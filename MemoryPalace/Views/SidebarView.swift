@@ -147,7 +147,7 @@ struct SidebarView: View {
                 .frame(maxWidth: searchBarExpanded ? .infinity : nil)
                 .clipShape(Capsule())
                 #if os(iOS)
-                .glassEffect(.regular.tint(Color.white.opacity(0.15)), in: .capsule)
+                .glassEffectCompat(tint: Color.white.opacity(0.15), in: Capsule())
                 #else
                 .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
                 .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))
@@ -163,7 +163,7 @@ struct SidebarView: View {
                         .foregroundColor(Theme.branchIndicator)
                         .frame(width: isIOSStyle ? 44 : 34, height: isIOSStyle ? 44 : 34)
                         #if os(iOS)
-                        .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                        .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
                         #else
                         .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
                         .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))

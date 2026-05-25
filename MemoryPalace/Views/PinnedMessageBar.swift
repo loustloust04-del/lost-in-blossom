@@ -42,8 +42,7 @@ struct PinnedMessageBar: View {
             #if os(iOS)
             // 不加 .interactive()：iOS 26 的 interactive glass 层会吞 tap
             // （回底按钮踩过坑，坐实了这个 bug）
-            .glassEffect(.regular.tint(Color.white.opacity(0.15)),
-                         in: Capsule(style: .continuous))
+            .glassEffectCompat(tint: Color.white.opacity(0.15), in: Capsule(style: .continuous))
             #else
             .background(
                 Capsule(style: .continuous)

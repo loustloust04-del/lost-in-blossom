@@ -682,7 +682,7 @@ struct ChatInputBar: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .glassEffect(.regular.tint(Theme.accent).interactive())
+                    .glassEffectCompat(tint: Theme.accent, interactive: true)
                 }
                 .buttonStyle(.plain)
             }
@@ -941,7 +941,7 @@ private struct InputFieldContainer: View {
             .padding(.trailing, 4)
         }
         #if os(iOS)
-        .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .rect(cornerRadius: 20))
+        .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: RoundedRectangle(cornerRadius: 20))
         // S1 fix: glassEffect .interactive() 在真机上 tap-through 有时序延迟
         // （经粟粟 iPhone 17 Air A/B 测确认）。在外层抢焦点绕过去，保留玻璃发光视觉。
         .contentShape(Rectangle())

@@ -495,7 +495,7 @@ struct ContentView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Theme.textSecondary)
                         .frame(width: 44, height: 44)
-                        .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                        .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
                 }
 
                 // 中间：PinBar（有 pin 时）或 Spacer。Phase 3 P3.9 会在这里挂 PinnedMessageBar。
@@ -587,7 +587,7 @@ struct ContentView: View {
                             .contentShape(Rectangle())
                     }
                 }
-                .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .capsule)
+                .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Capsule())
             }
             .padding(.horizontal, 16)
             .padding(.top, 6)

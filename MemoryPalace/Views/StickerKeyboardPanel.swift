@@ -69,7 +69,7 @@ struct StickerKeyboardPanel: View {
                 }
             }
             .padding(.horizontal, 4)
-            .glassEffect(.regular.tint(Color.black.opacity(0.01)).interactive(), in: .rect(cornerRadius: 20))
+            .glassEffectCompat(tint: Color.black.opacity(0.01), interactive: true, in: RoundedRectangle(cornerRadius: 20))
             .padding(.horizontal, 16)
 
             // 玻璃卡片（像键盘贴底，顶部圆角底部直角，延伸到屏幕底边）
@@ -123,8 +123,8 @@ struct StickerKeyboardPanel: View {
                 if showCard {
                     // glass 放 background 闭包里 + ignoresSafeArea → 延伸到屏幕底边
                     Color.clear
-                        .glassEffect(.regular.tint(Color.black.opacity(0.01)).interactive(),
-                                     in: .rect(cornerRadii: .init(topLeading: 16, topTrailing: 16)))
+                        .glassEffectCompat(tint: Color.black.opacity(0.01), interactive: true,
+                                           in: UnevenRoundedRectangle(cornerRadii: .init(topLeading: 16, topTrailing: 16)))
                         .ignoresSafeArea(.container, edges: .bottom)
                 }
             }
