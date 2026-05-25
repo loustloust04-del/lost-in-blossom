@@ -714,7 +714,7 @@ final class CCBridgeProvider: BaseChatProvider {
         //    带回这个 id，handler 仍能命中。只是这条对话跟 MP 的 MessageNode 失联。
         let chatId    = extraHeaders["X-MP-ChatId"]    ?? UUID().uuidString
         let messageId = extraHeaders["X-MP-MessageId"] ?? UUID().uuidString
-        let user      = extraHeaders["X-MP-User"]      ?? "susu"
+        let user      = extraHeaders["X-MP-User"]      ?? "tianyi"
 
         // 3. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
         wsClient.registerReplyHandler(chatId: chatId) { [weak self] replyText in

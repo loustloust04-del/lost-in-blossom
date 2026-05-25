@@ -4,7 +4,7 @@ import Security
 /// 薄封装 Keychain 通用密码条目，支持可选 iCloud 同步。
 /// Service 统一；account 就是 providerId。
 enum KeychainStore {
-    static let service = "com.susu.MemoryPalace.apikey"
+    static let service = "com.bunny.lostinblossom.apikey"
 
     /// 写入/更新/删除（value == nil 等价于 remove）。成功返回 true。
     /// 为保证一致性：写入前先删除同 account 的所有条目（本机+云），再按 sync 写一份。

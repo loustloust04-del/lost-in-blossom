@@ -33,8 +33,8 @@ targets:
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
-        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace
-        PRODUCT_NAME: "记忆宫殿"
+        PRODUCT_BUNDLE_IDENTIFIER: com.bunny.lostinblossom.macos
+        PRODUCT_NAME: "Lost in Blossom"
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
@@ -48,7 +48,7 @@ targets:
     type: application
     platform: iOS
     deploymentTarget:
-      iOS: "26.0"
+      iOS: "17.0"
     sources:
       - path: MemoryPalace
     dependencies:
@@ -63,8 +63,8 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios
-        PRODUCT_NAME: "记忆宫殿"
+        PRODUCT_BUNDLE_IDENTIFIER: com.bunny.lostinblossom
+        PRODUCT_NAME: "Lost in Blossom"
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
@@ -72,21 +72,16 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "保存便签图片到相册"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        DEVELOPMENT_TEAM: GQN42B462A
       configs:
         Debug:
           CODE_SIGN_STYLE: Automatic
-          DEVELOPMENT_TEAM: 7TFJ93A25W
         Release:
           CODE_SIGN_STYLE: Manual
-          DEVELOPMENT_TEAM: GQN42B462A
-          PROVISIONING_PROFILE_SPECIFIER: "MemoryPalace iOS Distribution"
-          CODE_SIGN_IDENTITY: "Apple Distribution: Jing Lu (GQN42B462A)"
 
   StickerProbeUITests:
     type: bundle.ui-testing
@@ -101,7 +96,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.uitests
         TEST_TARGET_NAME: MemoryPalaceIOS
-        DEVELOPMENT_TEAM: GQN42B462A
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
 
