@@ -89,7 +89,7 @@ struct ToolBarView: View {
         .animation(springAnim, value: selectedToolId)
         .padding(isIOSStyle ? 4 : 3)
         #if os(iOS)
-        .glassEffect(.regular.tint(Color.white.opacity(0.06)), in: .capsule)
+        .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
         #else
         .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
         .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))

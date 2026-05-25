@@ -19,7 +19,7 @@ struct ScrollToBottomButton: View {
         }
         #if os(iOS)
         // 不 clipShape、不 frame — glass 内置按压 morph 动画需要空间自由形变
-        .buttonStyle(.glass)
+        .glassButtonStyleCompat()
         #else
         .buttonStyle(.plain)
         .background(Circle().fill(.ultraThinMaterial))
