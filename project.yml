@@ -1,0 +1,124 @@
+name: MemoryPalace
+options:
+  bundleIdPrefix: com.susu
+  xcodeVersion: "16.0"
+  minimumXcodeGenVersion: "2.38"
+
+packages:
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.4.1"
+  VariableBlur:
+    url: https://github.com/nikstar/VariableBlur
+    from: "1.3.0"
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: "0.9.19"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+
+targets:
+  MemoryPalace:
+    type: application
+    platform: macOS
+    deploymentTarget:
+      macOS: "14.0"
+    sources:
+      - path: MemoryPalace
+    dependencies:
+      - package: MarkdownUI
+      - package: ZIPFoundation
+    settings:
+      base:
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace
+        PRODUCT_NAME: "记忆宫殿"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Susu. All rights reserved."
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+  MemoryPalaceIOS:
+    type: application
+    platform: iOS
+    deploymentTarget:
+      iOS: "26.0"
+    sources:
+      - path: MemoryPalace
+    dependencies:
+      - package: MarkdownUI
+      - package: VariableBlur
+      - package: ZIPFoundation
+    info:
+      path: MemoryPalace/Info-iOS.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios
+        PRODUCT_NAME: "记忆宫殿"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "保存便签图片到相册"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        DEVELOPMENT_TEAM: GQN42B462A
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+          DEVELOPMENT_TEAM: 7TFJ93A25W
+        Release:
+          CODE_SIGN_STYLE: Manual
+          DEVELOPMENT_TEAM: GQN42B462A
+          PROVISIONING_PROFILE_SPECIFIER: "MemoryPalace iOS Distribution"
+          CODE_SIGN_IDENTITY: "Apple Distribution: Jing Lu (GQN42B462A)"
+
+  StickerProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget:
+      iOS: "26.0"
+    sources:
+      - path: StickerProbeUITests
+    dependencies:
+      - target: MemoryPalaceIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.uitests
+        TEST_TARGET_NAME: MemoryPalaceIOS
+        DEVELOPMENT_TEAM: GQN42B462A
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  MemoryPalace:
+    build:
+      targets:
+        MemoryPalace: all
+  MemoryPalaceIOS:
+    build:
+      targets:
+        MemoryPalaceIOS: all
+  StickerProbeUITests:
+    build:
+      targets:
+        MemoryPalaceIOS: all
+        StickerProbeUITests: all
+    test:
+      targets:
+        - StickerProbeUITests

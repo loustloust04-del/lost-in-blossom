@@ -1,0 +1,605 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+// MARK: - macOS Appearance Settings Tab
+
+struct AppearanceSettingsTab: View {
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @AppStorage("selectedFont") private var selectedFont = ""
+    @AppStorage("fontScale") private var fontScale = 1.2
+    @AppStorage("expandAllMessages") private var expandAllMessages = false
+    @AppStorage("blurRadius") private var blurRadius = 1.3
+    // 气泡外观（高级）
+    @AppStorage("bubbleCornerRadius") private var bubbleCornerRadius: Double = 16
+    @AppStorage("bubblePaddingH") private var bubblePaddingH: Double = 18
+    @AppStorage("bubblePaddingV") private var bubblePaddingV: Double = 15
+    @AppStorage("bubbleSpacing") private var bubbleSpacing: Double = 31
+    @AppStorage("lineSpacingScale") private var lineSpacingScale: Double = 1.45
+    @AppStorage("paragraphSpacingScale") private var paragraphSpacingScale: Double = 1.65
+    @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
+    @AppStorage("hideRoleName") private var hideRoleName: Bool = false
+    @AppStorage("hideActionBar") private var hideActionBar: Bool = false
+    @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
+    // 负向 key：true = 关闭自动半透明。这样 key 缺省（false）= 行为保持原样。
+    @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
+    @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
+
+    @State private var importedFonts: [(fileName: String, fontName: String)] = []
+    @State private var showFontImporter = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            // Fonts
+            VStack(alignment: .leading, spacing: 14) {
+                Text("字体")
+                    .font(.system(size: Theme.SettingsFont.sectionHeader, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+
+                VStack(spacing: 4) {
+                    ForEach(FontManager.presetFonts, id: \.name) { preset in
+                        FontOptionRow(
+                            displayName: preset.displayName,
+                            fontName: preset.name,
+                            isSelected: selectedFont == preset.name,
+                            previewFont: preset.name.isEmpty ? .system(size: Theme.SettingsFont.body) : .custom(preset.name, size: Theme.SettingsFont.body)
+                        ) {
+                            selectedFont = preset.name
+                        }
+                    }
+                }
+
+                if !importedFonts.isEmpty {
+                    Divider().opacity(0.1).padding(.vertical, 2)
+                    Text("导入的字体")
+                        .font(.caption)
+                        .foregroundColor(Theme.textMuted)
+                    VStack(spacing: 4) {
+                        ForEach(importedFonts, id: \.fontName) { font in
+                            FontOptionRow(
+                                displayName: font.fileName,
+                                fontName: font.fontName,
+                                isSelected: selectedFont == font.fontName,
+                                previewFont: .custom(font.fontName, size: Theme.SettingsFont.body),
+                                onDelete: {
+                                    FontManager.deleteFont(named: font.fontName)
+                                    if selectedFont == font.fontName { selectedFont = "" }
+                                    importedFonts = FontManager.importedFonts()
+                                }
+                            ) {
+                                selectedFont = font.fontName
+                            }
+                        }
+                    }
+                }
+
+                #if os(macOS)
+                Button(action: { showFontImporter = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: Theme.SettingsFont.secondary))
+                        Text("导入字体文件...")
+                            .font(.system(size: Theme.SettingsFont.secondary))
+                    }
+                    .foregroundColor(Theme.branchIndicator)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                #endif
+            }
+
+            Divider().opacity(0.15)
+
+            // Font scale
+            VStack(spacing: 8) {
+                HStack {
+                    Text("聊天字号")
+                        .font(.system(size: Theme.SettingsFont.label))
+                        .foregroundColor(Theme.textPrimary)
+                    Spacer()
+                    Text("\(Int(fontScale * 100))%")
+                        .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
+                        .foregroundColor(Theme.branchIndicator)
+                }
+                #if os(iOS)
+                HStack(spacing: 12) {
+                    Button(action: { fontScale = max(0.5, fontScale - 0.1) }) {
+                        Image(systemName: "textformat.size.smaller")
+                            .font(.system(size: Theme.SettingsFont.label))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Slider(value: $fontScale, in: 0.5...2.0, step: 0.05)
+                        .tint(Theme.branchIndicator)
+
+                    Button(action: { fontScale = min(2.0, fontScale + 0.1) }) {
+                        Image(systemName: "textformat.size.larger")
+                            .font(.system(size: Theme.SettingsFont.label))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if fontScale != 1.2 {
+                    Button(action: { fontScale = 1.2 }) {
+                        Text("重置默认")
+                            .font(.system(size: Theme.SettingsFont.secondary))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                #else
+                HStack(spacing: 4) {
+                    Spacer()
+                    Text("⌘+ 放大  ⌘- 缩小  ⌘0 重置")
+                        .font(.caption)
+                        .foregroundColor(Theme.textMuted.opacity(0.7))
+                }
+                #endif
+            }
+
+            Divider().opacity(0.15)
+
+            // 气泡外观（高级） — 默认折叠
+            DisclosureGroup(isExpanded: $bubbleAdvExpanded) {
+                VStack(alignment: .leading, spacing: 14) {
+                    bubbleSliderRow("圆角", value: $bubbleCornerRadius, range: 0...28, step: 1) { "\(Int($0))pt" }
+                    bubbleSliderRow("水平内边距", value: $bubblePaddingH, range: 8...24, step: 1) { "\(Int($0))pt" }
+                    bubbleSliderRow("垂直内边距", value: $bubblePaddingV, range: 4...20, step: 1) { "\(Int($0))pt" }
+                    bubbleSliderRow("气泡间距", value: $bubbleSpacing, range: 8...40, step: 1) { "\(Int($0))pt" }
+                    bubbleSliderRow("行间距", value: $lineSpacingScale, range: 0.5...2.0, step: 0.05) { "\(Int($0 * 100))%" }
+                    bubbleSliderRow("段落间距", value: $paragraphSpacingScale, range: 0.5...2.0, step: 0.05) { "\(Int($0 * 100))%" }
+
+                    Divider().opacity(0.1)
+
+                    Toggle("隐藏时间戳", isOn: $hideTimestamp)
+                        #if os(macOS)
+                        .toggleStyle(.checkbox)
+                        #endif
+                    Toggle("隐藏用户/助手名", isOn: $hideRoleName)
+                        #if os(macOS)
+                        .toggleStyle(.checkbox)
+                        #endif
+                    Toggle("隐藏消息下方按钮行", isOn: $hideActionBar)
+                        #if os(macOS)
+                        .toggleStyle(.checkbox)
+                        #endif
+                    Toggle("壁纸下气泡自动半透明", isOn: Binding(
+                        get: { !disableAutoTransparent },
+                        set: { disableAutoTransparent = !$0; themeManager?.notifyThemeChange() }
+                    ))
+                        #if os(macOS)
+                        .toggleStyle(.checkbox)
+                        #endif
+
+                    Divider().opacity(0.1)
+
+                    HStack {
+                        Spacer()
+                        Button("全部重置") { resetAllBubbleAppearance() }
+                            .font(.system(size: Theme.SettingsFont.secondary))
+                            .foregroundColor(Theme.textMuted)
+                            .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                Text("气泡外观（高级）")
+                    .font(.system(size: Theme.SettingsFont.sectionHeader, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+            }
+
+            Divider().opacity(0.15)
+
+            // Expand all messages
+            VStack(alignment: .leading, spacing: 8) {
+                Text("消息显示")
+                    .font(.system(size: Theme.SettingsFont.sectionHeader, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+
+                Toggle(isOn: $expandAllMessages) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("全部展开全文")
+                            .font(.system(size: Theme.SettingsFont.body))
+                            .foregroundColor(Theme.textPrimary)
+                        Text("关闭时超过 300 字的消息会折叠")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+                #if os(macOS)
+                .toggleStyle(.checkbox)
+                #endif
+
+                Toggle(isOn: $showFlagBlocks) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("显示安全提示卡")
+                            .font(.system(size: Theme.SettingsFont.body))
+                            .foregroundColor(Theme.textPrimary)
+                        Text("Claude 在对话里插入的 ⚠️ flag（如 self_harm_risk + 热线）")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+                #if os(macOS)
+                .toggleStyle(.checkbox)
+                #endif
+
+                // Blur radius slider
+                VStack(spacing: 6) {
+                    HStack {
+                        Text("边缘模糊")
+                            .font(.system(size: Theme.SettingsFont.label))
+                            .foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        Text("\(Int(blurRadius))")
+                            .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
+                            .foregroundColor(Theme.branchIndicator)
+                    }
+                    Slider(value: $blurRadius, in: 0...6, step: 1)
+                        .tint(Theme.branchIndicator)
+                }
+            }
+        }
+        .onAppear {
+            importedFonts = FontManager.importedFonts()
+        }
+        .fileImporter(
+            isPresented: $showFontImporter,
+            allowedContentTypes: [
+                UTType(filenameExtension: "ttf") ?? .data,
+                UTType(filenameExtension: "otf") ?? .data,
+                UTType(filenameExtension: "ttc") ?? .data,
+            ],
+            allowsMultipleSelection: true
+        ) { result in
+            if case .success(let urls) = result {
+                for url in urls {
+                    guard url.startAccessingSecurityScopedResource() else { continue }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    if let name = FontManager.importFont(from: url) {
+                        selectedFont = name
+                    }
+                }
+                importedFonts = FontManager.importedFonts()
+            }
+        }
+    }
+
+    // MARK: - Bubble Appearance helpers
+
+    @ViewBuilder
+    private func bubbleSliderRow(
+        _ title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        formatter: @escaping (Double) -> String
+    ) -> some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.system(size: Theme.SettingsFont.label))
+                    .foregroundColor(Theme.textPrimary)
+                Spacer()
+                Text(formatter(value.wrappedValue))
+                    .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
+                    .foregroundColor(Theme.branchIndicator)
+            }
+            Slider(value: value, in: range, step: step)
+                .tint(Theme.branchIndicator)
+        }
+    }
+
+    private func resetAllBubbleAppearance() {
+        bubbleCornerRadius = 16
+        bubblePaddingH = 18
+        bubblePaddingV = 15
+        bubbleSpacing = 31
+        lineSpacingScale = 1.45
+        paragraphSpacingScale = 1.65
+        hideTimestamp = false
+        hideRoleName = false
+        hideActionBar = false
+    }
+}
+
+// MARK: - iOS Appearance Page
+
+#if os(iOS)
+struct IOSAppearancePage: View {
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @AppStorage("selectedFont") private var selectedFont = ""
+    @AppStorage("fontScale") private var fontScale = 1.2
+    @AppStorage("expandAllMessages") private var expandAllMessages = false
+    @AppStorage("blurRadius") private var blurRadius = 1.3
+    // 气泡外观（高级）
+    @AppStorage("bubbleCornerRadius") private var bubbleCornerRadius: Double = 16
+    @AppStorage("bubblePaddingH") private var bubblePaddingH: Double = 18
+    @AppStorage("bubblePaddingV") private var bubblePaddingV: Double = 15
+    @AppStorage("bubbleSpacing") private var bubbleSpacing: Double = 31
+    @AppStorage("lineSpacingScale") private var lineSpacingScale: Double = 1.45
+    @AppStorage("paragraphSpacingScale") private var paragraphSpacingScale: Double = 1.65
+    @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
+    @AppStorage("hideRoleName") private var hideRoleName: Bool = false
+    @AppStorage("hideActionBar") private var hideActionBar: Bool = false
+    @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
+    @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
+    @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
+
+    @State private var importedFonts: [(fileName: String, fontName: String)] = []
+    @State private var showFontImporter = false
+
+    var body: some View {
+        List {
+            Section("字体") {
+                VStack(spacing: Theme.optionRowSpacing) {
+                    ForEach(FontManager.presetFonts, id: \.name) { preset in
+                        FontOptionRow(
+                            displayName: preset.displayName,
+                            fontName: preset.name,
+                            isSelected: selectedFont == preset.name,
+                            previewFont: preset.name.isEmpty ? .system(size: Theme.F.body) : .custom(preset.name, size: Theme.F.body)
+                        ) {
+                            selectedFont = preset.name
+                        }
+                    }
+
+                    if !importedFonts.isEmpty {
+                        Divider().opacity(0.1).padding(.vertical, 2)
+                        ForEach(importedFonts, id: \.fontName) { font in
+                            FontOptionRow(
+                                displayName: font.fileName,
+                                fontName: font.fontName,
+                                isSelected: selectedFont == font.fontName,
+                                previewFont: .custom(font.fontName, size: Theme.F.body),
+                                onDelete: {
+                                    FontManager.deleteFont(named: font.fontName)
+                                    if selectedFont == font.fontName { selectedFont = "" }
+                                    importedFonts = FontManager.importedFonts()
+                                }
+                            ) {
+                                selectedFont = font.fontName
+                            }
+                        }
+                    }
+
+                    Button(action: { showFontImporter = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: Theme.F.secondary))
+                            Text("导入字体文件...")
+                                .font(.system(size: Theme.F.secondary))
+                            Spacer()
+                        }
+                        .foregroundColor(Theme.branchIndicator)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, Theme.optionRowVerticalPadding)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+
+            Section("聊天字号") {
+                HStack {
+                    Text("\(Int(fontScale * 100))%")
+                        .font(.system(size: Theme.F.secondary, weight: .medium))
+                        .foregroundColor(Theme.branchIndicator)
+                    Spacer()
+                }
+
+                HStack(spacing: 12) {
+                    Button(action: { fontScale = max(0.5, fontScale - 0.1) }) {
+                        Image(systemName: "textformat.size.smaller")
+                            .font(.system(size: Theme.F.label))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Slider(value: $fontScale, in: 0.5...2.0, step: 0.05)
+                        .tint(Theme.branchIndicator)
+
+                    Button(action: { fontScale = min(2.0, fontScale + 0.1) }) {
+                        Image(systemName: "textformat.size.larger")
+                            .font(.system(size: Theme.F.label))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if fontScale != 1.2 {
+                    Button(action: { fontScale = 1.2 }) {
+                        Text("重置默认")
+                            .font(.system(size: Theme.F.secondary))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+
+            Section {
+                DisclosureGroup(isExpanded: $bubbleAdvExpanded) {
+                    iosBubbleSliderRow("圆角", value: $bubbleCornerRadius, range: 0...28, step: 1) { "\(Int($0))pt" }
+                    iosBubbleSliderRow("水平内边距", value: $bubblePaddingH, range: 8...24, step: 1) { "\(Int($0))pt" }
+                    iosBubbleSliderRow("垂直内边距", value: $bubblePaddingV, range: 4...20, step: 1) { "\(Int($0))pt" }
+                    iosBubbleSliderRow("气泡间距", value: $bubbleSpacing, range: 8...40, step: 1) { "\(Int($0))pt" }
+                    iosBubbleSliderRow("行间距", value: $lineSpacingScale, range: 0.5...2.0, step: 0.05) { "\(Int($0 * 100))%" }
+                    iosBubbleSliderRow("段落间距", value: $paragraphSpacingScale, range: 0.5...2.0, step: 0.05) { "\(Int($0 * 100))%" }
+
+                    Toggle("隐藏时间戳", isOn: $hideTimestamp)
+                    Toggle("隐藏用户/助手名", isOn: $hideRoleName)
+                    Toggle("隐藏消息下方按钮行", isOn: $hideActionBar)
+                    Toggle("壁纸下气泡自动半透明", isOn: Binding(
+                        get: { !disableAutoTransparent },
+                        set: { disableAutoTransparent = !$0; themeManager?.notifyThemeChange() }
+                    ))
+
+                    Button(action: resetAllBubbleAppearance) {
+                        HStack {
+                            Spacer()
+                            Text("全部重置")
+                                .font(.system(size: Theme.F.secondary))
+                                .foregroundColor(Theme.textMuted)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } label: {
+                    Text("气泡外观（高级）")
+                        .font(.system(size: Theme.F.label, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+
+            Section("消息显示") {
+                Toggle(isOn: $expandAllMessages) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("全部展开全文")
+                            .font(.system(size: Theme.F.body))
+                        Text("关闭时超过 300 字的消息会折叠")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+
+                Toggle(isOn: $showFlagBlocks) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("显示安全提示卡")
+                            .font(.system(size: Theme.F.body))
+                        Text("Claude 在对话里插入的 ⚠️ flag（如 self_harm_risk + 热线）")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+
+                HStack {
+                    Text("边缘模糊")
+                        .font(.system(size: Theme.F.label))
+                    Spacer()
+                    Text("\(Int(blurRadius))")
+                        .font(.system(size: Theme.F.secondary, weight: .medium))
+                        .foregroundColor(Theme.branchIndicator)
+                }
+                Slider(value: $blurRadius, in: 0...6, step: 1)
+                    .tint(Theme.branchIndicator)
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.sidebarBg)
+        .scrollDismissesKeyboard(.immediately)
+        .navigationTitle("外观")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            importedFonts = FontManager.importedFonts()
+        }
+        .fileImporter(
+            isPresented: $showFontImporter,
+            allowedContentTypes: [
+                UTType(filenameExtension: "ttf") ?? .data,
+                UTType(filenameExtension: "otf") ?? .data,
+                UTType(filenameExtension: "ttc") ?? .data,
+            ],
+            allowsMultipleSelection: true
+        ) { result in
+            if case .success(let urls) = result {
+                for url in urls {
+                    guard url.startAccessingSecurityScopedResource() else { continue }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    if let name = FontManager.importFont(from: url) {
+                        selectedFont = name
+                    }
+                }
+                importedFonts = FontManager.importedFonts()
+            }
+        }
+    }
+
+    // MARK: - Bubble Appearance helpers (iOS)
+
+    @ViewBuilder
+    private func iosBubbleSliderRow(
+        _ title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        formatter: @escaping (Double) -> String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.system(size: Theme.F.label))
+                    .foregroundColor(Theme.textPrimary)
+                Spacer()
+                Text(formatter(value.wrappedValue))
+                    .font(.system(size: Theme.F.secondary, weight: .medium))
+                    .foregroundColor(Theme.branchIndicator)
+            }
+            Slider(value: value, in: range, step: step)
+                .tint(Theme.branchIndicator)
+        }
+    }
+
+    private func resetAllBubbleAppearance() {
+        bubbleCornerRadius = 16
+        bubblePaddingH = 18
+        bubblePaddingV = 15
+        bubbleSpacing = 31
+        lineSpacingScale = 1.45
+        paragraphSpacingScale = 1.65
+        hideTimestamp = false
+        hideRoleName = false
+        hideActionBar = false
+    }
+}
+#endif
+
+// MARK: - Font Option Row
+
+struct FontOptionRow: View {
+    let displayName: String
+    let fontName: String
+    let isSelected: Bool
+    let previewFont: Font
+    var onDelete: (() -> Void)? = nil
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: Theme.SettingsFont.body))
+                    .foregroundColor(isSelected ? Theme.branchIndicator : Theme.textMuted.opacity(0.5))
+                Text("记忆宫殿")
+                    .font(previewFont)
+                    .foregroundColor(Theme.textPrimary)
+                Text(displayName)
+                    .font(.system(size: Theme.SettingsFont.caption))
+                    .foregroundColor(Theme.textMuted)
+                Spacer()
+                if let onDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "xmark.circle")
+                            .font(.system(size: Theme.SettingsFont.secondary))
+                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, Theme.optionRowVerticalPadding)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Theme.accent.opacity(0.4) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}

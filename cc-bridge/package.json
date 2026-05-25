@@ -1,0 +1,17 @@
+{
+  "name": "cc-bridge",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "hub": "bun run hub.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "@types/bun": "latest"
+  }
+}

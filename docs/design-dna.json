@@ -1,0 +1,199 @@
+{
+  "meta": {
+    "name": "记忆宫殿 Design DNA",
+    "description": "macOS 原生 AI 对话浏览器的设计身份 — 暖奶白、柔和、安静",
+    "source_references": [
+      "MemoryPalace/Utils/Theme.swift",
+      "MemoryPalace/Utils/MarkdownTheme.swift",
+      "MemoryPalace/Utils/FontManager.swift"
+    ],
+    "created_at": "2026-03-25",
+    "platform": "macOS / SwiftUI"
+  },
+
+  "design_system": {
+    "color": {
+      "palette_type": "analogous",
+      "primary": { "hex": "#8EBD9F", "role": "分支指示、链接、强调 — 薄荷绿" },
+      "secondary": { "hex": "#E7EEEC", "role": "辅助底色、代码块背景、hover 高亮 — 浅灰薄荷" },
+      "accent": { "hex": "#8EBD9F", "role": "与 primary 同色，不做区分" },
+      "neutral": {
+        "scale": ["#FFFBF6", "#F8F4EF", "#F3F2EB", "#E7EEEC", "#D5DCD9"],
+        "usage": "从暖奶白到浅灰薄荷的 5 阶渐变，构成所有表面"
+      },
+      "semantic": {
+        "success": null,
+        "warning": null,
+        "error": "#E18585",
+        "info": null
+      },
+      "surface": {
+        "background": "#FFFBF6",
+        "sidebar": "#F8F4EF",
+        "user_bubble": "#F8F4EF",
+        "assistant_bubble": "#F3F2EB",
+        "card": "#F3F2EB",
+        "elevated": "#E7EEEC"
+      },
+      "text": {
+        "primary": "rgb(61, 54, 51)",
+        "secondary": "rgb(128, 120, 112)",
+        "muted": "rgb(173, 166, 158)"
+      },
+      "functional": {
+        "favorite": "rgb(240, 204, 143)",
+        "danger": "#E18585"
+      },
+      "contrast_strategy": "subtle layers — 表面用 5 阶暖灰渐变区分层级，不依赖边框",
+      "forbidden": ["蓝色 (blue)", "黄色 (yellow)"]
+    },
+
+    "typography": {
+      "type_scale": {
+        "heading_1": { "size": 20, "weight": "bold", "line_height": null, "tracking": null },
+        "heading_2": { "size": 17, "weight": "semibold", "line_height": null, "tracking": null },
+        "heading_3": { "size": 15, "weight": "semibold", "line_height": null, "tracking": null },
+        "body": { "size": 13.5, "weight": "regular", "line_height": "1.42em", "tracking": null },
+        "body_small": { "size": 12, "weight": "regular", "line_height": null, "tracking": null },
+        "caption": { "size": 11, "weight": "regular", "line_height": null, "tracking": null },
+        "overline": { "size": 10, "weight": "semibold", "line_height": null, "tracking": null }
+      },
+      "font_families": {
+        "heading": "系统默认 / 用户选择",
+        "body": "系统默认 / 用户选择",
+        "mono": "系统等宽 (SF Mono)"
+      },
+      "font_presets": ["系统默认", "苹方", "宋体", "楷体", "仿宋"],
+      "font_scale": "用户可调 (UserDefaults fontScale, 默认 1.0)",
+      "font_style_notes": "无衬线为主，支持用户导入自定义字体 (.ttf/.otf/.ttc)"
+    },
+
+    "spacing": {
+      "base_unit": 4,
+      "scale": [4, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32],
+      "content_density": "comfortable",
+      "section_rhythm": "气泡间距 6pt，区块内 padding 12-14pt，区块间 20-28pt",
+      "key_values": {
+        "bubble_padding": 14,
+        "bubble_spacing": 6,
+        "content_horizontal_padding": 28,
+        "content_vertical_padding": 20,
+        "code_block_padding": 12,
+        "sheet_padding": 20
+      }
+    },
+
+    "layout": {
+      "grid_system": "NavigationSplitView — sidebar + detail",
+      "sidebar_width": "macOS 默认可拖拽",
+      "max_content_width": null,
+      "bubble_max_width_ratio": 0.75,
+      "alignment_tendency": "对话流左对齐 (assistant) / 右对齐 (user)",
+      "notes": "macOS 原生布局，无响应式断点"
+    },
+
+    "shape": {
+      "border_radius": {
+        "small": 6,
+        "medium": 8,
+        "large": 16,
+        "pill": 999
+      },
+      "border_usage": "极少 — 仅表格用 0.5pt 水平线，blockquote 左侧 3pt 竖线",
+      "divider_style": "极细水平线 0.5pt，accent 色 60% 不透明度",
+      "key_values": {
+        "bubble_corner_radius": 16,
+        "code_block_corner_radius": 8,
+        "branch_selector_corner_radius": 8,
+        "button_corner_radius": 6
+      }
+    },
+
+    "elevation": {
+      "shadow_style": "soft diffused",
+      "levels": {
+        "low": "0 1px 3px rgba(0,0,0,0.04)",
+        "medium": null,
+        "high": null
+      },
+      "depth_cues": "颜色深浅区分层级，几乎不用阴影"
+    },
+
+    "iconography": {
+      "style": "outlined",
+      "stroke_weight": "regular",
+      "size_scale": [10, 12, 14, 16],
+      "preferred_set": "SF Symbols"
+    },
+
+    "motion": {
+      "easing": ".easeInOut",
+      "duration_scale": {
+        "micro": "0.15s",
+        "normal": "0.25s",
+        "macro": "0.35s"
+      },
+      "entrance_pattern": "opacity fade",
+      "exit_pattern": "opacity fade",
+      "philosophy": "minimal functional — hover 显隐用 opacity，不做花哨动画"
+    },
+
+    "components": {
+      "bubble_style": "圆角 16pt 矩形，无边框，纯色填充。用户气泡 #F8F4EF 右对齐，assistant 气泡 #F3F2EB 左对齐",
+      "button_style": "胶囊形或小圆角，branchIndicator 色 (#8EBD9F) 填充 + 白色文字，或 ghost 按钮",
+      "input_style": "圆角框，mainBg 底色，无明显边框",
+      "card_style": "圆角 8-16pt，浅色填充，极淡阴影",
+      "navigation_pattern": "NavigationSplitView — 侧栏列表 + 详情",
+      "branch_selector": "水平胶囊行，选中态 branchIndicator 色，未选中态透明",
+      "hover_behavior": "opacity 控制显隐 (0→1)，不改变布局，不用 if/else 条件渲染",
+      "label_style": "角色标签 10pt semibold，大写，textSecondary 色"
+    }
+  },
+
+  "design_style": {
+    "aesthetic": {
+      "mood": ["温暖", "安静", "私密", "怀旧"],
+      "visual_metaphor": "私人图书馆 / 手写笔记本",
+      "era_influence": "无特定年代，偏经典朴素",
+      "genre": "personal tool / knowledge browser",
+      "personality_traits": ["内敛", "温柔", "细心", "不张扬"],
+      "adjectives": ["暖", "柔", "净", "轻", "雅"]
+    },
+
+    "visual_language": {
+      "complexity": "minimal",
+      "ornamentation": "none",
+      "whitespace_usage": "generous — 气泡间大量留白，内容不拥挤",
+      "visual_weight_distribution": "content-centered — 视觉重心在对话内容上",
+      "focal_strategy": "single focus — 一次只看一段对话",
+      "contrast_level": "low — 所有颜色都在暖灰色谱内，没有高对比跳跃",
+      "texture_usage": "none"
+    },
+
+    "composition": {
+      "hierarchy_method": "spatial isolation + typographic hierarchy",
+      "balance_type": "asymmetric — 对话流左右交替",
+      "flow_direction": "top to bottom — 时间线向下",
+      "grouping_strategy": "by conversation turn — 每轮对话一个气泡",
+      "negative_space_role": "呼吸感 — 气泡之间、侧栏和内容之间的留白传递安静感"
+    },
+
+    "interaction_feel": {
+      "feedback_style": "subtle — opacity 变化、轻微颜色加深",
+      "hover_behavior": "opacity reveal — 功能按钮平时隐藏，hover 时淡入",
+      "transition_personality": "fade-subtle",
+      "loading_style": "无特殊加载动画",
+      "microinteraction_density": "low"
+    },
+
+    "brand_voice_in_ui": {
+      "tone": "亲近随意",
+      "formality": "informal — 用'你'而非'您'",
+      "user_label": "你",
+      "ai_label": "小雾",
+      "language": "全中文",
+      "empty_state_approach": "简洁提示文字",
+      "error_tone": "温和"
+    }
+  }
+}

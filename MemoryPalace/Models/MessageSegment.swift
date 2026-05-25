@@ -1,0 +1,154 @@
+import Foundation
+
+/// Claude 导入 v2 写入的结构化分段。按 `content[]` 原顺序保存。
+/// 渲染时（MessageSegmentsView）按顺序 map 成独立 View，每段独立折叠。
+///
+/// Codable 用自定义 key "kind" 做 tag，保持向后兼容（新增 case 时老解码跳过即可）。
+enum MessageSegment: Codable, Hashable {
+    case text(String)
+    case thinking(text: String, signature: String?)
+    case toolUse(
+        id: String,
+        name: String,
+        inputJSON: String,
+        integrationName: String?,
+        iconName: String?
+    )
+    case toolResult(
+        toolUseId: String,
+        text: String,
+        isError: Bool,
+        integrationName: String?
+    )
+    case flag(
+        kind: String,
+        helplineName: String?,
+        helplinePhone: String?,
+        helplineUrl: String?
+    )
+    case attachment(
+        name: String,
+        type: String?,
+        extractedContent: String?
+    )
+    case file(name: String, uuid: String)
+
+    // MARK: - Codable
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case text
+        case signature
+        case id
+        case name
+        case inputJSON
+        case integrationName
+        case iconName
+        case toolUseId
+        case isError
+        case helplineName
+        case helplinePhone
+        case helplineUrl
+        case type
+        case extractedContent
+        case uuid
+    }
+
+    private enum Kind: String, Codable {
+        case text
+        case thinking
+        case toolUse
+        case toolResult
+        case flag
+        case attachment
+        case file
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .text(let s):
+            try c.encode(Kind.text, forKey: .kind)
+            try c.encode(s, forKey: .text)
+        case .thinking(let text, let sig):
+            try c.encode(Kind.thinking, forKey: .kind)
+            try c.encode(text, forKey: .text)
+            try c.encodeIfPresent(sig, forKey: .signature)
+        case .toolUse(let id, let name, let inputJSON, let integration, let icon):
+            try c.encode(Kind.toolUse, forKey: .kind)
+            try c.encode(id, forKey: .id)
+            try c.encode(name, forKey: .name)
+            try c.encode(inputJSON, forKey: .inputJSON)
+            try c.encodeIfPresent(integration, forKey: .integrationName)
+            try c.encodeIfPresent(icon, forKey: .iconName)
+        case .toolResult(let useId, let text, let isErr, let integration):
+            try c.encode(Kind.toolResult, forKey: .kind)
+            try c.encode(useId, forKey: .toolUseId)
+            try c.encode(text, forKey: .text)
+            try c.encode(isErr, forKey: .isError)
+            try c.encodeIfPresent(integration, forKey: .integrationName)
+        case .flag(let kind, let hName, let hPhone, let hUrl):
+            try c.encode(Kind.flag, forKey: .kind)
+            try c.encode(kind, forKey: .name)
+            try c.encodeIfPresent(hName, forKey: .helplineName)
+            try c.encodeIfPresent(hPhone, forKey: .helplinePhone)
+            try c.encodeIfPresent(hUrl, forKey: .helplineUrl)
+        case .attachment(let name, let type, let extracted):
+            try c.encode(Kind.attachment, forKey: .kind)
+            try c.encode(name, forKey: .name)
+            try c.encodeIfPresent(type, forKey: .type)
+            try c.encodeIfPresent(extracted, forKey: .extractedContent)
+        case .file(let name, let uuid):
+            try c.encode(Kind.file, forKey: .kind)
+            try c.encode(name, forKey: .name)
+            try c.encode(uuid, forKey: .uuid)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(Kind.self, forKey: .kind)
+        switch kind {
+        case .text:
+            let s = try c.decode(String.self, forKey: .text)
+            self = .text(s)
+        case .thinking:
+            let s = try c.decode(String.self, forKey: .text)
+            let sig = try c.decodeIfPresent(String.self, forKey: .signature)
+            self = .thinking(text: s, signature: sig)
+        case .toolUse:
+            self = .toolUse(
+                id: try c.decode(String.self, forKey: .id),
+                name: try c.decode(String.self, forKey: .name),
+                inputJSON: try c.decode(String.self, forKey: .inputJSON),
+                integrationName: try c.decodeIfPresent(String.self, forKey: .integrationName),
+                iconName: try c.decodeIfPresent(String.self, forKey: .iconName)
+            )
+        case .toolResult:
+            self = .toolResult(
+                toolUseId: try c.decode(String.self, forKey: .toolUseId),
+                text: try c.decode(String.self, forKey: .text),
+                isError: try c.decode(Bool.self, forKey: .isError),
+                integrationName: try c.decodeIfPresent(String.self, forKey: .integrationName)
+            )
+        case .flag:
+            self = .flag(
+                kind: try c.decode(String.self, forKey: .name),
+                helplineName: try c.decodeIfPresent(String.self, forKey: .helplineName),
+                helplinePhone: try c.decodeIfPresent(String.self, forKey: .helplinePhone),
+                helplineUrl: try c.decodeIfPresent(String.self, forKey: .helplineUrl)
+            )
+        case .attachment:
+            self = .attachment(
+                name: try c.decode(String.self, forKey: .name),
+                type: try c.decodeIfPresent(String.self, forKey: .type),
+                extractedContent: try c.decodeIfPresent(String.self, forKey: .extractedContent)
+            )
+        case .file:
+            self = .file(
+                name: try c.decode(String.self, forKey: .name),
+                uuid: try c.decode(String.self, forKey: .uuid)
+            )
+        }
+    }
+}

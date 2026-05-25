@@ -1,0 +1,27 @@
+# Xcode
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+*.xcworkspace/
+
+# Build artifacts
+.build/
+build/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+
+# Worktrees
+.worktrees/
+.claude/worktrees/
+
+# CC Bridge
+cc-bridge/node_modules

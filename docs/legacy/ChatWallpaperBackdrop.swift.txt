@@ -1,0 +1,93 @@
+#if os(iOS)
+import SwiftUI
+import UIKit
+
+/// 聊天页专属 wallpaper backdrop。
+///
+/// 不走 `ThemeBackgroundView.body` 那条 GeometryReader + `.frame(proxy.size)`
+/// + `.clipped()` 组合——在 `iOSChatPage` 的 ZStack 里：
+/// 1. GeometryReader 的 preferred size = parent proposed size，ZStack 用
+///    non-flex sibling 的 intrinsic size 当 union 时会把 GeometryReader 挤到
+///    CardFlowView ScrollView content 的 size，wallpaper 塌缩到中间小块
+/// 2. `.ignoresSafeArea()` 加在外层只改视觉不改内部 proxy.size，即便塌缩解决
+///    了 wallpaper 也永远只铺 safe area 内
+///
+/// 这里改成：纯 ZStack + `.frame(maxWidth/maxHeight: .infinity)`，用 `.background`
+/// 在 iOSChatPage 外层挂，`.ignoresSafeArea()` 让整体漫满屏。image 用 flex frame
+/// + scaledToFill + clipped，没有 proxy.size 参与。
+struct ChatWallpaperBackdrop: View {
+    let fill: Color
+    let imageURL: URL?
+    let scheme: ColorScheme
+    let backgroundStyle: ThemeBackgroundStyle
+
+    var body: some View {
+        ZStack {
+            fill
+            if let imageURL {
+                artworkView(url: imageURL)
+                    .overlay(overlayGradient)
+                    .opacity(backgroundStyle.resolvedOpacity(for: scheme))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
+        #if DEBUG
+        // [PROBE bg] 实测 wallpaper 实际得到的 size 和 safeAreaInsets
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        print("[PROBE bg] wallpaper onAppear size=\(proxy.size) safeAreaInsets=\(proxy.safeAreaInsets)")
+                    }
+                    .onChange(of: proxy.size) { _, new in
+                        print("[PROBE bg] wallpaper size changed to \(new) safeAreaInsets=\(proxy.safeAreaInsets)")
+                    }
+                    .onChange(of: proxy.safeAreaInsets) { _, new in
+                        print("[PROBE bg] wallpaper safeAreaInsets changed to \(new) size=\(proxy.size)")
+                    }
+            }
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private func artworkView(url: URL) -> some View {
+        if let image = UIImage(contentsOfFile: url.path) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .offset(
+                    x: backgroundStyle.resolvedOffsetX,
+                    y: backgroundStyle.resolvedOffsetY
+                )
+                .saturation(0.92)
+                .clipped()
+        }
+    }
+
+    private var overlayGradient: LinearGradient {
+        LinearGradient(
+            colors: overlayColors,
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var overlayColors: [Color] {
+        if scheme == .dark {
+            return [
+                Color.black.opacity(0.42),
+                Color.black.opacity(0.18),
+                Color.black.opacity(0.50)
+            ]
+        }
+        return [
+            Color.white.opacity(0.18),
+            Color.white.opacity(0.04),
+            Color.white.opacity(0.24)
+        ]
+    }
+}
+#endif

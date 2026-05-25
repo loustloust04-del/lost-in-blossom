@@ -1,0 +1,626 @@
+import SwiftUI
+import SwiftData
+
+// MARK: - Right Panel (Tool-based Container)
+
+struct RightPanelView: View {
+    @Binding var selectedToolId: String
+    var viewModel: ConversationViewModel
+    var stickerVM: StickerViewModel
+
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+    @State private var bounceTrigger: Int = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ToolBarView(selectedToolId: $selectedToolId)
+                .background(Theme.sidebarBg)
+                .zIndex(selectedToolId == "calendar" ? 0 : 1)
+
+            panelContent
+                .phaseAnimator(
+                    [false, true],
+                    trigger: bounceTrigger
+                ) { content, phase in
+                    content
+                        .scaleEffect(phase ? 0.995 : 1.0, anchor: .top)
+                        .offset(y: phase ? 2 : 0)
+                } animation: { phase in
+                    phase
+                        ? .spring(duration: 0.35, bounce: 0.2)   // 弹回：柔和微弹
+                        : .easeOut(duration: 0.08)               // 下压：快速平滑
+                }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Theme.sidebarBg)
+        .onChange(of: selectedToolId) { _, _ in
+            bounceTrigger += 1
+        }
+    }
+
+    @ViewBuilder
+    private var panelContent: some View {
+        switch selectedToolId {
+        case "calendar":
+            CalendarPanelView(viewModel: viewModel, profileId: profileManager?.currentProfile.id ?? "")
+        case "memory":
+            MemoryPanelView(viewModel: viewModel)
+        case "worldBook":
+            WorldBookPanelView()
+        case "cardLibrary":
+            CardLibraryPanelView()
+        case "sticker":
+            StickerLibraryView(viewModel: viewModel, stickerVM: stickerVM)
+        case "prompt":
+            PersonaSettingsTab(useSheetNavigation: true)
+        default:
+            Text("未知工具")
+                .foregroundColor(Theme.textMuted)
+        }
+    }
+}
+
+struct RightPanelTopBar: View {
+    @Binding var selectedToolId: String
+    var onImport: () -> Void
+    var onSettings: () -> Void
+
+    var body: some View {
+        ToolBarView(selectedToolId: $selectedToolId)
+            .background(Theme.sidebarBg)
+    }
+}
+
+// MARK: - Memory Panel
+
+struct MemoryPanelView: View {
+    var viewModel: ConversationViewModel
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+    @Environment(RightPanelNavigator.self) private var navigator: RightPanelNavigator?
+
+    @State private var memories: [Memory] = []
+    @State private var showAddInput = false
+    @State private var newMemoryText = ""
+    @State private var newMemoryCategory = "fact"
+    @State private var highlightedId: String? = nil
+
+    private let store = SwiftDataMemoryStore()
+    private let categories = [
+        ("fact", "事实"), ("preference", "偏好"), ("relationship", "关系"),
+        ("goal", "目标"), ("context", "情境")
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Stats header
+            memoryHeader
+                .padding(.horizontal, isIOSStyle ? 16 : 12)
+                .padding(.top, isIOSStyle ? 4 : 8)
+                .padding(.bottom, isIOSStyle ? 12 : 8)
+
+            // Memory list
+            ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 6) {
+                    let grouped = groupedMemories
+                    if !grouped.hot.isEmpty {
+                        sectionHeader("活跃", count: grouped.hot.count, color: Color(hex: 0xD4A574))
+                        ForEach(grouped.hot, id: \.id) { mem in
+                            memoryRowWithHighlight(mem)
+                        }
+                    }
+                    if !grouped.warm.isEmpty {
+                        sectionHeader("休眠", count: grouped.warm.count, color: Theme.branchIndicator)
+                            .padding(.top, grouped.hot.isEmpty ? 0 : 8)
+                        ForEach(grouped.warm, id: \.id) { mem in
+                            memoryRowWithHighlight(mem)
+                        }
+                    }
+                    if !grouped.cold.isEmpty {
+                        sectionHeader("将忘", count: grouped.cold.count, color: Color(red: 0.6, green: 0.65, blue: 0.7))
+                            .padding(.top, (grouped.hot.isEmpty && grouped.warm.isEmpty) ? 0 : 8)
+                        ForEach(grouped.cold, id: \.id) { mem in
+                            memoryRowWithHighlight(mem)
+                        }
+                    }
+
+                    if memories.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "brain")
+                                .font(.system(size: 24))
+                                .foregroundColor(Theme.textMuted.opacity(0.4))
+                            Text("还没有记忆")
+                                .font(.system(size: Theme.F.body))
+                                .foregroundColor(Theme.textMuted)
+                            Text("和{{char}}聊天时会自动记住重要的事".expandingMacros(profile: profileManager?.currentProfile))
+                                .font(.system(size: Theme.F.caption))
+                                .foregroundColor(Theme.textMuted.opacity(0.6))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+                    }
+                }
+                .padding(.horizontal, isIOSStyle ? 14 : 10)
+                .padding(.vertical, isIOSStyle ? 8 : 4)
+            }
+            .onAppear { consumeTarget(navigator?.pendingTarget, proxy: proxy) }
+            .onChange(of: navigator?.pendingTarget) { _, target in
+                consumeTarget(target, proxy: proxy)
+            }
+            } // end ScrollViewReader
+
+            Spacer(minLength: 0)
+
+            // Add memory input
+            if showAddInput {
+                addMemoryInput
+            }
+
+            // Bottom: add button + token bar
+            VStack(spacing: 6) {
+                if !showAddInput {
+                    Button(action: { withAnimation(.easeInOut(duration: 0.2)) { showAddInput = true } }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: isIOSStyle ? 12 : 11))
+                            Text("添加记忆")
+                                .font(.system(size: Theme.F.secondary))
+                        }
+                        .foregroundColor(Theme.branchIndicator)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                tokenBudgetBar
+            }
+            .padding(.horizontal, isIOSStyle ? 16 : 12)
+            .padding(.top, isIOSStyle ? 10 : 8)
+            .padding(.bottom, isIOSStyle ? 14 : 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear { refreshMemories() }
+        // 切楼层前清空 memories，避免 @State 里持有旧 store 的 Memory 实例让 body
+        // 在 container reset 后访问失效实例。Plan: docs/plan-profile-switch-atomic.md
+        .onReceive(NotificationCenter.default.publisher(for: .profileWillSwitch)) { _ in
+            memories = []
+        }
+    }
+
+    // MARK: - Header
+
+    private var memoryHeader: some View {
+        HStack(spacing: 8) {
+            let grouped = groupedMemories
+            HStack(spacing: 4) {
+                Circle().fill(Color(hex: 0xD4A574)).frame(width: 6, height: 6)
+                Text("\(grouped.hot.count)")
+                    .font(.system(size: Theme.F.secondary, weight: .medium))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            HStack(spacing: 4) {
+                Circle().fill(Theme.branchIndicator).frame(width: 6, height: 6)
+                Text("\(grouped.warm.count)")
+                    .font(.system(size: Theme.F.secondary, weight: .medium))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            HStack(spacing: 4) {
+                Circle().fill(Color(red: 0.6, green: 0.65, blue: 0.7)).frame(width: 6, height: 6)
+                Text("\(grouped.cold.count)")
+                    .font(.system(size: Theme.F.secondary, weight: .medium))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            Spacer()
+            Text("\(memories.count) 条")
+                .font(.system(size: Theme.F.secondary))
+                .foregroundColor(Theme.textMuted)
+        }
+    }
+
+    // MARK: - Navigation Target Consumer
+
+    private func consumeTarget(_ target: RightPanelNavigator.Target?, proxy: ScrollViewProxy) {
+        guard let t = target, t.tool == "memory" else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(t.id, anchor: .center)
+            }
+        }
+        highlightedId = t.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if highlightedId == t.id { highlightedId = nil }
+        }
+        navigator?.pendingTarget = nil
+    }
+
+    // MARK: - Memory Row With Highlight
+
+    @ViewBuilder
+    private func memoryRowWithHighlight(_ mem: Memory) -> some View {
+        let idStr = mem.id.uuidString
+        MemoryCardView(
+            memory: mem,
+            effectiveWeight: effectiveWeight(mem),
+            onPin: { togglePin(mem) },
+            onDelete: { deleteMemory(mem) }
+        )
+        .id(idStr)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(highlightedId == idStr ? Theme.branchIndicator.opacity(0.35) : Color.clear)
+                .animation(.easeInOut(duration: 0.35), value: highlightedId)
+        )
+    }
+
+    // MARK: - Section Header
+
+    private func sectionHeader(_ title: String, count: Int, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 5, height: 5)
+            Text(title)
+                .font(.system(size: Theme.F.secondary, weight: .medium))
+                .foregroundColor(Theme.textSecondary)
+            Text("\(count)")
+                .font(.system(size: Theme.F.caption))
+                .foregroundColor(Theme.textMuted)
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - Token Budget
+
+    private var tokenBudgetBar: some View {
+        let totalTokens = memories.filter { effectiveWeight($0) >= 0.3 || $0.isUserExplicit }
+            .reduce(0) { $0 + $1.tokenCount }
+        let budget = 2000
+        let ratio = min(1.0, Double(totalTokens) / Double(budget))
+
+        return VStack(spacing: 2) {
+            HStack {
+                Text("\(totalTokens) / \(budget) tokens")
+                    .font(.system(size: Theme.F.secondary))
+                    .foregroundColor(Theme.textMuted)
+                Spacer()
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Theme.accent.opacity(0.3))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Theme.branchIndicator.opacity(0.6))
+                        .frame(width: geo.size.width * ratio)
+                }
+            }
+            .frame(height: 3)
+        }
+    }
+
+    // MARK: - Add Memory
+
+    private var addMemoryInput: some View {
+        VStack(spacing: 6) {
+            TextField("输入要记住的事...", text: $newMemoryText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: Theme.F.body))
+                .lineLimit(isIOSStyle ? 4 : 3)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Theme.mainBg)
+                )
+
+            HStack(spacing: 6) {
+                Picker("", selection: $newMemoryCategory) {
+                    ForEach(categories, id: \.0) { cat in
+                        Text(cat.1).tag(cat.0)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .font(.system(size: Theme.F.secondary))
+
+                Spacer()
+
+                Button("取消") {
+                    withAnimation { showAddInput = false; newMemoryText = "" }
+                }
+                .font(.system(size: Theme.F.secondary))
+                .foregroundColor(Theme.textMuted)
+                .buttonStyle(.plain)
+
+                Button("添加") {
+                    addMemory()
+                }
+                .font(.system(size: Theme.F.secondary, weight: .medium))
+                .foregroundColor(Theme.branchIndicator)
+                .buttonStyle(.plain)
+                .disabled(newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(.horizontal, isIOSStyle ? 16 : 12)
+        .padding(.vertical, isIOSStyle ? 10 : 8)
+        .background {
+            if isIOSStyle {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Theme.mainBg.opacity(0.92))
+            } else {
+                Theme.sidebarBg
+            }
+        }
+        .overlay {
+            if isIOSStyle {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
+            }
+        }
+        .padding(.horizontal, isIOSStyle ? 12 : 0)
+        .padding(.bottom, isIOSStyle ? 1 : 0)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    // MARK: - Data
+
+    private var groupedMemories: (hot: [Memory], warm: [Memory], cold: [Memory]) {
+        var hot: [Memory] = []
+        var warm: [Memory] = []
+        var cold: [Memory] = []
+        for mem in memories {
+            let w = effectiveWeight(mem)
+            if mem.isUserExplicit || w >= 0.3 {
+                hot.append(mem)
+            } else if w >= 0.05 {
+                warm.append(mem)
+            } else {
+                cold.append(mem)
+            }
+        }
+        return (hot, warm, cold)
+    }
+
+    private func effectiveWeight(_ memory: Memory) -> Double {
+        DecayEngine.effectiveWeight(memory)
+    }
+
+    private func refreshMemories() {
+        let profileId = profileManager?.currentProfile.id ?? ""
+        memories = (try? store.listAll(profileId: profileId, context: modelContext)) ?? []
+    }
+
+    private func togglePin(_ memory: Memory) {
+        memory.isUserExplicit.toggle()
+        if memory.isUserExplicit {
+            memory.decayWeight = 1.0
+        }
+        memory.updatedAt = Date()
+        try? modelContext.save()
+        refreshMemories()
+    }
+
+    private func deleteMemory(_ memory: Memory) {
+        modelContext.delete(memory)
+        try? modelContext.save()
+        refreshMemories()
+    }
+
+    private func addMemory() {
+        let text = newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let profileId = profileManager?.currentProfile.id ?? ""
+        let memory = Memory(
+            content: text,
+            category: newMemoryCategory,
+            keywords: text.components(separatedBy: .whitespaces).filter { $0.count > 1 },
+            profileId: profileId,
+            isUserExplicit: true
+        )
+        memory.decayWeight = 1.0
+        modelContext.insert(memory)
+        try? modelContext.save()
+
+        newMemoryText = ""
+        withAnimation { showAddInput = false }
+        refreshMemories()
+    }
+
+    private var isIOSStyle: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+}
+
+// MARK: - Memory Card
+
+struct MemoryCardView: View {
+    let memory: Memory
+    let effectiveWeight: Double
+    var isFlashing: Bool = false
+    var onPin: () -> Void
+    var onDelete: () -> Void
+
+    @State private var isHovering = false
+    @State private var breathPhase: Double = 0
+    @State private var flashOpacity: Double = 0
+
+    private let categoryLabels: [String: String] = [
+        "preference": "偏好", "fact": "事实", "relationship": "关系",
+        "goal": "目标", "context": "情境"
+    ]
+
+    // Opacity: 0.25 (dead) to 1.0 (fresh)
+    private var baseOpacity: Double {
+        memory.isUserExplicit ? 1.0 : (0.25 + 0.75 * effectiveWeight)
+    }
+
+    // Breath: stronger memories breathe faster and more visibly
+    private var breathAmplitude: Double { 0.03 * effectiveWeight }
+    private var breathPeriod: Double { 3.0 + (1.0 - effectiveWeight) * 4.0 }
+
+    // Border color: warm amber(1.0) → mint(0.5) → cool grey(0.0)
+    private var borderColor: Color {
+        if memory.isUserExplicit { return Color(hex: 0xD4A574) }
+        if effectiveWeight > 0.5 {
+            let t = (effectiveWeight - 0.5) * 2  // 0→1
+            return blend(Theme.branchIndicator, Color(hex: 0xD4A574), t: t)
+        } else {
+            let t = effectiveWeight * 2  // 0→1
+            return blend(Color(red: 0.6, green: 0.65, blue: 0.7), Theme.branchIndicator, t: t)
+        }
+    }
+
+    private var borderWidth: CGFloat {
+        if effectiveWeight > 0.3 { return 3 }
+        if effectiveWeight > 0.05 { return 2 }
+        return 1
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Left border
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(borderColor)
+                .frame(width: borderWidth)
+                .padding(.vertical, 4)
+
+            VStack(alignment: .leading, spacing: 4) {
+                // Content
+                Text(memory.content)
+                    .font(.system(size: Theme.F.body))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(isIOSStyle ? 4 : 3)
+
+                // Meta row
+                HStack(spacing: 6) {
+                    // Category tag
+                    Text(categoryLabels[memory.category] ?? memory.category)
+                        .font(.system(size: Theme.F.badge, weight: .medium))
+                        .foregroundColor(Theme.branchIndicator)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule().fill(Theme.branchIndicator.opacity(0.12))
+                        )
+
+                    // Access info
+                    Text("\(memory.accessCount)次")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
+
+                    Text(relativeDate(memory.lastAccessedAt))
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
+
+                    Spacer()
+
+                    // Pin icon
+                    if memory.isUserExplicit {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(Color(hex: 0xD4A574))
+                    }
+
+                    #if os(iOS)
+                    Menu {
+                        Button(memory.isUserExplicit ? "取消钉住" : "钉住", action: onPin)
+                        Button("删除", role: .destructive, action: onDelete)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Theme.textMuted)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    #else
+                    // Hover actions
+                    if isHovering {
+                        Button(action: onPin) {
+                            Image(systemName: memory.isUserExplicit ? "pin.slash" : "pin")
+                                .font(.system(size: 9))
+                                .foregroundColor(Theme.textMuted)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: onDelete) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 9))
+                                .foregroundColor(Theme.danger.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    #endif
+                }
+
+                // Decay bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Theme.accent.opacity(0.2))
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(borderColor.opacity(0.5))
+                            .frame(width: geo.size.width * effectiveWeight)
+                    }
+                }
+                .frame(height: 2)
+            }
+            .padding(.leading, 8)
+            .padding(.vertical, 6)
+            .padding(.trailing, 8)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.mainBg.opacity(0.6))
+        )
+        // Phosphor flash overlay
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(hex: 0xD4A574).opacity(flashOpacity))
+                .allowsHitTesting(false)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .opacity(baseOpacity + breathAmplitude * breathPhase)
+        .blur(radius: effectiveWeight < 0.1 && !memory.isUserExplicit ? 1.5 : 0)
+        .onHover { isHovering = $0 }
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: breathPeriod)
+                .repeatForever(autoreverses: true)
+            ) {
+                breathPhase = 1
+            }
+        }
+        .onChange(of: isFlashing) { _, flashing in
+            if flashing {
+                withAnimation(.easeIn(duration: 0.2)) { flashOpacity = 0.4 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    withAnimation(.easeOut(duration: 0.6)) { flashOpacity = 0 }
+                }
+            }
+        }
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let days = Int(-date.timeIntervalSinceNow / 86400)
+        if days == 0 { return "今天" }
+        if days == 1 { return "昨天" }
+        if days < 30 { return "\(days)天前" }
+        return "\(days / 30)月前"
+    }
+
+    private var isIOSStyle: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Simple color blend between two colors
+    private func blend(_ a: Color, _ b: Color, t: Double) -> Color {
+        // Use opacity-based approximation since Color doesn't expose components easily
+        // At t=0 → a, at t=1 → b
+        return t > 0.5 ? b.opacity(1.0) : a.opacity(1.0)
+    }
+}
