@@ -1138,7 +1138,7 @@ final class ConversationViewModel {
         }
         // ccBridge：只取最后一条 user 的 raw 文字，丢掉 system prompt 和历史
         let lastUser = assembled.messages.last(where: { $0.role == "user" })?.content ?? ""
-        let userLabel = profile.userName.isEmpty ? "susu" : profile.userName
+        let userLabel = profile.userName.isEmpty ? "tianyi" : profile.userName
         let headers: [String: String] = [
             "X-MP-ChatId": conversation.id,
             "X-MP-MessageId": messageNodeId,

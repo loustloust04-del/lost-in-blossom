@@ -81,7 +81,7 @@ enum ProbeStickerSeed {
         let msg1 = MessageNode(
             id: "probe-msg-1",
             role: "user",
-            content: "这是探针测试消息 1 — 粟粟你看不到这条",
+            content: "这是探针测试消息 1 — 天奕你看不到这条",
             contentType: "text",
             createTime: now,
             parentId: nil,

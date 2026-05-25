@@ -58,7 +58,7 @@ struct PersonaSettingsTab: View {
     private static let iOSSimplePromptFields = [
         IOSSimplePromptField(slotId: PromptSlot.mainId, label: "系统指令", placeholder: "你是一个有帮助的助手..."),
         IOSSimplePromptField(slotId: PromptSlot.charDescriptionId, label: "助手设定", placeholder: "AI 助手的设定、风格、背景..."),
-        IOSSimplePromptField(slotId: PromptSlot.personaDescriptionId, label: "用户描述", placeholder: "我叫粟粟，喜欢..."),
+        IOSSimplePromptField(slotId: PromptSlot.personaDescriptionId, label: "用户描述", placeholder: "我叫天奕，喜欢..."),
         IOSSimplePromptField(slotId: PromptSlot.dialogueExamplesId, label: "对话示例", placeholder: "{{user}}: 你好\n{{char}}: 你好，今天能帮什么？"),
         IOSSimplePromptField(slotId: PromptSlot.jailbreakId, label: "后置提醒", placeholder: "保持角色设定，用自然的语气回应。"),
     ]
@@ -799,7 +799,7 @@ struct PersonaSettingsTab: View {
             personaSlotField("助手设定", preset: preset, slotId: PromptSlot.charDescriptionId,
                             placeholder: "AI 助手的设定、风格、背景...", psm: psm, height: 60)
             personaSlotField("用户描述", preset: preset, slotId: PromptSlot.personaDescriptionId,
-                            placeholder: "我叫粟粟，喜欢...", psm: psm)
+                            placeholder: "我叫天奕，喜欢...", psm: psm)
             personaSlotField("对话示例", preset: preset, slotId: PromptSlot.dialogueExamplesId,
                             placeholder: "{{user}}: 你好\n{{char}}: 你好，今天能帮什么？", psm: psm, height: 50)
             personaSlotField("后置提醒", preset: preset, slotId: PromptSlot.jailbreakId,

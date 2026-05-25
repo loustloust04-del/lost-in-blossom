@@ -75,7 +75,7 @@ struct Profile: Identifiable, Hashable, Codable {
 
     /// Legacy ghost-lily 用 SwiftData default store —— 没有 explicit URL，由 SwiftData
     /// 自动放在 `Application Support/<BundleID>/default.store`。迁移时需要读它。
-    var usesDefaultStore: Bool { id == "ghost-lily" }
+    var usesDefaultStore: Bool { id == "lost-blossom" }
 
     /// Legacy default store URL（for ghost-lily）—— SwiftData 没有公开 API 返回它，
     /// 只能按它的约定路径构造。
@@ -351,7 +351,7 @@ struct MemoryPalaceApp: App {
         // 路线 B: 1 个 unified container. app lifetime 内不换.
         let container = ProfileManager.makeUnifiedContainer()
         let profiles = ProfileManager.loadProfiles()
-        let lastId = UserDefaults.standard.string(forKey: "lastProfileId") ?? "ghost-lily"
+        let lastId = UserDefaults.standard.string(forKey: "lastProfileId") ?? "lost-blossom"
         let current = profiles.first(where: { $0.id == lastId }) ?? profiles.first ?? Profile.seedProfiles[0]
 
         let tUnified = CFAbsoluteTimeGetCurrent()

@@ -463,7 +463,7 @@ struct APISettingsTab: View {
                 #if os(macOS)
                 Button("查看启动说明") {
                     // TODO: path 写死在仓库 worktree 下，将来 bundle 化时改
-                    let url = URL(fileURLWithPath: "/Users/susu/Desktop/susu-project/记忆宫殿/MemoryPalace/.claude/worktrees/cc-bridge/cc-bridge/README.md")
+                    let url = URL(fileURLWithPath: "/Users/tianyi/Desktop/tianyi-project/lost-in-blossom/MemoryPalace/.claude/worktrees/cc-bridge/cc-bridge/README.md")
                     NSWorkspace.shared.open(url)
                 }
                 .buttonStyle(.bordered)
