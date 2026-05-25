@@ -352,8 +352,31 @@ final class OpenAICompatibleProvider: BaseChatProvider {
 
 // MARK: - Anthropic Provider
 
+/// content_block_start 시점에 생성, content_block_stop 시점에 finalize.
+private struct ActiveBlock {
+    enum Kind {
+        case text
+        case toolUse(id: String, name: String)
+        case toolResult(toolUseId: String)
+    }
+    var kind: Kind
+    var accumulated: String = ""
+}
+
 final class AnthropicProvider: BaseChatProvider {
     private var currentEventType = ""
+
+    /// ProviderRouter가 sendStreaming() 전에 설정. 비어있으면 MCP 미사용.
+    var mcpServersToInject: [MCPServerConfig] = []
+
+    /// 스트리밍 완료 후 tool 세그먼트가 있을 때만 호출. ConversationViewModel이 setSegments()에 사용.
+    var onSegmentsCallback: (([MessageSegment]) -> Void)?
+
+    /// index → 진행 중인 content block 상태
+    private var activeBlocks: [Int: ActiveBlock] = [:]
+
+    /// content_block_stop 시 완성된 세그먼트 (text + tool, 순서 유지)
+    private var pendingSegments: [MessageSegment] = []
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
@@ -369,6 +392,8 @@ final class AnthropicProvider: BaseChatProvider {
     ) {
         resetState(onToken: onToken, onComplete: onComplete, onError: onError)
         currentEventType = ""
+        activeBlocks = [:]
+        pendingSegments = []
 
         // Build Anthropic Messages API format
         var apiMessages: [[String: Any]] = []
@@ -393,6 +418,14 @@ final class AnthropicProvider: BaseChatProvider {
             body["stream"] = p.streaming
         }
 
+        // MCP servers injection (Anthropic mcp_servers beta)
+        let enabledMCP = mcpServersToInject.filter(\.isEnabled)
+        if !enabledMCP.isEmpty {
+            body["mcp_servers"] = enabledMCP.map { s -> [String: Any] in
+                ["type": "url", "url": s.url, "name": s.name]
+            }
+        }
+
         guard let url = URL(string: "\(baseURL)/messages") else {
             onError("无效的 API 地址: \(baseURL)")
             isStreaming = false
@@ -405,6 +438,10 @@ final class AnthropicProvider: BaseChatProvider {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (key, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: key)
+        }
+        // MCP beta header (only when MCP servers are active)
+        if !enabledMCP.isEmpty {
+            request.setValue("mcp-client-0.1", forHTTPHeaderField: "anthropic-beta")
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
@@ -500,7 +537,7 @@ final class AnthropicProvider: BaseChatProvider {
 
         switch type {
         case "message_start":
-            // { "type": "message_start", "message": { "usage": { "input_tokens": N, "output_tokens": 0 } } }
+            // { "type": "message_start", "message": { "usage": { "input_tokens": N } } }
             if let msg = obj["message"] as? [String: Any],
                let u = msg["usage"] as? [String: Any],
                let it = u["input_tokens"] as? Int {
@@ -508,17 +545,67 @@ final class AnthropicProvider: BaseChatProvider {
                 gotUsage = true
             }
 
+        case "content_block_start":
+            // 新규 content block 시작. text / tool_use / tool_result 세 종류.
+            let index = obj["index"] as? Int ?? 0
+            let block = obj["content_block"] as? [String: Any]
+            switch block?["type"] as? String {
+            case "text":
+                activeBlocks[index] = ActiveBlock(kind: .text)
+            case "tool_use":
+                let id = block?["id"] as? String ?? ""
+                let rawName = block?["name"] as? String ?? ""
+                activeBlocks[index] = ActiveBlock(kind: .toolUse(id: id, name: rawName))
+            case "tool_result":
+                let toolUseId = block?["tool_use_id"] as? String ?? ""
+                var toolResultBlock = ActiveBlock(kind: .toolResult(toolUseId: toolUseId))
+                // mcp_servers beta: tool_result 내용이 content_block_start에 직접 포함되기도 함
+                if let content = block?["content"] as? String {
+                    toolResultBlock.accumulated = content
+                }
+                activeBlocks[index] = toolResultBlock
+            default:
+                break
+            }
+
         case "content_block_delta":
-            if let delta = obj["delta"] as? [String: Any],
-               let text = delta["text"] as? String {
-                DispatchQueue.main.async { [self] in
-                    streamingContent += text
-                    onToken?(text)
+            let index = obj["index"] as? Int ?? 0
+            let delta = obj["delta"] as? [String: Any]
+            switch delta?["type"] as? String {
+            case "text_delta":
+                let text = delta?["text"] as? String ?? ""
+                activeBlocks[index]?.accumulated += text
+                // text block만 onToken으로 실시간 업데이트
+                if let block = activeBlocks[index], case .text = block.kind {
+                    DispatchQueue.main.async { [self] in
+                        streamingContent += text
+                        onToken?(text)
+                    }
+                }
+            case "input_json_delta":
+                // tool_use block의 입력 JSON 조각 누적
+                let partial = delta?["partial_json"] as? String ?? ""
+                activeBlocks[index]?.accumulated += partial
+            default:
+                if let text = delta?["text"] as? String, !text.isEmpty {
+                    // fallback: type 없이 text 필드만 있는 경우 (구버전 Anthropic API 호환)
+                    activeBlocks[index]?.accumulated += text
+                    DispatchQueue.main.async { [self] in
+                        streamingContent += text
+                        onToken?(text)
+                    }
                 }
             }
 
+        case "content_block_stop":
+            // block 완료 → MessageSegment 생성 후 pendingSegments에 추가
+            let index = obj["index"] as? Int ?? 0
+            if let block = activeBlocks.removeValue(forKey: index) {
+                finalizeBlock(block)
+            }
+
         case "message_delta":
-            // { "type": "message_delta", "usage": { "output_tokens": N } }
+            // { "usage": { "output_tokens": N } }
             if let u = obj["usage"] as? [String: Any],
                let ot = u["output_tokens"] as? Int {
                 accumulatedOutputTokens = ot
@@ -527,8 +614,18 @@ final class AnthropicProvider: BaseChatProvider {
 
         case "message_stop":
             receivedDone = true
+            let segments = pendingSegments
+            let hasTool = segments.contains {
+                if case .toolUse = $0 { return true }
+                if case .toolResult = $0 { return true }
+                return false
+            }
             DispatchQueue.main.async { [self] in
                 isStreaming = false
+                // tool 세그먼트가 있을 때만 onSegmentsCallback 호출 (plain text는 기존 경로 유지)
+                if hasTool {
+                    onSegmentsCallback?(segments)
+                }
                 onComplete?(streamingContent, finalUsage)
             }
 
@@ -544,6 +641,37 @@ final class AnthropicProvider: BaseChatProvider {
 
         default:
             break
+        }
+    }
+
+    /// block 완료 시 MessageSegment로 변환하여 pendingSegments에 추가.
+    private func finalizeBlock(_ block: ActiveBlock) {
+        switch block.kind {
+        case .text:
+            // 텍스트는 이미 streamingContent에 실시간 누적됨. 비어있지 않으면 segments에도 추가.
+            let text = block.accumulated
+            if !text.isEmpty {
+                pendingSegments.append(.text(text))
+            }
+        case .toolUse(let id, let rawName):
+            // Q2: server name prefix 제거 ("imprint-memory__memory_remember" → "memory_remember")
+            let parts = rawName.components(separatedBy: "__")
+            let displayName = parts.count > 1 ? parts.dropFirst().joined(separator: "__") : rawName
+            let serverName = parts.count > 1 ? parts[0] : nil
+            pendingSegments.append(.toolUse(
+                id: id,
+                name: displayName,
+                inputJSON: block.accumulated.isEmpty ? "{}" : block.accumulated,
+                integrationName: serverName,
+                iconName: nil
+            ))
+        case .toolResult(let toolUseId):
+            pendingSegments.append(.toolResult(
+                toolUseId: toolUseId,
+                text: block.accumulated,
+                isError: false,
+                integrationName: nil
+            ))
         }
     }
 }
@@ -581,6 +709,7 @@ final class ProviderRouter {
         providerManager: ProviderManager,
         samplingParams: SamplingParams? = nil,
         additionalHeaders: [String: String] = [:],
+        onSegments: (([MessageSegment]) -> Void)? = nil,
         onToken: @escaping (String) -> Void,
         onComplete: @escaping (String, TokenUsage?) -> Void,
         onError: @escaping (String) -> Void
@@ -607,6 +736,10 @@ final class ProviderRouter {
         case .openaiCompatible:
             chatProvider = openAIProvider
         case .anthropic:
+            // MCP 서버 주입: anthropic provider이고 mcpEnabled가 false가 아닐 때
+            let mcpEnabled = samplingParams?.mcpEnabled ?? true
+            anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
+            anthropicProvider.onSegmentsCallback = onSegments
             chatProvider = anthropicProvider
         case .ccBridge:
             chatProvider = ccBridgeProvider
