@@ -191,7 +191,11 @@ struct SettingsView: View {
                     case .data:
                         DataSettingsTab()
                     case .notifications:
+                        #if os(iOS)
+                        IOSNotificationPage()
+                        #else
                         NotificationSettingsTab()
+                        #endif
                     case .debug:
                         Text("开发调试模式仅 iOS 生效")
                             .font(.system(size: Theme.F.body))
