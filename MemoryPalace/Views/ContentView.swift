@@ -400,6 +400,15 @@ struct ContentView: View {
                 withAnimation { iOSPage = 1 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .notificationNavigationRequested)) { notification in
+            // Phase 3.1: 用户点击本地通知后路由到对应对话
+            guard let convId = notification.userInfo?["conversationId"] as? String else { return }
+            let descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == convId })
+            if let conv = try? modelContext.fetch(descriptor).first {
+                viewModel.selectedConversation = conv
+                withAnimation { iOSPage = 1 }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardVisible = true
         }
