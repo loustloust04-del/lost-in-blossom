@@ -736,7 +736,7 @@ final class ProviderRouter {
         case .openaiCompatible:
             chatProvider = openAIProvider
         case .anthropic:
-            // MCP 서버 주입: anthropic provider이고 mcpEnabled가 false가 아닐 때
+            // MCP 服务器注入：provider 为 anthropic 且 mcpEnabled 不为 false 时
             let mcpEnabled = samplingParams?.mcpEnabled ?? true
             anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
             anthropicProvider.onSegmentsCallback = onSegments

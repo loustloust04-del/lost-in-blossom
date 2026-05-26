@@ -203,7 +203,7 @@ struct APISettingsTab: View {
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
 
-                // MCP 工具服务器 — Anthropic provider만 표시
+                // MCP 工具服务器 — 仅 Anthropic provider 显示
                 if selectedProvider?.type == .anthropic {
                     Section("MCP 工具服务器") {
                         mcpServersContent
@@ -568,15 +568,15 @@ struct APISettingsTab: View {
         let servers = providerManager?.providers.first(where: { $0.id == pid })?.mcpServers ?? []
 
         VStack(alignment: .leading, spacing: 10) {
-            // 설명 텍스트
+            // 说明文本
             Text("连接 MCP 工具服务器（Anthropic beta），可让 Caelum 自动调用 imprint-memory 等工具。")
                 .font(.system(size: Theme.SettingsFont.caption))
                 .foregroundColor(Theme.textSecondary)
 
-            // 기존 서버 목록
+            // 已有服务器列表
             ForEach(servers) { server in
                 HStack(spacing: 8) {
-                    // 활성화 토글
+                    // 启用切换
                     Button {
                         guard let pm = providerManager else { return }
                         var updated = server
@@ -602,7 +602,7 @@ struct APISettingsTab: View {
 
                     Spacer()
 
-                    // 삭제 버튼
+                    // 删除按钮
                     Button {
                         guard let pm = providerManager else { return }
                         pm.removeMCPServer(id: server.id, from: pid)
@@ -616,7 +616,7 @@ struct APISettingsTab: View {
                 .padding(.vertical, 4)
             }
 
-            // 추가 폼
+            // 添加表单
             if showAddMCPForm {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("名称 (如 imprint-memory)", text: $newMCPName)
@@ -664,7 +664,7 @@ struct APISettingsTab: View {
                 .padding(.top, 4)
             }
 
-            // 추가 버튼
+            // 添加按钮
             if !showAddMCPForm {
                 Button {
                     showAddMCPForm = true

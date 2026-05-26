@@ -1287,8 +1287,8 @@ final class ConversationViewModel {
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,
             onSegments: { [weak assistantNode] segments in
-                // tool_use/tool_result 세그먼트가 있을 때만 호출됨.
-                // onComplete보다 먼저 실행되므로 context.save()는 onComplete에서 처리.
+                // 仅在存在 tool_use/tool_result 段时调用。
+                // 比 onComplete 先执行，context.save() 在 onComplete 中处理。
                 assistantNode?.setSegments(segments)
             },
             onToken: { [weak self] token in
