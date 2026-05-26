@@ -2,9 +2,7 @@ import SwiftUI
 import SwiftData
 import MarkdownUI
 import UniformTypeIdentifiers
-#if os(iOS)
 import VariableBlur
-#endif
 
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
@@ -22,10 +20,6 @@ struct CardFlowView: View {
     @State private var showAddToChat = false
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
-    #if os(macOS)
-    @State private var pinCurrentIndex: Int = 0
-    @State private var pinBarHidden: Bool = false
-    #endif
     @State private var isAtBottom: Bool = true
 
     @ViewBuilder
@@ -79,37 +73,6 @@ struct CardFlowView: View {
     }
 
     // Pin Bar handlers：iOS 版已挪到 ContentView；macOS 版保留（PinBar 仍在 CardFlowView）
-    #if os(macOS)
-    private func handlePinBarTap() {
-        let pins = viewModel.pinnedNodes
-        guard !pins.isEmpty else { return }
-        let idx = min(pinCurrentIndex, pins.count - 1)
-        let target = pins[idx]
-        if viewModel.currentPath.contains(where: { $0.id == target.id }) {
-            viewModel.scrollToNodeId = target.id
-            viewModel.highlightedNodeId = target.id
-            let targetId = target.id
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if viewModel.highlightedNodeId == targetId {
-                    viewModel.highlightedNodeId = nil
-                }
-            }
-        }
-        pinCurrentIndex = (idx + 1) % pins.count
-    }
-
-    private func handleUnpinCurrent() {
-        let pins = viewModel.pinnedNodes
-        guard !pins.isEmpty else { return }
-        let idx = min(pinCurrentIndex, pins.count - 1)
-        let target = pins[idx]
-        target.isPinned = false
-        target.pinnedAt = nil
-        if pinCurrentIndex >= pins.count - 1 {
-            pinCurrentIndex = 0
-        }
-    }
-    #endif
 
     /// 三步回底（滚到底部哨兵 = content 真正的底）：
     /// 1. 先无动画滚到 lastId（让 LazyVStack 载入长 bubble，此时哨兵可能还没 mount）
@@ -144,9 +107,6 @@ struct CardFlowView: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            #if os(macOS)
-            .background(Theme.mainBg)
-            #endif
             // iOS 下路线 C chat page 有 wallpaper，loading 区透明让 wallpaper 可见
         } else {
             VStack(spacing: 0) {
@@ -161,24 +121,6 @@ struct CardFlowView: View {
                         }
                     )
                 }
-
-                #if os(macOS)
-                // macOS：Pin bar 作为 VStack 子项（nav 无胶囊，不遮）
-                PinnedMessageBar(
-                    pinnedNodes: viewModel.pinnedNodes,
-                    currentIndex: $pinCurrentIndex,
-                    isHidden: $pinBarHidden,
-                    onTap: handlePinBarTap,
-                    onUnpinCurrent: handleUnpinCurrent,
-                    onUnpinAll: {
-                        viewModel.unpinAll()
-                        pinCurrentIndex = 0
-                    }
-                )
-                .animation(.easeInOut(duration: 0.25), value: viewModel.pinnedNodes.map(\.id))
-                .animation(.easeInOut(duration: 0.25), value: pinCurrentIndex)
-                .animation(.easeInOut(duration: 0.25), value: pinBarHidden)
-                #endif
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -206,21 +148,11 @@ struct CardFlowView: View {
                                 Color.clear
                                     .frame(height: 1)
                                     .id("__bottom_sentinel__")
-                                    #if os(macOS)
-                                    .onAppear { isAtBottom = true }
-                                    .onDisappear { isAtBottom = false }
-                                    #endif
                             }
                             // 新消息入场动画：路径长度变化时触发 ForEach item transition
                             .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
-                            #if os(iOS)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 16)
-                            #else
-                            .padding(.horizontal, 28)
-                            .padding(.vertical, 20)
-                            .frame(maxWidth: 720)
-                            #endif
                             .frame(maxWidth: .infinity)
 
                             StickerCanvasLayer(
@@ -233,21 +165,7 @@ struct CardFlowView: View {
                             handleStickerDrop(providers: providers, location: location)
                         }
                     }
-                    #if os(iOS)
                     .contentMargins(.top, 50, for: .scrollContent)
-                    #endif
-                    #if os(macOS)
-                    .background(Theme.mainBg)
-                    .overlay(alignment: .bottomTrailing) {
-                        ScrollToBottomButton(
-                            isVisible: !isAtBottom && !viewModel.currentPath.isEmpty,
-                            action: { scrollToLastMessage(proxy: proxy) }
-                        )
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 16)
-                    }
-                    #endif
-                    #if os(iOS)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
                     .overlay(alignment: .top) {
@@ -270,9 +188,7 @@ struct CardFlowView: View {
                         .ignoresSafeArea(.all, edges: .top)
                         .allowsHitTesting(false)
                     }
-                    #endif
 
-                    #if os(iOS)
                     .onScrollGeometryChange(for: Bool.self) { geometry in
                         // tolerance 200pt：content 下方有 padding + 哨兵 + sticker canvas
                         // 大约这么多 pt，用户视觉"到底"时 offset 距离数学 size 还有 100-200pt
@@ -281,7 +197,6 @@ struct CardFlowView: View {
                     } action: { _, atBottom in
                         isAtBottom = atBottom
                     }
-                    #endif
                     .onChange(of: viewModel.isLoading) { _, loading in
                         // 对话加载完成 → 滚到最后一条（applyTreeData 只在搜索跳转时设 scrollToNodeId，
                         // 普通切对话不会自动滚，ScrollView 保留上一对话的 offset，所以要在这里兜底）
@@ -316,7 +231,6 @@ struct CardFlowView: View {
                             proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
-                    #if os(iOS)
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
                     .scrollDismissesKeyboard(.immediately)
@@ -360,23 +274,11 @@ struct CardFlowView: View {
                     }
                     .animation(.easeInOut(duration: 0.25), value: showStickerPanel)
                     .animation(.easeInOut(duration: 0.25), value: stickerVM.isEditingStickers)
-                    #endif
                 }
 
                 // 底栏：编辑模式 = 工具栏，普通模式 = 输入框（仅 macOS，iOS 合并在 StickerKeyboardPanel）
-                #if os(macOS)
-                if stickerVM.isEditingStickers {
-                    StickerToolbar(stickerVM: stickerVM, viewModel: viewModel)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else if let pm = providerManager {
-                    ChatInputBar(viewModel: viewModel, modelContext: modelContext, profileManager: profileManager, providerManager: pm, presetManager: presetManager)
-                        .equatable()
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                #endif
             }
             .animation(.easeInOut(duration: 0.25), value: stickerVM.isEditingStickers)
-            #if os(iOS)
             .overlay(alignment: .bottom) {
                 if showStickerPanel || stickerVM.isEditingStickers {
                     StickerKeyboardPanel(
@@ -404,7 +306,6 @@ struct CardFlowView: View {
             }
             .animation(.easeInOut(duration: 0.25), value: showStickerPanel)
             .animation(.easeInOut(duration: 0.25), value: stickerVM.isEditingStickers)
-            #endif
             .background {
                 // Hidden button for Cmd+F shortcut
                 Button("") {
@@ -421,10 +322,6 @@ struct CardFlowView: View {
             }
             .onChange(of: viewModel.selectedConversation?.id) { _, convId in
                 loadStickersForConversation(convId)
-                #if os(macOS)
-                pinCurrentIndex = 0
-                pinBarHidden = false
-                #endif
                 isAtBottom = true   // 避免上一对话的 false 泄漏到新对话（会让 safeAreaInset 错位）
             }
             .onAppear {
@@ -437,9 +334,7 @@ struct CardFlowView: View {
                     }
                 }
             }
-            #if os(iOS)
             .toolbarBackground(Theme.mainBg, for: .navigationBar)
-            #endif
             .overlay(alignment: .top) {
                 // B20 part 2: transient toast (e.g. "已切换到分支")
                 if let notice = viewModel.transientNotice {
@@ -456,7 +351,6 @@ struct CardFlowView: View {
                         }
                 }
             }
-            #if os(iOS)
             // Add to Chat 功能面板（+ 号触发）
             .sheet(isPresented: $showAddToChat) {
                 AddToChatSheet(onOpenSticker: {
@@ -466,7 +360,6 @@ struct CardFlowView: View {
                     }
                 })
             }
-            #endif
         }
     }
 
@@ -636,21 +529,13 @@ struct ChatInputBar: View {
     }
 
     private var inputPlaceholder: String {
-        #if os(iOS)
         ""
-        #else
-        "发消息... (⌘↩ 发送)"
-        #endif
     }
 
     private var inputBarSpacing: CGFloat {
-        #if os(iOS)
         // 10 = 回底按钮 .padding(.bottom, 4) + ChatInputBar .padding(.top, 6)
         // 让 input field ↔ 胶囊 的间距 = 回底 ↔ input field 的间距，视觉对称
         isFocused ? 0 : 10
-        #else
-        6
-        #endif
     }
 
     var body: some View {
@@ -676,7 +561,6 @@ struct ChatInputBar: View {
 
             // Model selector — glass floating button, hide when keyboard is up.
             // 贴纸按钮已内嵌到 InputFieldContainer 左侧，底部工具行只剩模型选择器。
-            #if os(iOS)
             HStack {
                 Spacer()
                 Button {
@@ -702,35 +586,7 @@ struct ChatInputBar: View {
             .padding(.horizontal, 4)
             .frame(height: isFocused ? 0 : nil, alignment: .top)
             .opacity(isFocused ? 0 : 1)
-            #else
-            if !isFocused {
-                Button {
-                    showModelPicker.toggle()
-                } label: {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Theme.branchIndicator.opacity(0.6))
-                            .frame(width: 5, height: 5)
-                        Text(currentModel.name)
-                            .font(.system(size: 10))
-                            .foregroundColor(Theme.textMuted)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 7))
-                            .foregroundColor(Theme.textMuted.opacity(0.5))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(Theme.accent.opacity(0.3))
-                    )
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, 4)
-            }
-            #endif
         }
-        #if os(iOS)
         .padding(.horizontal, 16)
         .padding(.bottom, isFocused ? 5 : 4) // 8 → 4 压缩 input bar 下方空白；focused 时键盘上方留 5px 呼吸
         .padding(.top, 6)
@@ -763,15 +619,6 @@ struct ChatInputBar: View {
             .allowsHitTesting(false)
             .animation(.easeInOut(duration: 0.25), value: isFocused)
         }
-        #else
-        .padding(.horizontal, 28)
-        .padding(.bottom, 12)
-        .padding(.top, 6)
-        .frame(maxWidth: 720)
-        .frame(maxWidth: .infinity)
-        .background(Theme.mainBg)
-        #endif
-        #if os(iOS)
         .sheet(isPresented: $showModelPicker) {
             ModelPickerPopover(
                 providerManager: providerManager,
@@ -784,18 +631,6 @@ struct ChatInputBar: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
-        #else
-        .popover(isPresented: $showModelPicker, arrowEdge: .bottom) {
-            ModelPickerPopover(
-                providerManager: providerManager,
-                selectedModelId: currentModel.id
-            ) { model in
-                selectedModelId = model.id
-                providerManager.touchLastUsed(providerId: model.providerId, modelId: model.modelId)
-                showModelPicker = false
-            }
-        }
-        #endif
         .onAppear {
             providerManager.resolveStaleSelectedModel()
             providerManager.resolveStaleFavorites()
@@ -891,7 +726,6 @@ private struct InputFieldContainer: View {
         }()
         #endif
         return HStack(alignment: .center, spacing: 0) {
-            #if os(iOS)
             if let onStickerTap {
                 Button(action: onStickerTap) {
                     Image(systemName: "plus")
@@ -903,7 +737,6 @@ private struct InputFieldContainer: View {
                 .buttonStyle(.plain)
                 .padding(.leading, 6)
             }
-            #endif
 
             TextField(placeholder, text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -917,29 +750,14 @@ private struct InputFieldContainer: View {
                     print(String(format: "[PERF] TextField onChange len=%d t=%.3f", newVal.count, CFAbsoluteTimeGetCurrent()))
                 }
                 #endif
-                #if os(macOS)
-                .onKeyPress(.return, phases: .down) { press in
-                    if press.modifiers.contains(.command) {
-                        triggerSend()
-                        return .handled
-                    }
-                    return .ignored
-                }
-                #endif
 
             Button(action: triggerSend) {
                 Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
                     // 图标切换用 SF Symbol replace 动画
                     .contentTransition(.symbolEffect(.replace))
-                    #if os(iOS)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
-                    #else
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 24, height: 24)
-                    #endif
                     .background(
                         Circle()
                             .fill(
@@ -956,27 +774,14 @@ private struct InputFieldContainer: View {
             .disabled(!canSend)
             // 整体 spring 弹性缩放：流式开始/停止时弹一下
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isStreaming)
-            #if os(iOS)
             .frame(width: 44, height: 44)
-            #endif
             .padding(.trailing, 4)
         }
-        #if os(iOS)
         .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: RoundedRectangle(cornerRadius: 20))
         // S1 fix: glassEffect .interactive() 在真机上 tap-through 有时序延迟
         // （经粟粟 iPhone 17 Air A/B 测确认）。在外层抢焦点绕过去，保留玻璃发光视觉。
         .contentShape(Rectangle())
         .onTapGesture { isFocused = true }
-        #else
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Theme.sidebarBg)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Theme.accent, lineWidth: 1)
-        )
-        #endif
     }
 
     private func triggerSend() {
@@ -1071,15 +876,8 @@ struct ModelPickerPopover: View {
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 16)
-            #if os(macOS)
-            .frame(width: 260)
-            #else
             .frame(maxWidth: .infinity)
-            #endif
         }
-        #if os(macOS)
-        .frame(maxHeight: 360)
-        #endif
     }
 }
 
@@ -1339,12 +1137,7 @@ struct BubbleView: View {
                 }
                 Divider()
                 Button(action: {
-                    #if os(macOS)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(ContentCleaner.clean(node.content, cacheKey: node.id), forType: .string)
-                    #else
                     UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
-                    #endif
                 }) {
                     Label("复制文本", systemImage: "doc.on.doc")
                 }
@@ -1355,26 +1148,6 @@ struct BubbleView: View {
             }
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
-            #if os(macOS)
-            if !hideActionBar {
-                HoverButtons(
-                    isFavorite: node.isFavorite,
-                    isPinned: node.isPinned,
-                    onCopy: {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(ContentCleaner.clean(node.content, cacheKey: node.id), forType: .string)
-                    },
-                    onToggleFavorite: onToggleFavorite,
-                    onTogglePin: onTogglePin,
-                    onSoftDelete: onSoftDelete,
-                    onEdit: isUser && onEdit != nil && !isEditing ? {
-                        editText = node.content
-                        isEditing = true
-                    } : nil,
-                    onRegenerate: !isUser && !isStreaming ? onRegenerate : nil
-                )
-            }
-            #endif
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
@@ -1448,17 +1221,7 @@ struct HoverButtons: View {
         .foregroundColor(Theme.textMuted)
         .padding(.horizontal, 4)
         .padding(.top, 2)
-        #if os(macOS)
-        .opacity(isHovered ? 1 : 0)
-        #endif
         .contentShape(Rectangle())
-        #if os(macOS)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovered = hovering
-            }
-        }
-        #endif
     }
 }
 

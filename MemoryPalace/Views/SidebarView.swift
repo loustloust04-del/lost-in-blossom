@@ -146,12 +146,7 @@ struct SidebarView: View {
                 .frame(width: searchBarExpanded ? nil : (isIOSStyle ? 44 : 34), height: isIOSStyle ? 44 : 34)
                 .frame(maxWidth: searchBarExpanded ? .infinity : nil)
                 .clipShape(Capsule())
-                #if os(iOS)
                 .glassEffectCompat(tint: Color.white.opacity(0.15), in: Capsule())
-                #else
-                .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
-                .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))
-                #endif
                 .animation(.spring(response: 0.35, dampingFraction: 0.95), value: searchBarExpanded)
 
                 if !searchBarExpanded { Spacer() }
@@ -162,27 +157,10 @@ struct SidebarView: View {
                         .font(.system(size: isIOSStyle ? 15 : 11, weight: .medium))
                         .foregroundColor(Theme.branchIndicator)
                         .frame(width: isIOSStyle ? 44 : 34, height: isIOSStyle ? 44 : 34)
-                        #if os(iOS)
                         .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
-                        #else
-                        .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
-                        .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))
-                        #endif
                 }
                 .buttonStyle(.plain)
 
-                #if os(macOS)
-                Button(action: { showImporter = true }) {
-                    Image(systemName: "plus.circle")
-                        .font(.system(size: isIOSStyle ? 14 : 11, weight: .medium))
-                        .foregroundColor(Theme.branchIndicator)
-                        .frame(width: isIOSStyle ? 36 : 28, height: isIOSStyle ? 36 : 28)
-                        .padding(isIOSStyle ? 4 : 3)
-                        .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
-                        .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))
-                }
-                .buttonStyle(.plain)
-                #endif
             }
             .padding(.horizontal, isIOSStyle ? 20 : 12)
             .padding(.top, isIOSStyle ? 8 : 10)
@@ -256,14 +234,12 @@ struct SidebarView: View {
                                 }
                             }
                         }
-                        #if os(iOS)
                         .scrollIndicators(.hidden)
                         .scrollDismissesKeyboard(.immediately)
                         .refreshable {
                             viewModel.flushPendingRefresh()
                             try? await Task.sleep(nanoseconds: 400_000_000)
                         }
-                        #endif
                         .sidebarCardShape(for: currentTab)
                     } else if searchFilter.resourceKind == .characterCard {
                         resourceResultsView(kind: .characterCard)
@@ -316,23 +292,19 @@ struct SidebarView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.top, 40)
-                                    #if os(iOS)
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     }
-                                    #endif
                                 }
                             }
                         }
-                        #if os(iOS)
                         .scrollIndicators(.hidden)
                         .scrollDismissesKeyboard(.immediately)
                         .refreshable {
                             viewModel.flushPendingRefresh()
                             try? await Task.sleep(nanoseconds: 400_000_000)
                         }
-                        #endif
                         .sidebarCardShape(for: currentTab)
                     }
                 }
@@ -368,11 +340,6 @@ struct SidebarView: View {
                                             }
                                             renamingConversationId = nil
                                         }
-                                        #if os(macOS)
-                                        .onExitCommand {
-                                            renamingConversationId = nil
-                                        }
-                                        #endif
                                 } else {
                                     conversationRowView(conversation)
                                     .contextMenu {
@@ -542,12 +509,10 @@ struct SidebarView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 40)
-                                #if os(iOS)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                 }
-                                #endif
                             }
 
                             if isLoadingMore {
@@ -559,14 +524,12 @@ struct SidebarView: View {
                             Color.clear.frame(height: 4)
                         }
                     }
-                    #if os(iOS)
                     .scrollIndicators(.hidden)
                     .scrollDismissesKeyboard(.immediately)
                     .refreshable {
                         viewModel.flushPendingRefresh()
                         try? await Task.sleep(nanoseconds: 400_000_000)
                     }
-                    #endif
                     .sidebarCardShape(for: currentTab)
                 }
             }
@@ -695,15 +658,9 @@ struct SidebarView: View {
             isSelected: viewModel.selectedConversation?.id == conversation.id,
             isFirst: conversation.id == conversations.first?.id
         )
-        #if os(iOS)
         row.onTapGesture {
             viewModel.loadConversation(conversation, context: modelContext)
         }
-        #else
-        row.onTapGesture {
-            viewModel.loadConversation(conversation, context: modelContext)
-        }
-        #endif
     }
 
     private func exportConversation(_ conversation: Conversation) {
@@ -713,25 +670,6 @@ struct SidebarView: View {
                 exportingConversation = conversation
             }
         } else {
-            #if os(macOS)
-            // Lightweight mode: show save panel first, then export
-            let panel = NSSavePanel()
-            panel.title = "导出 Markdown"
-            panel.nameFieldStringValue = "\(MarkdownExporter.sanitizedFileName(conversation.title)).md"
-            panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                guard panel.runModal() == .OK, let url = panel.url else { return }
-                let markdown = MarkdownExporter.loadAndExport(
-                    conversation: conversation,
-                    context: modelContext,
-                    mode: .longest,
-                    userName: userName,
-                    assistantName: assistantName
-                )
-                try? markdown.write(to: url, atomically: true, encoding: .utf8)
-            }
-            #endif
         }
     }
 
@@ -786,7 +724,6 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 170)
 
-        #if os(iOS)
         // iOS 空态：ScrollView + 系统 .refreshable，和大卡下拉动画一致
         // （卡片跟手指下移 + 顶部 spinner 滑进）。frame(height: 170) 锁死小卡高度。
         // .scrollBounceBehavior(.always) 让没内容也能 bounce → refresh 可触发。
@@ -802,9 +739,6 @@ struct SidebarView: View {
             try? await Task.sleep(nanoseconds: 400_000_000)
         }
         .scrollDismissesKeyboard(.immediately)
-        #else
-        cardBody
-        #endif
     }
 
     private var sortLabel: String {
@@ -817,11 +751,7 @@ struct SidebarView: View {
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 
     // MARK: - Chrome-style Tab Bar
@@ -869,16 +799,12 @@ struct SidebarView: View {
     @State private var snappedTabId: SidebarTab? = nil
 
     private var sidebarTabBar: some View {
-        #if os(iOS)
         // iOS：包一层 TabBarGestureContainer（UIHostingController wrapper），
         // 在容器 view 上挂 pan gesture，配合 TabView(.page) 的
         // require(toFail:) 屏蔽翻页
         return TabBarGestureContainer { sidebarTabBarBody }
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
-        #else
-        return sidebarTabBarBody
-        #endif
     }
 
     @ViewBuilder
@@ -919,14 +845,12 @@ struct SidebarView: View {
                                 .offset(x: -8)
                         }
                     )
-                    #if os(iOS)
                     .onChange(of: snappedTabId) { oldTab, newTab in
                         // Clock 齿轮手感：划过每个 tab 都震一下
                         if oldTab != nil && newTab != nil && oldTab != newTab {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
                     }
-                    #endif
                     .onChange(of: currentTab) { _, newTab in
                         guard newTab != .all else { return }
                         withAnimation(.easeInOut(duration: 0.25)) {
@@ -1661,10 +1585,8 @@ struct SidebarView: View {
                 }
             }
         }
-        #if os(iOS)
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
-        #endif
         .sidebarCardShape(for: currentTab)
     }
 
@@ -2065,19 +1987,11 @@ struct CharacterCardMatchRow: View {
             // 头像缩略
             Group {
                 if let data = result.imageData {
-                    #if os(macOS)
-                    if let img = NSImage(data: data) {
-                        Image(nsImage: img)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } else { Image(systemName: "person.crop.rectangle") }
-                    #else
                     if let img = UIImage(data: data) {
                         Image(uiImage: img)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     } else { Image(systemName: "person.crop.rectangle") }
-                    #endif
                 } else {
                     Image(systemName: "person.crop.rectangle")
                         .font(.system(size: 14))
@@ -2391,21 +2305,10 @@ struct AdvancedSearchPanel: View {
         .padding(.trailing, isIOSStyle ? 20 : 12)
         .padding(.top, 8)
         .padding(.bottom, 18)
-        #if os(macOS)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Theme.mainBg.opacity(0.6))
-        )
-        .padding(.horizontal, 10)
-        #endif
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 
     /// 分类名（时间/角色/排序/类型）
@@ -2556,19 +2459,11 @@ private struct SidebarCardShape: ViewModifier {
 
     /// iOS 下 tab bar 已隐藏，四角统一圆角；macOS tab bar 常显，全部标签下左上角贴边。
     private var topLeadingRadius: CGFloat {
-        #if os(iOS)
         16
-        #else
-        tab == .all ? 0 : 16
-        #endif
     }
 
     private var horizontalPadding: CGFloat {
-        #if os(iOS)
         20
-        #else
-        12
-        #endif
     }
 }
 

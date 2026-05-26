@@ -1,9 +1,7 @@
 import SwiftUI
 import SwiftData
-#if os(iOS)
 import UIKit
 import VariableBlur
-#endif
 
 #if DEBUG
 @MainActor enum PerfCounters {
@@ -37,11 +35,9 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
     @State private var showTrash = false
-    #if os(iOS)
     // 当前 iOS page：0=list, 1=chat, 2=more。@State 与 PagingContainerView.currentPage binding，
     // UIKit UIScrollView paging 完成后通过 binding 回写。
     @State private var iOSPage: Int = 1
-    #endif
     // iOSPageDragOffset removed — ScrollView handles drag natively
     @State private var isSidebarVisible = true
     @State private var isRightPanelVisible = false
@@ -51,7 +47,6 @@ struct ContentView: View {
     @State private var isFullscreenTransitioning = false
     @State private var windowWidth: CGFloat = 1200
     @State private var suppressAutoCollapse = false
-    #if os(iOS)
     @State private var isKeyboardVisible = false
     @State private var topSafeAreaInset: CGFloat = 59  // 默认 iPhone 常见值；onAppear 更新成 UIApplication 的真值
     // 聊天页 nav 菜单 / 重命名 / 改标签 状态
@@ -63,19 +58,6 @@ struct ContentView: View {
     @State private var pinBarHidden: Bool = false
     // 分支地图 sheet（B20 part 2 A3 反馈）
     @State private var showBranchMap = false
-    #endif
-    #if os(macOS)
-    // bgMode 在 iOS 上从未被 read（仅 macOS 内 zstackLayer 判断），但 @AppStorage declaration
-    // 让 ContentView 订阅 _debugBackgroundModeRaw 这个 wrapper，启动后 UserDefaults 异步同步
-    // 触发 ContentView body re-eval（第三轮 log 实证 #2 +2.85s ghost body 的真凶）。
-    // 包 #if os(macOS) 后 iOS struct 没这个 property，不再订阅。
-    @AppStorage(DebugRenderSettings.themeBackgroundModeKey)
-    private var debugBackgroundModeRaw: String = DebugThemeBackgroundMode.original.rawValue
-
-    private var debugBackgroundMode: DebugThemeBackgroundMode {
-        DebugThemeBackgroundMode(rawValue: debugBackgroundModeRaw) ?? .original
-    }
-    #endif
     @AppStorage("blurRadius") private var blurRadius = 1.3
     // pageIndicatorInZStack / debugPageIndicatorMode / @AppStorage debugPageIndicatorModeRaw
     // 全 dead code（pageIndicatorInZStack 无 call site）— 已删除以减少订阅 surface。
@@ -124,9 +106,6 @@ struct ContentView: View {
         #endif
         let manager = themeManager ?? ThemeManager.shared
         let _ = manager.themeChangeID
-        #if os(macOS)
-        let bgMode = debugBackgroundMode
-        #endif
         #if DEBUG
         // 订阅源 snapshot — 砍掉之前探针 observer effect 引入的字段（ContentView 生产代码
         // 不 read 这些 field，但探针 read 让 ContentView 订阅了它们 → 第三轮 log 看到的
@@ -148,13 +127,8 @@ struct ContentView: View {
             "profileId": profileManager?.currentProfile.id.prefix(8).description ?? "nil",
             "colorScheme": "\(colorScheme)",
         ]
-        #if os(iOS)
         _bodyProbeSnapshot["iOSPage"] = "\(iOSPage)"
         _bodyProbeSnapshot["isKeyboardVisible"] = "\(isKeyboardVisible)"
-        #endif
-        #if os(macOS)
-        _bodyProbeSnapshot["bgMode"] = bgMode.rawValue
-        #endif
         let _bodyProbeDiff = _bodyProbeSnapshot
             .filter { PerfCounters.lastContentViewSnapshot[$0.key] != $0.value }
             .map { "\($0.key): \(PerfCounters.lastContentViewSnapshot[$0.key] ?? "∅")→\($0.value)" }
@@ -167,65 +141,10 @@ struct ContentView: View {
                      _bodyProbeDiffStr))
         #endif
         return ZStack {
-            #if os(macOS)
-            // master 的 Theme.mainBg baseline，仅 macOS 留：路线 C 下 iOS 每页自己 .background +
-            // hc.view.clipsToBounds 已兜底，不需要 baseline；macOS 保留作 ZStack 底色防露白。
-            Theme.mainBg.ignoresSafeArea()
-            #endif
 
-            #if os(macOS)
-            // Debug: C 模式把 wallpaper 挪到 ZStack 底层（避开 .background 的 parent-size 约束）
-            // iOS 下已改为"只聊天页带 wallpaper"，全局 zstackLayer 不再适用，保留仅 macOS
-            if bgMode == .zstackLayer {
-                ThemeBackgroundView(
-                    fill: Theme.mainBg,
-                    imageURL: manager.currentBackgroundImageURL,
-                    scheme: manager.activeScheme,
-                    backgroundStyle: manager.currentBackgroundStyle
-                )
-                .ignoresSafeArea()
-            }
-            if isFullscreen {
-                fullscreenLayout
-            } else {
-                normalLayout
-            }
-
-            rightPanelCornerButton
-                .padding(.top, isFullscreen ? 8 : 6)
-                .padding(.trailing, 14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .ignoresSafeArea(edges: .top)
-                .zIndex(10)
-
-            if isFullscreenTransitioning {
-                Rectangle()
-                    .fill(Theme.mainBg)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .frame(height: 64, alignment: .top)
-                    .ignoresSafeArea(edges: .top)
-                    .allowsHitTesting(false)
-                    .transition(.identity)
-            }
-            #endif
-            #if os(iOS)
             iOSLayout
-            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        #if os(macOS)
-        .background {
-            if bgMode != .zstackLayer {
-                ThemeBackgroundView(
-                    fill: Theme.mainBg,
-                    imageURL: manager.currentBackgroundImageURL,
-                    scheme: manager.activeScheme,
-                    backgroundStyle: manager.currentBackgroundStyle
-                )
-                .ignoresSafeArea()
-            }
-        }
-        #else
         // 路线 C：body.background 撤了。每页自己处理背景 + safe area 延伸：
         // - iOSListPage / iOSDashboardPage 各自 .background(color.ignoresSafeArea())
         // - iOSChatPage 内部 .background { ChatWallpaperBackdrop.ignoresSafeArea() } + topBar overlay
@@ -246,7 +165,6 @@ struct ContentView: View {
                 .allowsHitTesting(false)
             }
         }
-        #endif
         .onReceive(NotificationCenter.default.publisher(for: .showStickerLibrary)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedToolId = "sticker"
@@ -258,11 +176,7 @@ struct ContentView: View {
             guard let t = target else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedToolId = t.tool
-                #if os(macOS)
-                isRightPanelVisible = true
-                #else
                 iOSPage = 2
-                #endif
             }
         }
         .transaction { tx in
@@ -274,7 +188,6 @@ struct ContentView: View {
                 CCBridgeWebSocketClient.shared.connect(url: url)
             }
             manager.syncSystemColorScheme(colorScheme)
-            #if os(iOS)
             let top = screenSafeAreaTop
             if top > 0 { topSafeAreaInset = top }
 
@@ -300,21 +213,10 @@ struct ContentView: View {
                 }
             }
             #endif
-            #endif
         }
         .onChange(of: colorScheme) { _, newScheme in
             manager.syncSystemColorScheme(newScheme)
         }
-        #if os(macOS)
-        .toolbarBackground(.hidden, for: .windowToolbar)
-        .background(
-            WindowFullscreenObserver(
-                isFullscreen: $isFullscreen,
-                isTransitioning: $isFullscreenTransitioning,
-                windowWidth: $windowWidth
-            )
-        )
-        #endif
         .onReceive(NotificationCenter.default.publisher(for: .memoryPalaceRequestImport)) { _ in
             showImporter = true
         }
@@ -323,24 +225,19 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showImporter) {
             ImportView()
-                #if os(iOS)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(Theme.sidebarBg)
-                #endif
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
-                #if os(iOS)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(.clear)
-                #endif
         }
     }
 
     // MARK: - iOS Three-Screen Layout (ScrollView horizontal paging)
-    #if os(iOS)
     private var iOSLayout: some View {
         let manager = themeManager ?? ThemeManager.shared
         let scheme = manager.activeScheme
@@ -773,7 +670,6 @@ struct ContentView: View {
         let conv = viewModel.createNewConversation(title: "新对话", profileId: pid, context: modelContext)
         viewModel.loadConversation(conv, context: modelContext)
     }
-    #endif
 
     // MARK: - macOS Layout
     private var normalLayout: some View {
@@ -799,27 +695,12 @@ struct ContentView: View {
             Group {
                 if viewModel.selectedConversation != nil {
                     CardFlowView(viewModel: viewModel, stickerVM: stickerVM)
-                        #if os(macOS)
-                        .navigationBarBackButtonHidden(true)
-                        #endif
                 } else {
                     EmptyStateView(showImporter: $showImporter, profileId: profileManager?.currentProfile.id ?? "")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            #if os(macOS)
-            if isRightPanelVisible {
-                PanelDivider(
-                    panelWidth: $calendarWidth,
-                    minWidth: 200,
-                    maxWidth: max(calendarMaxWidth(in: detailWidth), 200)
-                )
-                RightPanelView(selectedToolId: $selectedToolId, viewModel: viewModel, stickerVM: stickerVM)
-                    .frame(width: min(calendarWidth, max(calendarMaxWidth(in: detailWidth), 200)))
-                    .frame(maxHeight: .infinity, alignment: .top)
-            }
-            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
@@ -830,65 +711,6 @@ struct ContentView: View {
             }
         )
     }
-
-    #if os(macOS)
-    private var fullscreenLayout: some View {
-        HSplitView {
-            if isSidebarVisible {
-                SidebarView(
-                    searchText: $searchText,
-                    showFavoritesOnly: $showFavoritesOnly,
-                    showTrash: $showTrash,
-                    showImporter: $showImporter,
-                    showSettings: $showSettings,
-                    viewModel: viewModel,
-                    profileId: profileManager?.currentProfile.id ?? ""
-                )
-                .frame(minWidth: sidebarMinWidth, idealWidth: 300, maxWidth: sidebarMaxWidth)
-                .background(Theme.sidebarBg)
-                .transition(.move(edge: .leading).combined(with: .opacity))
-            }
-
-            HStack(alignment: .top, spacing: 0) {
-                VStack(spacing: 0) {
-                    DetailTopBar(
-                        isSidebarVisible: $isSidebarVisible,
-                        showImporter: $showImporter
-                    )
-
-                    if viewModel.selectedConversation != nil {
-                        CardFlowView(viewModel: viewModel, stickerVM: stickerVM)
-                            .navigationBarBackButtonHidden(true)
-                    } else {
-                        EmptyStateView(showImporter: $showImporter, profileId: profileManager?.currentProfile.id ?? "")
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.mainBg)
-
-                if isRightPanelVisible {
-                    PanelDivider(
-                        panelWidth: $calendarWidth,
-                        minWidth: 200,
-                        maxWidth: max(calendarMaxWidth(in: detailWidth), 200)
-                    )
-                    RightPanelView(selectedToolId: $selectedToolId, viewModel: viewModel, stickerVM: stickerVM)
-                        .frame(width: min(calendarWidth, max(calendarMaxWidth(in: detailWidth), 200)))
-                        .frame(maxHeight: .infinity, alignment: .top)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { detailWidth = geo.size.width }
-                        .onChange(of: geo.size.width) { _, w in detailWidth = w }
-                }
-            )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    #endif
 
     private var rightPanelCornerButton: some View {
         Button {
@@ -952,114 +774,6 @@ struct DetailTopBar: View {
     }
 }
 
-#if os(macOS)
-// MARK: - Fullscreen Observer
-
-struct WindowFullscreenObserver: NSViewRepresentable {
-    @Binding var isFullscreen: Bool
-    @Binding var isTransitioning: Bool
-    @Binding var windowWidth: CGFloat
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            context.coordinator.attach(
-                to: view.window,
-                onStateChange: { full, transitioning in
-                    isFullscreen = full
-                    isTransitioning = transitioning
-                },
-                onWidthChange: { width in
-                    windowWidth = width
-                }
-            )
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.attach(
-            to: nsView.window,
-            onStateChange: { full, transitioning in
-                isFullscreen = full
-                isTransitioning = transitioning
-            },
-            onWidthChange: { width in
-                windowWidth = width
-            }
-        )
-    }
-
-    final class Coordinator {
-        private weak var window: NSWindow?
-        private var observers: [NSObjectProtocol] = []
-        private var onStateChange: ((Bool, Bool) -> Void)?
-        private var onWidthChange: ((CGFloat) -> Void)?
-
-        deinit {
-            removeObservers()
-        }
-
-        func attach(to window: NSWindow?, onStateChange: @escaping (Bool, Bool) -> Void, onWidthChange: @escaping (CGFloat) -> Void) {
-            self.onStateChange = onStateChange
-            self.onWidthChange = onWidthChange
-            guard let window else { return }
-            if self.window !== window {
-                removeObservers()
-                self.window = window
-                installObservers(for: window)
-                // 保持 900 的最小宽度，避免日历面板在边界尺寸下反复折叠
-                window.minSize.width = 900
-            }
-            onStateChange(window.styleMask.contains(.fullScreen), false)
-            onWidthChange(window.frame.width)
-        }
-
-        private func installObservers(for window: NSWindow) {
-            let center = NotificationCenter.default
-            observers = [
-                center.addObserver(forName: NSWindow.willEnterFullScreenNotification, object: window, queue: .main) { [weak self, weak window] _ in
-                    guard let self, let window else { return }
-                    self.onStateChange?(window.styleMask.contains(.fullScreen), true)
-                },
-                center.addObserver(forName: NSWindow.willExitFullScreenNotification, object: window, queue: .main) { [weak self, weak window] _ in
-                    guard let self, let window else { return }
-                    self.onStateChange?(window.styleMask.contains(.fullScreen), true)
-                },
-                center.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main) { [weak self, weak window] _ in
-                    guard let self, let window else { return }
-                    self.onStateChange?(window.styleMask.contains(.fullScreen), true)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
-                        self.onStateChange?(window.styleMask.contains(.fullScreen), false)
-                    }
-                },
-                center.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main) { [weak self, weak window] _ in
-                    guard let self, let window else { return }
-                    self.onStateChange?(window.styleMask.contains(.fullScreen), true)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
-                        self.onStateChange?(window.styleMask.contains(.fullScreen), false)
-                    }
-                },
-                center.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak self, weak window] _ in
-                    guard let self, let window else { return }
-                    self.onWidthChange?(window.frame.width)
-                }
-            ]
-        }
-
-        private func removeObservers() {
-            let center = NotificationCenter.default
-            observers.forEach(center.removeObserver)
-            observers.removeAll()
-        }
-    }
-}
-#endif
-
 // MARK: - Panel Divider
 
 struct PanelDivider: View {
@@ -1079,12 +793,6 @@ struct PanelDivider: View {
                     .fill(Theme.accent.opacity(0.45))
                     .frame(width: 1)
             )
-            #if os(macOS)
-            .onHover { hovering in
-                updateResizeCursor(isHovering: hovering)
-            }
-            .onDisappear(perform: releaseResizeCursor)
-            #endif
             .gesture(
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
@@ -1100,23 +808,6 @@ struct PanelDivider: View {
             )
     }
 
-    #if os(macOS)
-    private func updateResizeCursor(isHovering: Bool) {
-        if isHovering {
-            guard !hasResizeCursor else { return }
-            hasResizeCursor = true
-            NSCursor.resizeLeftRight.push()
-        } else {
-            releaseResizeCursor()
-        }
-    }
-
-    private func releaseResizeCursor() {
-        guard hasResizeCursor else { return }
-        hasResizeCursor = false
-        NSCursor.pop()
-    }
-    #endif
 }
 
 // MARK: - Empty State
@@ -1151,7 +842,6 @@ struct EmptyStateView: View {
     @State private var greetingVisible = false
 
     var body: some View {
-        #if os(iOS)
         // iOS：问候语设计（类 Claude App 空状态）
         VStack(spacing: 0) {
             Spacer()
@@ -1187,34 +877,6 @@ struct EmptyStateView: View {
             }
         }
         .onDisappear { greetingVisible = false }
-        #else
-        // macOS：保留原有设计
-        VStack(spacing: 20) {
-            if conversations.isEmpty {
-                Image(systemName: "tray")
-                    .font(.system(size: 48))
-                    .foregroundColor(Theme.textMuted)
-                Text("还没有对话")
-                    .font(.title2)
-                    .foregroundColor(Theme.textSecondary)
-                Text("导入你的 ChatGPT 对话，开始构建记忆宫殿")
-                    .foregroundColor(Theme.textMuted)
-                Button("导入 conversations.json") {
-                    showImporter = true
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.branchIndicator)
-            } else {
-                Image(systemName: "rectangle.stack")
-                    .font(.system(size: 48))
-                    .foregroundColor(Theme.textMuted)
-                Text("选择一条对话")
-                    .font(.title2)
-                    .foregroundColor(Theme.textSecondary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        #endif
     }
 }
 
