@@ -34,12 +34,25 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [{
     name: "reply",
-    description: "Reply to a Memory Palace channel message. Use this when responding to <channel source=\"memorypalace\"> input.",
+    description: "Reply to a Memory Palace channel message. Use this when responding to <channel source=\"memorypalace\"> input. If you called any imprint-memory tools while preparing your reply, list them in tool_calls so the iOS app can display them as tool cards.",
     inputSchema: {
       type: "object",
       properties: {
         chat_id: { type: "string", description: "The chat_id from the <channel> tag" },
         content: { type: "string", description: "Your reply text" },
+        tool_calls: {
+          type: "array",
+          description: "Optional: MCP tool calls made while preparing this reply (e.g., imprint-memory queries)",
+          items: {
+            type: "object",
+            properties: {
+              name:       { type: "string", description: "Tool name, e.g. memory_search" },
+              input_json: { type: "string", description: "JSON-encoded tool arguments" },
+              result:     { type: "string", description: "Tool result summary" },
+            },
+            required: ["name"],
+          },
+        },
       },
       required: ["chat_id", "content"],
     },
@@ -50,8 +63,26 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name !== "reply") {
     throw new Error(`unknown tool: ${req.params.name}`)
   }
-  const args = req.params.arguments as { chat_id: string; content: string }
+  const args = req.params.arguments as {
+    chat_id: string
+    content: string
+    tool_calls?: Array<{ name: string; input_json?: string; result?: string }>
+  }
   const ws = await ensureHub()
+
+  // 先发 tool_event 让 iOS 渲染 ToolCallCardView，再发 reply
+  if (args.tool_calls && args.tool_calls.length > 0) {
+    for (const tc of args.tool_calls) {
+      ws.send(JSON.stringify({
+        type: "tool_event",
+        chat_id: args.chat_id,
+        tool_name: tc.name,
+        input_json: tc.input_json ?? "{}",
+        result: tc.result ?? "",
+      }))
+    }
+  }
+
   ws.send(JSON.stringify({
     type: "reply",
     chat_id: args.chat_id,

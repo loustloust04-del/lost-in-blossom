@@ -742,6 +742,7 @@ final class ProviderRouter {
             anthropicProvider.onSegmentsCallback = onSegments
             chatProvider = anthropicProvider
         case .ccBridge:
+            ccBridgeProvider.onSegmentsCallback = onSegments
             chatProvider = ccBridgeProvider
         }
 
@@ -815,6 +816,8 @@ final class ProviderRouter {
 
 final class CCBridgeProvider: BaseChatProvider {
     @ObservationIgnored private let wsClient = CCBridgeWebSocketClient.shared
+    /// ProviderRouter 在发起请求前注入，用于把 tool_event 段回传给 ViewModel
+    var onSegmentsCallback: (([MessageSegment]) -> Void)?
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
@@ -849,21 +852,54 @@ final class CCBridgeProvider: BaseChatProvider {
         let messageId = extraHeaders["X-MP-MessageId"] ?? UUID().uuidString
         let user      = extraHeaders["X-MP-User"]      ?? "tianyi"
 
-        // 3. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
+        // 3. 积累 tool_event 段（CC 调用 imprint-memory 后通过 reply tool_calls 上报）
+        //    pendingToolSegments 被 toolEventHandler 和 replyHandler 两个闭包共享捕获；
+        //    两者均在 main thread 调用，无竞争。
+        var pendingToolSegments: [MessageSegment] = []
+        let capturedOnSegments = onSegmentsCallback  // 快照，避免 sendStreaming 返回后被覆盖
+
+        wsClient.toolEventHandler = { [chatId] (evtChatId, toolName, inputJSON, result) in
+            guard evtChatId == chatId else { return }
+            // Q2：不显示 server 前缀，直接用 toolName（CC 已自动去前缀或 mcp-server.ts 直接传工具名）
+            let toolUseSeg = MessageSegment.toolUse(
+                id: UUID().uuidString,
+                name: toolName,
+                inputJSON: inputJSON.isEmpty ? "{}" : inputJSON,
+                integrationName: "imprint-memory",
+                iconName: nil
+            )
+            let toolResultSeg = MessageSegment.toolResult(
+                toolUseId: "",    // CCBridge 路径 toolUseId 无意义，置空
+                text: result,
+                isError: false,
+                integrationName: nil
+            )
+            pendingToolSegments.append(toolUseSeg)
+            if !result.isEmpty { pendingToolSegments.append(toolResultSeg) }
+        }
+
+        // 4. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
         wsClient.registerReplyHandler(chatId: chatId) { [weak self] replyText in
             guard let self else { return }
+            self.wsClient.toolEventHandler = nil           // 清除 tool_event 监听
             self.wsClient.unregisterReplyHandler(chatId: chatId)
             self.isStreaming = false
             self.streamingContent = replyText
+            // 若有 tool segments，组合后回传 ViewModel 写入 node.segments
+            if !pendingToolSegments.isEmpty {
+                var segs = pendingToolSegments
+                segs.append(.text(replyText))
+                capturedOnSegments?(segs)
+            }
             onComplete(replyText, nil)  // CC 不上报 token 用量
         }
 
-        // 4. 触发连接（如未连接）
+        // 5. 触发连接（如未连接）
         if !wsClient.isConnected, let url = URL(string: baseURL) {
             wsClient.connect(url: url)
         }
 
-        // 5. 发送 send 帧；若 WS 未连接，send 立即回调 error，走 failNow 分支
+        // 6. 发送 send 帧；若 WS 未连接，send 立即回调 error，走 failNow 分支
         let payload: [String: Any] = [
             "type":       "send",
             "chat_id":    chatId,
@@ -874,6 +910,7 @@ final class CCBridgeProvider: BaseChatProvider {
         wsClient.send(payload) { [weak self] err in
             guard let self else { return }
             if let err {
+                self.wsClient.toolEventHandler = nil
                 self.wsClient.unregisterReplyHandler(chatId: chatId)
                 self.failNow("CC Bridge WS 发送失败：\(err.localizedDescription)", onError: onError)
             }
