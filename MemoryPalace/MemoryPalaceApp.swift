@@ -433,10 +433,6 @@ struct MemoryPalaceApp: App {
             // Plan: docs/plan-unified-container.md
             ContentView()
                 .preferredColorScheme(themeManager.preferredColorScheme)
-                #if os(macOS)
-                .frame(minWidth: 800, minHeight: 500)
-                .background(WindowConfigurator())
-                #endif
                 .environment(themeManager)
                 .environment(profileManager)
                 .environment(providerManager)
@@ -448,32 +444,6 @@ struct MemoryPalaceApp: App {
                 .modelContainer(profileManager.container)
                 .id(profileManager.currentProfile.id)
         }
-        #if os(macOS)
-        .windowStyle(.automatic)
-        .windowToolbarStyle(.unified(showsTitle: false))
-        .commands {
-            CommandGroup(after: .toolbar) {
-                Button("放大") {
-                    let current = UserDefaults.standard.double(forKey: "fontScale")
-                    let scale = current > 0 ? current : 1.0
-                    UserDefaults.standard.set(min(scale + 0.1, 2.0), forKey: "fontScale")
-                }
-                .keyboardShortcut("+", modifiers: .command)
-
-                Button("缩小") {
-                    let current = UserDefaults.standard.double(forKey: "fontScale")
-                    let scale = current > 0 ? current : 1.0
-                    UserDefaults.standard.set(max(scale - 0.1, 0.5), forKey: "fontScale")
-                }
-                .keyboardShortcut("-", modifiers: .command)
-
-                Button("重置缩放") {
-                    UserDefaults.standard.set(1.0, forKey: "fontScale")
-                }
-                .keyboardShortcut("0", modifiers: .command)
-            }
-        }
-        #endif
     }
 }
 
@@ -694,11 +664,7 @@ struct ProfileEditorSheet: View {
     var body: some View {
         let _ = themeManager?.themeChangeID
         Group {
-            #if os(iOS)
             iOSBody
-            #else
-            macOSBody
-            #endif
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -757,11 +723,9 @@ struct ProfileEditorSheet: View {
         }
     }
 
-    #if os(iOS)
     private var iOSBody: some View {
         editorNavigation
     }
-    #endif
 
     private var macOSBody: some View {
         editorNavigation
@@ -833,11 +797,7 @@ struct ProfileEditorSheet: View {
                             }
                         }
                     }
-                    #if os(macOS)
-                    .pickerStyle(.menu)
-                    #else
                     .tint(Theme.branchIndicator)
-                    #endif
                 }
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
@@ -862,17 +822,11 @@ struct ProfileEditorSheet: View {
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.plain)
-            #endif
             .scrollContentBackground(.hidden)
             .background(Theme.sidebarBg)
             .navigationTitle(title)
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -1128,32 +1082,3 @@ struct ProfileEditorSheet: View {
     }
 }
 
-#if os(macOS)
-// MARK: - NSWindow Transparent Titlebar
-
-struct WindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                Self.configure(window)
-            }
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        guard let window = nsView.window else { return }
-        Self.configure(window)
-    }
-
-    private static func configure(_ window: NSWindow) {
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.backgroundColor = Theme.platformMainBackgroundColor
-        window.styleMask.insert(.fullSizeContentView)
-        window.titlebarSeparatorStyle = .none
-        window.toolbar?.showsBaselineSeparator = false
-    }
-}
-#endif
