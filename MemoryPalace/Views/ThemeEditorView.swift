@@ -1,8 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
-#if os(iOS)
 import PhotosUI
-#endif
 
 struct ThemeEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,9 +8,7 @@ struct ThemeEditorView: View {
     @State private var editingScheme: ColorScheme = .light
     @State private var showImageImporter = false
     @State private var imageImportError: String?
-    #if os(iOS)
     @State private var selectedPhotoItem: PhotosPickerItem?
-    #endif
 
     let themeId: String
 
@@ -81,7 +77,6 @@ struct ThemeEditorView: View {
                         backgroundStyle: backgroundStyle
                     )
 
-                    #if os(iOS)
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                         Text("从照片选背景图")
                             .foregroundColor(Theme.branchIndicator)
@@ -91,12 +86,6 @@ struct ThemeEditorView: View {
                         showImageImporter = true
                     }
                     .foregroundColor(Theme.branchIndicator)
-                    #else
-                    Button("选择背景图片") {
-                        showImageImporter = true
-                    }
-                    .foregroundColor(Theme.branchIndicator)
-                    #endif
 
                     if theme.hasBackgroundImage {
                         ThemeAdjustmentSliderRow(
@@ -208,18 +197,12 @@ struct ThemeEditorView: View {
                 .listRowSeparator(.hidden)
 
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.sidebar)
-            #endif
             .scrollContentBackground(.hidden)
             .background(Color.clear)
             .navigationTitle(theme.isCustomDraft ? "编辑主题" : theme.name)
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
@@ -273,14 +256,12 @@ struct ThemeEditorView: View {
         } message: {
             Text(imageImportError ?? "")
         }
-        #if os(iOS)
         .onChange(of: selectedPhotoItem) { _, newItem in
             guard let newItem else { return }
             Task {
                 await importPhotoItem(newItem)
             }
         }
-        #endif
     }
 
     private func colorBinding(for keyPath: WritableKeyPath<ThemeTokenSet, ThemeColorValue>) -> Binding<Color> {
@@ -345,7 +326,6 @@ struct ThemeEditorView: View {
         return rounded > 0 ? "+\(rounded)" : "\(rounded)"
     }
 
-    #if os(iOS)
     private func importPhotoItem(_ item: PhotosPickerItem) async {
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
@@ -359,7 +339,6 @@ struct ThemeEditorView: View {
             imageImportError = error.localizedDescription
         }
     }
-    #endif
 }
 
 private struct ThemeEditorBackgroundRow: View {

@@ -151,7 +151,6 @@ struct GeneralSettingsTab: View {
 
 // MARK: - iOS General Page
 
-#if os(iOS)
 struct IOSGeneralPage: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -289,4 +288,3 @@ private struct IOSGeneralWorldBookBindingSection: View {
         try? modelContext.save()
     }
 }
-#endif

@@ -1,9 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-#if os(iOS)
 import UIKit
-#endif
 
 // MARK: - Settings Container
 
@@ -38,16 +36,11 @@ struct SettingsView: View {
 
     var body: some View {
         let _ = manager.themeChangeID
-        #if os(iOS)
         iOSSettingsBody
-        #else
-        macOSSettingsBody
-        #endif
     }
 
     @State private var selectedSettingsTab: SettingsTab? = nil
 
-    #if os(iOS)
     private var iOSSettingsBody: some View {
         NavigationStack {
             List {
@@ -106,7 +99,6 @@ struct SettingsView: View {
         .background(Theme.sidebarBg.ignoresSafeArea())
         .toolbarBackground(.hidden, for: .navigationBar)
     }
-    #endif
 
     private var macOSSettingsBody: some View {
         VStack(spacing: 0) {
@@ -191,11 +183,7 @@ struct SettingsView: View {
                     case .data:
                         DataSettingsTab()
                     case .notifications:
-                        #if os(iOS)
                         IOSNotificationPage()
-                        #else
-                        NotificationSettingsTab()
-                        #endif
                     case .debug:
                         Text("开发调试模式仅 iOS 生效")
                             .font(.system(size: Theme.F.body))
@@ -219,7 +207,6 @@ struct SettingsView: View {
 
     // MARK: - Settings Row Helper (iOS)
 
-    #if os(iOS)
     private func settingsButton(icon: String, title: String, color: Color, tab: SettingsTab) -> some View {
         Button {
             selectedSettingsTab = tab
@@ -241,7 +228,6 @@ struct SettingsView: View {
         .listRowBackground(Theme.mainBg)
         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
     }
-    #endif
 }
 
 // MARK: - Settings Text Field
@@ -256,11 +242,7 @@ struct SettingsTextField: View {
             Text(label)
                 .font(.system(size: Theme.SettingsFont.label))
                 .foregroundColor(Theme.textSecondary)
-                #if os(iOS)
                 .frame(width: 90, alignment: .leading)
-                #else
-                .frame(width: 72, alignment: .leading)
-                #endif
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: Theme.SettingsFont.body))

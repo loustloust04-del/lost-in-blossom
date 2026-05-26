@@ -170,7 +170,6 @@ struct RegexSettingsTab: View {
 
 // MARK: - iOS Regex Page
 
-#if os(iOS)
 struct IOSRegexPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
@@ -334,4 +333,3 @@ struct IOSRegexPage: View {
         profileManager?.updateProfile(profile)
     }
 }
-#endif

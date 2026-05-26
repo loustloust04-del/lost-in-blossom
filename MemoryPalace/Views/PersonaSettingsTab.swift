@@ -1,9 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-#if os(iOS)
 import UIKit
-#endif
 
 // MARK: - Persona Settings Tab
 
@@ -38,7 +36,6 @@ struct PersonaSettingsTab: View {
     @State private var rawJSONError: String? = nil
     @State private var rawJSONDirty = false
 
-    #if os(iOS)
     private struct IOSSimplePromptField: Identifiable {
         let slotId: String
         let label: String
@@ -62,14 +59,9 @@ struct PersonaSettingsTab: View {
         IOSSimplePromptField(slotId: PromptSlot.dialogueExamplesId, label: "对话示例", placeholder: "{{user}}: 你好\n{{char}}: 你好，今天能帮什么？"),
         IOSSimplePromptField(slotId: PromptSlot.jailbreakId, label: "后置提醒", placeholder: "保持角色设定，用自然的语气回应。"),
     ]
-    #endif
 
     var body: some View {
-        #if os(iOS)
         iOSPromptPage
-        #else
-        personaTab
-        #endif
     }
 
     // MARK: - macOS Persona Tab
@@ -200,9 +192,6 @@ struct PersonaSettingsTab: View {
                         Text("请求").tag("request")
                     }
                     .pickerStyle(.segmented)
-                    #if os(macOS)
-                    .frame(width: 300)
-                    #endif
                     .tint(Theme.branchIndicator)
 
                     Spacer()
@@ -212,7 +201,6 @@ struct PersonaSettingsTab: View {
 
                 // 采样参数只在插槽和 JSON 模式显示
                 if personaEditMode == "slots" || personaEditMode == "raw" {
-                    #if os(iOS)
                     // iOS: collapsible section
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) { samplingExpanded.toggle() }
@@ -234,9 +222,6 @@ struct PersonaSettingsTab: View {
                     if samplingExpanded {
                         personaSamplingSection(preset: preset, profile: profile, pm: pm, psm: psm)
                     }
-                    #else
-                    personaSamplingSection(preset: preset, profile: profile, pm: pm, psm: psm)
-                    #endif
                     Divider().opacity(0.15)
                 }
 
@@ -263,17 +248,6 @@ struct PersonaSettingsTab: View {
     // MARK: - Preset Export / Import
 
     private func exportPreset(_ preset: Preset) {
-        #if os(macOS)
-        guard let data = preset.toSillyTavernJSON() else { return }
-        let panel = NSSavePanel()
-        panel.title = "导出预设"
-        panel.nameFieldStringValue = "\(preset.name).json"
-        panel.allowedContentTypes = [.json]
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            try? data.write(to: url)
-        }
-        #endif
     }
 
     private func importPresetData(_ data: Data) {
@@ -302,7 +276,6 @@ struct PersonaSettingsTab: View {
     // MARK: Persona — 采样参数
 
     private func personaSamplingSection(preset: Preset, profile: Profile, pm: ProfileManager, psm: PresetManager) -> some View {
-        #if os(iOS)
         let tempBinding = Binding<Double>(
             get: { preset.sampling.temperature },
             set: { val in
@@ -423,14 +396,12 @@ struct PersonaSettingsTab: View {
                 psm.save(p)
             }
         )
-        #endif
 
         return VStack(alignment: .leading, spacing: 10) {
             Text("采样参数")
                 .font(.system(size: Theme.SettingsFont.sectionHeader, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
 
-            #if os(iOS)
             VStack(alignment: .leading, spacing: 12) {
                 ParameterRow(label: "Temperature", value: tempBinding, range: 0...2, step: 0.1)
                 ParameterRow(label: "上下文深度", value: contextBinding, range: 5...200, step: 5, intMode: true)
@@ -519,274 +490,6 @@ struct PersonaSettingsTab: View {
                         .foregroundColor(Theme.textMuted)
                 }
             }
-            #else
-            // 参数滑块
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Temperature: \(preset.sampling.temperature, specifier: "%.1f")")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { preset.sampling.temperature },
-                        set: { val in
-                            var p = preset
-                            p.sampling.temperature = val
-                            psm.save(p)
-                        }
-                    ), in: 0...2, step: 0.1)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("上下文深度: \(preset.sampling.contextDepth)")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { Double(preset.sampling.contextDepth) },
-                        set: { val in
-                            var p = preset
-                            p.sampling.contextDepth = Int(val)
-                            psm.save(p)
-                        }
-                    ), in: 5...200, step: 5)
-                }
-            }
-
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Top P: \(preset.sampling.topP, specifier: "%.2f")")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { preset.sampling.topP },
-                        set: { val in
-                            var p = preset
-                            p.sampling.topP = val
-                            psm.save(p)
-                        }
-                    ), in: 0...1, step: 0.05)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Max Tokens: \(preset.sampling.maxTokens)")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { Double(preset.sampling.maxTokens) },
-                        set: { val in
-                            var p = preset
-                            p.sampling.maxTokens = Int(val)
-                            psm.save(p)
-                        }
-                    ), in: 256...16384, step: 256)
-                }
-            }
-
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Top K: \(preset.sampling.topK)")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { Double(preset.sampling.topK) },
-                        set: { val in
-                            var p = preset
-                            p.sampling.topK = Int(val)
-                            psm.save(p)
-                        }
-                    ), in: 0...500, step: 1)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Freq Penalty: \(preset.sampling.frequencyPenalty, specifier: "%.2f")")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { preset.sampling.frequencyPenalty },
-                        set: { val in
-                            var p = preset
-                            p.sampling.frequencyPenalty = val
-                            psm.save(p)
-                        }
-                    ), in: -2...2, step: 0.05)
-                }
-            }
-
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Presence Penalty: \(preset.sampling.presencePenalty, specifier: "%.2f")")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { preset.sampling.presencePenalty },
-                        set: { val in
-                            var p = preset
-                            p.sampling.presencePenalty = val
-                            psm.save(p)
-                        }
-                    ), in: -2...2, step: 0.05)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Seed: \(preset.sampling.seed == -1 ? "随机" : "\(preset.sampling.seed)")")
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textMuted)
-                    Slider(value: Binding(
-                        get: { Double(preset.sampling.seed) },
-                        set: { val in
-                            var p = preset
-                            p.sampling.seed = Int(val)
-                            psm.save(p)
-                        }
-                    ), in: -1...9999, step: 1)
-                }
-            }
-
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("推理深度")
-                        .font(.system(size: Theme.SettingsFont.label))
-                        .foregroundColor(Theme.textMuted)
-                    Picker("", selection: Binding(
-                        get: { preset.sampling.reasoningEffort },
-                        set: { val in
-                            var p = preset
-                            p.sampling.reasoningEffort = val
-                            psm.save(p)
-                        }
-                    )) {
-                        Text("自动").tag("auto")
-                        Text("低").tag("low")
-                        Text("中").tag("medium")
-                        Text("高").tag("high")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("详细度")
-                        .font(.system(size: Theme.SettingsFont.label))
-                        .foregroundColor(Theme.textMuted)
-                    Picker("", selection: Binding(
-                        get: { preset.sampling.verbosity },
-                        set: { val in
-                            var p = preset
-                            p.sampling.verbosity = val
-                            psm.save(p)
-                        }
-                    )) {
-                        Text("自动").tag("auto")
-                        Text("简洁").tag("concise")
-                        Text("详细").tag("verbose")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 150)
-                }
-
-                Toggle(isOn: Binding(
-                    get: { preset.sampling.streaming },
-                    set: { val in
-                        var p = preset
-                        p.sampling.streaming = val
-                        psm.save(p)
-                    }
-                )) {
-                    Text("流式输出")
-                        .font(.system(size: Theme.SettingsFont.body))
-                        .foregroundColor(Theme.textMuted)
-                }
-                #if os(macOS)
-                .toggleStyle(.checkbox)
-                #endif
-
-                Spacer()
-            }
-
-            // Continue Postfix
-            HStack(spacing: 8) {
-                Text("续写后缀")
-                    .font(.system(size: Theme.SettingsFont.label))
-                    .foregroundColor(Theme.textMuted)
-                TextField("", text: Binding(
-                    get: { preset.sampling.continuePostfix },
-                    set: { val in
-                        var p = preset
-                        p.sampling.continuePostfix = val
-                        psm.save(p)
-                    }
-                ))
-                .font(.system(size: Theme.SettingsFont.body))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 120)
-                Spacer()
-            }
-
-            // 后处理设置
-            Divider().opacity(0.1)
-
-            Text("后处理")
-                .font(.system(size: Theme.SettingsFont.sectionHeader, weight: .medium))
-                .foregroundColor(Theme.textSecondary)
-
-            HStack(spacing: 16) {
-                // Post-processing mode
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("消息规整")
-                        .font(.system(size: Theme.SettingsFont.label))
-                        .foregroundColor(Theme.textMuted)
-                    Picker("", selection: Binding(
-                        get: { preset.sampling.postProcessingMode },
-                        set: { val in
-                            var p = preset
-                            p.sampling.postProcessingMode = val
-                            psm.save(p)
-                        }
-                    )) {
-                        Text("无").tag("none")
-                        Text("合并").tag("merge")
-                        Text("严格").tag("strict")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 150)
-                }
-
-                // Squash toggle
-                Toggle(isOn: Binding(
-                    get: { preset.sampling.squashSystemMessages },
-                    set: { val in
-                        var p = preset
-                        p.sampling.squashSystemMessages = val
-                        psm.save(p)
-                    }
-                )) {
-                    Text("合并连续 System")
-                        .font(.system(size: Theme.SettingsFont.body))
-                        .foregroundColor(Theme.textMuted)
-                }
-                #if os(macOS)
-                .toggleStyle(.checkbox)
-                #endif
-
-                // Continue prefill toggle
-                Toggle(isOn: Binding(
-                    get: { preset.sampling.continuePrefill },
-                    set: { val in
-                        var p = preset
-                        p.sampling.continuePrefill = val
-                        psm.save(p)
-                    }
-                )) {
-                    Text("续写 Prefill")
-                        .font(.system(size: Theme.SettingsFont.body))
-                        .foregroundColor(Theme.textMuted)
-                }
-                #if os(macOS)
-                .toggleStyle(.checkbox)
-                #endif
-
-                Spacer()
-            }
-            #endif
         }
     }
 
@@ -887,7 +590,6 @@ struct PersonaSettingsTab: View {
             }
 
             ForEach(Array(preset.prompts.enumerated()), id: \.element.id) { index, slot in
-                #if os(iOS)
                 // iOS: card style, tap to push edit page
                 Button {
                     selectedSlotIndex = index
@@ -961,130 +663,13 @@ struct PersonaSettingsTab: View {
                         }
                     }
                 }
-                #else
-                // macOS: original collapsible row
-                VStack(spacing: 0) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: Theme.SettingsFont.badge))
-                            .foregroundColor(Theme.textMuted.opacity(0.5))
-
-                        if !slot.isSystemPrompt {
-                            Toggle("", isOn: Binding(
-                                get: { slot.isEnabled },
-                                set: { val in
-                                    var p = preset
-                                    p.prompts[index].isEnabled = val
-                                    psm.save(p)
-                                }
-                            ))
-                            .toggleStyle(.switch)
-                            .scaleEffect(0.6)
-                            .frame(width: 30)
-                        } else {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: Theme.SettingsFont.badge))
-                                .foregroundColor(Theme.textMuted)
-                                .frame(width: 30)
-                        }
-
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                if expandedSlotIds.contains(slot.id) { expandedSlotIds.remove(slot.id) } else { expandedSlotIds.insert(slot.id) }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: expandedSlotIds.contains(slot.id) ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: Theme.SettingsFont.badge))
-                                Text(slot.name)
-                                    .font(.system(size: Theme.SettingsFont.body))
-                                    .lineLimit(1)
-                            }
-                            .foregroundColor(slot.isEnabled || slot.isSystemPrompt ? Theme.textPrimary : Theme.textMuted)
-                        }
-                        .buttonStyle(.plain)
-
-                        Text(slot.role)
-                            .font(.system(size: Theme.SettingsFont.badge, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(
-                                slot.role == "system" ? Theme.textMuted :
-                                slot.role == "user" ? Theme.branchIndicator : .orange
-                            ))
-
-                        if slot.isMarker {
-                            Text("占位")
-                                .font(.system(size: Theme.SettingsFont.badge))
-                                .foregroundColor(Theme.textMuted)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Capsule().stroke(Theme.textMuted, lineWidth: 0.5))
-                        }
-
-                        Spacer()
-
-                        if !slot.isSystemPrompt && !slot.isMarker {
-                            Button {
-                                var p = preset
-                                p.prompts.remove(at: index)
-                                psm.save(p)
-                                expandedSlotIds.remove(slot.id)
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: Theme.SettingsFont.secondary))
-                                    .foregroundColor(Theme.danger)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 5)
-                    .padding(.horizontal, 8)
-
-                    if expandedSlotIds.contains(slot.id) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            if slot.isMarker {
-                                slotMarkerEditor(slot: slot, index: index, preset: preset, psm: psm)
-                            } else {
-                                slotContentEditor(slot: slot, index: index, preset: preset, psm: psm)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
-                    }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill((slot.isEnabled || slot.isSystemPrompt) ? Theme.assistantBubble : Theme.mainBg.opacity(0.5))
-                )
-                .draggable(slot.id) {
-                    Text(slot.name)
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .padding(6)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.assistantBubble))
-                }
-                .dropDestination(for: String.self) { droppedIds, _ in
-                    guard let droppedId = droppedIds.first,
-                          let fromIndex = preset.prompts.firstIndex(where: { $0.id == droppedId }),
-                          fromIndex != index else { return false }
-                    var p = preset
-                    let item = p.prompts.remove(at: fromIndex)
-                    p.prompts.insert(item, at: index)
-                    for i in p.prompts.indices { p.prompts[i].injectionOrder = i * 10 }
-                    psm.save(p)
-                    return true
-                }
-                #endif
             }
-            #if os(iOS)
             .modifier(SlotNavigationModifier(
                 selectedSlotIndex: $selectedSlotIndex,
                 useSheet: useSheetNavigation,
                 preset: preset,
                 psm: psm
             ))
-            #endif
         }
     }
 
@@ -1415,12 +1000,7 @@ struct PersonaSettingsTab: View {
             HStack {
                 Spacer()
                 Button {
-                    #if os(macOS)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(jsonString, forType: .string)
-                    #else
                     UIPasteboard.general.string = jsonString
-                    #endif
                 } label: {
                     Label("复制 JSON", systemImage: "doc.on.doc")
                         .font(.system(size: Theme.SettingsFont.secondary))
@@ -1462,7 +1042,6 @@ struct PersonaSettingsTab: View {
 
 // MARK: - iOS Prompt Page
 
-#if os(iOS)
 extension PersonaSettingsTab {
 
     var iOSPersonaEditModeSelection: Binding<String> {
@@ -2020,7 +1599,6 @@ extension PersonaSettingsTab {
         return snapshot
     }
 }
-#endif
 
 // MARK: - Parameter Row
 
@@ -2061,9 +1639,7 @@ struct ParameterRow: View {
         }
         .alert("输入数值", isPresented: $isEditing) {
             TextField("", text: $editText)
-                #if os(iOS)
                 .keyboardType(intMode ? .numberPad : .decimalPad)
-                #endif
             Button("确定") {
                 if let v = Double(editText) {
                     value = min(max(v, range.lowerBound), range.upperBound)
@@ -2076,7 +1652,6 @@ struct ParameterRow: View {
 
 // MARK: - Slot Edit Page (iOS)
 
-#if os(iOS)
 struct SlotEditPage: View {
     let slot: PromptSlot
     let index: Int
@@ -2129,9 +1704,7 @@ struct SlotEditPage: View {
                         TextField("0=按顺序", text: $editDepth)
                             .font(.system(size: Theme.F.body))
                             .multilineTextAlignment(.trailing)
-                            #if os(iOS)
                             .keyboardType(.numberPad)
-                            #endif
                             .onChange(of: editDepth) { _, val in
                                 var p = preset
                                 p.prompts[index].injectionDepth = Int(val) ?? 0
@@ -2179,17 +1752,11 @@ struct SlotEditPage: View {
                 .listRowBackground(Theme.danger.opacity(0.1))
             }
         }
-        #if os(iOS)
         .listStyle(.insetGrouped)
-        #else
-        .listStyle(.plain)
-        #endif
         .scrollContentBackground(.hidden)
         .background(Theme.sidebarBg)
         .navigationTitle(slot.name)
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
         .onAppear {
             editName = slot.name
             editRole = slot.role
@@ -2311,4 +1878,3 @@ struct SlotNavigationModifier: ViewModifier {
         }
     }
 }
-#endif

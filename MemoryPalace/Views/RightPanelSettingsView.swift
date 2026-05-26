@@ -61,7 +61,6 @@ struct RightPanelSettingsSection: View {
 
 // MARK: - iOS 右栏设置页
 
-#if os(iOS)
 struct IOSRightPanelPage: View {
     @Environment(RightPanelToolManager.self) private var toolManager: RightPanelToolManager?
 
@@ -111,4 +110,3 @@ struct IOSRightPanelPage: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-#endif

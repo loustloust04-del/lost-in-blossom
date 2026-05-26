@@ -1,8 +1,6 @@
 import SwiftUI
 import SwiftData
-#if os(iOS)
 import UIKit
-#endif
 
 // MARK: - API Settings Tab
 
@@ -77,21 +75,13 @@ struct APISettingsTab: View {
     }
 
     private var inputCornerRadius: CGFloat {
-        #if os(iOS)
         8
-        #else
-        6
-        #endif
     }
 
     // MARK: - Body (platform dispatch)
 
     var body: some View {
-        #if os(iOS)
         iOSBody
-        #else
-        macOSBody
-        #endif
     }
 
     // MARK: - macOS Body
@@ -162,7 +152,6 @@ struct APISettingsTab: View {
 
     // MARK: - iOS Body
 
-    #if os(iOS)
     var iOSBody: some View {
         List {
             if providerManager != nil {
@@ -248,7 +237,6 @@ struct APISettingsTab: View {
             handleCloudSyncToggled(newValue)
         }
     }
-    #endif
 
     // MARK: - Section Content
 
@@ -280,11 +268,7 @@ struct APISettingsTab: View {
                 }
             }
             .labelsHidden()
-            #if os(macOS)
-            .pickerStyle(.menu)
-            #else
             .tint(Theme.branchIndicator)
-            #endif
         }
     }
 
@@ -350,11 +334,7 @@ struct APISettingsTab: View {
                 }
             }
             .labelsHidden()
-            #if os(macOS)
-            .pickerStyle(.menu)
-            #else
             .tint(Theme.branchIndicator)
-            #endif
         }
     }
 
@@ -383,10 +363,8 @@ struct APISettingsTab: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, Theme.optionRowVerticalPadding)
                     .background(RoundedRectangle(cornerRadius: inputCornerRadius).fill(Theme.mainBg))
-                    #if os(iOS)
                     .autocapitalization(.none)
                     .keyboardType(.URL)
-                    #endif
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -400,9 +378,7 @@ struct APISettingsTab: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, Theme.optionRowVerticalPadding)
                         .background(RoundedRectangle(cornerRadius: inputCornerRadius).fill(Theme.mainBg))
-                        #if os(iOS)
                         .autocapitalization(.none)
-                        #endif
                     Button("添加") {
                         addManualModel()
                     }
@@ -474,14 +450,6 @@ struct APISettingsTab: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
-                #if os(macOS)
-                Button("查看启动说明") {
-                    // TODO: path 写死在仓库 worktree 下，将来 bundle 化时改
-                    let url = URL(fileURLWithPath: "/Users/tianyi/Desktop/tianyi-project/lost-in-blossom/MemoryPalace/.claude/worktrees/cc-bridge/cc-bridge/README.md")
-                    NSWorkspace.shared.open(url)
-                }
-                .buttonStyle(.bordered)
-                #endif
 
                 Button("重新连接") {
                     if let url = URL(string: provider.baseURL) {
@@ -1171,9 +1139,7 @@ private struct SavedAPIRow: View {
                     .foregroundColor(Theme.textPrimary)
                     .focused($nameFocused)
                     .onSubmit { commitRename() }
-                    #if os(iOS)
                     .autocapitalization(.none)
-                    #endif
             } else {
                 Text(provider.name)
                     .font(.system(size: Theme.SettingsFont.body, weight: .medium))
@@ -1307,9 +1273,7 @@ private struct BudgetSection: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Theme.mainBg))
-                    #if os(iOS)
                     .keyboardType(.decimalPad)
-                    #endif
             }
 
             HStack {

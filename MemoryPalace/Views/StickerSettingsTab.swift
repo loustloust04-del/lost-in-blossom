@@ -131,15 +131,6 @@ struct StickerSettingsTab: View {
                 let url = try await StickerPackExporter.export(profileId: pid, context: modelContext)
                 await MainActor.run {
                     isExportingStickers = false
-                    #if os(macOS)
-                    let panel = NSSavePanel()
-                    panel.allowsOtherFileTypes = true
-                    panel.nameFieldStringValue = "贴纸包.stickerpack"
-                    if panel.runModal() == .OK, let dest = panel.url {
-                        try? FileManager.default.moveItem(at: url, to: dest)
-                        stickerImportExportMessage = "导出成功！"
-                    }
-                    #endif
                 }
             } catch {
                 await MainActor.run {
@@ -152,36 +143,11 @@ struct StickerSettingsTab: View {
 
     private func importStickerPack() {
         guard let pid = profileManager?.currentProfile.id else { return }
-        #if os(macOS)
-        let panel = NSOpenPanel()
-        panel.allowsOtherFileTypes = true
-        panel.message = "选择贴纸包文件（.stickerpack）"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        isImportingStickers = true
-        stickerImportExportMessage = nil
-        Task {
-            do {
-                let counts = try await StickerPackImporter.importPack(url: url, profileId: pid, context: modelContext)
-                await MainActor.run {
-                    isImportingStickers = false
-                    stickerImportExportMessage = "导入成功！\(counts.assets) 个贴纸，\(counts.placements) 个布局"
-                    loadStickerStats()
-                }
-            } catch {
-                await MainActor.run {
-                    isImportingStickers = false
-                    stickerImportExportMessage = "导入失败：\(error.localizedDescription)"
-                }
-            }
-        }
-        #endif
     }
 }
 
 // MARK: - iOS Sticker Settings Page
 
-#if os(iOS)
 struct IOSStickerPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
@@ -362,4 +328,3 @@ struct IOSStickerPage: View {
         }
     }
 }
-#endif

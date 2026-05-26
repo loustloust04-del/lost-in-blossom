@@ -121,11 +121,7 @@ struct ThemeSettingsTab: View {
                             .foregroundColor(Theme.textMuted)
                     }
                 }
-                #if os(macOS)
-                .toggleStyle(.checkbox)
-                #else
                 .tint(Theme.branchIndicator)
-                #endif
             }
         }
         .sheet(isPresented: Binding(
@@ -176,7 +172,6 @@ struct ThemeSettingsTab: View {
     }
 }
 
-#if os(iOS)
 struct IOSThemePage: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @State private var editingThemeId: String?
@@ -349,7 +344,6 @@ struct IOSThemePage: View {
         showSaveSheet = true
     }
 }
-#endif
 
 private struct ThemeModeRow: View {
     let title: String
@@ -629,18 +623,12 @@ private struct ThemeSaveSheet: View {
                 .listRowSeparator(.hidden)
 
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.sidebar)
-            #endif
             .scrollContentBackground(.hidden)
             .background(Color.clear)
             .navigationTitle("保存主题")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -660,9 +648,6 @@ private struct ThemeSaveSheet: View {
             )
             .ignoresSafeArea()
         }
-        #if os(macOS)
-        .frame(width: 430, height: 360)
-        #endif
     }
 }
 

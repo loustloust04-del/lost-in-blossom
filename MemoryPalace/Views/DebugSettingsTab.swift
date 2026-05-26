@@ -1,6 +1,5 @@
 import SwiftUI
 
-#if os(iOS)
 struct IOSDebugPage: View {
     @AppStorage(DebugRenderSettings.themeBackgroundModeKey)
     private var backgroundModeRaw: String = DebugThemeBackgroundMode.original.rawValue
@@ -96,4 +95,3 @@ struct IOSDebugPage: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-#endif

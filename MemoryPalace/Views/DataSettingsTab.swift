@@ -98,11 +98,7 @@ struct DataSettingsTab: View {
 
     var body: some View {
         Group {
-            #if os(iOS)
             iOSBody
-            #else
-            macOSBody
-            #endif
         }
         .alert("清空 Claude 数据", isPresented: $wipeConfirm) {
             Button("取消", role: .cancel) {}
@@ -249,7 +245,6 @@ struct DataSettingsTab: View {
         }
     }
 
-    #if os(iOS)
     /// iOS version wrapped in List with sections
     var iOSBody: some View {
         List {
@@ -373,153 +368,14 @@ struct DataSettingsTab: View {
                 .presentationDetents([.large])
         }
     }
-    #endif
 
     private func exportAllConversations() {
-        #if os(iOS)
         return // iOS: 暂不支持批量导出
-        #else
-        let panel = NSOpenPanel()
-        panel.title = "选择导出文件夹"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-
-        guard panel.runModal() == .OK, let folderURL = panel.url else { return }
-
-        let pid = profileManager?.currentProfile.id ?? ""
-        var descriptor = FetchDescriptor<Conversation>(
-            sortBy: [SortDescriptor(\Conversation.updateTime, order: .reverse)]
-        )
-        descriptor.predicate = #Predicate<Conversation> { conv in conv.profileId == pid && conv.isDeleted == false }
-        guard let conversations = try? modelContext.fetch(descriptor) else { return }
-
-        let convData = conversations.map { (id: $0.id, title: $0.title, currentNodeId: $0.currentNodeId) }
-        let mode: ExportPathMode = exportMode == "full" ? .fullTree : .longest
-        let uName = userName
-        let aName = assistantName
-        let container = modelContext.container
-        let scopedPid = pid
-
-        exportTotal = convData.count
-        exportProgress = 0
-        isExportingAll = true
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let bgContext = ModelContext(container)
-            var usedNames = Set<String>()
-
-            for (i, data) in convData.enumerated() {
-                let cid = data.id
-                let convDescriptor = FetchDescriptor<Conversation>(
-                    predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == scopedPid }
-                )
-                guard let conversation = try? bgContext.fetch(convDescriptor).first else { continue }
-
-                let markdown = MarkdownExporter.loadAndExport(
-                    conversation: conversation,
-                    context: bgContext,
-                    mode: mode,
-                    userName: uName,
-                    assistantName: aName
-                )
-
-                let baseName = MarkdownExporter.sanitizedFileName(data.title)
-                var fileName = baseName
-                var counter = 1
-                while usedNames.contains(fileName) {
-                    fileName = "\(baseName)-\(counter)"
-                    counter += 1
-                }
-                usedNames.insert(fileName)
-
-                let fileURL = folderURL.appendingPathComponent("\(fileName).md")
-                try? markdown.write(to: fileURL, atomically: true, encoding: .utf8)
-
-                DispatchQueue.main.async { exportProgress = Double(i + 1) }
-            }
-
-            DispatchQueue.main.async { isExportingAll = false }
-        }
-        #endif
     }
 
     /// 遍历所有楼层，按「根目录/{楼层名}/*.md」输出。
     private func exportAllProfilesData() {
-        #if os(iOS)
         return // iOS: 暂不支持批量导出
-        #else
-        guard let profileManager else { return }
-        let profiles = profileManager.profiles
-        guard !profiles.isEmpty else { return }
-
-        let panel = NSOpenPanel()
-        panel.title = "选择导出根目录"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-
-        guard panel.runModal() == .OK, let rootURL = panel.url else { return }
-
-        let mode: ExportPathMode = exportMode == "full" ? .fullTree : .longest
-        exportAllProfilesTotal = profiles.count
-        exportAllProfilesProgress = 0
-        isExportingAllProfiles = true
-
-        let unifiedContainer = modelContext.container
-        DispatchQueue.global(qos: .userInitiated).async {
-            for (profileIndex, profile) in profiles.enumerated() {
-                // 路线 B 单 container：用 unified container + profileId predicate 遍历
-                let bgContext = ModelContext(unifiedContainer)
-                let pid = profile.id
-
-                var descriptor = FetchDescriptor<Conversation>(
-                    sortBy: [SortDescriptor(\Conversation.updateTime, order: .reverse)]
-                )
-                descriptor.predicate = #Predicate<Conversation> { conv in conv.profileId == pid && conv.isDeleted == false }
-                guard let conversations = try? bgContext.fetch(descriptor) else {
-                    DispatchQueue.main.async { exportAllProfilesProgress = Double(profileIndex + 1) }
-                    continue
-                }
-
-                let folderName = MarkdownExporter.sanitizedFileName(profile.name)
-                let profileFolder = rootURL.appendingPathComponent(folderName, isDirectory: true)
-                try? FileManager.default.createDirectory(at: profileFolder, withIntermediateDirectories: true)
-
-                var usedNames = Set<String>()
-                let uName = profile.userName.isEmpty ? "你" : profile.userName
-                let aName = profile.assistantName.isEmpty ? "助手" : profile.assistantName
-
-                for conv in conversations {
-                    let markdown = MarkdownExporter.loadAndExport(
-                        conversation: conv,
-                        context: bgContext,
-                        mode: mode,
-                        userName: uName,
-                        assistantName: aName
-                    )
-
-                    let baseName = MarkdownExporter.sanitizedFileName(conv.title)
-                    var fileName = baseName
-                    var counter = 1
-                    while usedNames.contains(fileName) {
-                        fileName = "\(baseName)-\(counter)"
-                        counter += 1
-                    }
-                    usedNames.insert(fileName)
-
-                    let fileURL = profileFolder.appendingPathComponent("\(fileName).md")
-                    try? markdown.write(to: fileURL, atomically: true, encoding: .utf8)
-                }
-
-                DispatchQueue.main.async { exportAllProfilesProgress = Double(profileIndex + 1) }
-            }
-
-            DispatchQueue.main.async { isExportingAllProfiles = false }
-        }
-        #endif
     }
 }
 

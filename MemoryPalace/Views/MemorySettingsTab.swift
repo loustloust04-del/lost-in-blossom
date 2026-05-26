@@ -345,7 +345,6 @@ struct MemorySettingsTab: View {
 
 // MARK: - iOS Memory Page
 
-#if os(iOS)
 struct IOSMemoryPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
@@ -672,4 +671,3 @@ struct IOSMemoryPage: View {
         memories = store.listAll(profileId: profileId, context: modelContext)
     }
 }
-#endif

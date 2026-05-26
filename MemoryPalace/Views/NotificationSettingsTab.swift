@@ -1,12 +1,9 @@
 import SwiftUI
 import UserNotifications
-#if os(iOS)
 import UIKit
-#endif
 
 // MARK: - iOS 通知设置页
 
-#if os(iOS)
 struct IOSNotificationPage: View {
     @State private var service = LocalNotificationService.shared
     @State private var isRequestingPermission = false
@@ -238,22 +235,6 @@ struct IOSNotificationPage: View {
         }
     }
 }
-#endif
 
 // MARK: - macOS 占位
 
-#if os(macOS)
-struct NotificationSettingsTab: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "bell.slash")
-                .font(.system(size: 32))
-                .foregroundColor(Theme.textMuted)
-            Text("通知设置仅在 iOS 版本中可用")
-                .font(.system(size: Theme.SettingsFont.label))
-                .foregroundColor(Theme.textMuted)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-#endif

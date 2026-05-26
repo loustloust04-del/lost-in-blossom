@@ -72,19 +72,6 @@ struct AppearanceSettingsTab: View {
                     }
                 }
 
-                #if os(macOS)
-                Button(action: { showFontImporter = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: Theme.SettingsFont.secondary))
-                        Text("导入字体文件...")
-                            .font(.system(size: Theme.SettingsFont.secondary))
-                    }
-                    .foregroundColor(Theme.branchIndicator)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-                #endif
             }
 
             Divider().opacity(0.15)
@@ -100,7 +87,6 @@ struct AppearanceSettingsTab: View {
                         .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
                         .foregroundColor(Theme.branchIndicator)
                 }
-                #if os(iOS)
                 HStack(spacing: 12) {
                     Button(action: { fontScale = max(0.5, fontScale - 0.1) }) {
                         Image(systemName: "textformat.size.smaller")
@@ -127,14 +113,6 @@ struct AppearanceSettingsTab: View {
                     }
                     .buttonStyle(.plain)
                 }
-                #else
-                HStack(spacing: 4) {
-                    Spacer()
-                    Text("⌘+ 放大  ⌘- 缩小  ⌘0 重置")
-                        .font(.caption)
-                        .foregroundColor(Theme.textMuted.opacity(0.7))
-                }
-                #endif
             }
 
             Divider().opacity(0.15)
@@ -152,24 +130,12 @@ struct AppearanceSettingsTab: View {
                     Divider().opacity(0.1)
 
                     Toggle("隐藏时间戳", isOn: $hideTimestamp)
-                        #if os(macOS)
-                        .toggleStyle(.checkbox)
-                        #endif
                     Toggle("隐藏用户/助手名", isOn: $hideRoleName)
-                        #if os(macOS)
-                        .toggleStyle(.checkbox)
-                        #endif
                     Toggle("隐藏消息下方按钮行", isOn: $hideActionBar)
-                        #if os(macOS)
-                        .toggleStyle(.checkbox)
-                        #endif
                     Toggle("壁纸下气泡自动半透明", isOn: Binding(
                         get: { !disableAutoTransparent },
                         set: { disableAutoTransparent = !$0; themeManager?.notifyThemeChange() }
                     ))
-                        #if os(macOS)
-                        .toggleStyle(.checkbox)
-                        #endif
 
                     Divider().opacity(0.1)
 
@@ -206,9 +172,6 @@ struct AppearanceSettingsTab: View {
                             .foregroundColor(Theme.textMuted)
                     }
                 }
-                #if os(macOS)
-                .toggleStyle(.checkbox)
-                #endif
 
                 Toggle(isOn: $showFlagBlocks) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -220,9 +183,6 @@ struct AppearanceSettingsTab: View {
                             .foregroundColor(Theme.textMuted)
                     }
                 }
-                #if os(macOS)
-                .toggleStyle(.checkbox)
-                #endif
 
                 // Blur radius slider
                 VStack(spacing: 6) {
@@ -305,7 +265,6 @@ struct AppearanceSettingsTab: View {
 
 // MARK: - iOS Appearance Page
 
-#if os(iOS)
 struct IOSAppearancePage: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @AppStorage("selectedFont") private var selectedFont = ""
@@ -558,7 +517,6 @@ struct IOSAppearancePage: View {
         hideActionBar = false
     }
 }
-#endif
 
 // MARK: - Font Option Row
 
