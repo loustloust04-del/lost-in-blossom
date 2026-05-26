@@ -2,11 +2,7 @@ import Foundation
 import SwiftData
 import SwiftUI
 
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 /// 贴纸系统状态管理
 @Observable
@@ -503,36 +499,12 @@ final class StickerViewModel {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 3.0
         guard let cgImage = renderer.cgImage else { return nil }
-        #if os(macOS)
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        return rep.representation(using: .png, properties: [:])
-        #else
         return UIImage(cgImage: cgImage).pngData()
-        #endif
     }
 
     /// macOS: NSSavePanel 保存 PNG 文件
-    #if os(macOS)
-    @MainActor
-    func saveNoteAsPNG(content: String, style: String) {
-        guard let data = exportNoteAsPNG(content: content, style: style) else {
-            print("[便签导出] exportNoteAsPNG 返回 nil")
-            return
-        }
-        // 延迟一帧，等 context menu 关闭后再弹 NSSavePanel
-        DispatchQueue.main.async {
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.png]
-            panel.nameFieldStringValue = "便签.png"
-            if panel.runModal() == .OK, let url = panel.url {
-                try? data.write(to: url)
-            }
-        }
-    }
-    #endif
 
     /// iOS: 直接弹 UIActivityViewController（UIKit 回调触发 SwiftUI sheet 不可靠）
-    #if os(iOS)
     @MainActor
     func shareNoteAsPNG(content: String, style: String) {
         guard let data = exportNoteAsPNG(content: content, style: style),
@@ -547,7 +519,6 @@ final class StickerViewModel {
             topVC.present(vc, animated: true)
         }
     }
-    #endif
 
     // MARK: - Deduplicate Name
 
