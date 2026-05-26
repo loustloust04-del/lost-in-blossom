@@ -46,7 +46,7 @@ struct SamplingParams: Codable, Hashable {
     var postProcessingMode: String = "none" // "none" | "merge" | "strict"
     var continuePrefill: Bool = false     // 续写时用 assistant prefill
     var continuePostfix: String = " "
-    /// Anthropic mcp_servers beta 활성화 여부. true = provider의 mcpServers 주입 (기본 on).
+    /// Anthropic mcp_servers beta 是否启用. true = 注入 provider 的 mcpServers（默认开启）.
     var mcpEnabled: Bool = true
 }
 

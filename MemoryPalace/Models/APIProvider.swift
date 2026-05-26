@@ -2,11 +2,11 @@ import Foundation
 
 // MARK: - MCP Server Config
 
-/// Anthropic mcp_servers beta에서 사용하는 MCP 서버 설정.
-/// APIProvider에 붙어있지만 별도 UserDefaults 키로 저장 (built-in / custom 모두 동일 경로).
+/// Anthropic mcp_servers beta 使用的 MCP 服务器配置.
+/// 虽然挂在 APIProvider 上，但通过独立的 UserDefaults 键存储（built-in / custom 共用同一路径）.
 struct MCPServerConfig: Identifiable, Codable, Hashable {
     var id: String = UUID().uuidString
-    var name: String        // 서버 식별자, tool 이름의 네임스페이스로 쓰임 ("imprint-memory")
+    var name: String        // 服务器标识符，用作 tool 名称的命名空间前缀（如 "imprint-memory"）
     var url: String         // MCP SSE endpoint URL
     var isEnabled: Bool = true
 }
@@ -46,8 +46,8 @@ struct APIProvider: Identifiable, Codable {
     var lastUsedModelId: String?
     var lastUsedAt: Date?
 
-    /// 해당 provider에 연결된 MCP 서버 목록.
-    /// CodingKeys에 포함하지 않음 — ProviderManager.reload()에서 별도 저장소에서 병합.
+    /// 与该 provider 关联的 MCP 服务器列表.
+    /// 不包含在 CodingKeys 中 — 由 ProviderManager.reload() 从独立存储中合并.
     var mcpServers: [MCPServerConfig] = []
 
     // MARK: - Budget (保险闸)
@@ -954,7 +954,7 @@ final class ProviderManager {
 
     // MARK: - MCP Server Management
 
-    /// 특정 provider에 MCP 서버 추가 또는 업데이트 (id 기준 upsert).
+    /// 向指定 provider 添加或更新 MCP 服务器（按 id 做 upsert）.
     func addOrUpdateMCPServer(_ server: MCPServerConfig, for providerId: String) {
         var dict = loadMCPServersPerProvider()
         var list = dict[providerId] ?? []
@@ -968,7 +968,7 @@ final class ProviderManager {
         reload()
     }
 
-    /// 특정 provider에서 MCP 서버 삭제.
+    /// 从指定 provider 中删除 MCP 服务器.
     func removeMCPServer(id: String, from providerId: String) {
         var dict = loadMCPServersPerProvider()
         dict[providerId]?.removeAll { $0.id == id }

@@ -352,7 +352,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
 
 // MARK: - Anthropic Provider
 
-/// content_block_start 시점에 생성, content_block_stop 시점에 finalize.
+/// 在 content_block_start 时创建，在 content_block_stop 时 finalize.
 private struct ActiveBlock {
     enum Kind {
         case text
@@ -366,16 +366,16 @@ private struct ActiveBlock {
 final class AnthropicProvider: BaseChatProvider {
     private var currentEventType = ""
 
-    /// ProviderRouter가 sendStreaming() 전에 설정. 비어있으면 MCP 미사용.
+    /// 由 ProviderRouter 在调用 sendStreaming() 前设置. 为空则不使用 MCP.
     var mcpServersToInject: [MCPServerConfig] = []
 
-    /// 스트리밍 완료 후 tool 세그먼트가 있을 때만 호출. ConversationViewModel이 setSegments()에 사용.
+    /// 流式完成后仅在存在 tool 段时调用. ConversationViewModel 用于 setSegments().
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
 
-    /// index → 진행 중인 content block 상태
+    /// index → 进行中的 content block 状态
     private var activeBlocks: [Int: ActiveBlock] = [:]
 
-    /// content_block_stop 시 완성된 세그먼트 (text + tool, 순서 유지)
+    /// content_block_stop 时已完成的段（text + tool，保持顺序）
     private var pendingSegments: [MessageSegment] = []
 
     override func sendStreaming(
@@ -546,7 +546,7 @@ final class AnthropicProvider: BaseChatProvider {
             }
 
         case "content_block_start":
-            // 新규 content block 시작. text / tool_use / tool_result 세 종류.
+            // 新的 content block 开始. 共三种类型：text / tool_use / tool_result.
             let index = obj["index"] as? Int ?? 0
             let block = obj["content_block"] as? [String: Any]
             switch block?["type"] as? String {
@@ -559,7 +559,7 @@ final class AnthropicProvider: BaseChatProvider {
             case "tool_result":
                 let toolUseId = block?["tool_use_id"] as? String ?? ""
                 var toolResultBlock = ActiveBlock(kind: .toolResult(toolUseId: toolUseId))
-                // mcp_servers beta: tool_result 내용이 content_block_start에 직접 포함되기도 함
+                // mcp_servers beta: tool_result 内容有时直接包含在 content_block_start 中
                 if let content = block?["content"] as? String {
                     toolResultBlock.accumulated = content
                 }
@@ -575,7 +575,7 @@ final class AnthropicProvider: BaseChatProvider {
             case "text_delta":
                 let text = delta?["text"] as? String ?? ""
                 activeBlocks[index]?.accumulated += text
-                // text block만 onToken으로 실시간 업데이트
+                // 只有 text block 才通过 onToken 实时更新
                 if let block = activeBlocks[index], case .text = block.kind {
                     DispatchQueue.main.async { [self] in
                         streamingContent += text
@@ -583,12 +583,12 @@ final class AnthropicProvider: BaseChatProvider {
                     }
                 }
             case "input_json_delta":
-                // tool_use block의 입력 JSON 조각 누적
+                // 累积 tool_use block 的输入 JSON 片段
                 let partial = delta?["partial_json"] as? String ?? ""
                 activeBlocks[index]?.accumulated += partial
             default:
                 if let text = delta?["text"] as? String, !text.isEmpty {
-                    // fallback: type 없이 text 필드만 있는 경우 (구버전 Anthropic API 호환)
+                    // fallback: 仅有 text 字段而无 type 的情况（兼容旧版 Anthropic API）
                     activeBlocks[index]?.accumulated += text
                     DispatchQueue.main.async { [self] in
                         streamingContent += text
@@ -598,7 +598,7 @@ final class AnthropicProvider: BaseChatProvider {
             }
 
         case "content_block_stop":
-            // block 완료 → MessageSegment 생성 후 pendingSegments에 추가
+            // block 完成 → 生成 MessageSegment 后追加到 pendingSegments
             let index = obj["index"] as? Int ?? 0
             if let block = activeBlocks.removeValue(forKey: index) {
                 finalizeBlock(block)
@@ -622,7 +622,7 @@ final class AnthropicProvider: BaseChatProvider {
             }
             DispatchQueue.main.async { [self] in
                 isStreaming = false
-                // tool 세그먼트가 있을 때만 onSegmentsCallback 호출 (plain text는 기존 경로 유지)
+                // 仅在存在 tool 段时调用 onSegmentsCallback（纯文本走原有路径）
                 if hasTool {
                     onSegmentsCallback?(segments)
                 }
@@ -644,17 +644,17 @@ final class AnthropicProvider: BaseChatProvider {
         }
     }
 
-    /// block 완료 시 MessageSegment로 변환하여 pendingSegments에 추가.
+    /// block 完成时转换为 MessageSegment 并追加到 pendingSegments。
     private func finalizeBlock(_ block: ActiveBlock) {
         switch block.kind {
         case .text:
-            // 텍스트는 이미 streamingContent에 실시간 누적됨. 비어있지 않으면 segments에도 추가.
+            // 文本已实时累积到 streamingContent。非空时也追加到 segments。
             let text = block.accumulated
             if !text.isEmpty {
                 pendingSegments.append(.text(text))
             }
         case .toolUse(let id, let rawName):
-            // Q2: server name prefix 제거 ("imprint-memory__memory_remember" → "memory_remember")
+            // Q2: 去除 server name 前缀 ("imprint-memory__memory_remember" → "memory_remember")
             let parts = rawName.components(separatedBy: "__")
             let displayName = parts.count > 1 ? parts.dropFirst().joined(separator: "__") : rawName
             let serverName = parts.count > 1 ? parts[0] : nil
