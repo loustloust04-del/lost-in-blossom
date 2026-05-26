@@ -352,8 +352,31 @@ final class OpenAICompatibleProvider: BaseChatProvider {
 
 // MARK: - Anthropic Provider
 
+/// 在 content_block_start 时创建，在 content_block_stop 时 finalize.
+private struct ActiveBlock {
+    enum Kind {
+        case text
+        case toolUse(id: String, name: String)
+        case toolResult(toolUseId: String)
+    }
+    var kind: Kind
+    var accumulated: String = ""
+}
+
 final class AnthropicProvider: BaseChatProvider {
     private var currentEventType = ""
+
+    /// 由 ProviderRouter 在调用 sendStreaming() 前设置. 为空则不使用 MCP.
+    var mcpServersToInject: [MCPServerConfig] = []
+
+    /// 流式完成后仅在存在 tool 段时调用. ConversationViewModel 用于 setSegments().
+    var onSegmentsCallback: (([MessageSegment]) -> Void)?
+
+    /// index → 进行中的 content block 状态
+    private var activeBlocks: [Int: ActiveBlock] = [:]
+
+    /// content_block_stop 时已完成的段（text + tool，保持顺序）
+    private var pendingSegments: [MessageSegment] = []
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
@@ -369,6 +392,8 @@ final class AnthropicProvider: BaseChatProvider {
     ) {
         resetState(onToken: onToken, onComplete: onComplete, onError: onError)
         currentEventType = ""
+        activeBlocks = [:]
+        pendingSegments = []
 
         // Build Anthropic Messages API format
         var apiMessages: [[String: Any]] = []
@@ -393,6 +418,14 @@ final class AnthropicProvider: BaseChatProvider {
             body["stream"] = p.streaming
         }
 
+        // MCP servers injection (Anthropic mcp_servers beta)
+        let enabledMCP = mcpServersToInject.filter(\.isEnabled)
+        if !enabledMCP.isEmpty {
+            body["mcp_servers"] = enabledMCP.map { s -> [String: Any] in
+                ["type": "url", "url": s.url, "name": s.name]
+            }
+        }
+
         guard let url = URL(string: "\(baseURL)/messages") else {
             onError("无效的 API 地址: \(baseURL)")
             isStreaming = false
@@ -405,6 +438,10 @@ final class AnthropicProvider: BaseChatProvider {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (key, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: key)
+        }
+        // MCP beta header (only when MCP servers are active)
+        if !enabledMCP.isEmpty {
+            request.setValue("mcp-client-0.1", forHTTPHeaderField: "anthropic-beta")
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
@@ -500,7 +537,7 @@ final class AnthropicProvider: BaseChatProvider {
 
         switch type {
         case "message_start":
-            // { "type": "message_start", "message": { "usage": { "input_tokens": N, "output_tokens": 0 } } }
+            // { "type": "message_start", "message": { "usage": { "input_tokens": N } } }
             if let msg = obj["message"] as? [String: Any],
                let u = msg["usage"] as? [String: Any],
                let it = u["input_tokens"] as? Int {
@@ -508,17 +545,67 @@ final class AnthropicProvider: BaseChatProvider {
                 gotUsage = true
             }
 
+        case "content_block_start":
+            // 新的 content block 开始. 共三种类型：text / tool_use / tool_result.
+            let index = obj["index"] as? Int ?? 0
+            let block = obj["content_block"] as? [String: Any]
+            switch block?["type"] as? String {
+            case "text":
+                activeBlocks[index] = ActiveBlock(kind: .text)
+            case "tool_use":
+                let id = block?["id"] as? String ?? ""
+                let rawName = block?["name"] as? String ?? ""
+                activeBlocks[index] = ActiveBlock(kind: .toolUse(id: id, name: rawName))
+            case "tool_result":
+                let toolUseId = block?["tool_use_id"] as? String ?? ""
+                var toolResultBlock = ActiveBlock(kind: .toolResult(toolUseId: toolUseId))
+                // mcp_servers beta: tool_result 内容有时直接包含在 content_block_start 中
+                if let content = block?["content"] as? String {
+                    toolResultBlock.accumulated = content
+                }
+                activeBlocks[index] = toolResultBlock
+            default:
+                break
+            }
+
         case "content_block_delta":
-            if let delta = obj["delta"] as? [String: Any],
-               let text = delta["text"] as? String {
-                DispatchQueue.main.async { [self] in
-                    streamingContent += text
-                    onToken?(text)
+            let index = obj["index"] as? Int ?? 0
+            let delta = obj["delta"] as? [String: Any]
+            switch delta?["type"] as? String {
+            case "text_delta":
+                let text = delta?["text"] as? String ?? ""
+                activeBlocks[index]?.accumulated += text
+                // 只有 text block 才通过 onToken 实时更新
+                if let block = activeBlocks[index], case .text = block.kind {
+                    DispatchQueue.main.async { [self] in
+                        streamingContent += text
+                        onToken?(text)
+                    }
+                }
+            case "input_json_delta":
+                // 累积 tool_use block 的输入 JSON 片段
+                let partial = delta?["partial_json"] as? String ?? ""
+                activeBlocks[index]?.accumulated += partial
+            default:
+                if let text = delta?["text"] as? String, !text.isEmpty {
+                    // fallback: 仅有 text 字段而无 type 的情况（兼容旧版 Anthropic API）
+                    activeBlocks[index]?.accumulated += text
+                    DispatchQueue.main.async { [self] in
+                        streamingContent += text
+                        onToken?(text)
+                    }
                 }
             }
 
+        case "content_block_stop":
+            // block 完成 → 生成 MessageSegment 后追加到 pendingSegments
+            let index = obj["index"] as? Int ?? 0
+            if let block = activeBlocks.removeValue(forKey: index) {
+                finalizeBlock(block)
+            }
+
         case "message_delta":
-            // { "type": "message_delta", "usage": { "output_tokens": N } }
+            // { "usage": { "output_tokens": N } }
             if let u = obj["usage"] as? [String: Any],
                let ot = u["output_tokens"] as? Int {
                 accumulatedOutputTokens = ot
@@ -527,8 +614,18 @@ final class AnthropicProvider: BaseChatProvider {
 
         case "message_stop":
             receivedDone = true
+            let segments = pendingSegments
+            let hasTool = segments.contains {
+                if case .toolUse = $0 { return true }
+                if case .toolResult = $0 { return true }
+                return false
+            }
             DispatchQueue.main.async { [self] in
                 isStreaming = false
+                // 仅在存在 tool 段时调用 onSegmentsCallback（纯文本走原有路径）
+                if hasTool {
+                    onSegmentsCallback?(segments)
+                }
                 onComplete?(streamingContent, finalUsage)
             }
 
@@ -544,6 +641,37 @@ final class AnthropicProvider: BaseChatProvider {
 
         default:
             break
+        }
+    }
+
+    /// block 完成时转换为 MessageSegment 并追加到 pendingSegments。
+    private func finalizeBlock(_ block: ActiveBlock) {
+        switch block.kind {
+        case .text:
+            // 文本已实时累积到 streamingContent。非空时也追加到 segments。
+            let text = block.accumulated
+            if !text.isEmpty {
+                pendingSegments.append(.text(text))
+            }
+        case .toolUse(let id, let rawName):
+            // Q2: 去除 server name 前缀 ("imprint-memory__memory_remember" → "memory_remember")
+            let parts = rawName.components(separatedBy: "__")
+            let displayName = parts.count > 1 ? parts.dropFirst().joined(separator: "__") : rawName
+            let serverName = parts.count > 1 ? parts[0] : nil
+            pendingSegments.append(.toolUse(
+                id: id,
+                name: displayName,
+                inputJSON: block.accumulated.isEmpty ? "{}" : block.accumulated,
+                integrationName: serverName,
+                iconName: nil
+            ))
+        case .toolResult(let toolUseId):
+            pendingSegments.append(.toolResult(
+                toolUseId: toolUseId,
+                text: block.accumulated,
+                isError: false,
+                integrationName: nil
+            ))
         }
     }
 }
@@ -581,6 +709,7 @@ final class ProviderRouter {
         providerManager: ProviderManager,
         samplingParams: SamplingParams? = nil,
         additionalHeaders: [String: String] = [:],
+        onSegments: (([MessageSegment]) -> Void)? = nil,
         onToken: @escaping (String) -> Void,
         onComplete: @escaping (String, TokenUsage?) -> Void,
         onError: @escaping (String) -> Void
@@ -607,8 +736,13 @@ final class ProviderRouter {
         case .openaiCompatible:
             chatProvider = openAIProvider
         case .anthropic:
+            // MCP 服务器注入：provider 为 anthropic 且 mcpEnabled 不为 false 时
+            let mcpEnabled = samplingParams?.mcpEnabled ?? true
+            anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
+            anthropicProvider.onSegmentsCallback = onSegments
             chatProvider = anthropicProvider
         case .ccBridge:
+            ccBridgeProvider.onSegmentsCallback = onSegments
             chatProvider = ccBridgeProvider
         }
 
@@ -682,6 +816,8 @@ final class ProviderRouter {
 
 final class CCBridgeProvider: BaseChatProvider {
     @ObservationIgnored private let wsClient = CCBridgeWebSocketClient.shared
+    /// ProviderRouter 在发起请求前注入，用于把 tool_event 段回传给 ViewModel
+    var onSegmentsCallback: (([MessageSegment]) -> Void)?
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
@@ -716,21 +852,54 @@ final class CCBridgeProvider: BaseChatProvider {
         let messageId = extraHeaders["X-MP-MessageId"] ?? UUID().uuidString
         let user      = extraHeaders["X-MP-User"]      ?? "tianyi"
 
-        // 3. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
+        // 3. 积累 tool_event 段（CC 调用 imprint-memory 后通过 reply tool_calls 上报）
+        //    pendingToolSegments 被 toolEventHandler 和 replyHandler 两个闭包共享捕获；
+        //    两者均在 main thread 调用，无竞争。
+        var pendingToolSegments: [MessageSegment] = []
+        let capturedOnSegments = onSegmentsCallback  // 快照，避免 sendStreaming 返回后被覆盖
+
+        wsClient.toolEventHandler = { [chatId] (evtChatId, toolName, inputJSON, result) in
+            guard evtChatId == chatId else { return }
+            // Q2：不显示 server 前缀，直接用 toolName（CC 已自动去前缀或 mcp-server.ts 直接传工具名）
+            let toolUseSeg = MessageSegment.toolUse(
+                id: UUID().uuidString,
+                name: toolName,
+                inputJSON: inputJSON.isEmpty ? "{}" : inputJSON,
+                integrationName: "imprint-memory",
+                iconName: nil
+            )
+            let toolResultSeg = MessageSegment.toolResult(
+                toolUseId: "",    // CCBridge 路径 toolUseId 无意义，置空
+                text: result,
+                isError: false,
+                integrationName: nil
+            )
+            pendingToolSegments.append(toolUseSeg)
+            if !result.isEmpty { pendingToolSegments.append(toolResultSeg) }
+        }
+
+        // 4. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
         wsClient.registerReplyHandler(chatId: chatId) { [weak self] replyText in
             guard let self else { return }
+            self.wsClient.toolEventHandler = nil           // 清除 tool_event 监听
             self.wsClient.unregisterReplyHandler(chatId: chatId)
             self.isStreaming = false
             self.streamingContent = replyText
+            // 若有 tool segments，组合后回传 ViewModel 写入 node.segments
+            if !pendingToolSegments.isEmpty {
+                var segs = pendingToolSegments
+                segs.append(.text(replyText))
+                capturedOnSegments?(segs)
+            }
             onComplete(replyText, nil)  // CC 不上报 token 用量
         }
 
-        // 4. 触发连接（如未连接）
+        // 5. 触发连接（如未连接）
         if !wsClient.isConnected, let url = URL(string: baseURL) {
             wsClient.connect(url: url)
         }
 
-        // 5. 发送 send 帧；若 WS 未连接，send 立即回调 error，走 failNow 分支
+        // 6. 发送 send 帧；若 WS 未连接，send 立即回调 error，走 failNow 分支
         let payload: [String: Any] = [
             "type":       "send",
             "chat_id":    chatId,
@@ -741,6 +910,7 @@ final class CCBridgeProvider: BaseChatProvider {
         wsClient.send(payload) { [weak self] err in
             guard let self else { return }
             if let err {
+                self.wsClient.toolEventHandler = nil
                 self.wsClient.unregisterReplyHandler(chatId: chatId)
                 self.failNow("CC Bridge WS 发送失败：\(err.localizedDescription)", onError: onError)
             }

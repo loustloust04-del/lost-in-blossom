@@ -20,6 +20,9 @@ final class CCBridgeWebSocketClient: NSObject {
     @ObservationIgnored private var manualClose = false
     @ObservationIgnored private var replyHandlers: [String: (String) -> Void] = [:]
     @ObservationIgnored private let handlersQueue = DispatchQueue(label: "cc.bridge.handlers")
+    /// tool_event 回调：(chatId, toolName, inputJSON, result)
+    /// CCBridgeProvider 在发起请求前设置，reply 到达后清除。
+    @ObservationIgnored var toolEventHandler: ((String, String, String, String) -> Void)?
 
     // MARK: - Public API
 
@@ -127,6 +130,16 @@ final class CCBridgeWebSocketClient: NSObject {
                 handlersQueue.async { [weak self] in
                     guard let handler = self?.replyHandlers[chatId] else { return }
                     DispatchQueue.main.async { handler(content) }
+                }
+            }
+        case "tool_event":
+            // CCBridgeProvider 发起请求时注册，reply 到达后清除
+            if let chatId = obj["chat_id"] as? String,
+               let toolName = obj["tool_name"] as? String {
+                let inputJSON = obj["input_json"] as? String ?? "{}"
+                let result    = obj["result"]     as? String ?? ""
+                DispatchQueue.main.async { [weak self] in
+                    self?.toolEventHandler?(chatId, toolName, inputJSON, result)
                 }
             }
         case "ack":

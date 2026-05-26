@@ -85,6 +85,7 @@ export function startHub(): WebSocketServer {
       ws.on("message", (raw) => {
         let msg: any
         try { msg = JSON.parse(raw.toString()) } catch { return }
+
         if (msg.type === "reply" && typeof msg.chat_id === "string" && typeof msg.content === "string") {
           const payload = JSON.stringify({
             type: "reply",
@@ -93,11 +94,21 @@ export function startHub(): WebSocketServer {
           })
           for (const mp of mpClients) {
             if (mp.readyState === mp.OPEN) {
-              try {
-                mp.send(payload)
-              } catch {
-                // 死 socket，等 close 事件清理
-              }
+              try { mp.send(payload) } catch { /* 死 socket，等 close 事件清理 */ }
+            }
+          }
+        } else if (msg.type === "tool_event" && typeof msg.chat_id === "string") {
+          // 转发 tool_event 给所有 MP 客户端，让 iOS 渲染 ToolCallCardView
+          const payload = JSON.stringify({
+            type: "tool_event",
+            chat_id: msg.chat_id,
+            tool_name: msg.tool_name ?? "",
+            input_json: msg.input_json ?? "{}",
+            result: msg.result ?? "",
+          })
+          for (const mp of mpClients) {
+            if (mp.readyState === mp.OPEN) {
+              try { mp.send(payload) } catch { /* 死 socket，等 close 事件清理 */ }
             }
           }
         }

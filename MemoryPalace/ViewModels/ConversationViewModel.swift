@@ -1286,6 +1286,11 @@ final class ConversationViewModel {
             providerManager: providerManager,
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,
+            onSegments: { [weak assistantNode] segments in
+                // 仅在存在 tool_use/tool_result 段时调用。
+                // 比 onComplete 先执行，context.save() 在 onComplete 中处理。
+                assistantNode?.setSegments(segments)
+            },
             onToken: { [weak self] token in
                 guard let self else { return }
                 streamingText += token
@@ -1502,6 +1507,9 @@ final class ConversationViewModel {
             providerManager: providerManager,
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,
+            onSegments: { [weak newNode] segments in
+                newNode?.setSegments(segments)
+            },
             onToken: { [weak self] token in
                 guard let self else { return }
                 streamingText += token
@@ -1609,6 +1617,9 @@ final class ConversationViewModel {
             providerManager: providerManager,
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,
+            onSegments: { [weak newAssistantNode] segments in
+                newAssistantNode?.setSegments(segments)
+            },
             onToken: { [weak self] token in
                 guard let self else { return }
                 streamingText += token

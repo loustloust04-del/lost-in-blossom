@@ -1,5 +1,16 @@
 import Foundation
 
+// MARK: - MCP Server Config
+
+/// Anthropic mcp_servers beta 使用的 MCP 服务器配置.
+/// 虽然挂在 APIProvider 上，但通过独立的 UserDefaults 键存储（built-in / custom 共用同一路径）.
+struct MCPServerConfig: Identifiable, Codable, Hashable {
+    var id: String = UUID().uuidString
+    var name: String        // 服务器标识符，用作 tool 名称的命名空间前缀（如 "imprint-memory"）
+    var url: String         // MCP SSE endpoint URL
+    var isEnabled: Bool = true
+}
+
 // MARK: - Provider Type
 
 enum ProviderType: String, Codable {
@@ -34,6 +45,10 @@ struct APIProvider: Identifiable, Codable {
     var createdAt: Date
     var lastUsedModelId: String?
     var lastUsedAt: Date?
+
+    /// 与该 provider 关联的 MCP 服务器列表.
+    /// 不包含在 CodingKeys 中 — 由 ProviderManager.reload() 从独立存储中合并.
+    var mcpServers: [MCPServerConfig] = []
 
     // MARK: - Budget (保险闸)
     var budgetEnabled: Bool
@@ -322,6 +337,7 @@ extension APIProvider {
 
 private let customProvidersKey = "customProviders"
 private let customModelsKey = "customModels" // per-provider extra models for built-in providers
+private let mcpServersPerProviderKey = "mcpServersPerProvider" // per-provider MCP server list
 private let cloudSyncKey = "apiKeyCloudSync"
 private let favoriteModelsKey = "favoriteModels"
 private let legacyApiKeyPrefix = "apikey-"
@@ -353,7 +369,7 @@ final class ProviderManager {
         apiKeyCacheLoaded = true
     }
 
-    /// Reload providers: built-in + custom, merge extra models for built-in
+    /// Reload providers: built-in + custom, merge extra models and MCP servers
     func reload() {
         var result = APIProvider.builtIn
 
@@ -367,6 +383,14 @@ final class ProviderManager {
 
         // Append custom providers
         result.append(contentsOf: loadCustomProviders())
+
+        // Merge MCP servers (separate storage, applies to both built-in and custom)
+        let mcpPerProvider = loadMCPServersPerProvider()
+        for i in result.indices {
+            if let list = mcpPerProvider[result[i].id] {
+                result[i].mcpServers = list
+            }
+        }
 
         providers = result
     }
@@ -926,6 +950,41 @@ final class ProviderManager {
     private func loadExtraModels() -> [String: [ProviderModel]] {
         guard let data = UserDefaults.standard.data(forKey: customModelsKey) else { return [:] }
         return (try? JSONDecoder().decode([String: [ProviderModel]].self, from: data)) ?? [:]
+    }
+
+    // MARK: - MCP Server Management
+
+    /// 向指定 provider 添加或更新 MCP 服务器（按 id 做 upsert）.
+    func addOrUpdateMCPServer(_ server: MCPServerConfig, for providerId: String) {
+        var dict = loadMCPServersPerProvider()
+        var list = dict[providerId] ?? []
+        if let idx = list.firstIndex(where: { $0.id == server.id }) {
+            list[idx] = server
+        } else {
+            list.append(server)
+        }
+        dict[providerId] = list
+        saveMCPServersPerProvider(dict)
+        reload()
+    }
+
+    /// 从指定 provider 中删除 MCP 服务器.
+    func removeMCPServer(id: String, from providerId: String) {
+        var dict = loadMCPServersPerProvider()
+        dict[providerId]?.removeAll { $0.id == id }
+        if dict[providerId]?.isEmpty == true { dict.removeValue(forKey: providerId) }
+        saveMCPServersPerProvider(dict)
+        reload()
+    }
+
+    private func loadMCPServersPerProvider() -> [String: [MCPServerConfig]] {
+        guard let data = UserDefaults.standard.data(forKey: mcpServersPerProviderKey) else { return [:] }
+        return (try? JSONDecoder().decode([String: [MCPServerConfig]].self, from: data)) ?? [:]
+    }
+
+    private func saveMCPServersPerProvider(_ dict: [String: [MCPServerConfig]]) {
+        let data = try? JSONEncoder().encode(dict)
+        UserDefaults.standard.set(data, forKey: mcpServersPerProviderKey)
     }
 
     private func loadFavoriteModelIds() -> [String] {
