@@ -424,11 +424,7 @@ struct MemoryPanelView: View {
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 }
 
@@ -522,7 +518,6 @@ struct MemoryCardView: View {
                             .foregroundColor(Color(hex: 0xD4A574))
                     }
 
-                    #if os(iOS)
                     Menu {
                         Button(memory.isUserExplicit ? "取消钉住" : "钉住", action: onPin)
                         Button("删除", role: .destructive, action: onDelete)
@@ -533,24 +528,6 @@ struct MemoryCardView: View {
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
-                    #else
-                    // Hover actions
-                    if isHovering {
-                        Button(action: onPin) {
-                            Image(systemName: memory.isUserExplicit ? "pin.slash" : "pin")
-                                .font(.system(size: 9))
-                                .foregroundColor(Theme.textMuted)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 9))
-                                .foregroundColor(Theme.danger.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    #endif
                 }
 
                 // Decay bar
@@ -610,11 +587,7 @@ struct MemoryCardView: View {
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 
     /// Simple color blend between two colors

@@ -343,11 +343,7 @@ struct CalendarPanelView: View {
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 }
 
@@ -395,10 +391,6 @@ private struct DayCell: View {
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 }

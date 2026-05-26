@@ -138,19 +138,9 @@ struct ExportOptionsSheet: View {
         }
 
         // Save file
-        #if os(macOS)
-        let panel = NSSavePanel()
-        panel.title = "导出 Markdown"
-        panel.nameFieldStringValue = "\(MarkdownExporter.sanitizedFileName(conversation.title)).md"
-        panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? markdown.write(to: url, atomically: true, encoding: .utf8)
-        #else
         // iOS: 暂时保存到临时目录（后续接 ShareSheet）
         let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(MarkdownExporter.sanitizedFileName(conversation.title)).md")
         try? markdown.write(to: tmpURL, atomically: true, encoding: .utf8)
-        #endif
 
         dismiss()
     }

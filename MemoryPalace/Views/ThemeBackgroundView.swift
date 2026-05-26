@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 struct ThemeBackgroundView: View {
     let fill: Color
@@ -132,21 +128,12 @@ private struct ThemeBackgroundArtwork: View {
 
     var body: some View {
         Group {
-            #if os(macOS)
-            if let image = NSImage(contentsOf: url) {
-                Image(nsImage: image)
-                    .resizable()
-            } else {
-                EmptyView()
-            }
-            #else
             if let image = UIImage(contentsOfFile: url.path) {
                 Image(uiImage: image)
                     .resizable()
             } else {
                 EmptyView()
             }
-            #endif
         }
         .scaledToFill()
         .frame(width: canvasSize.width, height: canvasSize.height)
@@ -168,21 +155,12 @@ private struct ThemeBackgroundArtworkFlex: View {
 
     var body: some View {
         Group {
-            #if os(macOS)
-            if let image = NSImage(contentsOf: url) {
-                Image(nsImage: image)
-                    .resizable()
-            } else {
-                EmptyView()
-            }
-            #else
             if let image = UIImage(contentsOfFile: url.path) {
                 Image(uiImage: image)
                     .resizable()
             } else {
                 EmptyView()
             }
-            #endif
         }
         .scaledToFill()
         .frame(maxWidth: .infinity, maxHeight: .infinity)

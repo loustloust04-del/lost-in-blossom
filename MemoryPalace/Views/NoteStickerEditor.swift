@@ -125,9 +125,7 @@ struct NoteStickerEditor: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.sidebarBg)
             .navigationTitle(isEditMode ? "编辑便签" : "新建便签")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -142,9 +140,6 @@ struct NoteStickerEditor: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(width: 300, height: 320)
-        #endif
         .onAppear {
             if isEditMode {
                 text = initialText

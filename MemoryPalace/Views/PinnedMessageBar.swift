@@ -39,21 +39,9 @@ struct PinnedMessageBar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)   // 32 + 2×6 = 44pt 和 nav 圆按钮等高
             .frame(maxWidth: .infinity)
-            #if os(iOS)
             // 不加 .interactive()：iOS 26 的 interactive glass 层会吞 tap
             // （回底按钮踩过坑，坐实了这个 bug）
             .glassEffectCompat(tint: Color.white.opacity(0.15), in: Capsule(style: .continuous))
-            #else
-            .background(
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Theme.accent.opacity(0.5), lineWidth: 0.5)
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 3)
-            #endif
             .contentShape(Capsule())
             .onTapGesture(perform: onTap)
             .contextMenu {
@@ -67,11 +55,6 @@ struct PinnedMessageBar: View {
                     Label("暂时隐藏", systemImage: "eye.slash")
                 }
             }
-            #if os(macOS)
-            .padding(.horizontal, 20)   // 对齐 HoverButtons 外边缘（LazyVStack 16 + HoverButtons 4）
-            .padding(.top, 6)
-            .padding(.bottom, 4)
-            #endif
             // iOS：外围 padding 由 ContentView.iOSChatTopBar 的 HStack 管布局，这里不再自占位
             .transition(.move(edge: .top).combined(with: .opacity))
         }

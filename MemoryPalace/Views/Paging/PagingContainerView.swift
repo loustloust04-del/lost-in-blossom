@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 
 /// SwiftUI 包装 `PagingViewController` 的 representable。
@@ -94,4 +93,3 @@ struct PagingContainerView: UIViewControllerRepresentable {
         }
     }
 }
-#endif

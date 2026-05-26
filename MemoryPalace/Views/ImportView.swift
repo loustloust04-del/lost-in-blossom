@@ -192,11 +192,7 @@ struct ImportView: View {
     var body: some View {
         let _ = themeManager?.themeChangeID
         Group {
-            #if os(iOS)
             iOSBody
-            #else
-            macOSBody
-            #endif
         }
         .fileImporter(
             isPresented: $showFilePicker,
@@ -214,7 +210,6 @@ struct ImportView: View {
         }
     }
 
-    #if os(iOS)
     private var iOSBody: some View {
         NavigationStack {
             List {
@@ -516,7 +511,6 @@ struct ImportView: View {
                     .fill(Theme.accent.opacity(0.45))
             )
     }
-    #endif
 
     private var resultBreakdownSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -615,9 +609,6 @@ struct ImportView: View {
                     .font(.system(size: Theme.F.label))
                     .foregroundColor(Theme.textSecondary)
                     .disabled(isImporting)
-                    #if os(macOS)
-                    .toggleStyle(.checkbox)
-                    #endif
 
                 Button("选择文件...") {
                     presentFilePicker()

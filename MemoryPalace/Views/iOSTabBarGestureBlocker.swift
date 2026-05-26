@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -94,4 +93,3 @@ struct TabBarGestureContainer<Content: View>: UIViewControllerRepresentable {
         }
     }
 }
-#endif

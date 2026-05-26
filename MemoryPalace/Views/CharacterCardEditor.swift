@@ -74,17 +74,11 @@ struct CharacterCardEditor: View {
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.plain)
-            #endif
             .scrollContentBackground(.hidden)
             .background(Theme.sidebarBg)
             .navigationTitle("编辑自定义助手模板")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { onCancel() }
@@ -96,9 +90,6 @@ struct CharacterCardEditor: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(width: 480, height: 600)
-        #endif
     }
 
     @ViewBuilder

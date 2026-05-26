@@ -88,54 +88,18 @@ struct ToolBarView: View {
         .animation(springAnim, value: pinnedTools.map(\.id))
         .animation(springAnim, value: selectedToolId)
         .padding(isIOSStyle ? 4 : 3)
-        #if os(iOS)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
-        #else
-        .background(Capsule().fill(Theme.mainBg.opacity(0.8)))
-        .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))
-        #endif
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        #if os(iOS)
         .sheet(isPresented: $showDrawer) {
             ToolDrawerView(selectedToolId: $selectedToolId, onDismiss: { showDrawer = false })
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        #else
-        .overlay(alignment: .top) {
-            if showDrawer {
-                ToolDrawerView(selectedToolId: $selectedToolId, onDismiss: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        showDrawer = false
-                    }
-                })
-                .frame(width: 260)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Theme.sidebarBg)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Theme.accent.opacity(0.4), lineWidth: 0.5)
-                )
-                .offset(y: 40)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)).combined(with: .offset(y: -6)),
-                    removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
-                ))
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showDrawer)
-        #endif
     }
 
     private var isIOSStyle: Bool {
-        #if os(iOS)
         true
-        #else
-        false
-        #endif
     }
 }
 
@@ -233,9 +197,7 @@ struct ToolDrawerView: View {
 
             Spacer()
         }
-        #if os(iOS)
         .background(Theme.sidebarBg)
-        #endif
     }
 
     private func toolCell(_ tool: RightPanelTool) -> some View {

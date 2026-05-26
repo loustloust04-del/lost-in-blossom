@@ -44,9 +44,7 @@ struct WorldBookPanelView: View {
     var body: some View {
         ScrollViewReader { proxy in
         VStack(spacing: 0) {
-        #if os(iOS)
         iosActionBar
-        #endif
         List {
             if !hasAnyContent {
                 Section {
@@ -59,11 +57,7 @@ struct WorldBookPanelView: View {
             globalBookSections
             floorBookSections
         }
-        #if os(iOS)
         .listStyle(.insetGrouped)
-        #else
-        .listStyle(.plain)
-        #endif
         .scrollContentBackground(.hidden)
         .background(Theme.sidebarBg)
         .toolbar {
@@ -184,7 +178,6 @@ struct WorldBookPanelView: View {
         } // end ScrollViewReader
     }
 
-    #if os(iOS)
     private var iosActionBar: some View {
         HStack(spacing: 8) {
             Menu {
@@ -227,7 +220,6 @@ struct WorldBookPanelView: View {
         .padding(.top, 8)
         .padding(.bottom, 4)
     }
-    #endif
 
     private func consumeTarget(_ target: RightPanelNavigator.Target?, proxy: ScrollViewProxy) {
         guard let t = target, t.tool == "worldBook" else { return }
@@ -1041,9 +1033,7 @@ struct WorldBookEntryEditor: View {
                         TextField("100", text: $insertionOrder)
                             .font(.system(size: Theme.F.body))
                             .multilineTextAlignment(.trailing)
-                            #if os(iOS)
                             .keyboardType(.numberPad)
-                            #endif
                     }
 
                     Toggle("常驻", isOn: $isConstant)
@@ -1056,17 +1046,11 @@ struct WorldBookEntryEditor: View {
                 .listRowBackground(Theme.mainBg)
                 .tint(Theme.branchIndicator)
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.plain)
-            #endif
             .scrollContentBackground(.hidden)
             .background(Theme.sidebarBg)
             .navigationTitle(isNew ? "新建条目" : "编辑条目")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { onCancel() }
@@ -1078,9 +1062,6 @@ struct WorldBookEntryEditor: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(width: 440, height: 520)
-        #endif
     }
 
     private func save() {

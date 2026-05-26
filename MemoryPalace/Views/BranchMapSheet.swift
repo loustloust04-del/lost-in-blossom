@@ -34,20 +34,12 @@ struct BranchMapSheet: View {
         NavigationStack {
             content
                 .navigationTitle("分支地图")
-                #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("完成") { dismiss() }
                     }
                 }
-                #else
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") { dismiss() }
-                    }
-                }
-                #endif
         }
         .presentationDetents([.medium, .large])
     }
@@ -649,7 +641,6 @@ extension BranchMapSheet {
 
         dfs(root, lane: 0, depth: 0)
     }
-
 
     fileprivate func collectVisible(_ node: TidyNode, leftPad: Double, topPad: Double, nodes: inout [VisibleNode], edges: inout [TreeEdge], maxX: inout Double, maxY: inout Double) {
         let absX = node.x + leftPad

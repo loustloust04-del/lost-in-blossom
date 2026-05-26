@@ -58,11 +58,7 @@ struct CardLibraryPanelView: View {
                 .listRowSeparator(.hidden)
             }
         }
-        #if os(iOS)
         .listStyle(.insetGrouped)
-        #else
-        .listStyle(.plain)
-        #endif
         .scrollContentBackground(.hidden)
         .background(Theme.sidebarBg)
         .fileImporter(
@@ -310,12 +306,7 @@ struct CardLibraryPanelView: View {
     }
 
     private func platformImage(from data: Data) -> Image? {
-        #if os(macOS)
-        guard let img = NSImage(data: data) else { return nil }
-        return Image(nsImage: img)
-        #else
         guard let img = UIImage(data: data) else { return nil }
         return Image(uiImage: img)
-        #endif
     }
 }

@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -224,4 +223,3 @@ final class PromptTextViewContainer: UIView {
         onHeightDidChange?(height)
     }
 }
-#endif

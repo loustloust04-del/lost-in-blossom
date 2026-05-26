@@ -1,4 +1,3 @@
-#if os(iOS)
 import UIKit
 import SwiftUI
 import CoreImage
@@ -401,4 +400,3 @@ struct WallpaperConfig: Equatable {
             && lhs.gradientColors.map { $0.cgColor } == rhs.gradientColors.map { $0.cgColor }
     }
 }
-#endif

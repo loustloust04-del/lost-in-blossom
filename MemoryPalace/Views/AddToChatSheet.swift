@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import PhotosUI
 
@@ -229,4 +228,3 @@ private extension View {
         modifier(RowEntranceModifier(index: index, appeared: appeared))
     }
 }
-#endif

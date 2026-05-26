@@ -387,13 +387,8 @@ struct DrawingBoardSheet: View {
         let renderer = ImageRenderer(content: drawingView)
         renderer.scale = 2.0
         guard let cgImage = renderer.cgImage else { return }
-        #if os(macOS)
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = rep.representation(using: .png, properties: [:]) else { return }
-        #else
         let uiImage = UIImage(cgImage: cgImage)
         guard let pngData = uiImage.pngData() else { return }
-        #endif
         onSave(pngData); dismiss()
     }
 }

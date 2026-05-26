@@ -17,15 +17,8 @@ struct ScrollToBottomButton: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(Theme.textMuted)
         }
-        #if os(iOS)
         // 不 clipShape、不 frame — glass 内置按压 morph 动画需要空间自由形变
         .glassButtonStyleCompat()
-        #else
-        .buttonStyle(.plain)
-        .background(Circle().fill(.ultraThinMaterial))
-        .overlay(Circle().stroke(Theme.accent.opacity(0.4), lineWidth: 0.5))
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
-        #endif
         .opacity(isVisible ? 1 : 0)
         .offset(y: isVisible ? 0 : 8)
         .animation(.spring(duration: 0.3), value: isVisible)
