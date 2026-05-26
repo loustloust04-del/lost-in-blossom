@@ -36,7 +36,7 @@ struct AddToChatSheet: View {
                 PhotosPicker(
                     selection: $photoPickerItems,
                     maxSelectionCount: 1,
-                    matching: .imagesAndVideos
+                    matching: .images
                 ) {
                     addToChatRow(
                         icon: "paperclip",
