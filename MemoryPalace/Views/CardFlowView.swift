@@ -193,6 +193,7 @@ struct CardFlowView: View {
                                 ForEach(viewModel.currentPath, id: \.id) { node in
                                     makeBubbleView(for: node)
                                         .id(node.id)
+                                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                                         .background(
                                             GeometryReader { geo in
                                                 Color.clear.task(id: geo.frame(in: .named("scrollContent")).midY) {
@@ -210,6 +211,8 @@ struct CardFlowView: View {
                                     .onDisappear { isAtBottom = false }
                                     #endif
                             }
+                            // 新消息入场动画：路径长度变化时触发 ForEach item transition
+                            .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
                             #if os(iOS)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 16)
@@ -926,6 +929,8 @@ private struct InputFieldContainer: View {
 
             Button(action: triggerSend) {
                 Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
+                    // 图标切换用 SF Symbol replace 动画
+                    .contentTransition(.symbolEffect(.replace))
                     #if os(iOS)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
@@ -936,15 +941,21 @@ private struct InputFieldContainer: View {
                     .frame(width: 24, height: 24)
                     #endif
                     .background(
-                        Circle().fill(
-                            isStreaming
-                                ? Theme.danger
-                                : canSend ? Theme.branchIndicator : Theme.textMuted.opacity(0.3)
-                        )
+                        Circle()
+                            .fill(
+                                isStreaming
+                                    ? Theme.danger
+                                    : canSend ? Theme.branchIndicator : Theme.textMuted.opacity(0.3)
+                            )
+                            // 圆圈颜色随状态切换
+                            .animation(.easeInOut(duration: 0.15), value: isStreaming)
+                            .animation(.easeInOut(duration: 0.15), value: canSend)
                     )
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
+            // 整体 spring 弹性缩放：流式开始/停止时弹一下
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isStreaming)
             #if os(iOS)
             .frame(width: 44, height: 44)
             #endif

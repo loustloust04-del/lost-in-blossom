@@ -661,6 +661,7 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             if viewModel.selectedConversation != nil {
                 CardFlowView(viewModel: viewModel, stickerVM: stickerVM)
+                    .transition(.opacity)
             } else {
                 EmptyStateView(
                     showImporter: $showImporter,
@@ -671,8 +672,11 @@ struct ContentView: View {
                         viewModel.loadConversation(conv, context: modelContext)
                     }
                 )
+                .transition(.opacity)
             }
         }
+        // 空状态 ↔ 聊天页 淡入淡出
+        .animation(.easeInOut(duration: 0.25), value: viewModel.selectedConversation != nil)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .top) {
             iOSChatTopBar
@@ -842,6 +846,7 @@ struct ContentView: View {
                 )
                 .frame(minWidth: sidebarMinWidth, idealWidth: 300, maxWidth: sidebarMaxWidth)
                 .background(Theme.sidebarBg)
+                .transition(.move(edge: .leading).combined(with: .opacity))
             }
 
             HStack(alignment: .top, spacing: 0) {
@@ -917,7 +922,7 @@ struct DetailTopBar: View {
     var body: some View {
         HStack(spacing: 10) {
             Button {
-                withAnimation(.easeInOut(duration: 0.16)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     isSidebarVisible.toggle()
                 }
             } label: {
@@ -1143,6 +1148,8 @@ struct EmptyStateView: View {
         return "\(timeGreet)，\(userName)"
     }
 
+    @State private var greetingVisible = false
+
     var body: some View {
         #if os(iOS)
         // iOS：问候语设计（类 Claude App 空状态）
@@ -1168,9 +1175,18 @@ struct EmptyStateView: View {
                     .padding(.top, 8)
                 }
             }
+            // 问候语淡入 + 轻微上移
+            .opacity(greetingVisible ? 1 : 0)
+            .offset(y: greetingVisible ? 0 : 12)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.4).delay(0.1)) {
+                greetingVisible = true
+            }
+        }
+        .onDisappear { greetingVisible = false }
         #else
         // macOS：保留原有设计
         VStack(spacing: 20) {
