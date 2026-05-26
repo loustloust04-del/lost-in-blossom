@@ -529,13 +529,7 @@ struct ChatInputBar: View {
     }
 
     private var inputPlaceholder: String {
-        ""
-    }
-
-    private var inputBarSpacing: CGFloat {
-        // 10 = 回底按钮 .padding(.bottom, 4) + ChatInputBar .padding(.top, 6)
-        // 让 input field ↔ 胶囊 的间距 = 回底 ↔ input field 的间距，视觉对称
-        isFocused ? 0 : 10
+        "Reply to Caelum"
     }
 
     var body: some View {
@@ -548,53 +542,22 @@ struct ChatInputBar: View {
                          isFocused ? "Y" : "N"))
         }()
         #endif
-        return VStack(spacing: inputBarSpacing) {
-            // Input container — inputText 持在子 view 里，打字只重建子 view 不重建整个 ChatInputBar
-            InputFieldContainer(
-                isFocused: $isFocused,
-                isStreaming: viewModel.providerRouter.isStreaming,
-                placeholder: inputPlaceholder,
-                onSend: { text in send(text) },
-                onCancelStream: { viewModel.providerRouter.cancel() },
-                onStickerTap: onStickerTap
-            )
-
-            // Model selector — glass floating button, hide when keyboard is up.
-            // 贴纸按钮已内嵌到 InputFieldContainer 左侧，底部工具行只剩模型选择器。
-            HStack {
-                Spacer()
-                Button {
-                    showModelPicker.toggle()
-                } label: {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Theme.branchIndicator.opacity(0.6))
-                            .frame(width: 5, height: 5)
-                        Text(currentModel.name)
-                            .font(.system(size: 10))
-                            .foregroundColor(Theme.textMuted)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 7))
-                            .foregroundColor(Theme.textMuted.opacity(0.5))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .glassEffectCompat(tint: Theme.accent, interactive: true)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 4)
-            .frame(height: isFocused ? 0 : nil, alignment: .top)
-            .opacity(isFocused ? 0 : 1)
-        }
+        // Claude App 风格：InputFieldContainer 自带两层布局（TextEditor + 工具栏），
+        // ChatInputBar 只负责外层 padding、环境模糊背景、sheet、alert。
+        return InputFieldContainer(
+            isFocused: $isFocused,
+            isStreaming: viewModel.providerRouter.isStreaming,
+            placeholder: inputPlaceholder,
+            modelName: currentModel.name,
+            onSend: { text in send(text) },
+            onCancelStream: { viewModel.providerRouter.cancel() },
+            onStickerTap: onStickerTap,
+            onModelTap: { showModelPicker.toggle() }
+        )
         .padding(.horizontal, 16)
-        .padding(.bottom, isFocused ? 5 : 4) // 8 → 4 压缩 input bar 下方空白；focused 时键盘上方留 5px 呼吸
+        .padding(.bottom, 8)
         .padding(.top, 6)
         .frame(maxWidth: .infinity)
-        // 关键 fix：让 ChatInputBar VStack 自己吞掉空白区 hit。
-        // 没这一句的话 VStack 空白（input field 跟 capsule 之间、capsule 左边 Spacer、
-        // 上下 padding 区）会让 hit 穿透到底下 ScrollView 的气泡 → 触发 contextMenu。
-        // 子 view（InputField / 模型胶囊 Button）有自己 hit area，不受影响。
         .contentShape(Rectangle())
         .background(alignment: .bottom) {
             ZStack {
@@ -612,9 +575,7 @@ struct ChatInputBar: View {
                     endPoint: .bottom
                 )
             }
-            .frame(height: isFocused ? 60 : 160)
-            // offset(y: 40) 让 blur+gradient 漫到 home indicator 区，wallpaper 场景下
-            // gradient 末端不再 solid（改 opacity 0），避免刷白盖住 wallpaper。
+            .frame(height: isFocused ? 80 : 160)
             .offset(y: isFocused ? 10 : 40)
             .allowsHitTesting(false)
             .animation(.easeInOut(duration: 0.25), value: isFocused)
@@ -701,18 +662,24 @@ extension ChatInputBar: Equatable {
 // 打字时只重建这个子 view（~80ms），外层 ChatInputBar（底部按钮行 / VariableBlurView /
 // sheet / alert）不受影响。粟粟 2026-04-19 log 实测 150-170ms/字 → 预期 ≤80ms/字。
 
+/// Claude App 风格两层输入框：
+/// 上层 TextEditor（多行，placeholder）+ 下层工具栏（+ 号 | 模型 ▾ | Spacer | ↑ 发送）
 private struct InputFieldContainer: View {
     @State private var text: String = ""
     @FocusState.Binding var isFocused: Bool
     let isStreaming: Bool
     let placeholder: String
+    let modelName: String
     let onSend: (String) -> Bool
     let onCancelStream: () -> Void
-    // iOS 贴纸按钮内嵌到输入框左侧；macOS 无（nil）
     let onStickerTap: (() -> Void)?
+    let onModelTap: () -> Void
 
     private var canSend: Bool {
         isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    private var hasText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -725,74 +692,108 @@ private struct InputFieldContainer: View {
                          text.count))
         }()
         #endif
-        return HStack(alignment: .center, spacing: 0) {
-            if let onStickerTap {
-                Button(action: onStickerTap) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(Theme.textMuted.opacity(0.7))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
+        return VStack(spacing: 0) {
+            // ── 上层：多行文本输入 ──────────────────────────────────────
+            ZStack(alignment: .topLeading) {
+                // placeholder（TextEditor 没有原生 placeholder）
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(.system(size: 15))
+                        .foregroundColor(Theme.textMuted.opacity(0.45))
+                        .padding(.top, 9)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $text)
+                    .font(.system(size: 15))
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 36, maxHeight: 120) // ≈5 行
+                    .focused($isFocused)
+                    #if DEBUG
+                    .onChange(of: text) { _, newVal in
+                        print(String(format: "[PERF] TextEditor onChange len=%d t=%.3f", newVal.count, CFAbsoluteTimeGetCurrent()))
+                    }
+                    #endif
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+
+            // ── 下层：工具栏 ────────────────────────────────────────────
+            HStack(spacing: 4) {
+                // + 号按钮
+                if let onStickerTap {
+                    Button(action: onStickerTap) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(Theme.textMuted)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // 模型选择标签
+                Button(action: onModelTap) {
+                    HStack(spacing: 4) {
+                        Text(modelName)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 8))
+                            .foregroundColor(Theme.textMuted.opacity(0.7))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Theme.textMuted.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
-                .padding(.leading, 6)
-            }
 
-            TextField(placeholder, text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .lineLimit(1...6)
-                .focused($isFocused)
-                .padding(.leading, onStickerTap == nil ? 14 : 8)
-                .padding(.vertical, 10)
-                #if DEBUG
-                .onChange(of: text) { _, newVal in
-                    print(String(format: "[PERF] TextField onChange len=%d t=%.3f", newVal.count, CFAbsoluteTimeGetCurrent()))
+                Spacer()
+
+                // 发送 / 停止按钮
+                Button(action: triggerSend) {
+                    Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
+                        .contentTransition(.symbolEffect(.replace))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(canSend ? .white : Theme.textMuted)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Circle()
+                                .fill(
+                                    isStreaming ? Theme.danger :
+                                    canSend     ? Color.black  :
+                                                  Theme.textMuted.opacity(0.15)
+                                )
+                                .animation(.easeInOut(duration: 0.15), value: isStreaming)
+                                .animation(.easeInOut(duration: 0.15), value: canSend)
+                        )
                 }
-                #endif
-
-            Button(action: triggerSend) {
-                Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
-                    // 图标切换用 SF Symbol replace 动画
-                    .contentTransition(.symbolEffect(.replace))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(
-                                isStreaming
-                                    ? Theme.danger
-                                    : canSend ? Theme.branchIndicator : Theme.textMuted.opacity(0.3)
-                            )
-                            // 圆圈颜色随状态切换
-                            .animation(.easeInOut(duration: 0.15), value: isStreaming)
-                            .animation(.easeInOut(duration: 0.15), value: canSend)
-                    )
+                .buttonStyle(.plain)
+                .disabled(!canSend)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isStreaming)
+                .padding(.trailing, 4)
             }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            // 整体 spring 弹性缩放：流式开始/停止时弹一下
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isStreaming)
-            .frame(width: 44, height: 44)
-            .padding(.trailing, 4)
+            .frame(height: 44)
+            .padding(.horizontal, 6)
         }
-        .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: RoundedRectangle(cornerRadius: 20))
-        // S1 fix: glassEffect .interactive() 在真机上 tap-through 有时序延迟
-        // （经粟粟 iPhone 17 Air A/B 测确认）。在外层抢焦点绕过去，保留玻璃发光视觉。
-        .contentShape(Rectangle())
+        // 圆角矩形卡片，跟聊天背景同色 + 细边框
+        .background(
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Theme.mainBg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .strokeBorder(Theme.textMuted.opacity(0.14), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 22))
         .onTapGesture { isFocused = true }
     }
 
     private func triggerSend() {
-        if isStreaming {
-            onCancelStream()
-            return
-        }
-        if onSend(text) {
-            text = ""
-        }
-        // 预算被拦 → 保留 text
+        if isStreaming { onCancelStream(); return }
+        if onSend(text) { text = "" }
     }
 }
 
