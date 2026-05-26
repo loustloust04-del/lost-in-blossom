@@ -1354,18 +1354,15 @@ struct BubbleView: View {
                 }
             }
 
-            // Hover action buttons — isolated to avoid full bubble re-render
+            // Hover action buttons — macOS only（iOS 用 context menu 代替）
+            #if os(macOS)
             if !hideActionBar {
                 HoverButtons(
                     isFavorite: node.isFavorite,
                     isPinned: node.isPinned,
                     onCopy: {
-                        #if os(macOS)
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(ContentCleaner.clean(node.content, cacheKey: node.id), forType: .string)
-                        #else
-                        UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
-                        #endif
                     },
                     onToggleFavorite: onToggleFavorite,
                     onTogglePin: onTogglePin,
@@ -1377,6 +1374,7 @@ struct BubbleView: View {
                     onRegenerate: !isUser && !isStreaming ? onRegenerate : nil
                 )
             }
+            #endif
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
