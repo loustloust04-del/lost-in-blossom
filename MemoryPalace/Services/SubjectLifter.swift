@@ -3,11 +3,7 @@ import Vision
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 /// Apple Vision Subject Lifting — 一键抠图
 enum SubjectLifter {
@@ -77,18 +73,10 @@ enum SubjectLifter {
     // MARK: - PNG Rendering
 
     private static func renderPNG(from cgImage: CGImage) throws -> Data {
-        #if os(macOS)
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = rep.representation(using: .png, properties: [:]) else {
-            throw LiftError.renderFailed
-        }
-        return pngData
-        #else
         let uiImage = UIImage(cgImage: cgImage)
         guard let pngData = uiImage.pngData() else {
             throw LiftError.renderFailed
         }
         return pngData
-        #endif
     }
 }

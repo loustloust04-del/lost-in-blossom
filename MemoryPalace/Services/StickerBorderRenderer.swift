@@ -2,11 +2,7 @@ import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 /// 贴纸描边样式
 enum BorderStyle: String, CaseIterable, Codable {
@@ -259,18 +255,10 @@ enum StickerBorderRenderer {
     }
 
     private static func renderPNG(from cgImage: CGImage) throws -> Data {
-        #if os(macOS)
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = rep.representation(using: .png, properties: [:]) else {
-            throw BorderError.renderFailed
-        }
-        return pngData
-        #else
         let uiImage = UIImage(cgImage: cgImage)
         guard let pngData = uiImage.pngData() else {
             throw BorderError.renderFailed
         }
         return pngData
-        #endif
     }
 }

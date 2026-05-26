@@ -148,11 +148,9 @@ final class LocalNotificationService: NSObject {
     func cancelAll() {
         center.removeAllPendingNotificationRequests()
         center.removeAllDeliveredNotifications()
-        #if os(iOS)
         Task { @MainActor in
             UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
         }
-        #endif
     }
 
     // MARK: - 问候语内容库

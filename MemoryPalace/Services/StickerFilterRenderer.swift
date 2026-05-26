@@ -2,11 +2,7 @@ import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 /// 贴纸滤镜样式
 enum FilterStyle: String, CaseIterable, Codable {
@@ -125,18 +121,10 @@ enum StickerFilterRenderer {
     }
 
     private static func renderPNG(from cgImage: CGImage) throws -> Data {
-        #if os(macOS)
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = rep.representation(using: .png, properties: [:]) else {
-            throw FilterError.renderFailed
-        }
-        return pngData
-        #else
         let uiImage = UIImage(cgImage: cgImage)
         guard let pngData = uiImage.pngData() else {
             throw FilterError.renderFailed
         }
         return pngData
-        #endif
     }
 }

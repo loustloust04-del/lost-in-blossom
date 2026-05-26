@@ -1,9 +1,5 @@
 import Foundation
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 /// 贴纸文件存储管理 — 图片存文件系统，不存 SwiftData
 enum StickerFileManager {
@@ -116,30 +112,6 @@ enum StickerFileManager {
     // MARK: - Thumbnail
 
     private static func generateThumbnail(from imageData: Data, maxSize: CGFloat) -> Data? {
-        #if os(macOS)
-        guard let image = NSImage(data: imageData),
-              let tiffData = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let cgImage = bitmap.cgImage else { return nil }
-
-        let width = CGFloat(cgImage.width)
-        let height = CGFloat(cgImage.height)
-        let ratio = min(maxSize / width, maxSize / height, 1.0)
-        let newSize = NSSize(width: width * ratio, height: height * ratio)
-
-        let thumbImage = NSImage(size: newSize)
-        thumbImage.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        NSRect(origin: .zero, size: newSize).fill(using: .clear)
-        image.draw(in: NSRect(origin: .zero, size: newSize),
-                   from: NSRect(origin: .zero, size: image.size),
-                   operation: .sourceOver, fraction: 1.0)
-        thumbImage.unlockFocus()
-
-        guard let thumbTiff = thumbImage.tiffRepresentation,
-              let thumbBitmap = NSBitmapImageRep(data: thumbTiff) else { return nil }
-        return thumbBitmap.representation(using: .png, properties: [:])
-        #else
         guard let uiImage = UIImage(data: imageData) else { return nil }
         let width = uiImage.size.width
         let height = uiImage.size.height
@@ -151,6 +123,5 @@ enum StickerFileManager {
         let thumb = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         return thumb?.pngData()
-        #endif
     }
 }
