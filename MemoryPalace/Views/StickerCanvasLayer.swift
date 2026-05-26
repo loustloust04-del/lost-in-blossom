@@ -22,9 +22,7 @@ struct StickerCanvasLayer: View {
     }
 
     var body: some View {
-        #if os(iOS)
         let _ = PROBE("[PROBE 贴纸 layer.body] editing=\(stickerVM.isEditingStickers) selectedId=\(stickerVM.selectedPlacedStickerId?.uuidString ?? "nil") stickerCount=\(stickerVM.placedStickers.count) stickerExtent=\(stickerExtent)")
-        #endif
         return ZStack(alignment: .topLeading) {
             // 透明底板撑满整个 overlay 区域 + 声明最小高度 = stickerExtent
             // ZStack 自然 layout 后整个 overlay 至少 stickerExtent 高，覆盖所有 sticker。
@@ -63,22 +61,14 @@ struct StickerCanvasLayer: View {
                 )
                 .zIndex(999)
                 // iOS 选框纯视觉，所有交互由画布级 UIKit overlay 统一处理
-                #if os(iOS)
                 .allowsHitTesting(false)
-                #endif
             }
 
             // 编辑模式浮动"完成"按钮（仅 macOS，iOS 合并在 StickerKeyboardPanel 工具栏里）
-            #if os(macOS)
-            if stickerVM.isEditingStickers {
-                editModeBar
-            }
-            #endif
 
             // iOS 画布级统一手势层 — 拖拽/缩放/旋转/选中/长按菜单/撤回全在这一个 UIView 上
             // ⚠️ zIndex(998) 是关键：贴纸有 zIndex(n)，overlay 必须在贴纸上方才能收到触摸
             // frame 撑满 overlay container（= LazyVStack frame），自动覆盖 messages 区域。
-            #if os(iOS)
             if stickerVM.isEditingStickers {
                 StickerCanvasGestureOverlay(
                     stickerVM: stickerVM,
@@ -89,7 +79,6 @@ struct StickerCanvasLayer: View {
                 .allowsHitTesting(true)
                 .zIndex(998)
             }
-            #endif
         }
         .coordinateSpace(name: "stickerCanvas")
         // 重命名弹窗
@@ -119,64 +108,6 @@ struct StickerCanvasLayer: View {
                 }
             }
         }
-        #if os(macOS)
-        // 快捷键（隐藏按钮）
-        .background {
-            Group {
-                // ⌘C 复制
-                Button("") {
-                    if let id = stickerVM.selectedPlacedStickerId,
-                       let sticker = stickerVM.placedStickers.first(where: { $0.id == id }) {
-                        stickerVM.copySticker(sticker)
-                    }
-                }
-                .keyboardShortcut("c", modifiers: .command)
-
-                // ⌘V 粘贴
-                Button("") {
-                    if let sticker = stickerVM.placedStickers.first(where: { $0.id == stickerVM.selectedPlacedStickerId }) {
-                        stickerVM.pasteSticker(
-                            conversationId: sticker.conversationId,
-                            nearPosition: CGPoint(x: sticker.positionX, y: sticker.positionY),
-                            profileId: sticker.profileId,
-                            context: modelContext
-                        )
-                    }
-                }
-                .keyboardShortcut("v", modifiers: .command)
-
-                // ⌫ 删除
-                Button("") {
-                    if let id = stickerVM.selectedPlacedStickerId,
-                       let sticker = stickerVM.placedStickers.first(where: { $0.id == id }) {
-                        stickerVM.removePlacedSticker(sticker, context: modelContext)
-                    }
-                }
-                .keyboardShortcut(.delete, modifiers: [])
-
-                // ] 置于最前
-                Button("") {
-                    if let id = stickerVM.selectedPlacedStickerId,
-                       let sticker = stickerVM.placedStickers.first(where: { $0.id == id }) {
-                        stickerVM.bringToFront(sticker, context: modelContext)
-                    }
-                }
-                .keyboardShortcut("]", modifiers: [])
-
-                // [ 置于最后
-                Button("") {
-                    if let id = stickerVM.selectedPlacedStickerId,
-                       let sticker = stickerVM.placedStickers.first(where: { $0.id == id }) {
-                        stickerVM.sendToBack(sticker, context: modelContext)
-                    }
-                }
-                .keyboardShortcut("[", modifiers: [])
-            }
-            .opacity(0)
-            .frame(width: 0, height: 0)
-            .allowsHitTesting(false)
-        }
-        #endif
     }
 
     @ViewBuilder
@@ -196,9 +127,6 @@ struct StickerCanvasLayer: View {
             }
         )
         // 右键菜单（仅 macOS；iOS 由编辑模式的 UIContextMenuInteraction 处理）
-        #if os(macOS)
-        .contextMenu { stickerContextMenu(sticker) }
-        #endif
         .position(x: sticker.positionX, y: sticker.positionY)
         .zIndex(Double(sticker.zIndex))
         // 长按进入编辑模式 + 选中（0.3s，比默认 0.5s 快）
@@ -210,67 +138,6 @@ struct StickerCanvasLayer: View {
             }
         }
         // 编辑模式下拖动移动位置（macOS 用 SwiftUI DragGesture，iOS 由画布级 UIKit overlay 统一处理）
-        #if os(macOS)
-        .gesture(
-            stickerVM.isEditingStickers && isSelected && !sticker.isLocked
-            ? DragGesture(coordinateSpace: .named("stickerCanvas"))
-                .onChanged { value in
-                    if !stickerVM.dragStarted {
-                        stickerVM.pushUndo(for: sticker)
-                        stickerVM.dragStarted = true
-                        stickerVM.dragTouchOffset = CGPoint(
-                            x: value.startLocation.x - sticker.positionX,
-                            y: value.startLocation.y - sticker.positionY
-                        )
-                        stickerVM.lastRotationDelta = 0
-                        stickerVM.lastDragTranslation = .zero
-                    }
-                    // 平移
-                    sticker.positionX = value.location.x
-                    sticker.positionY = value.location.y
-
-                    // 帧间 delta（DragGesture.translation 是累积值，需要减去上一帧）
-                    let delta = CGSize(
-                        width: value.translation.width - stickerVM.lastDragTranslation.width,
-                        height: value.translation.height - stickerVM.lastDragTranslation.height
-                    )
-                    stickerVM.lastDragTranslation = value.translation
-
-                    // 扭矩（用 delta，不是累积 translation）
-                    let off = stickerVM.dragTouchOffset
-                    let crossZ = off.x * delta.height - off.y * delta.width
-                    let size = stickerVM.stickerSizes[sticker.id] ?? CGSize(width: 80, height: 80)
-                    let w = size.width * sticker.scale
-                    let h = size.height * sticker.scale
-                    let halfDiagSq = (w * w + h * h) / 4.0
-                    let torqueFactor: Double = 15.0
-                    let rotDelta = (crossZ / max(halfDiagSq, 1)) * torqueFactor
-                    sticker.rotation += rotDelta
-                    stickerVM.lastRotationDelta = rotDelta
-                }
-                .onEnded { value in
-                    // 短促惯性（纸在桌上不滑远）
-                    let velocity = value.velocity
-                    let friction: Double = 0.02
-                    let angularInertia = stickerVM.lastRotationDelta * 4.0
-
-                    withAnimation(.interpolatingSpring(stiffness: 200, damping: 22)) {
-                        sticker.positionX += velocity.width * friction
-                        sticker.positionY += velocity.height * friction
-                        sticker.rotation += angularInertia
-                    }
-
-                    // B20 修复：fling 累加后 clamp，防贴纸飞远撑虚高 ZStack
-                    stickerVM.clampStickerY(sticker)
-
-                    stickerVM.dragStarted = false
-                    stickerVM.lastRotationDelta = 0
-                    stickerVM.lastDragTranslation = .zero
-                    try? modelContext.save()
-                }
-            : nil
-        )
-        #endif
         // 双击便签 → 编辑内容（macOS；iOS 编辑模式由 overlay 处理）
         .onTapGesture(count: 2) {
             if sticker.isNote, !sticker.isLocked {
@@ -285,9 +152,7 @@ struct StickerCanvasLayer: View {
         }
         // iOS 编辑模式下：所有交互由画布级 overlay 处理，关掉 stickerItem 的 hitTesting
         // 防止 contextMenu / onLongPressGesture 抢走 overlay 的触摸
-        #if os(iOS)
         .allowsHitTesting(!stickerVM.isEditingStickers)
-        #endif
     }
 
     // MARK: - Context Menu
@@ -325,11 +190,7 @@ struct StickerCanvasLayer: View {
             }
             .disabled(sticker.isLocked)
             Button {
-                #if os(macOS)
-                stickerVM.saveNoteAsPNG(content: sticker.noteContent ?? "", style: sticker.noteStyle ?? "yellow_square")
-                #else
                 stickerVM.shareNoteAsPNG(content: sticker.noteContent ?? "", style: sticker.noteStyle ?? "yellow_square")
-                #endif
             } label: {
                 Label("导出为图片", systemImage: "square.and.arrow.up")
             }
@@ -450,24 +311,6 @@ struct StickerSelectionOverlay: View {
         Rectangle()
             .stroke(borderColor.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             .frame(width: boxW, height: boxH)
-            #if os(macOS)
-            // macOS：四角缩放手柄 + 旋转手柄（鼠标精确控制）— 锁定时隐藏
-            .overlay(alignment: .topLeading) { if !sticker.isLocked { scaleHandle(xSign: -1, ySign: -1) } }
-            .overlay(alignment: .topTrailing) { if !sticker.isLocked { scaleHandle(xSign: 1, ySign: -1) } }
-            .overlay(alignment: .bottomLeading) { if !sticker.isLocked { scaleHandle(xSign: -1, ySign: 1) } }
-            .overlay(alignment: .bottomTrailing) { if !sticker.isLocked { scaleHandle(xSign: 1, ySign: 1) } }
-            .overlay(alignment: .top) {
-                if !sticker.isLocked {
-                    VStack(spacing: 0) {
-                        rotateHandleView
-                        Rectangle()
-                            .fill(Theme.branchIndicator)
-                            .frame(width: 1, height: 12)
-                    }
-                    .offset(y: -24)
-                }
-            }
-            #endif
             // 锁定图标（右上角）
             .overlay(alignment: .topTrailing) {
                 if sticker.isLocked {
@@ -484,27 +327,16 @@ struct StickerSelectionOverlay: View {
                 if !sticker.isLocked {
                     Button(action: onDelete) {
                         ZStack {
-                            #if os(iOS)
                             Circle().fill(.white).frame(width: 22, height: 22)
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 22))
                                 .foregroundColor(Theme.danger)
-                            #else
-                            Circle().fill(.white).frame(width: 14, height: 14)
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(Theme.danger)
-                            #endif
                         }
                     }
                     .buttonStyle(.plain)
-                    #if os(iOS)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
                     .offset(x: 16, y: -16)
-                    #else
-                    .offset(x: 10, y: -10)
-                    #endif
                 }
             }
             .rotationEffect(.degrees(sticker.rotation))
@@ -541,11 +373,6 @@ struct StickerSelectionOverlay: View {
                         onSave()
                     }
             )
-            #if os(macOS)
-            .onHover { hovering in
-                if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-            }
-            #endif
     }
 
     // MARK: - Rotate Handle
@@ -584,10 +411,5 @@ struct StickerSelectionOverlay: View {
                         onSave()
                     }
             )
-            #if os(macOS)
-            .onHover { hovering in
-                if hovering { NSCursor.crosshair.push() } else { NSCursor.pop() }
-            }
-            #endif
     }
 }

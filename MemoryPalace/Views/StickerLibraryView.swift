@@ -80,11 +80,9 @@ struct StickerLibraryView: View {
                                     )
                                 }
                             }
-                            #if os(iOS)
                             .onTapGesture {
                                 placeStickerFromTap(asset: asset)
                             }
-                            #endif
                             .contextMenu {
                                 Button { placeStickerFromTap(asset: asset) } label: {
                                     Label("添加到对话", systemImage: "plus.circle")
@@ -95,11 +93,7 @@ struct StickerLibraryView: View {
                                 }
                                 if asset.isNote {
                                     Button {
-                                        #if os(macOS)
-                                        stickerVM.saveNoteAsPNG(content: asset.noteContent ?? "", style: asset.noteStyle ?? "yellow_square")
-                                        #else
                                         stickerVM.shareNoteAsPNG(content: asset.noteContent ?? "", style: asset.noteStyle ?? "yellow_square")
-                                        #endif
                                     } label: {
                                         Label("导出为图片", systemImage: "square.and.arrow.up")
                                     }
@@ -164,11 +158,9 @@ struct StickerLibraryView: View {
                         try? modelContext.save()
                     }
                 }
-                #if os(iOS)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.sidebarBg)
-                #endif
             }
         }
         .sheet(item: $editingStyleAsset) { asset in
@@ -307,17 +299,10 @@ struct StickerThumbnailView: View {
     private func loadThumbnail() {
         DispatchQueue.global(qos: .userInitiated).async {
             if let data = StickerFileManager.loadImageCached(path: asset.thumbnailPath, profileId: profileId) {
-                #if os(macOS)
-                if let nsImage = NSImage(data: data) {
-                    let img = Image(nsImage: nsImage)
-                    DispatchQueue.main.async { thumbnailImage = img }
-                }
-                #else
                 if let uiImage = UIImage(data: data) {
                     let img = Image(uiImage: uiImage)
                     DispatchQueue.main.async { thumbnailImage = img }
                 }
-                #endif
             }
         }
     }

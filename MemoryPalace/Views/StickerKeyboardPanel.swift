@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import SwiftData
 
@@ -214,4 +213,3 @@ struct PanelStickerCell: View {
         }
     }
 }
-#endif

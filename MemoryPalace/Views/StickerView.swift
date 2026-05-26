@@ -1,7 +1,5 @@
 import SwiftUI
-#if os(iOS)
 import UIKit
-#endif
 
 /// 单个贴纸渲染 — 纸质感 + 动画
 struct StickerView: View {
@@ -67,12 +65,10 @@ struct StickerView: View {
         // 撕掉动画
         .rotation3DEffect(.degrees(tearRotation), axis: (x: 0, y: 1, z: 0), anchor: .leading)
         .opacity(tearOpacity)
-        #if os(iOS)
         .onChange(of: isSelected) { _, selected in
             let gen = UIImpactFeedbackGenerator(style: selected ? .light : .soft)
             gen.impactOccurred()
         }
-        #endif
         .onAppear {
             loadImage()
             animateAppear()
@@ -161,17 +157,10 @@ struct StickerView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let imagePath = "\(assetId.uuidString).png"
             if let data = StickerFileManager.loadImageCached(path: imagePath, profileId: profileId) {
-                #if os(macOS)
-                if let nsImage = NSImage(data: data) {
-                    let img = Image(nsImage: nsImage)
-                    DispatchQueue.main.async { stickerImage = img }
-                }
-                #else
                 if let uiImage = UIImage(data: data) {
                     let img = Image(uiImage: uiImage)
                     DispatchQueue.main.async { stickerImage = img }
                 }
-                #endif
             }
         }
     }

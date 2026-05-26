@@ -14,9 +14,7 @@ struct StickerImportSheet: View {
     @State private var showNaming = false
     @State private var isProcessing = false
     @State private var isDone = false
-    #if os(iOS)
     @State private var selectedPhotos: [PhotosPickerItem] = []
-    #endif
 
     var body: some View {
         NavigationStack {
@@ -65,9 +63,7 @@ struct StickerImportSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.sidebarBg)
             .navigationTitle("导入贴纸")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }
@@ -75,9 +71,6 @@ struct StickerImportSheet: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(width: 320, height: 240)
-        #endif
     }
 
     // MARK: - Pick Step
@@ -93,17 +86,6 @@ struct StickerImportSheet: View {
                 .font(.system(size: Theme.F.secondary))
                 .foregroundColor(Theme.textSecondary)
 
-            #if os(macOS)
-            Button(action: pickImages) {
-                Text("选择图片")
-                    .font(.system(size: Theme.F.body, weight: .medium))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Theme.branchIndicator))
-            }
-            .buttonStyle(.plain)
-            #else
             PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 20, matching: .images) {
                 Text("选择图片")
                     .font(.system(size: Theme.F.body, weight: .medium))
@@ -115,7 +97,6 @@ struct StickerImportSheet: View {
             .onChange(of: selectedPhotos) { _, items in
                 handlePhotoSelection(items)
             }
-            #endif
             Spacer()
         }
     }
@@ -169,27 +150,8 @@ struct StickerImportSheet: View {
     // MARK: - Actions
 
     private func pickImages() {
-        #if os(macOS)
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        panel.message = "选择要做成贴纸的图片"
-
-        guard panel.runModal() == .OK else { return }
-        let urls = panel.urls
-        guard !urls.isEmpty else { return }
-
-        pendingURLs = urls
-        stickerName = urls.count == 1
-            ? urls[0].deletingPathExtension().lastPathComponent
-            : ""
-        showNaming = true
-        #endif
     }
 
-    #if os(iOS)
     private func handlePhotoSelection(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         isProcessing = true
@@ -213,7 +175,6 @@ struct StickerImportSheet: View {
             }
         }
     }
-    #endif
 
     private func startImport() {
         let name = stickerName.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 import SwiftData
@@ -551,4 +550,3 @@ struct StickerCanvasGestureOverlay: UIViewRepresentable {
         }
     }
 }
-#endif

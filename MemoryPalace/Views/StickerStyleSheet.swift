@@ -198,11 +198,7 @@ struct StickerStyleSheet: View {
 
     private func loadCurrentPreview() {
         if let data = StickerFileManager.loadImageCached(path: asset.thumbnailPath, profileId: profileId) {
-            #if os(macOS)
-            if let nsImage = NSImage(data: data) { previewImage = Image(nsImage: nsImage) }
-            #else
             if let uiImage = UIImage(data: data) { previewImage = Image(uiImage: uiImage) }
-            #endif
         }
     }
 
@@ -221,11 +217,7 @@ struct StickerStyleSheet: View {
                 let bordered = try StickerBorderRenderer.renderBorder(on: filtered, style: selectedBorder, width: CGFloat(asset.borderWidth))
 
                 await MainActor.run {
-                    #if os(macOS)
-                    if let nsImage = NSImage(data: bordered) { previewImage = Image(nsImage: nsImage) }
-                    #else
                     if let uiImage = UIImage(data: bordered) { previewImage = Image(uiImage: uiImage) }
-                    #endif
                     isRendering = false
                 }
             } catch {
