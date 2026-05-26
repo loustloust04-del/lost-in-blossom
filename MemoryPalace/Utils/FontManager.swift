@@ -13,7 +13,6 @@ enum FontManager {
 
     /// Built-in font options
     /// 说明：app bundle 内打包了 LXGWWenKai-Regular / SourceHanSerifSC-Regular（OFL 协议）
-    #if os(iOS)
     static let presetFonts: [(name: String, displayName: String)] = [
         ("", "系统默认"),
         ("PingFangSC-Light", "苹方 Light"),
@@ -23,17 +22,6 @@ enum FontManager {
         ("LXGWWenKai-Regular", "霞鹜文楷"),
         ("SourceHanSerifSC-Regular", "思源宋体"),
     ]
-    #else
-    static let presetFonts: [(name: String, displayName: String)] = [
-        ("", "系统默认"),
-        ("PingFangSC-Regular", "苹方"),
-        ("STSongti-SC-Regular", "宋体"),
-        ("STKaitiSC-Regular", "楷体"),
-        ("STFangsong", "仿宋"),
-        ("LXGWWenKai-Regular", "霞鹜文楷"),
-        ("SourceHanSerifSC-Regular", "思源宋体"),
-    ]
-    #endif
 
     /// Register fonts bundled with the app (Resources/Fonts/*.ttf|*.otf)
     static func registerBundledFonts() {

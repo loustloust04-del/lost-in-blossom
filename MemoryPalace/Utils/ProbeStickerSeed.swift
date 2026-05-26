@@ -13,7 +13,6 @@ import SwiftData
 @inline(__always)
 func PROBE(_ msg: String) {
     NSLog(msg)
-    #if os(iOS)
     if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
         let url = dir.appendingPathComponent("probe.log")
         let line = msg + "\n"
@@ -27,7 +26,6 @@ func PROBE(_ msg: String) {
             }
         }
     }
-    #endif
 }
 
 enum ProbeStickerSeed {
@@ -36,12 +34,10 @@ enum ProbeStickerSeed {
 
     /// app 启动时清空 probe.log（每次 launch 一份新的）
     static func resetLogFile() {
-        #if os(iOS)
         if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             let url = dir.appendingPathComponent("probe.log")
             try? Data().write(to: url)
         }
-        #endif
     }
 
     /// 给 ConversationViewModel.onAppear 用：检查是否应自动选中 probe conversation

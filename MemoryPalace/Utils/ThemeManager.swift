@@ -1,10 +1,6 @@
 import Foundation
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 @Observable
 final class ThemeManager {
@@ -419,12 +415,6 @@ final class ThemeManager {
     }
 
     private static func detectSystemColorScheme() -> ColorScheme {
-        #if os(macOS)
-        let appearance = NSApp?.effectiveAppearance ?? NSApplication.shared.effectiveAppearance
-        let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-        return match == .darkAqua ? .dark : .light
-        #else
         return UITraitCollection.current.userInterfaceStyle == .dark ? .dark : .light
-        #endif
     }
 }
