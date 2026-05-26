@@ -166,6 +166,11 @@ extension BaseChatProvider: URLSessionDataDelegate {
 // MARK: - OpenAI Compatible Provider
 
 final class OpenAICompatibleProvider: BaseChatProvider {
+    /// DeepSeek reasoning_content 流式 buffer（其他模型为空）
+    private var streamingThinking: String = ""
+    /// 流式结束时若有 thinking 内容则调用（构造 MessageSegment 列表）
+    var onSegmentsCallback: (([MessageSegment]) -> Void)?
+
     override func sendStreaming(
         messages: [(role: String, content: String)],
         model: String,
@@ -179,6 +184,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         onError: @escaping (String) -> Void
     ) {
         resetState(onToken: onToken, onComplete: onComplete, onError: onError)
+        streamingThinking = ""
 
         var apiMessages: [[String: String]] = []
         if let sys = systemPrompt, !sys.isEmpty {
@@ -304,6 +310,16 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                     receivedDone = true
                     DispatchQueue.main.async { [self] in
                         isStreaming = false
+                        // DeepSeek reasoning：有思考内容时构造 segments，先于 onComplete 回调
+                        if !streamingThinking.isEmpty {
+                            var segments: [MessageSegment] = [
+                                .thinking(text: streamingThinking, signature: nil),
+                            ]
+                            if !streamingContent.isEmpty {
+                                segments.append(.text(streamingContent))
+                            }
+                            onSegmentsCallback?(segments)
+                        }
                         onComplete?(streamingContent, finalUsage)
                     }
                     return
@@ -339,6 +355,13 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 }
             }
             return
+        }
+
+        // DeepSeek reasoning model：思考链字段
+        if let reasoning = delta["reasoning_content"] as? String, !reasoning.isEmpty {
+            DispatchQueue.main.async { [self] in
+                streamingThinking += reasoning
+            }
         }
 
         if let content = delta["content"] as? String {
@@ -734,6 +757,7 @@ final class ProviderRouter {
         let chatProvider: BaseChatProvider
         switch provider.type {
         case .openaiCompatible:
+            openAIProvider.onSegmentsCallback = onSegments
             chatProvider = openAIProvider
         case .anthropic:
             // MCP 服务器注入：provider 为 anthropic 且 mcpEnabled 不为 false 时
