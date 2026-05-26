@@ -26,6 +26,7 @@ struct SettingsView: View {
         case rightPanel = "右栏"
         case memory = "记忆"
         case sticker = "贴纸"
+        case notifications = "通知"
         case appearance = "外观"
         case theme = "主题"
         case debug = "开发调试"
@@ -61,6 +62,7 @@ struct SettingsView: View {
                     settingsButton(icon: "sidebar.right", title: "右栏", color: Theme.textSecondary, tab: .rightPanel)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
                     settingsButton(icon: "star.circle", title: "贴纸", color: Theme.textSecondary, tab: .sticker)
+                    settingsButton(icon: "bell.fill", title: "通知", color: Theme.branchIndicator, tab: .notifications)
                 }
                 Section {
                     settingsButton(icon: "paintbrush", title: "外观", color: Theme.textSecondary, tab: .appearance)
@@ -89,6 +91,7 @@ struct SettingsView: View {
                 case .rightPanel:
                     IOSRightPanelPage()
                 case .data: DataSettingsTab()
+                case .notifications: IOSNotificationPage()
                 case .debug: IOSDebugPage()
                 }
             }
@@ -187,6 +190,8 @@ struct SettingsView: View {
                         RightPanelSettingsSection()
                     case .data:
                         DataSettingsTab()
+                    case .notifications:
+                        NotificationSettingsTab()
                     case .debug:
                         Text("开发调试模式仅 iOS 生效")
                             .font(.system(size: Theme.F.body))

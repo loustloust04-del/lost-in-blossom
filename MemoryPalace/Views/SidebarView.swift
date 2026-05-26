@@ -202,8 +202,11 @@ struct SidebarView: View {
             }
 
             // Chrome-style tab bar + content card
+            // iOS 简化模式：隐藏 tab bar，只显示对话列表（固定「全部」视图）
             VStack(spacing: 0) {
-                sidebarTabBar
+                if !isIOSStyle {
+                    sidebarTabBar
+                }
 
             if isSearchActive {
                 // MARK: - Search Results View
@@ -2543,12 +2546,21 @@ private struct SidebarCardShape: ViewModifier {
         content
             .background(Theme.mainBg)
             .clipShape(UnevenRoundedRectangle(
-                topLeadingRadius: tab == .all ? 0 : 16,
+                topLeadingRadius: topLeadingRadius,
                 bottomLeadingRadius: 16,
                 bottomTrailingRadius: 16,
                 topTrailingRadius: 16
             ))
             .padding(.horizontal, horizontalPadding)
+    }
+
+    /// iOS 下 tab bar 已隐藏，四角统一圆角；macOS tab bar 常显，全部标签下左上角贴边。
+    private var topLeadingRadius: CGFloat {
+        #if os(iOS)
+        16
+        #else
+        tab == .all ? 0 : 16
+        #endif
     }
 
     private var horizontalPadding: CGFloat {

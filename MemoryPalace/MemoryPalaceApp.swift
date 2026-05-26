@@ -344,6 +344,8 @@ struct MemoryPalaceApp: App {
 
     init() {
         let t0 = CFAbsoluteTimeGetCurrent()
+        // Phase 3.1: 尽早初始化通知 delegate（须在 willFinishLaunchingWithOptions 前完成）
+        _ = LocalNotificationService.shared
         FontManager.registerBundledFonts()
         FontManager.registerImportedFonts()
         let tFont = CFAbsoluteTimeGetCurrent()
@@ -617,6 +619,11 @@ extension Notification.Name {
     /// 由 SidebarView.navigateToNodeById 发，ContentView 订阅。
     /// 用通知是因为同一对话内点击不会触发 selectedConversation?.id 变化。
     static let conversationNavigationRequested = Notification.Name("MemoryPalaceConversationNavigationRequested")
+
+    /// 用户点击本地通知后，请求打开指定对话。
+    /// 由 LocalNotificationService 发，ContentView 订阅。
+    /// userInfo["conversationId"] = String
+    static let notificationNavigationRequested = Notification.Name("LIBNotificationNavigationRequested")
 }
 
 // MARK: - Profile Editor Sheet

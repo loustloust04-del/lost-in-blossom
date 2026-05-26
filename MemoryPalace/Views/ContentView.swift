@@ -387,6 +387,8 @@ struct ContentView: View {
         }
         .onAppear {
             viewModel.globalWorldBookEntries = (globalWBManager?.enabledBooks ?? []).flatMap { $0.entries }
+            // 没有对话时自动创建第一条（让用户启动即可聊天，跳过导入引导）
+            autoCreateFirstConversationIfNeeded()
         }
         .onChange(of: viewModel.selectedConversation?.id) { _, newId in
             if newId != nil && iOSPage == 0 {
@@ -397,6 +399,15 @@ struct ContentView: View {
             // B20 part 2: 同 conv 内点搜索结果时 selectedConversation?.id 不变，
             // 上面那条 onChange 不触发，靠这条通知补 page 切换。
             if iOSPage != 1 {
+                withAnimation { iOSPage = 1 }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .notificationNavigationRequested)) { notification in
+            // Phase 3.1: 用户点击本地通知后路由到对应对话
+            guard let convId = notification.userInfo?["conversationId"] as? String else { return }
+            let descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == convId })
+            if let conv = try? modelContext.fetch(descriptor).first {
+                viewModel.selectedConversation = conv
                 withAnimation { iOSPage = 1 }
             }
         }
@@ -648,7 +659,15 @@ struct ContentView: View {
             if viewModel.selectedConversation != nil {
                 CardFlowView(viewModel: viewModel, stickerVM: stickerVM)
             } else {
-                EmptyStateView(showImporter: $showImporter, profileId: profileManager?.currentProfile.id ?? "")
+                EmptyStateView(
+                    showImporter: $showImporter,
+                    profileId: profileManager?.currentProfile.id ?? "",
+                    onCreateConversation: {
+                        let pid = profileManager?.currentProfile.id ?? ""
+                        let conv = viewModel.createNewConversation(title: "新对话", profileId: pid, context: modelContext)
+                        viewModel.loadConversation(conv, context: modelContext)
+                    }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -733,6 +752,19 @@ struct ContentView: View {
         for subview in view.subviews {
             setAllScrollViewsEnabled(enabled, in: subview)
         }
+    }
+
+    /// 启动时若无任何对话则自动创建一条空对话，让用户直接进入聊天页面。
+    private func autoCreateFirstConversationIfNeeded() {
+        let pid = profileManager?.currentProfile.id ?? ""
+        guard !pid.isEmpty else { return }
+        var desc = FetchDescriptor<Conversation>(
+            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false }
+        )
+        desc.fetchLimit = 1
+        guard let count = try? modelContext.fetchCount(desc), count == 0 else { return }
+        let conv = viewModel.createNewConversation(title: "新对话", profileId: pid, context: modelContext)
+        viewModel.loadConversation(conv, context: modelContext)
     }
     #endif
 
@@ -1084,15 +1116,60 @@ struct PanelDivider: View {
 struct EmptyStateView: View {
     @Binding var showImporter: Bool
     let profileId: String
+    /// iOS 专用：点击「开始新对话」时调用。macOS 下为 nil。
+    var onCreateConversation: (() -> Void)? = nil
     @Query private var conversations: [Conversation]
+    @AppStorage("userName") private var userName = "你"
 
-    init(showImporter: Binding<Bool>, profileId: String) {
+    init(showImporter: Binding<Bool>, profileId: String, onCreateConversation: (() -> Void)? = nil) {
         self._showImporter = showImporter
         self.profileId = profileId
+        self.onCreateConversation = onCreateConversation
         _conversations = Query(filter: #Predicate<Conversation> { $0.profileId == profileId })
     }
 
+    private var greetingText: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let timeGreet: String
+        switch hour {
+        case 0..<5:  timeGreet = "夜深了"
+        case 5..<12: timeGreet = "早上好"
+        case 12..<18: timeGreet = "下午好"
+        default:     timeGreet = "晚上好"
+        }
+        return "\(timeGreet)，\(userName)"
+    }
+
     var body: some View {
+        #if os(iOS)
+        // iOS：问候语设计（类 Claude App 空状态）
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 14) {
+                Text("Lost in Blossom")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text(greetingText)
+                    .font(.system(size: 17))
+                    .foregroundColor(Theme.textSecondary)
+                if let create = onCreateConversation {
+                    Button(action: create) {
+                        Text("开始新对话")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 10)
+                            .background(Capsule().fill(Theme.branchIndicator))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
+                }
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #else
+        // macOS：保留原有设计
         VStack(spacing: 20) {
             if conversations.isEmpty {
                 Image(systemName: "tray")
@@ -1118,6 +1195,7 @@ struct EmptyStateView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #endif
     }
 }
 
