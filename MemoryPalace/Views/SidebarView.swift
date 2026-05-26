@@ -151,15 +151,17 @@ struct SidebarView: View {
 
                 if !searchBarExpanded { Spacer() }
 
-                // 新建对话（始终显示）
-                Button(action: { createNewConversation() }) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: isIOSStyle ? 15 : 11, weight: .medium))
-                        .foregroundColor(Theme.branchIndicator)
-                        .frame(width: isIOSStyle ? 44 : 34, height: isIOSStyle ? 44 : 34)
-                        .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
+                // 非 iOS：新建对话图标留在顶部（保持原有行为）
+                if !isIOSStyle {
+                    Button(action: { createNewConversation() }) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Theme.branchIndicator)
+                            .frame(width: 34, height: 34)
+                            .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
             }
             .padding(.horizontal, isIOSStyle ? 20 : 12)
@@ -600,6 +602,29 @@ struct SidebarView: View {
             }
             .padding(.horizontal, isIOSStyle ? 20 : 16)
             .padding(.vertical, isIOSStyle ? 6 : 6)
+
+            // ── New Chat 按钮（iOS 侧边栏底部，固定不滚动）────────────────
+            if isIOSStyle {
+                Button(action: createNewConversation) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("New chat")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.black)
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
