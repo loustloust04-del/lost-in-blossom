@@ -1,10 +1,6 @@
 import Foundation
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 enum AppThemeMode: String, CaseIterable, Codable, Identifiable {
     case system
@@ -70,11 +66,7 @@ struct ThemeColorValue: Codable, Hashable {
     }
 
     init(color: Color) {
-        #if os(macOS)
-        let native = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor.white
-        #else
         let native = UIColor(color)
-        #endif
 
         var red: CGFloat = 0
         var green: CGFloat = 0
@@ -115,15 +107,10 @@ struct ThemeColorValue: Codable, Hashable {
         var currentBrightness: CGFloat = 0
         var alpha: CGFloat = 0
 
-        #if os(macOS)
-        let source = platformColor.usingColorSpace(.deviceRGB) ?? platformColor
-        source.getHue(&hue, saturation: &currentSaturation, brightness: &currentBrightness, alpha: &alpha)
-        #else
         let source = platformColor
         guard source.getHue(&hue, saturation: &currentSaturation, brightness: &currentBrightness, alpha: &alpha) else {
             return self
         }
-        #endif
 
         return Self.colorValue(
             from: Self.makePlatformColor(
@@ -141,29 +128,16 @@ struct ThemeColorValue: Codable, Hashable {
         brightness: CGFloat,
         alpha: CGFloat
     ) -> PlatformColor {
-        #if os(macOS)
-        return NSColor(
-            hue: hue,
-            saturation: saturation,
-            brightness: brightness,
-            alpha: alpha
-        )
-        #else
         return UIColor(
             hue: hue,
             saturation: saturation,
             brightness: brightness,
             alpha: alpha
         )
-        #endif
     }
 
     private static func colorValue(from color: PlatformColor) -> ThemeColorValue {
-        #if os(macOS)
-        let source = color.usingColorSpace(.deviceRGB) ?? color
-        #else
         let source = color
-        #endif
 
         var red: CGFloat = 0
         var green: CGFloat = 0
@@ -173,17 +147,6 @@ struct ThemeColorValue: Codable, Hashable {
         return ThemeColorValue(red: red, green: green, blue: blue, alpha: alpha)
     }
 
-    #if os(macOS)
-    typealias PlatformColor = NSColor
-    var platformColor: NSColor {
-        NSColor(
-            red: red,
-            green: green,
-            blue: blue,
-            alpha: alpha
-        )
-    }
-    #else
     typealias PlatformColor = UIColor
     var platformColor: UIColor {
         UIColor(
@@ -193,7 +156,6 @@ struct ThemeColorValue: Codable, Hashable {
             alpha: alpha
         )
     }
-    #endif
 }
 
 struct ThemeTokenSet: Codable, Hashable {

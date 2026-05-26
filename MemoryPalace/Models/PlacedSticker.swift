@@ -5,12 +5,10 @@ import SwiftData
 /// 未来演化为通用 CanvasElement 的第一种类型
 @Model
 final class PlacedSticker {
-    #if os(iOS)
     #Index<PlacedSticker>(
         [\.profileId, \.conversationId],
         [\.profileId, \.conversationId, \.zIndex]
     )
-    #endif
 
     @Attribute(.unique) var id: UUID = UUID()
     var stickerAssetId: UUID?           // nil = 便签贴纸（无图片资产）

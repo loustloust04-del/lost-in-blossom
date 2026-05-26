@@ -3,13 +3,11 @@ import SwiftData
 
 @Model
 final class Conversation {
-    #if os(iOS)
     #Index<Conversation>(
         [\.profileId],
         [\.profileId, \.lastOpenedAt],
         [\.profileId, \.isDeleted, \.lastOpenedAt]
     )
-    #endif
 
     @Attribute(.unique) var id: String
     /// 楼层隔离。路线 B 单 ModelContainer 下所有 fetch 必须带 profileId predicate。
@@ -51,13 +49,11 @@ final class Conversation {
 
 @Model
 final class MessageNode {
-    #if os(iOS)
     #Index<MessageNode>(
         [\.profileId],
         [\.profileId, \.conversationId],
         [\.profileId, \.conversationId, \.isDeleted]
     )
-    #endif
 
     @Attribute(.unique) var id: String
     /// 楼层隔离。Migration 会给老数据补填。注：MessageNode 用 parentId: String? 做树
@@ -118,12 +114,10 @@ final class MessageNode {
 
 @Model
 final class UserCard {
-    #if os(iOS)
     #Index<UserCard>(
         [\.profileId],
         [\.profileId, \.attachedToNodeId]
     )
-    #endif
 
     var id: UUID = UUID()
     /// 楼层隔离。新建角色卡必填。

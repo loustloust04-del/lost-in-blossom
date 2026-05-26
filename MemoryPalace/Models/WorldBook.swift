@@ -99,9 +99,7 @@ extension WorldBookEntry {
 
 @Model
 final class WorldBook {
-    #if os(iOS)
     #Index<WorldBook>([\.profileId])
-    #endif
 
     @Attribute(.unique) var id: UUID = UUID()
     var name: String

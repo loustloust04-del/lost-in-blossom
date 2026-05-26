@@ -8,11 +8,9 @@ enum ImportMode: String, Codable {
 
 @Model
 final class ImportRecord {
-    #if os(iOS)
     #Index<ImportRecord>(
         [\.profileId, \.importDate]
     )
-    #endif
 
     var id: UUID = UUID()
     /// 楼层隔离

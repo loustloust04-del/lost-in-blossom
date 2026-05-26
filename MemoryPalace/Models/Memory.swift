@@ -5,13 +5,11 @@ import SwiftData
 
 @Model
 final class Memory {
-    #if os(iOS)
     #Index<Memory>(
         [\.profileId],
         [\.profileId, \.decayWeight],
         [\.profileId, \.updatedAt]
     )
-    #endif
 
     @Attribute(.unique) var id: UUID = UUID()
     var content: String              // 原子事实："用户喜欢暖奶白配色"

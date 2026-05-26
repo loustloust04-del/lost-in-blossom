@@ -3,9 +3,7 @@ import SwiftData
 
 @Model
 final class MemoryNote {
-    #if os(iOS)
     #Index<MemoryNote>([\.profileId])
-    #endif
 
     var id: UUID = UUID()
     var content: String

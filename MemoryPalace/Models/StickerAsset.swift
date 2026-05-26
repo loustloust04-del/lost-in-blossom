@@ -4,9 +4,7 @@ import SwiftData
 /// 贴纸库资产 — 图片贴纸或便签模板
 @Model
 final class StickerAsset {
-    #if os(iOS)
     #Index<StickerAsset>([\.profileId, \.createdAt])
-    #endif
 
     @Attribute(.unique) var id: UUID = UUID()
     var name: String = ""

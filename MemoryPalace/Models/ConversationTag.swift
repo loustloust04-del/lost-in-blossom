@@ -4,12 +4,10 @@ import SwiftData
 /// 对话标签 — 用户可自定义，多对多关联到 Conversation（通过 FavoriteItem join）
 @Model
 final class ConversationTag {
-    #if os(iOS)
     #Index<ConversationTag>(
         [\.profileId],
         [\.profileId, \.order]
     )
-    #endif
 
     @Attribute(.unique) var id: String = UUID().uuidString
     /// 楼层隔离
@@ -31,12 +29,10 @@ final class ConversationTag {
 /// Conversation ↔ ConversationTag 的 join item，也兼容收藏单条 bubble
 @Model
 final class FavoriteItem {
-    #if os(iOS)
     #Index<FavoriteItem>(
         [\.profileId],
         [\.profileId, \.conversationId]
     )
-    #endif
 
     @Attribute(.unique) var id: String = UUID().uuidString
     /// 楼层隔离

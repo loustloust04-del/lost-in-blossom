@@ -8,11 +8,9 @@ enum ImportConversationChangeKind: String, Codable {
 
 @Model
 final class ImportConversationChange {
-    #if os(iOS)
     #Index<ImportConversationChange>(
         [\.profileId, \.recordId]
     )
-    #endif
 
     var id: UUID = UUID()
     /// 楼层隔离
