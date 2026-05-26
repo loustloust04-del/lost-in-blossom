@@ -881,9 +881,9 @@ private struct InputFieldContainer: View {
             #if os(iOS)
             if let onStickerTap {
                 Button(action: onStickerTap) {
-                    Image(systemName: "square.fill.on.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(Theme.textMuted.opacity(0.5))
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(Theme.textMuted.opacity(0.7))
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
