@@ -624,6 +624,10 @@ extension Notification.Name {
     /// 由 LocalNotificationService 发，ContentView 订阅。
     /// userInfo["conversationId"] = String
     static let notificationNavigationRequested = Notification.Name("LIBNotificationNavigationRequested")
+
+    /// Add to Chat 面板请求打开设置页。
+    /// 由 AddToChatSheet 发，ContentView 订阅。
+    static let requestShowSettings = Notification.Name("LIBRequestShowSettings")
 }
 
 // MARK: - Profile Editor Sheet

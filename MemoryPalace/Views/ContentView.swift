@@ -318,6 +318,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .memoryPalaceRequestImport)) { _ in
             showImporter = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestShowSettings)) { _ in
+            showSettings = true
+        }
         .sheet(isPresented: $showImporter) {
             ImportView()
                 #if os(iOS)

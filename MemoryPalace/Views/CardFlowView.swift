@@ -19,6 +19,7 @@ struct CardFlowView: View {
     @State private var showInConvSearch = false
     @FocusState private var inConvSearchFocused: Bool
     @State private var showStickerPanel = false
+    @State private var showAddToChat = false
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     #if os(macOS)
@@ -343,11 +344,9 @@ struct CardFlowView: View {
                                     viewModel: viewModel, modelContext: modelContext,
                                     profileManager: profileManager, providerManager: pm, presetManager: presetManager,
                                     onStickerTap: {
+                                        // + 号 → Add to Chat 功能面板（iOS）
                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                                        withAnimation(.easeInOut(duration: 0.25)) {
-                                            showStickerPanel = true
-                                            stickerVM.isEditingStickers = true
-                                        }
+                                        showAddToChat = true
                                     }
                                 )
                                 .equatable()
@@ -454,6 +453,17 @@ struct CardFlowView: View {
                         }
                 }
             }
+            #if os(iOS)
+            // Add to Chat 功能面板（+ 号触发）
+            .sheet(isPresented: $showAddToChat) {
+                AddToChatSheet(onOpenSticker: {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showStickerPanel = true
+                        stickerVM.isEditingStickers = true
+                    }
+                })
+            }
+            #endif
         }
     }
 
