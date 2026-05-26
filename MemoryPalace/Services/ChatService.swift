@@ -310,17 +310,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                     receivedDone = true
                     DispatchQueue.main.async { [self] in
                         isStreaming = false
-                        // DeepSeek reasoning：有思考内容时构造 segments，先于 onComplete 回调
+                        // DeepSeek reasoning：将思考链用标记包裹后拼入 content
+                        var finalContent = streamingContent
                         if !streamingThinking.isEmpty {
-                            var segments: [MessageSegment] = [
-                                .thinking(text: streamingThinking, signature: nil),
-                            ]
-                            if !streamingContent.isEmpty {
-                                segments.append(.text(streamingContent))
-                            }
-                            onSegmentsCallback?(segments)
+                            finalContent = "[thinking]\(streamingThinking)[/thinking]\n\(streamingContent)"
                         }
-                        onComplete?(streamingContent, finalUsage)
+                        onComplete?(finalContent, finalUsage)
                     }
                     return
                 }
