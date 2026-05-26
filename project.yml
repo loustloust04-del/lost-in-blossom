@@ -20,30 +20,6 @@ settings:
     SWIFT_VERSION: "5.10"
 
 targets:
-  MemoryPalace:
-    type: application
-    platform: macOS
-    deploymentTarget:
-      macOS: "14.0"
-    sources:
-      - path: MemoryPalace
-    dependencies:
-      - package: MarkdownUI
-      - package: ZIPFoundation
-    settings:
-      base:
-        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
-        PRODUCT_BUNDLE_IDENTIFIER: com.bunny.lostinblossom.macos
-        PRODUCT_NAME: "Lost in Blossom"
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Susu. All rights reserved."
-        SWIFT_EMIT_LOC_STRINGS: YES
-        ENABLE_PREVIEWS: YES
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MACOSX_DEPLOYMENT_TARGET: "14.0"
-
   MemoryPalaceIOS:
     type: application
     platform: iOS
@@ -100,10 +76,6 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
-  MemoryPalace:
-    build:
-      targets:
-        MemoryPalace: all
   MemoryPalaceIOS:
     build:
       targets:
