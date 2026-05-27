@@ -58,3 +58,14 @@ jobs:
           name: LostInBlossom-Debug
           path: LostInBlossom.ipa
           retention-days: 14
+
+      - name: Deploy to VPS
+        if: success()
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 172.245.88.103
+          port: 48722
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "LostInBlossom.ipa"
+          target: "/root/projects/lib-web/"
