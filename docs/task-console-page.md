@@ -107,3 +107,25 @@ UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 - 只在 App 在前台时触发（`UIApplication.shared.applicationState == .active`）
 - 提供设置开关让用户关闭震动
 - 非思考模型（如 deepseek-chat）没有阶段一，只有阶段三
+
+---
+
+## 未来功能：Artifacts（HTML 画布）
+
+在对话中渲染 AI 输出的 HTML 代码块。
+
+### 核心实现
+1. 消息解析器检测 ```html 代码块
+2. 提取 HTML 内容
+3. 在消息气泡下方嵌入 WKWebView（高度自适应）
+4. 将 HTML 注入 WebView 渲染
+5. 沙盒隔离——WebView 不能访问 App 数据
+
+### Phase 1（最简版）
+- 只支持纯 HTML + CSS + JS
+- 不支持 React（需要编译器）
+- 不支持文件系统访问
+- WebView 高度根据内容自适应
+
+### 优先级
+低。等 UI 和核心功能稳定后再做。但架构上预留——消息解析器的 segment 系统已经有扩展点。
