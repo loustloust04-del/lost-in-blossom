@@ -1,0 +1,50 @@
+name: New Skill Request
+description: Propose a new skill topic for the collection
+labels: ["new-skill"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose a brand new skill. Good candidates are Apple frameworks or platform capabilities not yet covered by an existing skill.
+
+  - type: input
+    id: skill-name
+    attributes:
+      label: Proposed Skill Name
+      description: "Lowercase, hyphenated folder name (e.g., `screen-time-api`, `core-haptics`)"
+      placeholder: "core-haptics"
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: What should the skill cover?
+      description: Describe the framework, API surface, or topic area. What guidance would an agent need?
+      placeholder: |
+        Core Haptics framework — designing custom haptic patterns, CHHapticEngine lifecycle,
+        AHAP file authoring, integration with UIKit and SwiftUI gesture handlers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Why is this needed?
+      description: Why isn't this covered by existing skills? What agent task would this unblock?
+      placeholder: |
+        No existing skill covers haptic feedback beyond basic UIFeedbackGenerator.
+        Agents building immersive apps need guidance on custom haptic patterns and AHAP files.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Key Apple Documentation
+      description: Links to the primary Apple docs, WWDC sessions, or HIG pages for this topic.
+      placeholder: |
+        - https://developer.apple.com/documentation/corehaptics
+        - WWDC19 "Introducing Core Haptics"
+    validations:
+      required: true

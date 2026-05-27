@@ -1,0 +1,105 @@
+name: Validate Issue Templates
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  validate-issue-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Ensure invalid-template label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh api "repos/$REPO/labels/invalid-template" > /dev/null 2>&1; then
+            gh api --method PATCH "repos/$REPO/labels/invalid-template" \
+              -f new_name='invalid-template' \
+              -f color='e4e669' \
+              -f description='Issue bypassed the supported issue templates' \
+              > /dev/null
+            echo "UPDATED: invalid-template label"
+          else
+            gh api --method POST "repos/$REPO/labels" \
+              -f name='invalid-template' \
+              -f color='e4e669' \
+              -f description='Issue bypassed the supported issue templates' \
+              > /dev/null
+            echo "CREATED: invalid-template label"
+          fi
+
+      - name: Inspect and validate issue
+        id: validate
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_LABELS_JSON: ${{ toJson(github.event.issue.labels.*.name) }}
+          ISSUE_STATE: ${{ github.event.issue.state }}
+        run: |
+          BODY_FILE="$RUNNER_TEMP/issue-body.md"
+          printf '%s' "$ISSUE_BODY" > "$BODY_FILE"
+
+          if bash ./.github/scripts/validate-issue-template.sh "$BODY_FILE"; then
+            echo "is_valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_valid=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if jq -e '. | index("invalid-template") != null' <<<"$ISSUE_LABELS_JSON" > /dev/null; then
+            echo "has_invalid_template=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_invalid_template=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "issue_state=$ISSUE_STATE" >> "$GITHUB_OUTPUT"
+
+      - name: Label and comment on invalid issue
+        if: steps.validate.outputs.is_valid == 'false' && steps.validate.outputs.has_invalid_template != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          COMMENT_FILE="$RUNNER_TEMP/invalid-template-comment.md"
+
+          cat > "$COMMENT_FILE" <<EOF
+          This issue was automatically closed because it does not match one of this repository's supported issue forms.
+
+          Please resubmit it using one of these templates:
+
+          - [Skill Content Bug]($REPO_URL/issues/new?template=skill-content-bug.yml)
+          - [Skill Enhancement]($REPO_URL/issues/new?template=skill-enhancement.yml)
+          - [New Skill Request]($REPO_URL/issues/new?template=new-skill-request.yml)
+
+          You can also start from the full [issue chooser]($REPO_URL/issues/new/choose).
+
+          If you edit this issue so it matches one of the supported forms, the workflow will remove the invalid-template label and reopen it automatically.
+          EOF
+
+          gh issue edit "$ISSUE_URL" --add-label "invalid-template"
+          gh issue comment "$ISSUE_URL" --body-file "$COMMENT_FILE"
+
+      - name: Close invalid issue
+        if: steps.validate.outputs.is_valid == 'false' && steps.validate.outputs.issue_state != 'closed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: gh issue close "$ISSUE_URL" --reason "not planned"
+
+      - name: Restore valid issue
+        if: steps.validate.outputs.is_valid == 'true' && steps.validate.outputs.has_invalid_template == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_STATE: ${{ steps.validate.outputs.issue_state }}
+        run: |
+          gh issue edit "$ISSUE_URL" --remove-label "invalid-template"
+
+          if [[ "$ISSUE_STATE" == "closed" ]]; then
+            gh issue reopen "$ISSUE_URL"
+          fi

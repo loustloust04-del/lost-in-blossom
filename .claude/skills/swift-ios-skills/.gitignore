@@ -1,0 +1,8 @@
+.DS_Store
+**/.DS_Store
+CLAUDE.md
+.playwright-mcp
+tmp
+firebase-debug.log
+.claude
+.agents

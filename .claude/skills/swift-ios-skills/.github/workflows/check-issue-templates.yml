@@ -1,0 +1,43 @@
+name: Sync Issue Template Dropdowns
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/scripts/sync-skill-dropdowns.sh"
+  pull_request:
+    paths:
+      - "skills/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/scripts/sync-skill-dropdowns.sh"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-dropdowns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # PRs: check-only (fail if out of sync)
+      - name: Check dropdowns are in sync
+        if: github.event_name == 'pull_request'
+        run: ./.github/scripts/sync-skill-dropdowns.sh --check
+
+      # Pushes to main: auto-fix and commit
+      - name: Sync dropdowns
+        if: github.event_name == 'push'
+        run: |
+          ./.github/scripts/sync-skill-dropdowns.sh
+          if git diff --quiet; then
+            echo "Nothing to commit — already in sync."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/ISSUE_TEMPLATE/
+            git commit -m "chore: sync issue template skill dropdowns"
+            git push
+          fi

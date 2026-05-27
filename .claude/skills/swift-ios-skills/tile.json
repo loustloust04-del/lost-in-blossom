@@ -1,0 +1,262 @@
+{
+  "name": "dpearson2699/swift-ios-skills",
+  "version": "3.5.0",
+  "summary": "Agent skills for iOS, iPadOS, Swift, SwiftUI, and modern Apple framework development.",
+  "entrypoint": "README.md",
+  "docs": "README.md",
+  "private": false,
+  "skills": {
+    "accessorysetupkit": {
+      "path": "skills/accessorysetupkit/SKILL.md"
+    },
+    "activitykit": {
+      "path": "skills/activitykit/SKILL.md"
+    },
+    "adattributionkit": {
+      "path": "skills/adattributionkit/SKILL.md"
+    },
+    "alarmkit": {
+      "path": "skills/alarmkit/SKILL.md"
+    },
+    "app-clips": {
+      "path": "skills/app-clips/SKILL.md"
+    },
+    "app-intents": {
+      "path": "skills/app-intents/SKILL.md"
+    },
+    "app-store-optimization": {
+      "path": "skills/app-store-optimization/SKILL.md"
+    },
+    "app-store-review": {
+      "path": "skills/app-store-review/SKILL.md"
+    },
+    "apple-on-device-ai": {
+      "path": "skills/apple-on-device-ai/SKILL.md"
+    },
+    "appmigrationkit": {
+      "path": "skills/appmigrationkit/SKILL.md"
+    },
+    "audioaccessorykit": {
+      "path": "skills/audioaccessorykit/SKILL.md"
+    },
+    "authentication": {
+      "path": "skills/authentication/SKILL.md"
+    },
+    "avkit": {
+      "path": "skills/avkit/SKILL.md"
+    },
+    "background-processing": {
+      "path": "skills/background-processing/SKILL.md"
+    },
+    "browserenginekit": {
+      "path": "skills/browserenginekit/SKILL.md"
+    },
+    "callkit": {
+      "path": "skills/callkit/SKILL.md"
+    },
+    "carplay": {
+      "path": "skills/carplay/SKILL.md"
+    },
+    "cloudkit": {
+      "path": "skills/cloudkit/SKILL.md"
+    },
+    "contacts-framework": {
+      "path": "skills/contacts-framework/SKILL.md"
+    },
+    "core-bluetooth": {
+      "path": "skills/core-bluetooth/SKILL.md"
+    },
+    "core-data": {
+      "path": "skills/core-data/SKILL.md"
+    },
+    "core-motion": {
+      "path": "skills/core-motion/SKILL.md"
+    },
+    "core-nfc": {
+      "path": "skills/core-nfc/SKILL.md"
+    },
+    "coreml": {
+      "path": "skills/coreml/SKILL.md"
+    },
+    "cryptokit": {
+      "path": "skills/cryptokit/SKILL.md"
+    },
+    "cryptotokenkit": {
+      "path": "skills/cryptotokenkit/SKILL.md"
+    },
+    "debugging-instruments": {
+      "path": "skills/debugging-instruments/SKILL.md"
+    },
+    "device-integrity": {
+      "path": "skills/device-integrity/SKILL.md"
+    },
+    "dockkit": {
+      "path": "skills/dockkit/SKILL.md"
+    },
+    "energykit": {
+      "path": "skills/energykit/SKILL.md"
+    },
+    "eventkit": {
+      "path": "skills/eventkit/SKILL.md"
+    },
+    "financekit": {
+      "path": "skills/financekit/SKILL.md"
+    },
+    "focus-engine": {
+      "path": "skills/focus-engine/SKILL.md"
+    },
+    "gamekit": {
+      "path": "skills/gamekit/SKILL.md"
+    },
+    "healthkit": {
+      "path": "skills/healthkit/SKILL.md"
+    },
+    "homekit": {
+      "path": "skills/homekit/SKILL.md"
+    },
+    "ios-accessibility": {
+      "path": "skills/ios-accessibility/SKILL.md"
+    },
+    "ios-localization": {
+      "path": "skills/ios-localization/SKILL.md"
+    },
+    "ios-networking": {
+      "path": "skills/ios-networking/SKILL.md"
+    },
+    "ios-simulator": {
+      "path": "skills/ios-simulator/SKILL.md"
+    },
+    "mapkit": {
+      "path": "skills/mapkit/SKILL.md"
+    },
+    "metrickit": {
+      "path": "skills/metrickit/SKILL.md"
+    },
+    "musickit": {
+      "path": "skills/musickit/SKILL.md"
+    },
+    "natural-language": {
+      "path": "skills/natural-language/SKILL.md"
+    },
+    "paperkit": {
+      "path": "skills/paperkit/SKILL.md"
+    },
+    "passkit": {
+      "path": "skills/passkit/SKILL.md"
+    },
+    "pdfkit": {
+      "path": "skills/pdfkit/SKILL.md"
+    },
+    "pencilkit": {
+      "path": "skills/pencilkit/SKILL.md"
+    },
+    "permissionkit": {
+      "path": "skills/permissionkit/SKILL.md"
+    },
+    "photokit": {
+      "path": "skills/photokit/SKILL.md"
+    },
+    "push-notifications": {
+      "path": "skills/push-notifications/SKILL.md"
+    },
+    "realitykit": {
+      "path": "skills/realitykit/SKILL.md"
+    },
+    "relevancekit": {
+      "path": "skills/relevancekit/SKILL.md"
+    },
+    "scenekit": {
+      "path": "skills/scenekit/SKILL.md"
+    },
+    "sensorkit": {
+      "path": "skills/sensorkit/SKILL.md"
+    },
+    "shareplay-activities": {
+      "path": "skills/shareplay-activities/SKILL.md"
+    },
+    "speech-recognition": {
+      "path": "skills/speech-recognition/SKILL.md"
+    },
+    "spritekit": {
+      "path": "skills/spritekit/SKILL.md"
+    },
+    "storekit": {
+      "path": "skills/storekit/SKILL.md"
+    },
+    "swift-api-design-guidelines": {
+      "path": "skills/swift-api-design-guidelines/SKILL.md"
+    },
+    "swift-architecture": {
+      "path": "skills/swift-architecture/SKILL.md"
+    },
+    "swift-charts": {
+      "path": "skills/swift-charts/SKILL.md"
+    },
+    "swift-codable": {
+      "path": "skills/swift-codable/SKILL.md"
+    },
+    "swift-concurrency": {
+      "path": "skills/swift-concurrency/SKILL.md"
+    },
+    "swift-formatstyle": {
+      "path": "skills/swift-formatstyle/SKILL.md"
+    },
+    "swift-language": {
+      "path": "skills/swift-language/SKILL.md"
+    },
+    "swift-security": {
+      "path": "skills/swift-security/SKILL.md"
+    },
+    "swift-testing": {
+      "path": "skills/swift-testing/SKILL.md"
+    },
+    "swiftdata": {
+      "path": "skills/swiftdata/SKILL.md"
+    },
+    "swiftlint": {
+      "path": "skills/swiftlint/SKILL.md"
+    },
+    "swiftui-animation": {
+      "path": "skills/swiftui-animation/SKILL.md"
+    },
+    "swiftui-gestures": {
+      "path": "skills/swiftui-gestures/SKILL.md"
+    },
+    "swiftui-layout-components": {
+      "path": "skills/swiftui-layout-components/SKILL.md"
+    },
+    "swiftui-liquid-glass": {
+      "path": "skills/swiftui-liquid-glass/SKILL.md"
+    },
+    "swiftui-navigation": {
+      "path": "skills/swiftui-navigation/SKILL.md"
+    },
+    "swiftui-patterns": {
+      "path": "skills/swiftui-patterns/SKILL.md"
+    },
+    "swiftui-performance": {
+      "path": "skills/swiftui-performance/SKILL.md"
+    },
+    "swiftui-uikit-interop": {
+      "path": "skills/swiftui-uikit-interop/SKILL.md"
+    },
+    "swiftui-webkit": {
+      "path": "skills/swiftui-webkit/SKILL.md"
+    },
+    "tabletopkit": {
+      "path": "skills/tabletopkit/SKILL.md"
+    },
+    "tipkit": {
+      "path": "skills/tipkit/SKILL.md"
+    },
+    "vision-framework": {
+      "path": "skills/vision-framework/SKILL.md"
+    },
+    "weatherkit": {
+      "path": "skills/weatherkit/SKILL.md"
+    },
+    "widgetkit": {
+      "path": "skills/widgetkit/SKILL.md"
+    }
+  }
+}

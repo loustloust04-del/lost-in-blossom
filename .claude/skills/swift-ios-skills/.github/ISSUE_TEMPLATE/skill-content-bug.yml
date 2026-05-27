@@ -1,0 +1,160 @@
+name: Skill Content Bug
+description: Report incorrect, outdated, or misleading content in an existing skill
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when a skill contains incorrect API references, outdated guidance, wrong code patterns, or factually inaccurate claims. **Back up your report with official Apple documentation.**
+
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Affected Skill
+      description: Which skill contains the issue?
+      options:
+        - accessorysetupkit
+        - activitykit
+        - adattributionkit
+        - alarmkit
+        - app-clips
+        - app-intents
+        - app-store-optimization
+        - app-store-review
+        - apple-on-device-ai
+        - appmigrationkit
+        - audioaccessorykit
+        - authentication
+        - avkit
+        - background-processing
+        - browserenginekit
+        - callkit
+        - carplay
+        - cloudkit
+        - contacts-framework
+        - core-bluetooth
+        - core-data
+        - core-motion
+        - core-nfc
+        - coreml
+        - cryptokit
+        - cryptotokenkit
+        - debugging-instruments
+        - device-integrity
+        - dockkit
+        - energykit
+        - eventkit
+        - financekit
+        - focus-engine
+        - gamekit
+        - healthkit
+        - homekit
+        - ios-accessibility
+        - ios-localization
+        - ios-networking
+        - ios-simulator
+        - mapkit
+        - metrickit
+        - musickit
+        - natural-language
+        - paperkit
+        - passkit
+        - pdfkit
+        - pencilkit
+        - permissionkit
+        - photokit
+        - push-notifications
+        - realitykit
+        - relevancekit
+        - scenekit
+        - sensorkit
+        - shareplay-activities
+        - speech-recognition
+        - spritekit
+        - storekit
+        - swift-api-design-guidelines
+        - swift-architecture
+        - swift-charts
+        - swift-codable
+        - swift-concurrency
+        - swift-formatstyle
+        - swift-language
+        - swift-security
+        - swift-testing
+        - swiftdata
+        - swiftlint
+        - swiftui-animation
+        - swiftui-gestures
+        - swiftui-layout-components
+        - swiftui-liquid-glass
+        - swiftui-navigation
+        - swiftui-patterns
+        - swiftui-performance
+        - swiftui-uikit-interop
+        - swiftui-webkit
+        - tabletopkit
+        - tipkit
+        - vision-framework
+        - weatherkit
+        - widgetkit
+    validations:
+      required: true
+
+  - type: input
+    id: file
+    attributes:
+      label: Reference File (if applicable)
+      description: "Only needed if the issue is in a specific reference doc, not the main SKILL.md."
+      placeholder: "skills/<skill>/references/example.md"
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-is-wrong
+    attributes:
+      label: What is incorrect?
+      description: |
+        Quote the specific passage that is wrong. Explain what is incorrect about it and what the correct information should be.
+      placeholder: |
+        The skill states:
+        > "Use `FoundationModel.generate()` to produce text output."
+
+        This API does not exist. The correct API is `LanguageModelSession.respond(to:)`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: documentation-references
+    attributes:
+      label: Apple Documentation References
+      description: |
+        Link to the official Apple documentation, WWDC session, or HIG page that supports your correction. This is how we verify the fix.
+      placeholder: |
+        - https://developer.apple.com/documentation/foundationmodels/languagemodelsession
+        - WWDC25 session "Bring intelligence to your app with Foundation Models"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Where did you encounter this issue?
+      placeholder: |
+        - Coding agent: Claude Code / Cursor / Copilot / other
+        - Xcode version: 26.4
+        - Target platform: iOS 26 / iPadOS 26 / macOS 26
+        - Swift version: 6.3
+    validations:
+      required: true
+
+  - type: textarea
+    id: prompt-context
+    attributes:
+      label: Prompt or Context (optional)
+      description: If the skill produced bad output from a specific prompt, share the prompt and the incorrect output.
+      placeholder: |
+        Prompt: "Help me integrate on-device AI text generation using Foundation Models"
+        Output: The agent used a non-existent `FoundationModel.generate()` API...
+    validations:
+      required: false

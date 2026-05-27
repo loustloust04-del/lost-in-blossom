@@ -1,0 +1,134 @@
+name: Skill Enhancement
+description: Suggest an improvement, addition, or restructure for an existing skill
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose improvements to an existing skill — missing coverage, better examples, structural changes, etc.
+
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Affected Skill
+      description: Which skill should be improved?
+      options:
+        - accessorysetupkit
+        - activitykit
+        - adattributionkit
+        - alarmkit
+        - app-clips
+        - app-intents
+        - app-store-optimization
+        - app-store-review
+        - apple-on-device-ai
+        - appmigrationkit
+        - audioaccessorykit
+        - authentication
+        - avkit
+        - background-processing
+        - browserenginekit
+        - callkit
+        - carplay
+        - cloudkit
+        - contacts-framework
+        - core-bluetooth
+        - core-data
+        - core-motion
+        - core-nfc
+        - coreml
+        - cryptokit
+        - cryptotokenkit
+        - debugging-instruments
+        - device-integrity
+        - dockkit
+        - energykit
+        - eventkit
+        - financekit
+        - focus-engine
+        - gamekit
+        - healthkit
+        - homekit
+        - ios-accessibility
+        - ios-localization
+        - ios-networking
+        - ios-simulator
+        - mapkit
+        - metrickit
+        - musickit
+        - natural-language
+        - paperkit
+        - passkit
+        - pdfkit
+        - pencilkit
+        - permissionkit
+        - photokit
+        - push-notifications
+        - realitykit
+        - relevancekit
+        - scenekit
+        - sensorkit
+        - shareplay-activities
+        - speech-recognition
+        - spritekit
+        - storekit
+        - swift-api-design-guidelines
+        - swift-architecture
+        - swift-charts
+        - swift-codable
+        - swift-concurrency
+        - swift-formatstyle
+        - swift-language
+        - swift-security
+        - swift-testing
+        - swiftdata
+        - swiftlint
+        - swiftui-animation
+        - swiftui-gestures
+        - swiftui-layout-components
+        - swiftui-liquid-glass
+        - swiftui-navigation
+        - swiftui-patterns
+        - swiftui-performance
+        - swiftui-uikit-interop
+        - swiftui-webkit
+        - tabletopkit
+        - tipkit
+        - vision-framework
+        - weatherkit
+        - widgetkit
+    validations:
+      required: true
+
+  - type: dropdown
+    id: enhancement-type
+    attributes:
+      label: Type of Enhancement
+      options:
+        - Missing API coverage
+        - Better or additional code examples
+        - Structural or organizational improvement
+        - New reference document
+        - Clarification of existing guidance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What should be improved?
+      description: Describe the gap or improvement clearly. Reference specific sections if possible.
+      placeholder: |
+        The skill covers `NavigationStack` but doesn't mention `NavigationSplitView` for iPad-optimized layouts.
+        This should be covered in the multi-column navigation section.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Supporting References (optional)
+      description: Apple docs, WWDC sessions, or other sources that support the enhancement.
+    validations:
+      required: false
