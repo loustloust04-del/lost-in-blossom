@@ -1249,6 +1249,12 @@ struct BubbleView: View {
             .if(isUser) { view in
                 view.frame(maxWidth: 500, alignment: .trailing)
             }
+            // 6e: 长按弹出菜单时触发 medium 震动（与系统 context menu haptic 叠加，加重触感）
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
+            )
             .contextMenu {
                 if isUser, onEdit != nil {
                     Button(action: {
