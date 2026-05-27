@@ -28,11 +28,16 @@ struct CardFlowView: View {
         let isNodeStreaming = viewModel.providerRouter.isStreaming && node.id == viewModel.currentPath.last?.id && node.role == "assistant"
         let isNodeHighlighted = viewModel.highlightedNodeId == node.id
         let isNodeSearchMatch = viewModel.inConvMatches.contains(node.id)
+        // 思考链流式状态（只传给正在流式输出的那个节点）
+        let isThinkingNow = isNodeStreaming && viewModel.isThinking
+        let streamingThinkingForNode = isNodeStreaming ? viewModel.streamingThinkingText : ""
         BubbleView(
             node: node,
             hasBranches: info != nil,
             branchInfo: info,
             isStreaming: isNodeStreaming,
+            isThinking: isThinkingNow,
+            streamingThinkingText: streamingThinkingForNode,
             isHighlighted: isNodeHighlighted,
             isSearchMatch: isNodeSearchMatch,
             onToggleFavorite: { viewModel.toggleFavorite(node) },
@@ -917,6 +922,79 @@ struct ModelPickerPopover: View {
     }
 }
 
+// MARK: - Thinking UI
+
+/// 思考进行中的呼吸动画标签
+struct ThinkingBreathLabel: View {
+    @State private var breathPhase = false
+
+    var body: some View {
+        Text("思考中…")
+            .opacity(breathPhase ? 0.35 : 1.0)
+            .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: breathPhase)
+            .onAppear { breathPhase = true }
+    }
+}
+
+/// 思考内容底部 sheet（Claude App 风格）
+struct ThinkingPanelView: View {
+    let thinkingText: String
+    let isThinking: Bool
+
+    @State private var animateProgress = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 标题栏
+            HStack {
+                Text("Thought process")
+                    .font(.system(size: 17, weight: .semibold))
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
+
+            // 思考进行中：橙色流动进度线
+            if isThinking {
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.orange)
+                        .frame(width: geo.size.width * 0.3, height: 2)
+                        .offset(x: animateProgress
+                            ? geo.size.width * 0.7
+                            : -geo.size.width * 0.3)
+                        .animation(
+                            .linear(duration: 1.5).repeatForever(autoreverses: false),
+                            value: animateProgress
+                        )
+                        .onAppear { animateProgress = true }
+                }
+                .frame(height: 2)
+                .clipped()
+            }
+
+            // 思考全文
+            ScrollView {
+                Text(thinkingText)
+                    .font(.system(size: 15))
+                    .lineSpacing(7.5)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+}
+
 // MARK: - Branch Info (value type passed to BubbleView)
 
 struct BranchInfo {
@@ -933,6 +1011,10 @@ struct BubbleView: View {
     let hasBranches: Bool
     let branchInfo: BranchInfo?
     var isStreaming: Bool = false
+    /// True while the model is still generating reasoning_content (thinking phase)
+    var isThinking: Bool = false
+    /// Live reasoning tokens from ViewModel — only populated for the currently streaming node
+    var streamingThinkingText: String = ""
     var isHighlighted: Bool = false
     var isSearchMatch: Bool = false
     let onToggleFavorite: () -> Void
@@ -961,6 +1043,7 @@ struct BubbleView: View {
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
+    @State private var showThinkingPanel = false
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
@@ -1058,17 +1141,31 @@ struct BubbleView: View {
                         regexScripts: regexScripts
                     )
                 } else {
-                    // Thinking block (collapsible)
-                    if let thinking = thinkingResult?.thinking, !thinking.isEmpty {
-                        DisclosureGroup("思考过程") {
-                            Text(thinking)
-                                .font(.system(size: 11))
-                                .foregroundColor(Theme.textMuted)
-                                .textSelection(.enabled)
-                                .padding(.top, 2)
+                    // Thinking block — Claude App 风格小字预览 + 点击弹底部 sheet
+                    let liveThinking = isStreaming && !streamingThinkingText.isEmpty
+                    let staticThinking = thinkingResult?.thinking ?? ""
+                    let hasThinkingContent = liveThinking || !staticThinking.isEmpty
+                    if hasThinkingContent {
+                        let displayThinking = liveThinking ? streamingThinkingText : staticThinking
+                        let previewStr = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
+                        Button {
+                            showThinkingPanel = true
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 11))
+                                if liveThinking && isThinking {
+                                    ThinkingBreathLabel()
+                                } else {
+                                    Text(previewStr)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                            }
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(red: 155/255.0, green: 142/255.0, blue: 126/255.0))
                         }
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(Theme.textMuted.opacity(0.7))
+                        .buttonStyle(.plain)
                     }
 
                     // Assistant content — 正则脚本渲染替换
@@ -1192,6 +1289,16 @@ struct BubbleView: View {
         // 即 .contextMenu 自己附着的那个 view 的 frame。
         .sheet(isPresented: $showFolderPicker) {
             FolderPickerSheet(node: node, profileId: node.profileId)
+        }
+        .sheet(isPresented: $showThinkingPanel) {
+            let staticThinking = ContentCleaner.extractThinking(from: ContentCleaner.clean(node.content, cacheKey: node.id)).thinking ?? ""
+            let panelText = (!streamingThinkingText.isEmpty) ? streamingThinkingText : staticThinking
+            ThinkingPanelView(
+                thinkingText: panelText,
+                isThinking: isThinking
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 }
