@@ -94,12 +94,28 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search + new chat
+            // ── App 标题行 ──────────────────────────────────────────────────
+            HStack {
+                Text("Lost in Blossom")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
+                Spacer()
+                Button { showSettings = true } label: {
+                    Circle()
+                        .fill(Color(red: 232/255.0, green: 224/255.0, blue: 212/255.0))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, screenSafeAreaTop + 8)
+            .padding(.bottom, 12)
+
+            // ── 搜索栏 ──────────────────────────────────────────────────────
             HStack(spacing: 8) {
-                // 搜索 capsule：收起=圆，展开=长条，同一个 view 动态变形
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: isIOSStyle ? 15 : 11, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundColor(Theme.textMuted)
                         .onTapGesture {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.95)) {
@@ -133,7 +149,7 @@ struct SidebarView: View {
                             }
                         } label: {
                             Image(systemName: "line.3.horizontal.decrease")
-                                .font(.system(size: isIOSStyle ? 15 : 11, weight: .medium))
+                                .font(.system(size: 15, weight: .medium))
                                 .foregroundColor(searchFilter.hasActiveFilters ? Theme.branchIndicator : Theme.textMuted)
                                 .frame(width: 32, height: 32)
                                 .contentShape(Rectangle())
@@ -143,31 +159,16 @@ struct SidebarView: View {
                     }
                 }
                 .padding(.horizontal, searchBarExpanded ? 16 : 0)
-                .frame(width: searchBarExpanded ? nil : (isIOSStyle ? 44 : 34), height: isIOSStyle ? 44 : 34)
+                .frame(width: searchBarExpanded ? nil : 44, height: 44)
                 .frame(maxWidth: searchBarExpanded ? .infinity : nil)
                 .clipShape(Capsule())
                 .glassEffectCompat(tint: Color.white.opacity(0.15), in: Capsule())
                 .animation(.spring(response: 0.35, dampingFraction: 0.95), value: searchBarExpanded)
 
                 if !searchBarExpanded { Spacer() }
-
-                // 非 iOS：新建对话图标留在顶部（保持原有行为）
-                if !isIOSStyle {
-                    Button(action: { createNewConversation() }) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(Theme.branchIndicator)
-                            .frame(width: 34, height: 34)
-                            .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-
             }
-            .padding(.horizontal, isIOSStyle ? 20 : 12)
-            // iOS: 加上状态栏高度，确保搜索按钮在安全区域内（ZStack 父级 ignoresSafeArea）
-            .padding(.top, isIOSStyle ? (screenSafeAreaTop + 8) : 10)
-            .padding(.bottom, isIOSStyle ? 20 : 14)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
 
             // Advanced filter panel
             if showAdvancedFilter {
