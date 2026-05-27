@@ -83,6 +83,7 @@ struct SidebarView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var currentMatchIndex: Int = -1
     @State private var showSortPopover = false
+    @State private var showProjectsPage = false
     @AppStorage("exportMode") private var exportMode = "lightweight"
     @AppStorage("userName") private var userName = "你"
     @AppStorage("assistantName") private var assistantName = "助手"
@@ -169,6 +170,30 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
+
+            // ── 导航入口 ─────────────────────────────────────────────────────
+            VStack(spacing: 0) {
+                sidebarNavEntry(
+                    icon: "bubble.left.and.bubble.right",
+                    title: "Chats",
+                    isSelected: !showProjectsPage
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showProjectsPage = false
+                    }
+                }
+                sidebarNavEntry(
+                    icon: "folder",
+                    title: "Projects",
+                    isSelected: showProjectsPage
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showProjectsPage = true
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
 
             // Advanced filter panel
             if showAdvancedFilter {
@@ -312,6 +337,23 @@ struct SidebarView: View {
                         .sidebarCardShape(for: currentTab)
                     }
                 }
+            } else if showProjectsPage {
+                // MARK: - Projects (Coming Soon)
+                VStack(spacing: 12) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 36))
+                        .foregroundColor(Theme.textMuted.opacity(0.4))
+                    Text("Projects")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+                    Text("Coming Soon")
+                        .font(.system(size: 14))
+                        .foregroundColor(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, 60)
+
+                Spacer(minLength: 0)
             } else {
                 // MARK: - Normal Conversation List
                 if isIOSStyle && shouldShowCompactListEmptyState {
@@ -775,6 +817,32 @@ struct SidebarView: View {
         case .titleAZ: return "A→Z"
         case .titleZA: return "Z→A"
         }
+    }
+
+    @ViewBuilder
+    private func sidebarNavEntry(icon: String, title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textMuted)
+                    .frame(width: 24, alignment: .center)
+                Text(title)
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textMuted)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.textMuted.opacity(0.5))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Theme.accent.opacity(0.5) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var isIOSStyle: Bool {
