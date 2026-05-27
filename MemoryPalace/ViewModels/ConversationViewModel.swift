@@ -1288,6 +1288,9 @@ final class ConversationViewModel {
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)
 
         // 5. Stream
+        // 6a: 发送触觉反馈
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
         providerRouter.sendStreaming(
             model: model,
             messages: payload.messages,
@@ -1538,6 +1541,9 @@ final class ConversationViewModel {
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
 
+        // 6a: 发送触觉反馈
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
         providerRouter.sendStreaming(
             model: model,
             messages: payload.messages,
@@ -1675,6 +1681,9 @@ final class ConversationViewModel {
 
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
+
+        // 6a: 发送触觉反馈
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
         providerRouter.sendStreaming(
             model: model,
