@@ -1,12 +1,25 @@
 import SwiftUI
+import SwiftData
 
 /// Caelum's Console — 右滑 page 2 控制台页面
 ///
-/// 设计稿: docs/console-design-reference.html
+/// 数据来源：
+///   - DailyContext（SwiftData） — 手动记录（由 Caelum tool call 写入）
+///   - HealthKitService          — 步数 / 睡眠 / 月经（HealthKit）
+///   - 无数据 → 显示 "—" 或 "未报告"
 struct ConsoleView: View {
-    @State private var medicationTaken: Bool = true
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \DailyContext.date, order: .reverse) private var allContexts: [DailyContext]
+
+    @State private var healthKit = HealthKitService()
     @State private var medicationToggled: Bool = false
     @State private var tappedCardId: String? = nil
+
+    // 今天的 DailyContext（如果没有则为 nil）
+    private var todayCtx: DailyContext? {
+        let today = Calendar.current.startOfDay(for: Date())
+        return allContexts.first { Calendar.current.isDate($0.date, inSameDayAs: today) }
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -21,6 +34,23 @@ struct ConsoleView: View {
         .background(Self.pageBg.ignoresSafeArea())
         .sensoryFeedback(.impact(weight: .light), trigger: tappedCardId)
         .sensoryFeedback(.success, trigger: medicationToggled)
+        .task {
+            ensureTodayContext()
+            await healthKit.requestAuthorization()
+            if healthKit.authState == .authorized, let ctx = todayCtx {
+                await healthKit.populate(context: ctx)
+            }
+        }
+    }
+
+    // MARK: - Ensure today context
+
+    private func ensureTodayContext() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let existing = allContexts.first { Calendar.current.isDate($0.date, inSameDayAs: today) }
+        guard existing == nil else { return }
+        let ctx = DailyContext(date: today)
+        modelContext.insert(ctx)
     }
 
     // MARK: - Header
@@ -51,10 +81,10 @@ struct ConsoleView: View {
     private var greetingString: String {
         let h = Calendar.current.component(.hour, from: Date())
         switch h {
-        case 0..<5:  return "夜深了，天奕"
-        case 5..<12: return "早上好，天奕"
+        case 0..<5:   return "夜深了，天奕"
+        case 5..<12:  return "早上好，天奕"
         case 12..<18: return "下午好，天奕"
-        default:     return "晚上好，天奕"
+        default:      return "晚上好，天奕"
         }
     }
 
@@ -69,18 +99,8 @@ struct ConsoleView: View {
 
     private var cardStack: some View {
         VStack(spacing: 10) {
-            // Row 1: 饮水 + 进食 (two columns)
-            HStack(spacing: 10) {
-                waterCard
-                foodCard
-            }
-
-            // Row 2: 药物 + 睡眠 (two columns)
-            HStack(spacing: 10) {
-                medicationCard
-                sleepCard
-            }
-
+            HStack(spacing: 10) { waterCard; foodCard }
+            HStack(spacing: 10) { medicationCard; sleepCard }
             menstrualCard
             stepsCard
             screenTimeCard
@@ -93,18 +113,22 @@ struct ConsoleView: View {
     private var waterCard: some View {
         ConsoleCard(id: "water", tappedCardId: $tappedCardId) {
             ConsoleTag(icon: "drop", label: "饮水")
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text("2")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(Self.textPrimary)
-                Text("/ 6 杯")
-                    .font(.system(size: 13))
-                    .foregroundColor(Self.textUnit)
+            if let ctx = todayCtx {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(ctx.waterCount)")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(Self.textPrimary)
+                    Text("/ 6 杯")
+                        .font(.system(size: 13))
+                        .foregroundColor(Self.textUnit)
+                }
+                Text(ctx.waterCount >= 6 ? "今日达标 🎉" : "还差 \(6 - ctx.waterCount) 杯")
+                    .font(.system(size: 12))
+                    .foregroundColor(Self.textMuted)
+                    .padding(.top, 3)
+            } else {
+                noDataView
             }
-            Text("还差 4 杯")
-                .font(.system(size: 12))
-                .foregroundColor(Self.textMuted)
-                .padding(.top, 3)
         }
     }
 
@@ -113,18 +137,30 @@ struct ConsoleView: View {
     private var foodCard: some View {
         ConsoleCard(id: "food", tappedCardId: $tappedCardId) {
             ConsoleTag(icon: "fork.knife", label: "进食")
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text("1")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(Self.textPrimary)
-                Text("/ 3 餐")
-                    .font(.system(size: 13))
-                    .foregroundColor(Self.textUnit)
+            if let ctx = todayCtx {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(ctx.meals.count)")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(Self.textPrimary)
+                    Text("/ 3 餐")
+                        .font(.system(size: 13))
+                        .foregroundColor(Self.textUnit)
+                }
+                if let meal = ctx.latestMeal {
+                    Text("\(meal.description) · \(timeString(meal.time))")
+                        .font(.system(size: 12))
+                        .foregroundColor(Self.textMuted)
+                        .padding(.top, 3)
+                        .lineLimit(1)
+                } else {
+                    Text("未记录")
+                        .font(.system(size: 12))
+                        .foregroundColor(Self.textMuted)
+                        .padding(.top, 3)
+                }
+            } else {
+                noDataView
             }
-            Text("泡面 · 03:30")
-                .font(.system(size: 12))
-                .foregroundColor(Self.textMuted)
-                .padding(.top, 3)
         }
     }
 
@@ -133,17 +169,21 @@ struct ConsoleView: View {
     private var medicationCard: some View {
         ConsoleCard(id: "medication", tappedCardId: $tappedCardId) {
             ConsoleTag(icon: "pills", label: "药物")
-            ConsolePill(text: medicationTaken ? "已服用" : "未服用",
-                        style: medicationTaken ? .ok : .warn)
-                .padding(.top, 4)
-                .onTapGesture {
-                    medicationTaken.toggle()
-                    medicationToggled.toggle()
-                }
-            Text("右佐匹克隆 · 昨晚")
-                .font(.system(size: 12))
-                .foregroundColor(Self.textMuted)
-                .padding(.top, 6)
+            if let ctx = todayCtx {
+                let pillStyle: PillStyle = ctx.medicationStatus == .taken  ? .ok  :
+                                          ctx.medicationStatus == .skipped ? .off : .warn
+                let pillText =            ctx.medicationStatus == .taken  ? "已服用" :
+                                          ctx.medicationStatus == .skipped ? "已跳过" : "未报告"
+                ConsolePill(text: pillText, style: pillStyle)
+                    .padding(.top, 4)
+                Text("\(ctx.medicationName) · 昨晚")
+                    .font(.system(size: 12))
+                    .foregroundColor(Self.textMuted)
+                    .padding(.top, 6)
+                    .lineLimit(1)
+            } else {
+                noDataView
+            }
         }
     }
 
@@ -152,18 +192,23 @@ struct ConsoleView: View {
     private var sleepCard: some View {
         ConsoleCard(id: "sleep", tappedCardId: $tappedCardId) {
             ConsoleTag(icon: "moon", label: "睡眠")
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text("5.2")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(Self.textPrimary)
-                Text("小时")
-                    .font(.system(size: 13))
-                    .foregroundColor(Self.textUnit)
+            if let ctx = todayCtx, let dur = ctx.sleepDuration {
+                let h = Int(dur)
+                let m = Int((dur - Double(h)) * 60)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(m > 0 ? "\(h)h \(m)m" : "\(h)h")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(Self.textPrimary)
+                }
+                if let start = ctx.sleepStart, let end = ctx.sleepEnd {
+                    Text("\(timeString(start)) – \(timeString(end))")
+                        .font(.system(size: 12))
+                        .foregroundColor(Self.textMuted)
+                        .padding(.top, 3)
+                }
+            } else {
+                noDataView
             }
-            Text("04:15 – 09:30")
-                .font(.system(size: 12))
-                .foregroundColor(Self.textMuted)
-                .padding(.top, 3)
         }
     }
 
@@ -174,17 +219,31 @@ struct ConsoleView: View {
             ConsoleTag(icon: "calendar", label: "月经周期")
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("第 21 天")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Self.textPrimary)
-                    Text("预计 6月14日 来潮 · 还有 18 天")
-                        .font(.system(size: 12))
-                        .foregroundColor(Self.textMuted)
+                    if let ctx = todayCtx, let day = ctx.menstrualDay {
+                        Text("第 \(day) 天")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Self.textPrimary)
+                        if let next = ctx.nextPeriodDate {
+                            let daysLeft = max(0, Calendar.current.dateComponents(
+                                [.day], from: Date(), to: next).day ?? 0)
+                            Text("预计 \(shortDateString(next)) 来潮 · 还有 \(daysLeft) 天")
+                                .font(.system(size: 12))
+                                .foregroundColor(Self.textMuted)
+                        } else {
+                            Text("未设置预计来潮日")
+                                .font(.system(size: 12))
+                                .foregroundColor(Self.textMuted)
+                        }
+                    } else {
+                        Text("—")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(Self.textMuted)
+                    }
                 }
                 Spacer()
-                // Mini bar chart — cycle phase bars (height as fraction of 28pt)
+                // 静态示意 bar chart（周期相位可视化）
                 HStack(alignment: .bottom, spacing: 3) {
-                    ForEach(menstrualBars) { bar in
+                    ForEach(menstrualBarSpecs) { bar in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(bar.color)
                             .frame(width: 3, height: 28 * bar.height)
@@ -195,23 +254,6 @@ struct ConsoleView: View {
         }
     }
 
-    private struct BarSpec: Identifiable {
-        let id = UUID()
-        let height: CGFloat
-        let color: Color
-    }
-
-    private var menstrualBars: [BarSpec] {[
-        BarSpec(height: 0.40, color: Color(red: 212/255, green: 200/255, blue: 184/255)), // #D4C8B8
-        BarSpec(height: 0.25, color: Color(red: 212/255, green: 200/255, blue: 184/255)),
-        BarSpec(height: 0.15, color: Color(red: 232/255, green: 224/255, blue: 212/255)), // #E8E0D4
-        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
-        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
-        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
-        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
-        BarSpec(height: 0.60, color: Color(red: 188/255, green: 143/255, blue: 123/255).opacity(0.4)), // #BC8F7B predicted
-    ]}
-
     // MARK: - 6. 步数
 
     private var stepsCard: some View {
@@ -219,17 +261,29 @@ struct ConsoleView: View {
             ConsoleTag(icon: "figure.walk", label: "步数")
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("847")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(Self.textPrimary)
-                    Text("HealthKit · 今日")
-                        .font(.system(size: 12))
-                        .foregroundColor(Self.textMuted)
+                    if let steps = todayCtx?.steps {
+                        Text(stepsFormatted(steps))
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(Self.textPrimary)
+                        Text(healthKit.authState == .unavailable
+                             ? "手动记录 · 今日"
+                             : "HealthKit · 今日")
+                            .font(.system(size: 12))
+                            .foregroundColor(Self.textMuted)
+                    } else if healthKit.authState == .denied {
+                        Text("未授权")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Self.textMuted)
+                        Text("前往设置 › 健康 授权")
+                            .font(.system(size: 11))
+                            .foregroundColor(Self.textMuted)
+                    } else {
+                        noDataView
+                    }
                 }
                 Spacer()
-                // 7-day bar chart (6px wide bars, 32pt height)
                 HStack(alignment: .bottom, spacing: 3) {
-                    ForEach(stepsBars) { bar in
+                    ForEach(stepsBarSpecs) { bar in
                         RoundedRectangle(cornerRadius: 3)
                             .fill(bar.color)
                             .frame(width: 6, height: 32 * bar.height)
@@ -240,20 +294,6 @@ struct ConsoleView: View {
         }
     }
 
-    private var stepsBars: [BarSpec] {
-        let pastColor = Color(red: 212/255, green: 200/255, blue: 184/255) // #D4C8B8
-        let todayColor = Color(red: 168/255, green: 158/255, blue: 142/255) // #A89E8E
-        return [
-            BarSpec(height: 0.60, color: pastColor),
-            BarSpec(height: 0.35, color: pastColor),
-            BarSpec(height: 0.80, color: pastColor),
-            BarSpec(height: 0.45, color: pastColor),
-            BarSpec(height: 0.20, color: pastColor),
-            BarSpec(height: 0.55, color: pastColor),
-            BarSpec(height: 0.12, color: todayColor),
-        ]
-    }
-
     // MARK: - 7. 屏幕使用时间
 
     private var screenTimeCard: some View {
@@ -261,40 +301,53 @@ struct ConsoleView: View {
             ConsoleTag(icon: "iphone", label: "屏幕使用时间")
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text("6.5")
+                    if let st = todayCtx?.screenTime {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(String(format: "%.1f", st))
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundColor(Self.textPrimary)
+                            Text("小时")
+                                .font(.system(size: 13))
+                                .foregroundColor(Self.textUnit)
+                        }
+                        let social = todayCtx?.socialScreenTime.map {
+                            String(format: "%.1fh", $0)
+                        } ?? "—"
+                        Text("上限 10h · 社交 APP \(social) / 3h")
+                            .font(.system(size: 12))
+                            .foregroundColor(Self.textMuted)
+                    } else {
+                        Text("—")
                             .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(Self.textPrimary)
-                        Text("小时")
-                            .font(.system(size: 13))
-                            .foregroundColor(Self.textUnit)
+                            .foregroundColor(Self.textMuted)
+                        Text("Screen Time API 暂不可用")
+                            .font(.system(size: 11))
+                            .foregroundColor(Self.textMuted)
                     }
-                    Text("上限 10h · 社交 APP 2.1h / 3h")
-                        .font(.system(size: 12))
-                        .foregroundColor(Self.textMuted)
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    ConsolePill(text: "正常", style: .ok)
-                    // Progress bar 65% of 10h limit
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(red: 232/255, green: 224/255, blue: 212/255))
-                            .frame(width: 80, height: 5)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(
-                                LinearGradient(
+                if let st = todayCtx?.screenTime {
+                    let ratio = min(1.0, st / 10.0)
+                    let style: PillStyle = st < 6 ? .ok : st < 9 ? .warn : .off
+                    VStack(alignment: .trailing, spacing: 4) {
+                        ConsolePill(text: st < 6 ? "正常" : st < 9 ? "偏多" : "超标",
+                                    style: style)
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color(red: 232/255, green: 224/255, blue: 212/255))
+                                .frame(width: 80, height: 5)
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(LinearGradient(
                                     colors: [
                                         Color(red: 139/255, green: 115/255, blue:  85/255),
                                         Color(red: 166/255, green: 144/255, blue: 111/255)
                                     ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: 80 * 0.65, height: 5)
+                                    startPoint: .leading, endPoint: .trailing
+                                ))
+                                .frame(width: 80 * ratio, height: 5)
+                        }
+                        .frame(width: 80, height: 5)
                     }
-                    .frame(width: 80, height: 5)
                 }
             }
         }
@@ -307,20 +360,91 @@ struct ConsoleView: View {
             ConsoleTag(icon: "at", label: "推特动态")
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("今日 3 条")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Self.textPrimary)
-                    Text("最近：分享了 Lost in Blossom 的界面截图")
-                        .font(.system(size: 12))
-                        .foregroundColor(Self.textMuted)
-                        .lineLimit(2)
+                    if let count = todayCtx?.tweetCount {
+                        Text("今日 \(count) 条")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Self.textPrimary)
+                        if let summary = todayCtx?.latestTweetSummary {
+                            Text("最近：\(summary)")
+                                .font(.system(size: 12))
+                                .foregroundColor(Self.textMuted)
+                                .lineLimit(2)
+                        }
+                    } else {
+                        Text("—")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Self.textMuted)
+                        Text("Phase 2 接入 Twitter MCP")
+                            .font(.system(size: 11))
+                            .foregroundColor(Self.textMuted)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(Color(red: 196/255, green: 184/255, blue: 168/255)) // #C4B8A8
+                    .foregroundColor(Color(red: 196/255, green: 184/255, blue: 168/255))
             }
         }
+    }
+
+    // MARK: - Helpers
+
+    private var noDataView: some View {
+        Text("—")
+            .font(.system(size: 22, weight: .bold))
+            .foregroundColor(Self.textMuted)
+    }
+
+    private func timeString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: date)
+    }
+
+    private func shortDateString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M月d日"
+        return f.string(from: date)
+    }
+
+    private func stepsFormatted(_ n: Int) -> String {
+        let fmt = NumberFormatter()
+        fmt.numberStyle = .decimal
+        return fmt.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+
+    // MARK: - Static bar chart specs
+
+    private struct BarSpec: Identifiable {
+        let id = UUID()
+        let height: CGFloat
+        let color: Color
+    }
+
+    private var menstrualBarSpecs: [BarSpec] {[
+        BarSpec(height: 0.40, color: Color(red: 212/255, green: 200/255, blue: 184/255)),
+        BarSpec(height: 0.25, color: Color(red: 212/255, green: 200/255, blue: 184/255)),
+        BarSpec(height: 0.15, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
+        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
+        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
+        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
+        BarSpec(height: 0.10, color: Color(red: 232/255, green: 224/255, blue: 212/255)),
+        BarSpec(height: 0.60, color: Color(red: 188/255, green: 143/255, blue: 123/255).opacity(0.4)),
+    ]}
+
+    private var stepsBarSpecs: [BarSpec] {
+        let past  = Color(red: 212/255, green: 200/255, blue: 184/255)
+        let today = Color(red: 168/255, green: 158/255, blue: 142/255)
+        return [
+            BarSpec(height: 0.60, color: past),
+            BarSpec(height: 0.35, color: past),
+            BarSpec(height: 0.80, color: past),
+            BarSpec(height: 0.45, color: past),
+            BarSpec(height: 0.20, color: past),
+            BarSpec(height: 0.55, color: past),
+            BarSpec(height: 0.12, color: today),
+        ]
     }
 }
 
@@ -334,7 +458,7 @@ extension ConsoleView {
     static let textMuted   = Color(red: 181/255, green: 170/255, blue: 154/255) // #B5AA9A
 }
 
-// MARK: - Reusable card container
+// MARK: - ConsoleCard
 
 private struct ConsoleCard<Content: View>: View {
     let id: String
@@ -360,28 +484,29 @@ private struct ConsoleCard<Content: View>: View {
     }
 }
 
-// MARK: - Tag row (icon + label, 粟粟风格)
+// MARK: - ConsoleTag
 
 private struct ConsoleTag: View {
     let icon: String
     let label: String
+    private let c = Color(red: 168/255, green: 158/255, blue: 142/255)
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .regular))
-                .foregroundColor(Color(red: 168/255, green: 158/255, blue: 142/255))
+                .foregroundColor(c)
                 .frame(width: 16, height: 16)
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color(red: 168/255, green: 158/255, blue: 142/255))
+                .foregroundColor(c)
                 .tracking(0.3)
         }
         .padding(.bottom, 8)
     }
 }
 
-// MARK: - Status pill
+// MARK: - ConsolePill
 
 private enum PillStyle { case ok, warn, off }
 
@@ -401,21 +526,22 @@ private struct ConsolePill: View {
 
     private var bgColor: Color {
         switch style {
-        case .ok:   return Color(red: 232/255, green: 240/255, blue: 228/255) // #E8F0E4
-        case .warn: return Color(red: 245/255, green: 235/255, blue: 223/255) // #F5EBDF
-        case .off:  return Color(red: 240/255, green: 234/255, blue: 234/255) // #F0EAEA
+        case .ok:   return Color(red: 232/255, green: 240/255, blue: 228/255)
+        case .warn: return Color(red: 245/255, green: 235/255, blue: 223/255)
+        case .off:  return Color(red: 240/255, green: 234/255, blue: 234/255)
         }
     }
 
     private var fgColor: Color {
         switch style {
-        case .ok:   return Color(red: 107/255, green: 140/255, blue:  90/255) // #6B8C5A
-        case .warn: return Color(red: 166/255, green: 139/255, blue:  91/255) // #A68B5B
-        case .off:  return Color(red: 155/255, green: 142/255, blue: 142/255) // #9B8E8E
+        case .ok:   return Color(red: 107/255, green: 140/255, blue:  90/255)
+        case .warn: return Color(red: 166/255, green: 139/255, blue:  91/255)
+        case .off:  return Color(red: 155/255, green: 142/255, blue: 142/255)
         }
     }
 }
 
 #Preview {
     ConsoleView()
+        .modelContainer(for: DailyContext.self, inMemory: true)
 }
