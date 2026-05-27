@@ -1065,6 +1065,10 @@ final class ConversationViewModel {
     let memoryStore: MemoryStore = SwiftDataMemoryStore()
     /// Content being streamed for the current assistant response
     var streamingText = ""
+    /// Reasoning content being streamed (DeepSeek / models with reasoning_content)
+    var streamingThinkingText: String = ""
+    /// True while reasoning_content is arriving and before regular content starts
+    var isThinking: Bool = false
     /// Recent messages to send for memory extraction
     private let memoryExtractWindow = 5
 
@@ -1273,6 +1277,8 @@ final class ConversationViewModel {
         markConversationDirty()
 
         streamingText = ""
+        streamingThinkingText = ""
+        isThinking = false
 
         // 4. Assemble prompt using PromptAssembler
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
@@ -1291,8 +1297,18 @@ final class ConversationViewModel {
                 // 比 onComplete 先执行，context.save() 在 onComplete 中处理。
                 assistantNode?.setSegments(segments)
             },
+            onThinkingToken: { [weak self] token in
+                guard let self else { return }
+                streamingThinkingText += token
+                if !isThinking { isThinking = true }
+            },
             onToken: { [weak self] token in
                 guard let self else { return }
+                if isThinking {
+                    // 思考结束、正文开始——切换状态并触发震动
+                    isThinking = false
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
                 streamingText += token
                 assistantNode.content = streamingText
             },
@@ -1300,6 +1316,8 @@ final class ConversationViewModel {
                 guard let self else { return }
                 assistantNode.content = fullText
                 streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
                 conversation.nodeCount = currentPath.filter {
                     ($0.role == "user" || $0.role == "assistant") && !$0.content.isEmpty
                 }.count
@@ -1338,6 +1356,8 @@ final class ConversationViewModel {
                     assistantNode.content = "⚠️ \(error)"
                 }
                 streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
             }
         )
 
@@ -1495,6 +1515,8 @@ final class ConversationViewModel {
         conversation.updateTime = Date()
         markConversationDirty()
         streamingText = ""
+        streamingThinkingText = ""
+        isThinking = false
 
         // Assemble prompt
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
@@ -1510,8 +1532,17 @@ final class ConversationViewModel {
             onSegments: { [weak newNode] segments in
                 newNode?.setSegments(segments)
             },
+            onThinkingToken: { [weak self] token in
+                guard let self else { return }
+                streamingThinkingText += token
+                if !isThinking { isThinking = true }
+            },
             onToken: { [weak self] token in
                 guard let self else { return }
+                if isThinking {
+                    isThinking = false
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
                 streamingText += token
                 newNode.content = streamingText
             },
@@ -1519,6 +1550,8 @@ final class ConversationViewModel {
                 guard let self else { return }
                 newNode.content = fullText
                 streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
                 try? context.save()
                 scrollToNodeId = newAssistantId
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
@@ -1536,6 +1569,8 @@ final class ConversationViewModel {
                     newNode.content = "⚠️ \(error)"
                 }
                 streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
             }
         )
 
@@ -1606,6 +1641,8 @@ final class ConversationViewModel {
         conversation.updateTime = Date()
         markConversationDirty()
         streamingText = ""
+        streamingThinkingText = ""
+        isThinking = false
 
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
@@ -1620,8 +1657,17 @@ final class ConversationViewModel {
             onSegments: { [weak newAssistantNode] segments in
                 newAssistantNode?.setSegments(segments)
             },
+            onThinkingToken: { [weak self] token in
+                guard let self else { return }
+                streamingThinkingText += token
+                if !isThinking { isThinking = true }
+            },
             onToken: { [weak self] token in
                 guard let self else { return }
+                if isThinking {
+                    isThinking = false
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
                 streamingText += token
                 newAssistantNode.content = streamingText
             },
@@ -1629,6 +1675,8 @@ final class ConversationViewModel {
                 guard let self else { return }
                 newAssistantNode.content = fullText
                 streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
                 try? context.save()
                 scrollToNodeId = newAssistantId
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
@@ -1646,6 +1694,8 @@ final class ConversationViewModel {
                     newAssistantNode.content = "⚠️ \(error)"
                 }
                 streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
             }
         )
 
