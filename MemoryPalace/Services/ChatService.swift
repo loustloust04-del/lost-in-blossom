@@ -320,6 +320,8 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                         if !streamingThinking.isEmpty {
                             finalContent = "[thinking]\(streamingThinking)[/thinking]\n\(streamingContent)"
                         }
+                        // 6d: 回复完成 medium 震
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         onComplete?(finalContent, finalUsage)
                     }
                     return
