@@ -96,3 +96,45 @@
 - 聊天界面的 scale/offset/圆角也同步跟手势绑定
 
 **绝对不能** 用 `if isOpen { SidebarView() }` 这种 boolean 切换方式。侧边栏始终存在，只是通过 offset 控制位置。
+
+## 6. 聊天震动反馈（Haptic Feedback）
+
+目前只有页面切换和控制台有震动。核心聊天交互完全没有。必须加：
+
+### 6a. 发送消息
+在 ConversationViewModel 的发送方法里，发送成功时：
+```swift
+UIImpactFeedbackGenerator(style: .light).impactOccurred()
+```
+
+### 6b. 思考链脉搏
+在 ChatService 的 SSE 流处理中，接收 reasoning_content 期间：
+```swift
+// 每 2.5 秒震一次
+if isReceivingThinking && Date().timeIntervalSince(lastThinkingHapticTime) > 2.5 {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    lastThinkingHapticTime = Date()
+}
+```
+
+### 6c. 思考结束 → 回复开始
+检测 reasoning_content 停止、content 开始的切换点：
+```swift
+UINotificationFeedbackGenerator().notificationOccurred(.success)
+```
+
+### 6d. 回复完成
+收到 [DONE] 时：
+```swift
+UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+```
+
+### 6e. 长按气泡弹出菜单
+在 context menu 触发时：
+```swift
+UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+```
+
+### 注意
+- 所有震动必须在主线程触发：`DispatchQueue.main.async { ... }`
+- 思考链脉搏只在 App 前台时触发
