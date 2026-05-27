@@ -82,3 +82,67 @@
 
 这是侧边栏的最终版。做完这个不再改侧边栏结构了。
 每个区域单独 commit。
+
+---
+
+## 雷霆大跳根治方案（核心架构修改）
+
+### 根本原因
+侧边栏从左边外面"滑入"。跟聊天界面的移动不同步→空白→跳进来。
+
+### 正确架构
+侧边栏**始终在聊天界面下方**。不需要侧边栏做任何移动。只需要聊天界面移开，露出下面的侧边栏。
+
+像两张纸叠在一起——移开上面那张——下面那张就看到了。下面那张不需要动。
+
+### 实现：ZStack 而非 HStack
+
+```swift
+ZStack(alignment: .leading) {
+    // 底层：侧边栏（始终存在，始终不动，始终在这个位置）
+    SidebarView()
+        .frame(width: screenWidth * 0.8)
+    
+    // 上层：聊天界面（盖在侧边栏上面）
+    ChatView()
+        .offset(x: chatOffset)           // 右移露出侧边栏
+        .scaleEffect(chatScale)           // 缩小产生景深
+        .cornerRadius(chatCornerRadius)   // 圆角
+        .shadow(radius: sidebarOpen ? 10 : 0)  // 阴影增加层次感
+}
+
+// chatOffset/chatScale/chatCornerRadius 绑定到拖动手势：
+// 拖动时实时跟踪
+// 松手后 spring 动画弹到目标值
+```
+
+### 为什么这样不会雷霆大跳
+因为侧边栏**从不移动**。它一直在那里。用户看到的"侧边栏出现"其实是"聊天界面移开了"。
+不存在"侧边栏还没到位"的问题——它从第一帧开始就已经在正确位置了。
+
+### 手势绑定
+```swift
+@GestureState private var dragOffset: CGFloat = 0
+@State private var sidebarOpen = false
+
+var chatOffset: CGFloat {
+    let base: CGFloat = sidebarOpen ? screenWidth * 0.78 : 0
+    return base + (sidebarOpen ? min(0, dragOffset) : max(0, dragOffset))
+}
+
+var chatScale: CGFloat {
+    let progress = min(chatOffset / (screenWidth * 0.78), 1)
+    return 1 - (progress * 0.08)  // 1 → 0.92
+}
+
+var chatCornerRadius: CGFloat {
+    let progress = min(chatOffset / (screenWidth * 0.78), 1)
+    return progress * 30
+}
+```
+
+### 关键
+- **删除**所有侧边栏的 offset/transition 动画代码
+- 侧边栏是静态的，不动
+- 只有聊天界面在动（offset + scale + cornerRadius）
+- 三个值都绑定到同一个 dragOffset → 完美同步 → 不可能出现空白
