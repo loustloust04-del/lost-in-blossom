@@ -666,36 +666,31 @@ struct SidebarView: View {
                         .foregroundColor(Theme.textMuted)
                     Spacer()
                 }
-
-                Button(action: { showSettings = true }) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: Theme.F.sectionHeader))
-                        .foregroundColor(Theme.textMuted)
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, isIOSStyle ? 20 : 16)
             .padding(.vertical, isIOSStyle ? 6 : 6)
 
-            // ── New Chat 按钮（iOS 侧边栏底部，固定不滚动）────────────────
+            // ── New Chat 胶囊按钮（居中，60% 宽，圆角 24）────────────────
             if isIOSStyle {
-                Button(action: createNewConversation) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("New chat")
-                            .font(.system(size: 15, weight: .semibold))
+                GeometryReader { geo in
+                    Button(action: createNewConversation) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("New chat")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: geo.size.width * 0.6, height: 50)
+                        .background(
+                            Capsule()
+                                .fill(Color.black)
+                        )
                     }
-                    .foregroundColor(.white)
+                    .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.black)
-                    )
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
+                .frame(height: 50)
                 .padding(.bottom, 24)
                 .padding(.top, 4)
             }
