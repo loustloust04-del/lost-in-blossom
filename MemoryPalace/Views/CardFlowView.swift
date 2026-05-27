@@ -663,9 +663,10 @@ extension ChatInputBar: Equatable {
 // sheet / alert）不受影响。粟粟 2026-04-19 log 实测 150-170ms/字 → 预期 ≤80ms/字。
 
 /// Claude App 风格两层输入框：
-/// 上层 TextEditor（多行，placeholder）+ 下层工具栏（+ 号 | 模型 ▾ | Spacer | ↑ 发送）
+/// 上层 TextEditor（多行，placeholder）+ 下层工具栏（+ 号 | 模型 ▾ | Spacer | 语音/发送）
 private struct InputFieldContainer: View {
     @State private var text: String = ""
+    @State private var inputTextHeight: CGFloat = 36  // starts single-line, grows to ≤120
     @FocusState.Binding var isFocused: Bool
     let isStreaming: Bool
     let placeholder: String
@@ -695,6 +696,23 @@ private struct InputFieldContainer: View {
         return VStack(spacing: 0) {
             // ── 上层：多行文本输入 ──────────────────────────────────────
             ZStack(alignment: .topLeading) {
+                // 隐藏的 Text 尺寸镜像 — 计算 TextEditor 应有的高度
+                // Text 和 TextEditor 同字号，高度近似一致，用 GeometryReader 实测
+                Text(text.isEmpty ? " " : text)
+                    .font(.system(size: 15))
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 9)
+                    .padding(.leading, 5)
+                    .hidden()
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.onChange(of: geo.size.height, initial: true) { _, h in
+                                let clamped = max(36, min(120, h + 4))
+                                if abs(clamped - inputTextHeight) > 1 { inputTextHeight = clamped }
+                            }
+                        }
+                    )
                 // placeholder（TextEditor 没有原生 placeholder）
                 if text.isEmpty {
                     Text(placeholder)
@@ -707,7 +725,7 @@ private struct InputFieldContainer: View {
                 TextEditor(text: $text)
                     .font(.system(size: 15))
                     .scrollContentBackground(.hidden)
-                    .frame(minHeight: 36, maxHeight: 120) // ≈5 行
+                    .frame(height: inputTextHeight)
                     .focused($isFocused)
                     #if DEBUG
                     .onChange(of: text) { _, newVal in
@@ -715,6 +733,7 @@ private struct InputFieldContainer: View {
                     }
                     #endif
             }
+            .animation(.easeInOut(duration: 0.1), value: inputTextHeight)
             .padding(.horizontal, 10)
             .padding(.top, 4)
 
@@ -751,27 +770,43 @@ private struct InputFieldContainer: View {
 
                 Spacer()
 
-                // 发送 / 停止按钮
-                Button(action: triggerSend) {
-                    Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
-                        .contentTransition(.symbolEffect(.replace))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(canSend ? .white : Theme.textMuted)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            Circle()
-                                .fill(
-                                    isStreaming ? Theme.danger :
-                                    canSend     ? Color.black  :
-                                                  Theme.textMuted.opacity(0.15)
+                // 语音占位（空文本）/ 发送 / 停止 按钮
+                ZStack {
+                    if hasText || isStreaming {
+                        // 有文本 或 正在流式：显示发送 / 停止圆形按钮
+                        Button(action: triggerSend) {
+                            Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
+                                .contentTransition(.symbolEffect(.replace))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(canSend ? .white : Theme.textMuted)
+                                .frame(width: 30, height: 30)
+                                .background(
+                                    Circle()
+                                        .fill(
+                                            isStreaming ? Theme.danger :
+                                            canSend     ? Color.black  :
+                                                          Theme.textMuted.opacity(0.15)
+                                        )
+                                        .animation(.easeInOut(duration: 0.15), value: isStreaming)
+                                        .animation(.easeInOut(duration: 0.15), value: canSend)
                                 )
-                                .animation(.easeInOut(duration: 0.15), value: isStreaming)
-                                .animation(.easeInOut(duration: 0.15), value: canSend)
-                        )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSend)
+                        .transition(.scale.combined(with: .opacity))
+                    } else {
+                        // 空文本：显示语音占位按钮（暂无功能）
+                        Button(action: {}) {
+                            Image(systemName: "waveform.circle.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.black)
+                                .frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.scale.combined(with: .opacity))
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isStreaming)
+                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: hasText || isStreaming)
                 .padding(.trailing, 4)
             }
             .frame(height: 44)
