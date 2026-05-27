@@ -142,3 +142,35 @@ if isThinking {
 - 删除 DisclosureGroup 方式
 
 ---
+
+## 思考链总结（思考完成后生成）
+
+### 时机
+思考链流式输出结束、正文开始时 → 触发总结。不是实时的。一次性的。
+
+### 实现
+```swift
+// 思考完成后，用轻量模型生成一句话总结
+func summarizeThinking(_ thinkingText: String) async -> String? {
+    let prompt = "请用一句简短的中文总结以下AI的思考过程，不超过30个字：\n\n\(thinkingText.prefix(2000))"
+    // 调用 DeepSeek V3（便宜模型）
+    // model: "deepseek-chat"
+    // max_tokens: 100
+    // 返回总结文本
+}
+```
+
+### 显示
+- 总结生成前：灰色小字显示 "思考完成"
+- 总结生成后：替换为总结内容（如 "分析了用户的情绪并考虑回应策略"）
+- 总结失败/超时：保留 "思考完成" 不阻塞
+
+### 成本
+- 输入：思考链前 2000 字（约 1000 tokens）
+- 输出：一句话（约 30 tokens）
+- DeepSeek V3 价格：约 ¥0.001/次
+- 可忽略
+
+### 注意
+- 总结是异步的——不阻塞正文的流式显示
+- 总结缓存在 DailyContext 或消息元数据里——下次打开不重新生成
