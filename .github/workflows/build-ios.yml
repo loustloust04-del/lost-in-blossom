@@ -60,6 +60,7 @@ jobs:
           retention-days: 14
 
       - name: Deploy to VPS
+      continue-on-error: true
         if: success()
         uses: appleboy/scp-action@v0.1.7
         with:
