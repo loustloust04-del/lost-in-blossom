@@ -165,7 +165,8 @@ struct SidebarView: View {
 
             }
             .padding(.horizontal, isIOSStyle ? 20 : 12)
-            .padding(.top, isIOSStyle ? 8 : 10)
+            // iOS: 加上状态栏高度，确保搜索按钮在安全区域内（ZStack 父级 ignoresSafeArea）
+            .padding(.top, isIOSStyle ? (screenSafeAreaTop + 8) : 10)
             .padding(.bottom, isIOSStyle ? 20 : 14)
 
             // Advanced filter panel
@@ -777,6 +778,19 @@ struct SidebarView: View {
 
     private var isIOSStyle: Bool {
         true
+    }
+
+    /// 从 UIKit window 读取真实的状态栏 / notch 高度。
+    /// SidebarView 所在的 ZStack 使用 .ignoresSafeArea()，SwiftUI 环境里
+    /// safeAreaInsets 归零，必须走 UIKit 层获取正确值。
+    private var screenSafeAreaTop: CGFloat {
+        guard
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first,
+            let window = scene.windows.first(where: { $0.isKeyWindow })
+                ?? scene.windows.first
+        else { return 59 }   // iPhone 常见 fallback
+        return max(0, window.safeAreaInsets.top)
     }
 
     // MARK: - Chrome-style Tab Bar
