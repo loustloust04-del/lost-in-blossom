@@ -670,15 +670,11 @@ struct ContentView: View {
         viewModel.collectAllBranches().count
     }
 
+    /// 右滑 page 2: Caelum's Console（控制台）
+    /// 粟粟原 RightPanelView 暂时移出 page 2，后续整合进设置或单独入口
     private var iOSDashboardPage: some View {
-        RightPanelView(
-            selectedToolId: $selectedToolId,
-            viewModel: viewModel,
-            stickerVM: stickerVM
-        )
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.sidebarBg.ignoresSafeArea())
+        ConsoleView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     /// 编辑贴纸时彻底禁用所有滚动。路线 C 下水平 paging 已由 PagingContainerView.disableScroll

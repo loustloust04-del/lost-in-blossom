@@ -1,0 +1,223 @@
+import Foundation
+import HealthKit
+
+// MARK: - HealthKit result types
+
+struct HealthSleepRecord {
+    var startDate: Date
+    var endDate: Date
+    var durationHours: Double { max(0, endDate.timeIntervalSince(startDate) / 3600) }
+}
+
+struct HealthStepsRecord {
+    var count: Int
+    var date: Date
+}
+
+// MARK: - HealthKitService
+
+/// 封装 HealthKit 数据读取。
+///
+/// ⚠️  ESign 签名可能不支持 HealthKit entitlement。
+/// 所有方法在 HealthKit 不可用 / 授权被拒时静默返回 nil，
+/// 不影响其他功能。
+@Observable
+final class HealthKitService {
+
+    // MARK: State
+
+    enum AuthState {
+        case unknown
+        case authorized
+        case denied
+        case unavailable   // HealthKit 不在此设备上（模拟器 / 非 iPhone）
+    }
+
+    var authState: AuthState = .unknown
+
+    private let store = HKHealthStore()
+
+    // MARK: - Read types
+
+    private var readTypes: Set<HKObjectType> {
+        var types = Set<HKObjectType>()
+        if let steps = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+            types.insert(steps)
+        }
+        if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
+            types.insert(sleep)
+        }
+        if let flow = HKObjectType.categoryType(forIdentifier: .menstrualFlow) {
+            types.insert(flow)
+        }
+        return types
+    }
+
+    // MARK: - Authorization
+
+    /// 向用户请求 HealthKit 授权。
+    /// 调用时机：ConsoleView 首次出现时。
+    func requestAuthorization() async {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            authState = .unavailable
+            return
+        }
+        do {
+            try await store.requestAuthorization(toShare: [], read: readTypes)
+            authState = .authorized
+        } catch {
+            authState = .denied
+        }
+    }
+
+    // MARK: - Steps (今日)
+
+    /// 读取今日步数。返回 nil 表示未授权或无数据。
+    func fetchTodaySteps() async -> Int? {
+        guard HKHealthStore.isHealthDataAvailable() else { return nil }
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startOfDay,
+            end: Date(),
+            options: .strictStartDate
+        )
+
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(
+                quantityType: stepType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, stats, _ in
+                let count = stats?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                continuation.resume(returning: Int(count))
+            }
+            store.execute(query)
+        }
+    }
+
+    // MARK: - Sleep (最近一次)
+
+    /// 读取最近一次完整睡眠记录（asleep 阶段）。
+    func fetchLatestSleep() async -> HealthSleepRecord? {
+        guard HKHealthStore.isHealthDataAvailable() else { return nil }
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            return nil
+        }
+
+        // 只取 asleep 状态，忽略 inBed
+        let asleepValues: [HKCategoryValueSleepAnalysis] = [
+            .asleepUnspecified, .asleepCore, .asleepDeep, .asleepREM
+        ]
+        let valuePredicate = NSCompoundPredicate(orPredicateWithSubpredicates:
+            asleepValues.map {
+                HKQuery.predicateForCategorySamples(
+                    with: .equalTo,
+                    value: $0.rawValue
+                )
+            }
+        )
+
+        // 过去 24 小时
+        let yesterday = Date().addingTimeInterval(-86400)
+        let timePredicate = HKQuery.predicateForSamples(
+            withStart: yesterday,
+            end: Date(),
+            options: .strictStartDate
+        )
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            timePredicate, valuePredicate
+        ])
+
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: sleepType,
+                predicate: predicate,
+                limit: 20,
+                sortDescriptors: [sort]
+            ) { _, samples, _ in
+                guard let samples = samples as? [HKCategorySample], !samples.isEmpty else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                // 合并连续片段：取最早 start — 最晚 end
+                let start = samples.map(\.startDate).min() ?? samples[0].startDate
+                let end   = samples.map(\.endDate).max()   ?? samples[0].endDate
+                continuation.resume(returning: HealthSleepRecord(startDate: start, endDate: end))
+            }
+            self.store.execute(query)
+        }
+    }
+
+    // MARK: - Menstrual flow (最近记录)
+
+    /// 读取最近一次月经记录，返回当前周期第几天（粗估）。
+    /// 月经周期精确追踪需要用 HKCategoryTypeIdentifierMenstrualFlow 的完整历史，
+    /// Phase 1 只做简单"最近来潮日距今多少天"。
+    func fetchMenstrualDay() async -> Int? {
+        guard HKHealthStore.isHealthDataAvailable() else { return nil }
+        guard let flowType = HKObjectType.categoryType(forIdentifier: .menstrualFlow) else {
+            return nil
+        }
+
+        // 只取有血流量的样本（排除 none）
+        let predicate = HKQuery.predicateForCategorySamples(
+            with: .greaterThan,
+            value: HKCategoryValueMenstrualFlow.none.rawValue
+        )
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: flowType,
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: [sort]
+            ) { _, samples, _ in
+                guard let sample = (samples as? [HKCategorySample])?.first else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let days = Calendar.current.dateComponents(
+                    [.day],
+                    from: sample.startDate,
+                    to: Date()
+                ).day ?? 0
+                // "周期第几天"从 1 开始计
+                continuation.resume(returning: max(1, days + 1))
+            }
+            self.store.execute(query)
+        }
+    }
+
+    // MARK: - Populate DailyContext
+
+    /// 读取所有 HealthKit 数据并写入 DailyContext。
+    /// 如果某项数据无法获取则跳过，不覆盖已有手动数据。
+    func populate(context: DailyContext) async {
+        async let steps = fetchTodaySteps()
+        async let sleep = fetchLatestSleep()
+        async let menstrual = fetchMenstrualDay()
+
+        let (stepsResult, sleepResult, menstrualResult) =
+            await (steps, sleep, menstrual)
+
+        if let s = stepsResult {
+            context.steps = s
+        }
+        if let sl = sleepResult {
+            context.sleepStart = sl.startDate
+            context.sleepEnd   = sl.endDate
+        }
+        if let m = menstrualResult, context.menstrualDay == nil {
+            // 只在手动记录缺失时才写 HealthKit 值
+            context.menstrualDay = m
+        }
+    }
+}
