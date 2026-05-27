@@ -281,14 +281,14 @@ struct ContentView: View {
                 )
                 .ignoresSafeArea()
                 // 核心视觉：缩小 + 圆角 + 右移，三者同步随 ratio 插值
-                .clipShape(RoundedRectangle(cornerRadius: 26 * ratio))
+                .clipShape(RoundedRectangle(cornerRadius: 30 * ratio))
                 .scaleEffect(1.0 - 0.08 * ratio)
                 .offset(x: geo.size.width * 0.78 * ratio)
                 .allowsHitTesting(ratio < 0.1)
                 .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
 
                 // ── 2. 全屏半透明遮罩（opacity 随 ratio 淡入）─────────────────
-                Color.black.opacity(0.35 * ratio)
+                Color.black.opacity(0.30 * ratio)
                     .ignoresSafeArea()
                     .allowsHitTesting(ratio > 0.3)
                     .onTapGesture {
