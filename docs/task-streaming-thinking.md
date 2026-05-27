@@ -87,3 +87,58 @@ if !viewModel.streamingThinkingText.isEmpty {
 ---
 
 注意：这个改动涉及三层——ChatService、ConversationViewModel、UI。每层单独 commit。
+
+---
+
+## 思考链 UI — Claude App 风格
+
+参考 Claude iOS App 的思考链 UI（天奕截图）。
+
+### 1. 灰色小字预览行
+在助手消息上方——显示一行灰色小字：
+- 思考进行中："思考中…"（带呼吸动画）
+- 思考完成：截取思考链前 40 个字 + "…" 作为预览
+- 字号 13px，色 #9B8E7E，左侧加 🕐 小图标
+- 点击 → 弹出思考面板
+
+### 2. 思考面板（Bottom Sheet）
+```swift
+.sheet(isPresented: $showThinkingPanel) {
+    ThinkingPanelView(content: thinkingText)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+}
+```
+
+面板内容：
+- 顶部标题 "Thought process" + 关闭按钮
+- 下方是滚动的思考链全文
+- 字号 15px，行间距 1.5
+
+### 3. 橙色进度线（思考进行中）
+在思考面板顶部——当 `isThinking == true` 时——显示一条橙色的流动线：
+
+```swift
+// 橙色流动线
+if isThinking {
+    GeometryReader { geo in
+        Rectangle()
+            .fill(Color.orange)
+            .frame(width: geo.size.width * 0.3, height: 2)
+            .offset(x: animateProgress ? geo.size.width * 0.7 : -geo.size.width * 0.3)
+            .animation(.linear(duration: 1.5).repeatForever(autoreverses: false), value: animateProgress)
+            .onAppear { animateProgress = true }
+    }
+    .frame(height: 2)
+}
+```
+
+思考完成 → 进度线消失。
+
+### 4. 替换现有的 DisclosureGroup
+现在的思考链用 DisclosureGroup 折叠。改为：
+- 消息上方显示灰色小字预览
+- 点击 → 底部 sheet 弹出完整思考链
+- 删除 DisclosureGroup 方式
+
+---
