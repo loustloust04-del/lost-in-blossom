@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Caelum's Console</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#F8F5F0; font-family:-apple-system,'SF Pro','PingFang SC',sans-serif; max-width:430px; margin:0 auto; min-height:100vh; padding-bottom:env(safe-area-inset-bottom,20px); -webkit-font-smoothing:antialiased; }
+
+.header { padding:56px 24px 12px; }
+.header .sub { font-size:12px; color:#B5AA9A; letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; font-weight:500; }
+.header .title { font-size:28px; font-weight:700; color:#3A332B; line-height:1.2; }
+.header .date { font-size:13px; color:#B5AA9A; margin-top:6px; }
+
+.cards { padding:12px 20px; display:flex; flex-direction:column; gap:10px; }
+.card { background:white; border-radius:16px; padding:18px 20px; box-shadow:0 1px 3px rgba(0,0,0,0.03); }
+
+.row2 { display:flex; gap:10px; }
+.row2 .card { flex:1; }
+
+/* Icon tag — 粟粟风格浅灰标签 */
+.tag { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:#A89E8E; font-weight:500; letter-spacing:0.3px; margin-bottom:8px; }
+.tag-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; }
+.tag-icon svg { width:14px; height:14px; stroke:#A89E8E; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+
+.metric { font-size:22px; font-weight:700; color:#3A332B; }
+.metric-unit { font-size:13px; font-weight:400; color:#9B8E7E; margin-left:2px; }
+.metric-sub { font-size:12px; color:#B5AA9A; margin-top:3px; }
+
+/* Circle */
+.circle-wrap { position:relative; width:52px; height:52px; flex-shrink:0; }
+.circle-wrap svg { transform:rotate(-90deg); }
+.circle-label { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:#4A4038; }
+
+/* Wide card with left accent */
+.accent-card { border-left:3px solid #D4C8B8; }
+
+/* List row */
+.list-row { display:flex; align-items:center; gap:14px; padding:14px 0; }
+.list-row:first-child { padding-top:0; }
+.list-row:last-child { padding-bottom:0; }
+.list-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.list-info { flex:1; }
+.list-label { font-size:14px; font-weight:500; color:#4A4038; }
+.list-sub { font-size:12px; color:#B5AA9A; margin-top:1px; }
+.list-val { font-size:13px; color:#8B7E6E; font-weight:500; }
+.list-sep { height:1px; background:#F3EEE7; }
+
+/* Status pill */
+.pill { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; }
+.pill-ok { background:#E8F0E4; color:#6B8C5A; }
+.pill-warn { background:#F5EBDF; color:#A68B5B; }
+.pill-off { background:#F0EAEA; color:#9B8E8E; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="sub">Caelum's Console</div>
+  <div class="title" id="greeting"></div>
+  <div class="date" id="datestr"></div>
+</div>
+
+<div class="cards">
+
+  <!-- 饮水 + 进食 -->
+  <div class="row2">
+    <div class="card">
+      <div class="tag">
+        <div class="tag-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 6 7 6 7s0 5.5 0 8c0 4 2.69 7 6 7s6-3 6-7c0-2.5 0-8 0-8s-.48-5-6-5z"/><path d="M6 7h12"/></svg></div>
+        饮水
+      </div>
+      <div class="metric">2<span class="metric-unit">/ 6 杯</span></div>
+      <div class="metric-sub">还差 4 杯</div>
+    </div>
+    <div class="card">
+      <div class="tag">
+        <div class="tag-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4h3"/></svg></div>
+        进食
+      </div>
+      <div class="metric">1<span class="metric-unit">/ 3 餐</span></div>
+      <div class="metric-sub">泡面 · 03:30</div>
+    </div>
+  </div>
+
+  <!-- 药物 + 睡眠 -->
+  <div class="row2">
+    <div class="card">
+      <div class="tag">
+        <div class="tag-icon"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="16" rx="2"/><line x1="6" y1="10" x2="18" y2="10"/><line x1="10" y1="7" x2="14" y2="7"/></svg></div>
+        药物
+      </div>
+      <div style="margin-top:4px">
+        <span class="pill pill-ok">已服用</span>
+      </div>
+      <div class="metric-sub" style="margin-top:6px">右佐匹克隆 · 昨晚</div>
+    </div>
+    <div class="card">
+      <div class="tag">
+        <div class="tag-icon"><svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg></div>
+        睡眠
+      </div>
+      <div class="metric">5.2<span class="metric-unit">小时</span></div>
+      <div class="metric-sub">04:15 – 09:30</div>
+    </div>
+  </div>
+
+  <!-- 月经周期 -->
+  <div class="card">
+    <div class="tag">
+      <div class="tag-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="16" y1="2" x2="16" y2="5"/></svg></div>
+      月经周期
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div class="metric" style="font-size:18px">第 21 天</div>
+        <div class="metric-sub">预计 6月14日 来潮 · 还有 18 天</div>
+      </div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:28px;">
+        <div style="width:3px;height:40%;background:#D4C8B8;border-radius:2px"></div>
+        <div style="width:3px;height:25%;background:#D4C8B8;border-radius:2px"></div>
+        <div style="width:3px;height:15%;background:#E8E0D4;border-radius:2px"></div>
+        <div style="width:3px;height:10%;background:#E8E0D4;border-radius:2px"></div>
+        <div style="width:3px;height:10%;background:#E8E0D4;border-radius:2px"></div>
+        <div style="width:3px;height:10%;background:#E8E0D4;border-radius:2px"></div>
+        <div style="width:3px;height:10%;background:#E8E0D4;border-radius:2px"></div>
+        <div style="width:3px;height:60%;background:#BC8F7B;border-radius:2px;opacity:0.4"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步数 -->
+  <div class="card">
+    <div class="tag">
+      <div class="tag-icon"><svg viewBox="0 0 24 24"><path d="M13 4v6l4 4M7 20l5-5"/><circle cx="12" cy="4" r="2"/></svg></div>
+      步数
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+      <div>
+        <div class="metric">847</div>
+        <div class="metric-sub">HealthKit · 今日</div>
+      </div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:32px;">
+        <div style="width:6px;height:60%;background:#D4C8B8;border-radius:3px"></div>
+        <div style="width:6px;height:35%;background:#D4C8B8;border-radius:3px"></div>
+        <div style="width:6px;height:80%;background:#D4C8B8;border-radius:3px"></div>
+        <div style="width:6px;height:45%;background:#D4C8B8;border-radius:3px"></div>
+        <div style="width:6px;height:20%;background:#D4C8B8;border-radius:3px"></div>
+        <div style="width:6px;height:55%;background:#D4C8B8;border-radius:3px"></div>
+        <div style="width:6px;height:12%;background:#A89E8E;border-radius:3px"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 屏幕使用时间 -->
+  <div class="card">
+    <div class="tag">
+      <div class="tag-icon"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="18" x2="15" y2="18"/><circle cx="12" cy="7" r="0.5" fill="#A89E8E"/></svg></div>
+      屏幕使用时间
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+      <div>
+        <div class="metric">6.5<span class="metric-unit">小时</span></div>
+        <div class="metric-sub">上限 10h · 社交 APP 2.1h / 3h</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <span class="pill pill-ok">正常</span>
+        <div style="width:80px;height:5px;background:#E8E0D4;border-radius:3px;overflow:hidden;">
+          <div style="width:65%;height:100%;background:linear-gradient(90deg,#8B7355,#A6906F);border-radius:3px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 推特 -->
+  <div class="card">
+    <div class="tag">
+      <div class="tag-icon"><svg viewBox="0 0 24 24"><path d="M4 4l5 5M4 4h4M4 4v4M20 20l-5-5M20 20h-4M20 20v-4M16 4l-5 5M16 4h4M20 4v4M4 20l5-5M4 20h4M4 20v-4"/></svg></div>
+      推特动态
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div class="metric" style="font-size:18px">今日 3 条</div>
+        <div class="metric-sub">最近：分享了 Lost in Blossom 的界面截图</div>
+      </div>
+      <span style="color:#C4B8A8;font-size:18px">›</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const h = new Date().getHours();
+const g = h<5?'夜深了':h<12?'早上好':h<18?'下午好':'晚上好';
+document.getElementById('greeting').textContent = g + '，天奕';
+const now = new Date();
+const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+document.getElementById('datestr').textContent = months[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear()+' · Lost in Blossom';
+</script>
+</body>
+</html>
