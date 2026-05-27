@@ -170,6 +170,8 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     private var streamingThinking: String = ""
     /// 流式结束时若有 thinking 内容则调用（构造 MessageSegment 列表）
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
+    /// 实时发送每个 reasoning_content chunk（逐字显示思考链用）
+    var onThinkingToken: ((String) -> Void)?
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
@@ -356,6 +358,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         if let reasoning = delta["reasoning_content"] as? String, !reasoning.isEmpty {
             DispatchQueue.main.async { [self] in
                 streamingThinking += reasoning
+                onThinkingToken?(reasoning)  // 实时推送每个 chunk
             }
         }
 
@@ -728,6 +731,7 @@ final class ProviderRouter {
         samplingParams: SamplingParams? = nil,
         additionalHeaders: [String: String] = [:],
         onSegments: (([MessageSegment]) -> Void)? = nil,
+        onThinkingToken: ((String) -> Void)? = nil,
         onToken: @escaping (String) -> Void,
         onComplete: @escaping (String, TokenUsage?) -> Void,
         onError: @escaping (String) -> Void
@@ -753,6 +757,7 @@ final class ProviderRouter {
         switch provider.type {
         case .openaiCompatible:
             openAIProvider.onSegmentsCallback = onSegments
+            openAIProvider.onThinkingToken = onThinkingToken
             chatProvider = openAIProvider
         case .anthropic:
             // MCP 服务器注入：provider 为 anthropic 且 mcpEnabled 不为 false 时
