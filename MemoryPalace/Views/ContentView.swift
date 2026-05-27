@@ -42,7 +42,9 @@ struct ContentView: View {
     @State private var isSidebarVisible = true
     /// Claude App 风格：侧边栏以 overlay 方式弹出，不再是 UIKit paging 的 page 0
     @State private var isSidebarOpen: Bool = false
-    private let sidebarAnimation = Animation.spring(response: 0.35, dampingFraction: 0.85)
+    private let sidebarAnimation = Animation.spring(response: 0.4, dampingFraction: 0.85)
+    /// 实时拖拽增量 (>0 = 向右拉开, <0 = 向左关闭)。@GestureState 在手势结束时自动归零。
+    @GestureState private var sidebarLiveDrag: CGFloat = 0
     @State private var isRightPanelVisible = false
     @State private var selectedToolId: String = "memory"
     @State private var stickerVM = StickerViewModel()
@@ -256,11 +258,17 @@ struct ContentView: View {
         )
 
         return GeometryReader { geo in
-            let sidebarWidth = geo.size.width * 4 / 5
+            // 侧边栏宽度 = 屏宽 80%
+            let sidebarWidth = geo.size.width * 0.8
+
+            // 当前已打开量（0 = 完全关闭，sidebarWidth = 完全打开）
+            let baseOpen: CGFloat = isSidebarOpen ? sidebarWidth : 0
+            let openAmount = max(0, min(sidebarWidth, baseOpen + sidebarLiveDrag))
+            // 插值比例 0…1
+            let ratio = sidebarWidth > 0 ? openAmount / sidebarWidth : 0
 
             ZStack(alignment: .topLeading) {
-                // ── 1. 主内容区：chat (page 1) + dashboard (page 2) ──────────────
-                // page 0 改为透明占位（侧边栏已改为 overlay，不再是 paging page）
+                // ── 1. 主内容区：缩小 + 圆角 + 右移（Claude App 景深效果）──────
                 PagingContainerView(
                     listPage: AnyView(Color.clear.ignoresSafeArea()),
                     chatPage: AnyView(injectPagingEnv(iOSChatPage)),
@@ -272,39 +280,60 @@ struct ContentView: View {
                     isStreaming: viewModel.providerRouter.isStreaming
                 )
                 .ignoresSafeArea()
-                // 视觉上随侧边栏打开往右推移（UIKit 触控区域不随 offset 动，
-                // 靠 allowsHitTesting(false) 在侧边栏打开期间屏蔽命中）
-                .offset(x: isSidebarOpen ? sidebarWidth : 0)
-                .allowsHitTesting(!isSidebarOpen)
+                // 核心视觉：缩小 + 圆角 + 右移，三者同步随 ratio 插值
+                .clipShape(RoundedRectangle(cornerRadius: 26 * ratio))
+                .scaleEffect(1.0 - 0.08 * ratio)
+                .offset(x: geo.size.width * 0.78 * ratio)
+                .allowsHitTesting(ratio < 0.1)
                 .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
 
-                // ── 2. 半透明遮罩（侧边栏打开时盖在聊天区右侧 1/5）────────────
-                if isSidebarOpen {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .offset(x: sidebarWidth)
-                        .allowsHitTesting(true)
-                        .onTapGesture {
-                            withAnimation(sidebarAnimation) { isSidebarOpen = false }
-                        }
-                        .gesture(
-                            DragGesture(minimumDistance: 30)
-                                .onEnded { v in
-                                    if v.translation.width < -30 {
-                                        withAnimation(sidebarAnimation) { isSidebarOpen = false }
-                                    }
-                                }
-                        )
-                }
+                // ── 2. 全屏半透明遮罩（opacity 随 ratio 淡入）─────────────────
+                Color.black.opacity(0.35 * ratio)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(ratio > 0.3)
+                    .onTapGesture {
+                        withAnimation(sidebarAnimation) { isSidebarOpen = false }
+                    }
 
-                // ── 3. 侧边栏 overlay（从左滑入）────────────────────────────────
+                // ── 3. 侧边栏（始终存在，通过 offset 控制可见性）──────────────
+                // offset = openAmount - sidebarWidth：
+                //   关闭(openAmount=0)  → -sidebarWidth（屏外）
+                //   打开(openAmount=sw) → 0（贴左边缘）
                 iOSListPage
                     .frame(width: sidebarWidth)
-                    .offset(x: isSidebarOpen ? 0 : -sidebarWidth)
-                    .shadow(color: Color.black.opacity(0.15), radius: 16, x: 4, y: 0)
+                    .offset(x: openAmount - sidebarWidth)
+                    .shadow(color: .black.opacity(0.18 * ratio), radius: 20, x: 6, y: 0)
             }
+            // spring 动画仅在 boolean 跳变时触发（手势跟手期间不添加动画）
             .animation(sidebarAnimation, value: isSidebarOpen)
+            // ── 手势：左边缘右滑打开 / 任意处左滑关闭 ─────────────────────────
+            .gesture(
+                DragGesture(minimumDistance: 8, coordinateSpace: .local)
+                    .updating($sidebarLiveDrag) { value, state, _ in
+                        if !isSidebarOpen {
+                            // 仅响应从左侧 28pt 边缘区域开始的右滑
+                            guard value.startLocation.x < 28 else { return }
+                            state = max(0, value.translation.width)
+                        } else {
+                            // 侧边栏已打开：跟踪左滑关闭手势
+                            state = min(0, value.translation.width)
+                        }
+                    }
+                    .onEnded { value in
+                        if !isSidebarOpen {
+                            guard value.startLocation.x < 28 else { return }
+                            let shouldOpen = value.translation.width > sidebarWidth * 0.3
+                                || value.velocity.width > 500
+                            withAnimation(sidebarAnimation) { isSidebarOpen = shouldOpen }
+                        } else {
+                            let shouldClose = value.translation.width < -(sidebarWidth * 0.3)
+                                || value.velocity.width < -500
+                            if shouldClose {
+                                withAnimation(sidebarAnimation) { isSidebarOpen = false }
+                            }
+                        }
+                    }
+            )
         }
         .ignoresSafeArea()
         .onChange(of: iOSPage) { oldPage, newPage in
