@@ -172,6 +172,8 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
     /// 实时发送每个 reasoning_content chunk（逐字显示思考链用）
     var onThinkingToken: ((String) -> Void)?
+    /// 6b: 思考脉搏限流——上次触发 haptic 的时间，每 2.5 秒最多震一次
+    private var lastThinkingHapticTime: Date = .distantPast
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
@@ -187,6 +189,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     ) {
         resetState(onToken: onToken, onComplete: onComplete, onError: onError)
         streamingThinking = ""
+        lastThinkingHapticTime = .distantPast
 
         var apiMessages: [[String: String]] = []
         if let sys = systemPrompt, !sys.isEmpty {
@@ -359,6 +362,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
             DispatchQueue.main.async { [self] in
                 streamingThinking += reasoning
                 onThinkingToken?(reasoning)  // 实时推送每个 chunk
+                // 6b: 思考脉搏 —— 每 2.5 秒 light 震一次
+                let now = Date()
+                if now.timeIntervalSince(lastThinkingHapticTime) > 2.5 {
+                    lastThinkingHapticTime = now
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
             }
         }
 
