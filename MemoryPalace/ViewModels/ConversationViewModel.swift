@@ -1069,6 +1069,8 @@ final class ConversationViewModel {
     var streamingThinkingText: String = ""
     /// True while reasoning_content is arriving and before regular content starts
     var isThinking: Bool = false
+    /// One-sentence summary generated after thinking completes; cleared on next send
+    var thinkingSummary: String = ""
     /// Recent messages to send for memory extraction
     private let memoryExtractWindow = 5
 
@@ -1279,6 +1281,7 @@ final class ConversationViewModel {
         streamingText = ""
         streamingThinkingText = ""
         isThinking = false
+        thinkingSummary = ""
 
         // 4. Assemble prompt using PromptAssembler
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
@@ -1305,9 +1308,21 @@ final class ConversationViewModel {
             onToken: { [weak self] token in
                 guard let self else { return }
                 if isThinking {
-                    // 思考结束、正文开始——切换状态并触发震动
+                    // 思考结束、正文开始——切换状态并触发震动，异步生成一句话总结
                     isThinking = false
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    let capturedThinking = streamingThinkingText
+                    let capturedModel = model
+                    let capturedProvider = providerManager
+                    Task { [weak self] in
+                        guard let self else { return }
+                        let summary = await self.providerRouter.summarizeThinking(
+                            thinkingText: capturedThinking,
+                            model: capturedModel,
+                            providerManager: capturedProvider
+                        )
+                        if let s = summary { self.thinkingSummary = s }
+                    }
                 }
                 streamingText += token
                 assistantNode.content = streamingText
@@ -1517,6 +1532,7 @@ final class ConversationViewModel {
         streamingText = ""
         streamingThinkingText = ""
         isThinking = false
+        thinkingSummary = ""
 
         // Assemble prompt
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
@@ -1542,6 +1558,18 @@ final class ConversationViewModel {
                 if isThinking {
                     isThinking = false
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    let capturedThinking = streamingThinkingText
+                    let capturedModel = model
+                    let capturedProvider = providerManager
+                    Task { [weak self] in
+                        guard let self else { return }
+                        let summary = await self.providerRouter.summarizeThinking(
+                            thinkingText: capturedThinking,
+                            model: capturedModel,
+                            providerManager: capturedProvider
+                        )
+                        if let s = summary { self.thinkingSummary = s }
+                    }
                 }
                 streamingText += token
                 newNode.content = streamingText
@@ -1643,6 +1671,7 @@ final class ConversationViewModel {
         streamingText = ""
         streamingThinkingText = ""
         isThinking = false
+        thinkingSummary = ""
 
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
@@ -1667,6 +1696,18 @@ final class ConversationViewModel {
                 if isThinking {
                     isThinking = false
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    let capturedThinking = streamingThinkingText
+                    let capturedModel = model
+                    let capturedProvider = providerManager
+                    Task { [weak self] in
+                        guard let self else { return }
+                        let summary = await self.providerRouter.summarizeThinking(
+                            thinkingText: capturedThinking,
+                            model: capturedModel,
+                            providerManager: capturedProvider
+                        )
+                        if let s = summary { self.thinkingSummary = s }
+                    }
                 }
                 streamingText += token
                 newAssistantNode.content = streamingText
