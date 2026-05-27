@@ -40,6 +40,9 @@ struct ContentView: View {
     @State private var iOSPage: Int = 1
     // iOSPageDragOffset removed — ScrollView handles drag natively
     @State private var isSidebarVisible = true
+    /// Claude App 风格：侧边栏以 overlay 方式弹出，不再是 UIKit paging 的 page 0
+    @State private var isSidebarOpen: Bool = false
+    private let sidebarAnimation = Animation.spring(response: 0.35, dampingFraction: 0.85)
     @State private var isRightPanelVisible = false
     @State private var selectedToolId: String = "memory"
     @State private var stickerVM = StickerViewModel()
@@ -237,15 +240,11 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - iOS Three-Screen Layout (ScrollView horizontal paging)
+    // MARK: - iOS Layout：聊天+右栏 paging + Claude App 风格侧边栏 overlay
     private var iOSLayout: some View {
         let manager = themeManager ?? ThemeManager.shared
         let scheme = manager.activeScheme
         let style = manager.currentBackgroundStyle
-        // Wallpaper 走 UIKit 层（PagingViewController.view 底层 UIImageView + CAGradientLayer），
-        // 不用 SwiftUI `.background`——A10 实测 SwiftUI .background content frame 响应
-        // keyboard safeArea 等比放大 13%，导致"背景跟着键盘动"。
-        // 见 docs/research-wallpaper-uikit-layer.md + docs/plan-wallpaper-uikit-layer.md。
         let wallpaperConfig = WallpaperConfig(
             fill: Theme.mainBg,
             imageURL: manager.currentBackgroundImageURL,
@@ -255,29 +254,72 @@ struct ContentView: View {
             offsetY: style.resolvedOffsetY,
             gradientColors: wallpaperGradientColors(for: scheme)
         )
-        // 路线 B 下 container 不变，外层 App.body 的 .id(profile.id) 已经保证 profile
-        // 切换时整棵 ContentView re-init，PagingContainerView 自动跟着新建。不需要这里
-        // 额外 .id() hack。
-        return PagingContainerView(
-            listPage: AnyView(injectPagingEnv(iOSListPage)),
-            chatPage: AnyView(injectPagingEnv(iOSChatPage)),
-            dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
-            currentPage: $iOSPage,
-            disableScroll: stickerVM.isEditingStickers,
-            initialPage: 1,
-            wallpaper: wallpaperConfig,
-            // B2 窄版：流式期间 skip updatePages。读 isStreaming 会让 ContentView.body
-            // 在流式开始/结束各重算一次（边界时刻触发更新 rootView），非流式期间无成本。
-            isStreaming: viewModel.providerRouter.isStreaming
-        )
+
+        return GeometryReader { geo in
+            let sidebarWidth = geo.size.width * 4 / 5
+
+            ZStack(alignment: .topLeading) {
+                // ── 1. 主内容区：chat (page 1) + dashboard (page 2) ──────────────
+                // page 0 改为透明占位（侧边栏已改为 overlay，不再是 paging page）
+                PagingContainerView(
+                    listPage: AnyView(Color.clear.ignoresSafeArea()),
+                    chatPage: AnyView(injectPagingEnv(iOSChatPage)),
+                    dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
+                    currentPage: $iOSPage,
+                    disableScroll: stickerVM.isEditingStickers,
+                    initialPage: 1,
+                    wallpaper: wallpaperConfig,
+                    isStreaming: viewModel.providerRouter.isStreaming
+                )
+                .ignoresSafeArea()
+                // 视觉上随侧边栏打开往右推移（UIKit 触控区域不随 offset 动，
+                // 靠 allowsHitTesting(false) 在侧边栏打开期间屏蔽命中）
+                .offset(x: isSidebarOpen ? sidebarWidth : 0)
+                .allowsHitTesting(!isSidebarOpen)
+                .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
+
+                // ── 2. 半透明遮罩（侧边栏打开时盖在聊天区右侧 1/5）────────────
+                if isSidebarOpen {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .offset(x: sidebarWidth)
+                        .allowsHitTesting(true)
+                        .onTapGesture {
+                            withAnimation(sidebarAnimation) { isSidebarOpen = false }
+                        }
+                        .gesture(
+                            DragGesture(minimumDistance: 30)
+                                .onEnded { v in
+                                    if v.translation.width < -30 {
+                                        withAnimation(sidebarAnimation) { isSidebarOpen = false }
+                                    }
+                                }
+                        )
+                }
+
+                // ── 3. 侧边栏 overlay（从左滑入）────────────────────────────────
+                iOSListPage
+                    .frame(width: sidebarWidth)
+                    .offset(x: isSidebarOpen ? 0 : -sidebarWidth)
+                    .shadow(color: Color.black.opacity(0.15), radius: 16, x: 4, y: 0)
+            }
+            .animation(sidebarAnimation, value: isSidebarOpen)
+        }
         .ignoresSafeArea()
-        .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
         .onChange(of: iOSPage) { oldPage, newPage in
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            // 从聊天页切回 sidebar 时立刻 flush 挂起的重排 → 用户几乎看不到 3s 等待
-            if oldPage == 1 && newPage == 0 {
-                viewModel.flushPendingRefresh()
+            // page 0 被滑到时：拦截回 page 1，改为打开侧边栏 overlay
+            if newPage == 0 {
+                DispatchQueue.main.async {
+                    iOSPage = 1
+                    withAnimation(sidebarAnimation) { isSidebarOpen = true }
+                }
             }
+        }
+        .onChange(of: isSidebarOpen) { _, open in
+            // 从聊天切到侧边栏时立刻 flush 挂起的重排
+            if open { viewModel.flushPendingRefresh() }
         }
         .onChange(of: stickerVM.isEditingStickers) { _, editing in
             setStickerEditScrollLock(editing)
@@ -287,28 +329,24 @@ struct ContentView: View {
         }
         .onAppear {
             viewModel.globalWorldBookEntries = (globalWBManager?.enabledBooks ?? []).flatMap { $0.entries }
-            // 没有对话时自动创建第一条（让用户启动即可聊天，跳过导入引导）
             autoCreateFirstConversationIfNeeded()
         }
         .onChange(of: viewModel.selectedConversation?.id) { _, newId in
-            if newId != nil && iOSPage == 0 {
-                withAnimation { iOSPage = 1 }
+            if newId != nil {
+                withAnimation(sidebarAnimation) { isSidebarOpen = false }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .conversationNavigationRequested)) { _ in
-            // B20 part 2: 同 conv 内点搜索结果时 selectedConversation?.id 不变，
-            // 上面那条 onChange 不触发，靠这条通知补 page 切换。
-            if iOSPage != 1 {
-                withAnimation { iOSPage = 1 }
-            }
+            if iOSPage != 1 { withAnimation { iOSPage = 1 } }
+            withAnimation(sidebarAnimation) { isSidebarOpen = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .notificationNavigationRequested)) { notification in
-            // Phase 3.1: 用户点击本地通知后路由到对应对话
             guard let convId = notification.userInfo?["conversationId"] as? String else { return }
             let descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == convId })
             if let conv = try? modelContext.fetch(descriptor).first {
                 viewModel.selectedConversation = conv
                 withAnimation { iOSPage = 1 }
+                withAnimation(sidebarAnimation) { isSidebarOpen = false }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -357,9 +395,10 @@ struct ContentView: View {
 
     // MARK: - iOS Page indicator (debug-mode aware)
 
+    /// 页面指示点：侧边栏已改为 overlay，只显示 chat(1) / dashboard(2) 两个点
     private var pageIndicatorDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<3) { i in
+            ForEach(1..<3) { i in
                 Circle()
                     .fill(iOSPage == i ? Theme.branchIndicator : Theme.textMuted.opacity(0.3))
                     .frame(width: 6, height: 6)
@@ -398,11 +437,11 @@ struct ContentView: View {
     private var iOSChatTopBar: some View {
         return ZStack(alignment: .top) {
             HStack(spacing: 8) {
-                // 左箭头 → page 0（对话列表）
+                // 侧边栏按钮 → 打开 overlay 侧边栏
                 Button {
-                    withAnimation { iOSPage = 0 }
+                    withAnimation(sidebarAnimation) { isSidebarOpen = true }
                 } label: {
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "sidebar.leading")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Theme.textSecondary)
                         .frame(width: 44, height: 44)
@@ -538,6 +577,7 @@ struct ContentView: View {
         }
     }
 
+    /// 侧边栏内容（overlay 版）：带背景色，整屏高度
     private var iOSListPage: some View {
         SidebarView(
             searchText: $searchText,
@@ -549,6 +589,7 @@ struct ContentView: View {
             profileId: profileManager?.currentProfile.id ?? ""
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Theme.sidebarBg.ignoresSafeArea())
     }
 
     private var iOSChatPage: some View {
