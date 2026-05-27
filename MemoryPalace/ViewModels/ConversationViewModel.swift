@@ -1311,9 +1311,9 @@ final class ConversationViewModel {
             onToken: { [weak self] token in
                 guard let self else { return }
                 if isThinking {
-                    // 思考结束、正文开始——切换状态并触发震动，异步生成一句话总结
+                    // 思考结束、正文开始——6c: success 通知震（转折感），并异步生成一句话总结
                     isThinking = false
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     let capturedThinking = streamingThinkingText
                     let capturedModel = model
                     let capturedProvider = providerManager
