@@ -260,49 +260,48 @@ struct ContentView: View {
         return GeometryReader { geo in
             // 侧边栏宽度 = 屏宽 80%
             let sidebarWidth = geo.size.width * 0.8
-
-            // 当前已打开量（0 = 完全关闭，sidebarWidth = 完全打开）
-            let baseOpen: CGFloat = isSidebarOpen ? sidebarWidth : 0
-            let openAmount = max(0, min(sidebarWidth, baseOpen + sidebarLiveDrag))
+            // 聊天界面最大右移距离 = 屏宽 78%
+            let fullSlide: CGFloat = geo.size.width * 0.78
+            // 当前聊天偏移（实时跟手）
+            let targetOffset: CGFloat = isSidebarOpen ? fullSlide : 0
+            let chatOffset = max(0, min(fullSlide, targetOffset + sidebarLiveDrag))
             // 插值比例 0…1
-            let ratio = sidebarWidth > 0 ? openAmount / sidebarWidth : 0
+            let progress = fullSlide > 0 ? chatOffset / fullSlide : 0
 
-            ZStack(alignment: .topLeading) {
-                // ── 1. 主内容区：缩小 + 圆角 + 右移（Claude App 景深效果）──────
-                PagingContainerView(
-                    listPage: AnyView(Color.clear.ignoresSafeArea()),
-                    chatPage: AnyView(injectPagingEnv(iOSChatPage)),
-                    dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
-                    currentPage: $iOSPage,
-                    disableScroll: stickerVM.isEditingStickers,
-                    initialPage: 1,
-                    wallpaper: wallpaperConfig,
-                    isStreaming: viewModel.providerRouter.isStreaming
-                )
-                .ignoresSafeArea()
-                // 核心视觉：缩小 + 圆角 + 右移，三者同步随 ratio 插值
-                .clipShape(RoundedRectangle(cornerRadius: 30 * ratio))
-                .scaleEffect(1.0 - 0.08 * ratio)
-                .offset(x: geo.size.width * 0.78 * ratio)
-                .allowsHitTesting(ratio < 0.1)
-                .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
-
-                // ── 2. 全屏半透明遮罩（opacity 随 ratio 淡入）─────────────────
-                Color.black.opacity(0.30 * ratio)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(ratio > 0.3)
-                    .onTapGesture {
-                        withAnimation(sidebarAnimation) { isSidebarOpen = false }
-                    }
-
-                // ── 3. 侧边栏（始终存在，通过 offset 控制可见性）──────────────
-                // offset = openAmount - sidebarWidth：
-                //   关闭(openAmount=0)  → -sidebarWidth（屏外）
-                //   打开(openAmount=sw) → 0（贴左边缘）
+            ZStack(alignment: .leading) {
+                // ── 底层：侧边栏（永远在这里，永远不动，不需要任何 offset/animation）──
                 iOSListPage
                     .frame(width: sidebarWidth)
-                    .offset(x: openAmount - sidebarWidth)
-                    .shadow(color: .black.opacity(0.18 * ratio), radius: 20, x: 6, y: 0)
+
+                // ── 上层：聊天界面（盖在侧边栏上面，向右推开露出侧边栏）──────────────
+                ZStack {
+                    PagingContainerView(
+                        listPage: AnyView(Color.clear.ignoresSafeArea()),
+                        chatPage: AnyView(injectPagingEnv(iOSChatPage)),
+                        dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
+                        currentPage: $iOSPage,
+                        disableScroll: stickerVM.isEditingStickers,
+                        initialPage: 1,
+                        wallpaper: wallpaperConfig,
+                        isStreaming: viewModel.providerRouter.isStreaming
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(progress < 0.1)
+                    .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
+
+                    // 聊天遮罩：侧边栏开时提示聊天区不可交互，点击关闭侧边栏
+                    Color.black.opacity(0.28 * progress)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(progress > 0.3)
+                        .onTapGesture {
+                            withAnimation(sidebarAnimation) { isSidebarOpen = false }
+                        }
+                }
+                // 核心视觉：缩小 + 圆角 + 右移，三者同步随 progress 插值
+                .clipShape(RoundedRectangle(cornerRadius: 30 * progress))
+                .scaleEffect(1.0 - 0.08 * progress)
+                .offset(x: chatOffset)
+                .shadow(color: .black.opacity(0.18 * progress), radius: 20, x: -6, y: 0)
             }
             // spring 动画仅在 boolean 跳变时触发（手势跟手期间不添加动画）
             .animation(sidebarAnimation, value: isSidebarOpen)
