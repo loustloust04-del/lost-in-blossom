@@ -31,6 +31,7 @@ struct CardFlowView: View {
         // 思考链流式状态（只传给正在流式输出的那个节点）
         let isThinkingNow = isNodeStreaming && viewModel.isThinking
         let streamingThinkingForNode = isNodeStreaming ? viewModel.streamingThinkingText : ""
+        let thinkingSummaryForNode = isNodeStreaming ? viewModel.thinkingSummary : ""
         BubbleView(
             node: node,
             hasBranches: info != nil,
@@ -38,6 +39,7 @@ struct CardFlowView: View {
             isStreaming: isNodeStreaming,
             isThinking: isThinkingNow,
             streamingThinkingText: streamingThinkingForNode,
+            thinkingSummary: thinkingSummaryForNode,
             isHighlighted: isNodeHighlighted,
             isSearchMatch: isNodeSearchMatch,
             onToggleFavorite: { viewModel.toggleFavorite(node) },
@@ -1015,6 +1017,8 @@ struct BubbleView: View {
     var isThinking: Bool = false
     /// Live reasoning tokens from ViewModel — only populated for the currently streaming node
     var streamingThinkingText: String = ""
+    /// One-sentence summary generated after thinking phase ends; empty until summary arrives
+    var thinkingSummary: String = ""
     var isHighlighted: Bool = false
     var isSearchMatch: Bool = false
     let onToggleFavorite: () -> Void
@@ -1147,7 +1151,9 @@ struct BubbleView: View {
                     let hasThinkingContent = liveThinking || !staticThinking.isEmpty
                     if hasThinkingContent {
                         let displayThinking = liveThinking ? streamingThinkingText : staticThinking
-                        let previewStr = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
+                        // 预览优先级：总结 > 原文前40字
+                        let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
+                        let previewStr = thinkingSummary.isEmpty ? rawPreview : thinkingSummary
                         Button {
                             showThinkingPanel = true
                         } label: {
