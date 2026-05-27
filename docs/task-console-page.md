@@ -58,3 +58,52 @@ UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
 ---
 每项改完 commit 一次。
+
+## 思考链震动反馈（Thinking Haptic Pulse）
+
+仿照 Claude 官方 App 的触觉交互设计，在流式响应的三个阶段加入不同的震动：
+
+### 阶段一：思考中（Reasoning Phase）
+- 触发条件：正在接收 `reasoning_content`（思考链）
+- 震动类型：`UIImpactFeedbackGenerator(style: .light)` 或 `.soft`
+- 频率：每 2.5 秒一次
+- 感觉：像脉搏，一下一下，告诉用户"AI 还在想"
+- 实现：在 SSE 流处理中，维护一个 `lastThinkingHapticTime`，每收到 thinking chunk 时检查间隔
+
+```swift
+if isReceivingThinking {
+    let now = Date()
+    if now.timeIntervalSince(lastThinkingHapticTime) > 2.5 {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lastThinkingHapticTime = now
+    }
+}
+```
+
+### 阶段二：思考结束 → 回复开始（Transition）
+- 触发条件：reasoning_content 停止，content 开始流入
+- 震动类型：`UINotificationFeedbackGenerator().notificationOccurred(.success)`
+- 感觉：两下轻快的，节奏跟之前不同，"想好了，开始说了"
+- 实现：检测 `wasReceivingThinking && nowReceivingContent` 的切换点
+
+```swift
+if wasThinking && !currentChunkIsThinking {
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
+    wasThinking = false
+}
+```
+
+### 阶段三：回复完成（Completion）
+- 触发条件：收到 `[DONE]` 标记
+- 震动类型：`UIImpactFeedbackGenerator(style: .medium)`
+- 感觉：干脆的一下，"说完了"
+
+```swift
+// 在 [DONE] handler 里
+UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+```
+
+### 注意事项
+- 只在 App 在前台时触发（`UIApplication.shared.applicationState == .active`）
+- 提供设置开关让用户关闭震动
+- 非思考模型（如 deepseek-chat）没有阶段一，只有阶段三
