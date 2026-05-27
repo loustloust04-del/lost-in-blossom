@@ -84,6 +84,7 @@ struct SidebarView: View {
     @State private var currentMatchIndex: Int = -1
     @State private var showSortPopover = false
     @State private var showProjectsPage = false
+    @State private var showAllChats = false
     @AppStorage("exportMode") private var exportMode = "lightweight"
     @AppStorage("userName") private var userName = "你"
     @AppStorage("assistantName") private var assistantName = "助手"
@@ -369,7 +370,9 @@ struct SidebarView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             Color.clear.frame(height: 4)
-                            ForEach(conversations, id: \.id) { conversation in
+                            let displayedConversations = showAllChats ? conversations : Array(conversations.prefix(8))
+                            let hasMoreChats = !showAllChats && totalCount > 8
+                            ForEach(displayedConversations, id: \.id) { conversation in
                                 if renamingConversationId == conversation.id {
                                     TextField("对话名称", text: $renameText)
                                         .textFieldStyle(.plain)
@@ -462,10 +465,37 @@ struct SidebarView: View {
                                         }
                                     }
                                 }
-                                if conversation.id == conversations.last?.id {
+                                if showAllChats && conversation.id == conversations.last?.id {
                                     Color.clear.frame(height: 0)
                                         .onAppear { loadMore() }
                                 }
+                            }
+
+                            // "All Chats ›" footer — 仅在超过 8 条时显示
+                            if hasMoreChats {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showAllChats = true
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text("All Chats")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(Theme.textMuted)
+                                        Spacer()
+                                        Text("\(totalCount)")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Theme.textMuted.opacity(0.7))
+                                            .monospacedDigit()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 11)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
                             }
 
                             // Favorited individual bubbles section
@@ -697,6 +727,7 @@ struct SidebarView: View {
             renamingConversationId = nil
             selectedTagId = nil
             searchText = ""
+            showAllChats = false
         }
         .onChange(of: searchText) { _, newValue in
             if newValue.isEmpty { clearSearch() }
