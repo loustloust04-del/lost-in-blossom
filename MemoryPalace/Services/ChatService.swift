@@ -829,6 +829,27 @@ final class ProviderRouter {
         )
     }
 
+    /// 思考完成后，用当前 provider 异步生成一句话总结（不阻塞正文流式）
+    /// - Returns: 总结文本，失败时返回 nil
+    func summarizeThinking(
+        thinkingText: String,
+        model: ProviderModel,
+        providerManager: ProviderManager
+    ) async -> String? {
+        guard !thinkingText.isEmpty else { return nil }
+        let truncated = String(thinkingText.prefix(1500))
+        let prompt = "请用一句话（不超过20字）概括以下AI的思考过程：\n\n\(truncated)"
+        let messages: [(role: String, content: String)] = [(role: "user", content: prompt)]
+        guard let result = try? await sendNonStreaming(
+            model: model,
+            messages: messages,
+            systemPrompt: nil,
+            providerManager: providerManager
+        ) else { return nil }
+        let summary = result.0.trimmingCharacters(in: .whitespacesAndNewlines)
+        return summary.isEmpty ? nil : summary
+    }
+
     func cancel() {
         openAIProvider.cancel()
         anthropicProvider.cancel()
