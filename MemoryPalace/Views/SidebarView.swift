@@ -681,7 +681,7 @@ struct SidebarView: View {
                                 .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundColor(.white)
-                        .frame(width: geo.size.width * 0.6, height: 50)
+                        .frame(width: geo.size.width * 0.5, height: 44)
                         .background(
                             Capsule()
                                 .fill(Color.black)
@@ -690,7 +690,7 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
                 }
-                .frame(height: 50)
+                .frame(height: 44)
                 .padding(.bottom, 24)
                 .padding(.top, 4)
             }
