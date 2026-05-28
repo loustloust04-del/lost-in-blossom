@@ -2581,13 +2581,6 @@ private struct SidebarCardShape: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(Theme.mainBg)
-            .clipShape(UnevenRoundedRectangle(
-                topLeadingRadius: topLeadingRadius,
-                bottomLeadingRadius: 16,
-                bottomTrailingRadius: 16,
-                topTrailingRadius: 16
-            ))
             .padding(.horizontal, horizontalPadding)
     }
 
