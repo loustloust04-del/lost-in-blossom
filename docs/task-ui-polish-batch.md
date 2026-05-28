@@ -113,3 +113,29 @@
 
 注意：每项单独 commit，commit message 格式 `fix(ui): 简短描述`。
 做完一项测试没有编译错误再做下一项。
+
+---
+
+## 9. 震动反馈测试页 + 重新校准
+
+### 9a. 在设置页加一个"震动测试"入口
+点进去后显示所有 iOS 触觉类型的按钮，点击即触发对应震动：
+
+```
+Impact: light | medium | heavy | soft | rigid
+Notification: success | warning | error
+Selection: selectionChanged
+```
+
+每个按钮点击后触发对应的震动，让用户感受并对照。
+
+### 9b. 重新校准聊天震动
+
+根据用户反馈校准（暂定方案，后续可调）：
+- 发送消息 → `.soft`（轻柔确认）
+- 思考脉搏 → 删除（不需要思考过程中持续震）
+- 思考→回复转折 → `.rigid`（"按下去"的沉稳感）
+- 回复完成 → `.success`（"弹上来"的释放感）
+- 长按菜单 → `.medium`
+
+文件：`ChatService.swift` + 设置页
