@@ -19,6 +19,7 @@ struct AppearanceSettingsTab: View {
     @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
     @AppStorage("hideActionBar") private var hideActionBar: Bool = false
+    @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     // 负向 key：true = 关闭自动半透明。这样 key 缺省（false）= 行为保持原样。
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
@@ -132,6 +133,10 @@ struct AppearanceSettingsTab: View {
                     Toggle("隐藏时间戳", isOn: $hideTimestamp)
                     Toggle("隐藏用户/助手名", isOn: $hideRoleName)
                     Toggle("隐藏消息下方按钮行", isOn: $hideActionBar)
+                    Toggle("助手消息气泡", isOn: Binding(
+                        get: { !hideAssistantBubble },
+                        set: { hideAssistantBubble = !$0 }
+                    ))
                     Toggle("壁纸下气泡自动半透明", isOn: Binding(
                         get: { !disableAutoTransparent },
                         set: { disableAutoTransparent = !$0; themeManager?.notifyThemeChange() }
@@ -281,6 +286,7 @@ struct IOSAppearancePage: View {
     @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
     @AppStorage("hideActionBar") private var hideActionBar: Bool = false
+    @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
     @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
@@ -391,6 +397,10 @@ struct IOSAppearancePage: View {
                     Toggle("隐藏时间戳", isOn: $hideTimestamp)
                     Toggle("隐藏用户/助手名", isOn: $hideRoleName)
                     Toggle("隐藏消息下方按钮行", isOn: $hideActionBar)
+                    Toggle("助手消息气泡", isOn: Binding(
+                        get: { !hideAssistantBubble },
+                        set: { hideAssistantBubble = !$0 }
+                    ))
                     Toggle("壁纸下气泡自动半透明", isOn: Binding(
                         get: { !disableAutoTransparent },
                         set: { disableAutoTransparent = !$0; themeManager?.notifyThemeChange() }

@@ -1044,6 +1044,7 @@ struct BubbleView: View {
     @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
     @AppStorage("hideActionBar") private var hideActionBar: Bool = true
+    @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
@@ -1226,7 +1227,7 @@ struct BubbleView: View {
             .padding(.vertical, bubblePaddingV)
             .background(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                    .fill(isUser ? Theme.userBubble : Theme.assistantBubble)
+                    .fill(isUser ? Theme.userBubble : (hideAssistantBubble ? Color.clear : Theme.assistantBubble))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
