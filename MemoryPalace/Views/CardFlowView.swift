@@ -1043,7 +1043,7 @@ struct BubbleView: View {
     @AppStorage("paragraphSpacingScale") private var paragraphSpacingScale: Double = 1.65
     @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
-    @AppStorage("hideActionBar") private var hideActionBar: Bool = false
+    @AppStorage("hideActionBar") private var hideActionBar: Bool = true
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
@@ -1293,6 +1293,41 @@ struct BubbleView: View {
             }
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
+
+            // iOS action bar: copy / TTS / regenerate (controlled by hideActionBar setting)
+            if !hideActionBar {
+                HStack(spacing: 16) {
+                    // Copy
+                    Button {
+                        UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 13))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Regenerate (assistant only, not streaming)
+                    if !isUser, let onRegenerate, !isStreaming {
+                        Button(action: onRegenerate) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 13))
+                                .foregroundColor(Theme.textMuted)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Favorite
+                    Button(action: onToggleFavorite) {
+                        Image(systemName: node.isFavorite ? "star.fill" : "star")
+                            .font(.system(size: 13))
+                            .foregroundColor(node.isFavorite ? Theme.favorite : Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 4)
+                .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
