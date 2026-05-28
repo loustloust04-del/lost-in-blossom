@@ -65,6 +65,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
     /// V3 SwiftUI overlay 时灵时不灵 → V4 改 UIKit 层（codex 建议 + Apple docs hitTest D3 / safeAreaInsets D2）。
     private let homeIndicatorShield = HomeIndicatorHitShieldUIView()
     private var shieldHiddenByCaller: Bool = false   // 外部（PagingContainerView）显式 hide
+    private var edgePanGesture: UIScreenEdgePanGestureRecognizer?
 
     /// CIFilter 创建 GPU context 有开销，共享一个全局实例。
     /// xcdoc: /documentation/CoreImage/CIFilter-swift.class/colorControls()
@@ -133,6 +134,14 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
         let shieldLP = UILongPressGestureRecognizer(target: homeIndicatorShield, action: #selector(HomeIndicatorHitShieldUIView.absorbGesture))
         shieldLP.minimumPressDuration = 0.1
         homeIndicatorShield.addGestureRecognizer(shieldLP)
+
+        // Left-edge pan gesture to open sidebar — bypasses UIScrollView panGestureRecognizer
+        let edgePan = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleSidebarEdgePan(_:)))
+        edgePan.edges = .left
+        view.addGestureRecognizer(edgePan)
+        self.edgePanGesture = edgePan
+        // Prevent scrollView from stealing the edge-originated pan
+        scrollView.panGestureRecognizer.require(toFail: edgePan)
 
         // 键盘避让：嵌套 child HC 在 UIKit PagingViewController 下，SwiftUI 默认的
         // UIHostingController keyboard avoidance 机制失灵（实测 [PROBE kbd A/B] 无
@@ -209,6 +218,27 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
                 scrollView.setContentOffset(CGPoint(x: CGFloat(currentPage) * w, y: 0), animated: false)
             }
             lastLaidOutWidth = w
+        }
+    }
+
+    @objc private func handleSidebarEdgePan(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        let translation = gesture.translation(in: view).x
+        let velocity = gesture.velocity(in: view).x
+        switch gesture.state {
+        case .changed:
+            NotificationCenter.default.post(
+                name: .sidebarEdgePanChanged,
+                object: nil,
+                userInfo: ["translation": translation]
+            )
+        case .ended, .cancelled, .failed:
+            NotificationCenter.default.post(
+                name: .sidebarEdgePanEnded,
+                object: nil,
+                userInfo: ["translation": translation, "velocity": velocity]
+            )
+        default:
+            break
         }
     }
 
@@ -376,6 +406,12 @@ final class HomeIndicatorHitShieldUIView: UIView {
         return inside
     }
     @objc func absorbGesture() { /* 吃掉手势，不做任何事 */ }
+}
+
+// MARK: - Notification Names for Sidebar Edge Pan
+extension Notification.Name {
+    static let sidebarEdgePanChanged = Notification.Name("mp.sidebarEdgePanChanged")
+    static let sidebarEdgePanEnded = Notification.Name("mp.sidebarEdgePanEnded")
 }
 
 /// Wallpaper 显示配置。SwiftUI 侧构造，UIKit 侧应用。
