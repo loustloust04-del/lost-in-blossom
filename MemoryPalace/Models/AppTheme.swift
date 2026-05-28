@@ -173,7 +173,7 @@ struct ThemeTokenSet: Codable, Hashable {
 
     static let palaceLightDefault = ThemeTokenSet(
         mainBg: ThemeColorValue(hex: 0xFFFBF6),
-        sidebarBg: ThemeColorValue(hex: 0xF8F4EF),
+        sidebarBg: ThemeColorValue(hex: 0xF0EBE3),
         userBubble: ThemeColorValue(hex: 0xF8F4EF),
         assistantBubble: ThemeColorValue(hex: 0xF3F2EB),
         accent: ThemeColorValue(hex: 0xE7EEEC),

@@ -312,7 +312,7 @@ struct ContentView: View {
                     .updating($sidebarLiveDrag) { value, state, _ in
                         if !isSidebarOpen {
                             // 仅响应从左侧 28pt 边缘区域开始的右滑
-                            guard value.startLocation.x < 28 else { return }
+                            guard value.startLocation.x < 60 else { return }
                             state = max(0, value.translation.width)
                         } else {
                             // 侧边栏已打开：跟踪左滑关闭手势
@@ -321,7 +321,7 @@ struct ContentView: View {
                     }
                     .onEnded { value in
                         if !isSidebarOpen {
-                            guard value.startLocation.x < 28 else { return }
+                            guard value.startLocation.x < 60 else { return }
                             let shouldOpen = value.translation.width > sidebarWidth * 0.3
                                 || value.velocity.width > 500
                             withAnimation(sidebarAnimation) { isSidebarOpen = shouldOpen }
