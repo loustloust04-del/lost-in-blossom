@@ -61,7 +61,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
     /// frame 由 viewDidLayoutSubviews + viewSafeAreaInsetsDidChange 同步，高度 = min(window
     /// safeAreaInsets.bottom, 40)。挂 UIKit 层 + 用 window 的 safeAreaInsets（不取 chat HC 的
     /// 因为 chat HC additionalSafeAreaInsets 会被键盘改），命中链稳定不漂。
-    /// 可见性：currentPage == 1 (chat 页) && !disableScroll (非 sticker 编辑模式)。
+    /// 可见性：currentPage == 0 (chat 页) && !disableScroll (非 sticker 编辑模式)。
     /// V3 SwiftUI overlay 时灵时不灵 → V4 改 UIKit 层（codex 建议 + Apple docs hitTest D3 / safeAreaInsets D2）。
     private let homeIndicatorShield = HomeIndicatorHitShieldUIView()
     private var shieldHiddenByCaller: Bool = false   // 外部（PagingContainerView）显式 hide
@@ -126,7 +126,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
         // child HCs），UIKit 顶层命中。viewDidLayoutSubviews / viewSafeAreaInsetsDidChange 同步 frame。
         homeIndicatorShield.backgroundColor = .clear
         homeIndicatorShield.isUserInteractionEnabled = true
-        homeIndicatorShield.isHidden = (currentPage != 1) || shieldHiddenByCaller
+        homeIndicatorShield.isHidden = (currentPage != 0) || shieldHiddenByCaller
         view.addSubview(homeIndicatorShield)
         let shieldTap = UITapGestureRecognizer(target: homeIndicatorShield, action: #selector(HomeIndicatorHitShieldUIView.absorbGesture))
         homeIndicatorShield.addGestureRecognizer(shieldTap)
@@ -270,8 +270,8 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
 
     private func updateShieldVisibility() {
         guard isViewLoaded else { return }
-        // shield 仅在 chat 页（page 1）+ 非外部 hide 时可见
-        homeIndicatorShield.isHidden = (currentPage != 1) || shieldHiddenByCaller
+        // shield 仅在 chat 页（page 0）+ 非外部 hide 时可见
+        homeIndicatorShield.isHidden = (currentPage != 0) || shieldHiddenByCaller
         view.bringSubviewToFront(homeIndicatorShield)
         #if DEBUG
         PROBE("[PROBE shield] updateShieldVisibility currentPage=\(currentPage) shieldHiddenByCaller=\(shieldHiddenByCaller) → isHidden=\(homeIndicatorShield.isHidden)")

@@ -35,9 +35,9 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
     @State private var showTrash = false
-    // 当前 iOS page：0=list, 1=chat, 2=more。@State 与 PagingContainerView.currentPage binding，
+    // 当前 iOS page：0=chat, 1=dashboard。侧边栏走 ZStack overlay 不再是 paging page。@State 与 PagingContainerView.currentPage binding，
     // UIKit UIScrollView paging 完成后通过 binding 回写。
-    @State private var iOSPage: Int = 1
+    @State private var iOSPage: Int = 0
     // iOSPageDragOffset removed — ScrollView handles drag natively
     @State private var isSidebarVisible = true
     /// Claude App 风格：侧边栏以 overlay 方式弹出，不再是 UIKit paging 的 page 0
@@ -181,7 +181,7 @@ struct ContentView: View {
             guard let t = target else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedToolId = t.tool
-                iOSPage = 2
+                iOSPage = 1
             }
         }
         .transaction { tx in
@@ -276,12 +276,11 @@ struct ContentView: View {
                 // ── 上层：聊天界面（盖在侧边栏上面，向右推开露出侧边栏）──────────────
                 ZStack {
                     PagingContainerView(
-                        listPage: AnyView(Color(UIColor.systemBackground).ignoresSafeArea()),
                         chatPage: AnyView(injectPagingEnv(iOSChatPage)),
                         dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
                         currentPage: $iOSPage,
                         disableScroll: stickerVM.isEditingStickers,
-                        initialPage: 1,
+                        initialPage: 0,
                         wallpaper: wallpaperConfig,
                         isStreaming: viewModel.providerRouter.isStreaming
                     )
@@ -338,13 +337,7 @@ struct ContentView: View {
         .ignoresSafeArea()
         .onChange(of: iOSPage) { oldPage, newPage in
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            // page 0 被滑到时：拦截回 page 1，改为打开侧边栏 overlay
-            if newPage == 0 {
-                DispatchQueue.main.async {
-                    iOSPage = 1
-                    withAnimation(sidebarAnimation) { isSidebarOpen = true }
-                }
-            }
+            // page 0 = chat, page 1 = dashboard (sidebar is ZStack overlay, not a paging page)
         }
         .onChange(of: isSidebarOpen) { _, open in
             // 从聊天切到侧边栏时立刻 flush 挂起的重排
@@ -366,7 +359,7 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .conversationNavigationRequested)) { _ in
-            if iOSPage != 1 { withAnimation { iOSPage = 1 } }
+            if iOSPage != 0 { withAnimation { iOSPage = 0 } }
             withAnimation(sidebarAnimation) { isSidebarOpen = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .notificationNavigationRequested)) { notification in
@@ -374,7 +367,7 @@ struct ContentView: View {
             let descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == convId })
             if let conv = try? modelContext.fetch(descriptor).first {
                 viewModel.selectedConversation = conv
-                withAnimation { iOSPage = 1 }
+                withAnimation { iOSPage = 0 }
                 withAnimation(sidebarAnimation) { isSidebarOpen = false }
             }
         }
@@ -427,7 +420,7 @@ struct ContentView: View {
     /// 页面指示点：侧边栏已改为 overlay，只显示 chat(1) / dashboard(2) 两个点
     private var pageIndicatorDots: some View {
         HStack(spacing: 6) {
-            ForEach(1..<3) { i in
+            ForEach(0..<2) { i in
                 Circle()
                     .fill(iOSPage == i ? Theme.branchIndicator : Theme.textMuted.opacity(0.3))
                     .frame(width: 6, height: 6)
@@ -557,7 +550,7 @@ struct ContentView: View {
                     }
 
                     Button {
-                        withAnimation { iOSPage = 2 }
+                        withAnimation { iOSPage = 1 }
                     } label: {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 15, weight: .semibold))

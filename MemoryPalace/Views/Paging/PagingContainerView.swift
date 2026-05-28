@@ -17,7 +17,6 @@ import SwiftUI
 /// themeManager / globalWBManager / modelContext 由外层 ContentView.injectPagingEnv 注入
 /// 后作为 `*Page: AnyView` 传入，这里再叠加 3 个 Manager 的注入。
 struct PagingContainerView: UIViewControllerRepresentable {
-    let listPage: AnyView
     let chatPage: AnyView
     let dashPage: AnyView
     @Binding var currentPage: Int
@@ -53,7 +52,6 @@ struct PagingContainerView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> PagingViewController {
         let vc = PagingViewController(
             pages: [
-                AnyView(injectChatManagers(listPage)),
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage))
             ],
@@ -76,7 +74,6 @@ struct PagingContainerView: UIViewControllerRepresentable {
         // 证伪（贴纸 stale / 切对话 stale / 切楼层 race）后的保守版。
         if !isStreaming {
             vc.updatePages([
-                AnyView(injectChatManagers(listPage)),
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage))
             ])
