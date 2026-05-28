@@ -103,9 +103,14 @@ struct SidebarView: View {
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
                 Button { showSettings = true } label: {
-                    Circle()
-                        .fill(Color(red: 232/255.0, green: 224/255.0, blue: 212/255.0))
-                        .frame(width: 32, height: 32)
+                    ZStack {
+                        Circle()
+                            .fill(Color(UIColor.secondarySystemFill))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                    }
                 }
                 .buttonStyle(.plain)
             }
