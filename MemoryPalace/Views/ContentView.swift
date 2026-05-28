@@ -276,7 +276,7 @@ struct ContentView: View {
                 // ── 上层：聊天界面（盖在侧边栏上面，向右推开露出侧边栏）──────────────
                 ZStack {
                     PagingContainerView(
-                        listPage: AnyView(Color.clear.ignoresSafeArea()),
+                        listPage: AnyView(Color(UIColor.systemBackground).ignoresSafeArea()),
                         chatPage: AnyView(injectPagingEnv(iOSChatPage)),
                         dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
                         currentPage: $iOSPage,
@@ -297,6 +297,7 @@ struct ContentView: View {
                             withAnimation(sidebarAnimation) { isSidebarOpen = false }
                         }
                 }
+                .background(Color(UIColor.systemBackground))
                 // 核心视觉：缩小 + 圆角 + 右移，三者同步随 progress 插值
                 .clipShape(RoundedRectangle(cornerRadius: 30 * progress))
                 .scaleEffect(1.0 - 0.08 * progress)
