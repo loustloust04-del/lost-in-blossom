@@ -28,6 +28,7 @@ struct SettingsView: View {
         case appearance = "外观"
         case theme = "主题"
         case debug = "开发调试"
+        case hapticTest = "震动测试"
     }
 
     private var manager: ThemeManager {
@@ -63,6 +64,7 @@ struct SettingsView: View {
                 }
                 Section {
                     settingsButton(icon: "ladybug", title: "开发调试", color: Theme.textSecondary, tab: .debug)
+                    settingsButton(icon: "waveform", title: "震动测试", color: Theme.textSecondary, tab: .hapticTest)
                 }
             }
             .listStyle(.insetGrouped)
@@ -86,6 +88,7 @@ struct SettingsView: View {
                 case .data: DataSettingsTab()
                 case .notifications: IOSNotificationPage()
                 case .debug: IOSDebugPage()
+                case .hapticTest: HapticTestView()
                 }
             }
             .toolbar {
