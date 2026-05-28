@@ -1045,6 +1045,7 @@ struct BubbleView: View {
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
     @AppStorage("hideActionBar") private var hideActionBar: Bool = true
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
+    @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
@@ -1150,11 +1151,16 @@ struct BubbleView: View {
                     let liveThinking = isStreaming && !streamingThinkingText.isEmpty
                     let staticThinking = thinkingResult?.thinking ?? ""
                     let hasThinkingContent = liveThinking || !staticThinking.isEmpty
-                    if hasThinkingContent {
+                    if hasThinkingContent && thinkingPreviewMode != "hidden" {
                         let displayThinking = liveThinking ? streamingThinkingText : staticThinking
-                        // 预览优先级：总结 > 原文前40字
                         let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
-                        let previewStr = thinkingSummary.isEmpty ? rawPreview : thinkingSummary
+                        let previewStr: String
+                        switch thinkingPreviewMode {
+                        case "prefix":
+                            previewStr = rawPreview
+                        default: // "summary"
+                            previewStr = thinkingSummary.isEmpty ? rawPreview : thinkingSummary
+                        }
                         Button {
                             showThinkingPanel = true
                         } label: {

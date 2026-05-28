@@ -20,6 +20,7 @@ struct AppearanceSettingsTab: View {
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
     @AppStorage("hideActionBar") private var hideActionBar: Bool = false
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
+    @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     // 负向 key：true = 关闭自动半透明。这样 key 缺省（false）= 行为保持原样。
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
@@ -203,6 +204,19 @@ struct AppearanceSettingsTab: View {
                     Slider(value: $blurRadius, in: 0...6, step: 1)
                         .tint(Theme.branchIndicator)
                 }
+
+                // Thinking preview mode
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("思考链预览方式")
+                        .font(.system(size: Theme.SettingsFont.label))
+                        .foregroundColor(Theme.textPrimary)
+                    Picker("", selection: $thinkingPreviewMode) {
+                        Text("小模型总结").tag("summary")
+                        Text("截取前文").tag("prefix")
+                        Text("关闭").tag("hidden")
+                    }
+                    .pickerStyle(.segmented)
+                }
             }
         }
         .onAppear {
@@ -287,6 +301,7 @@ struct IOSAppearancePage: View {
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
     @AppStorage("hideActionBar") private var hideActionBar: Bool = false
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
+    @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
     @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
@@ -455,6 +470,17 @@ struct IOSAppearancePage: View {
                 }
                 Slider(value: $blurRadius, in: 0...6, step: 1)
                     .tint(Theme.branchIndicator)
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+
+            Section("思考链预览方式") {
+                Picker("", selection: $thinkingPreviewMode) {
+                    Text("小模型总结").tag("summary")
+                    Text("截取前文").tag("prefix")
+                    Text("关闭").tag("hidden")
+                }
+                .pickerStyle(.segmented)
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
