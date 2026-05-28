@@ -62,6 +62,7 @@ struct SidebarView: View {
     }
     @State private var conversations: [Conversation] = []
     @State private var totalCount: Int = 0
+    @State private var lastNavTapTime: Date = .distantPast
     @State private var isLoadingMore = false
     @State private var showNewTagSheet = false
     @State private var selectedTagId: String? = nil
@@ -184,8 +185,8 @@ struct SidebarView: View {
                     title: "Chats",
                     isSelected: !showProjectsPage
                 ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showProjectsPage = false
+                    debouncedNavAction {
+                        withAnimation(.easeInOut(duration: 0.2)) { showProjectsPage = false }
                     }
                 }
                 sidebarNavEntry(
@@ -193,8 +194,8 @@ struct SidebarView: View {
                     title: "Projects",
                     isSelected: showProjectsPage
                 ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showProjectsPage = true
+                    debouncedNavAction {
+                        withAnimation(.easeInOut(duration: 0.2)) { showProjectsPage = true }
                     }
                 }
             }
@@ -906,6 +907,13 @@ struct SidebarView: View {
         var result: [SidebarTab] = [.all, .favorites, .trash]
         result.append(contentsOf: tags.map { .tag(id: $0.id) })
         return result
+    }
+
+    private func debouncedNavAction(_ action: @escaping () -> Void) {
+        let now = Date()
+        guard now.timeIntervalSince(lastNavTapTime) > 0.3 else { return }
+        lastNavTapTime = now
+        action()
     }
 
     private func selectTab(_ tab: SidebarTab) {
