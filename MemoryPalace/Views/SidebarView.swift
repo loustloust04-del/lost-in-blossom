@@ -62,6 +62,7 @@ struct SidebarView: View {
     }
     @State private var conversations: [Conversation] = []
     @State private var totalCount: Int = 0
+    @State private var lastNavTapTime: Date = .distantPast
     @State private var isLoadingMore = false
     @State private var showNewTagSheet = false
     @State private var selectedTagId: String? = nil
@@ -103,9 +104,14 @@ struct SidebarView: View {
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
                 Button { showSettings = true } label: {
-                    Circle()
-                        .fill(Color(red: 232/255.0, green: 224/255.0, blue: 212/255.0))
-                        .frame(width: 32, height: 32)
+                    ZStack {
+                        Circle()
+                            .fill(Color(UIColor.secondarySystemFill))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                    }
                 }
                 .buttonStyle(.plain)
             }
@@ -179,8 +185,8 @@ struct SidebarView: View {
                     title: "Chats",
                     isSelected: !showProjectsPage
                 ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showProjectsPage = false
+                    debouncedNavAction {
+                        withAnimation(.easeInOut(duration: 0.2)) { showProjectsPage = false }
                     }
                 }
                 sidebarNavEntry(
@@ -188,8 +194,8 @@ struct SidebarView: View {
                     title: "Projects",
                     isSelected: showProjectsPage
                 ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showProjectsPage = true
+                    debouncedNavAction {
+                        withAnimation(.easeInOut(duration: 0.2)) { showProjectsPage = true }
                     }
                 }
             }
@@ -681,7 +687,7 @@ struct SidebarView: View {
                                 .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundColor(.white)
-                        .frame(width: geo.size.width * 0.6, height: 50)
+                        .frame(width: geo.size.width * 0.5, height: 44)
                         .background(
                             Capsule()
                                 .fill(Color.black)
@@ -690,7 +696,7 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
                 }
-                .frame(height: 50)
+                .frame(height: 44)
                 .padding(.bottom, 24)
                 .padding(.top, 4)
             }
@@ -901,6 +907,13 @@ struct SidebarView: View {
         var result: [SidebarTab] = [.all, .favorites, .trash]
         result.append(contentsOf: tags.map { .tag(id: $0.id) })
         return result
+    }
+
+    private func debouncedNavAction(_ action: @escaping () -> Void) {
+        let now = Date()
+        guard now.timeIntervalSince(lastNavTapTime) > 0.3 else { return }
+        lastNavTapTime = now
+        action()
     }
 
     private func selectTab(_ tab: SidebarTab) {
@@ -2581,13 +2594,6 @@ private struct SidebarCardShape: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(Theme.mainBg)
-            .clipShape(UnevenRoundedRectangle(
-                topLeadingRadius: topLeadingRadius,
-                bottomLeadingRadius: 16,
-                bottomTrailingRadius: 16,
-                topTrailingRadius: 16
-            ))
             .padding(.horizontal, horizontalPadding)
     }
 

@@ -1043,7 +1043,9 @@ struct BubbleView: View {
     @AppStorage("paragraphSpacingScale") private var paragraphSpacingScale: Double = 1.65
     @AppStorage("hideTimestamp") private var hideTimestamp: Bool = false
     @AppStorage("hideRoleName") private var hideRoleName: Bool = false
-    @AppStorage("hideActionBar") private var hideActionBar: Bool = false
+    @AppStorage("hideActionBar") private var hideActionBar: Bool = true
+    @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
+    @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
@@ -1149,11 +1151,16 @@ struct BubbleView: View {
                     let liveThinking = isStreaming && !streamingThinkingText.isEmpty
                     let staticThinking = thinkingResult?.thinking ?? ""
                     let hasThinkingContent = liveThinking || !staticThinking.isEmpty
-                    if hasThinkingContent {
+                    if hasThinkingContent && thinkingPreviewMode != "hidden" {
                         let displayThinking = liveThinking ? streamingThinkingText : staticThinking
-                        // 预览优先级：总结 > 原文前40字
                         let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
-                        let previewStr = thinkingSummary.isEmpty ? rawPreview : thinkingSummary
+                        let previewStr: String
+                        switch thinkingPreviewMode {
+                        case "prefix":
+                            previewStr = rawPreview
+                        default: // "summary"
+                            previewStr = thinkingSummary.isEmpty ? rawPreview : thinkingSummary
+                        }
                         Button {
                             showThinkingPanel = true
                         } label: {
@@ -1226,7 +1233,7 @@ struct BubbleView: View {
             .padding(.vertical, bubblePaddingV)
             .background(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                    .fill(isUser ? Theme.userBubble : Theme.assistantBubble)
+                    .fill(isUser ? Theme.userBubble : (hideAssistantBubble ? Color.clear : Theme.assistantBubble))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
@@ -1293,7 +1300,43 @@ struct BubbleView: View {
             }
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
+
+            // iOS action bar: copy / TTS / regenerate (controlled by hideActionBar setting)
+            if !hideActionBar {
+                HStack(spacing: 16) {
+                    // Copy
+                    Button {
+                        UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 13))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Regenerate (assistant only, not streaming)
+                    if !isUser, let onRegenerate, !isStreaming {
+                        Button(action: onRegenerate) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 13))
+                                .foregroundColor(Theme.textMuted)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Favorite
+                    Button(action: onToggleFavorite) {
+                        Image(systemName: node.isFavorite ? "star.fill" : "star")
+                            .font(.system(size: 13))
+                            .foregroundColor(node.isFavorite ? Theme.favorite : Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 4)
+                .padding(.top, 2)
+            }
         }
+        .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
         // (maxWidth: .infinity)，导致 row 空白区 (input bar 后渗 / home indicator 上方那带)

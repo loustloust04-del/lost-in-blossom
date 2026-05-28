@@ -45,6 +45,7 @@ struct ContentView: View {
     private let sidebarAnimation = Animation.spring(response: 0.4, dampingFraction: 0.85)
     /// 实时拖拽增量 (>0 = 向右拉开, <0 = 向左关闭)。@GestureState 在手势结束时自动归零。
     @GestureState private var sidebarLiveDrag: CGFloat = 0
+    @State private var edgePanDrag: CGFloat = 0
     @State private var isRightPanelVisible = false
     @State private var selectedToolId: String = "memory"
     @State private var stickerVM = StickerViewModel()
@@ -264,7 +265,7 @@ struct ContentView: View {
             let fullSlide: CGFloat = geo.size.width * 0.78
             // 当前聊天偏移（实时跟手）
             let targetOffset: CGFloat = isSidebarOpen ? fullSlide : 0
-            let chatOffset = max(0, min(fullSlide, targetOffset + sidebarLiveDrag))
+            let chatOffset = max(0, min(fullSlide, targetOffset + sidebarLiveDrag + edgePanDrag))
             // 插值比例 0…1
             let progress = fullSlide > 0 ? chatOffset / fullSlide : 0
 
@@ -305,34 +306,38 @@ struct ContentView: View {
             }
             // spring 动画仅在 boolean 跳变时触发（手势跟手期间不添加动画）
             .animation(sidebarAnimation, value: isSidebarOpen)
-            // ── 手势：左边缘右滑打开 / 任意处左滑关闭 ─────────────────────────
+            // ── 手势：仅处理侧边栏已打开时的左滑关闭（打开由 UIScreenEdgePanGestureRecognizer 处理）
             .gesture(
                 DragGesture(minimumDistance: 8, coordinateSpace: .local)
                     .updating($sidebarLiveDrag) { value, state, _ in
-                        if !isSidebarOpen {
-                            // 仅响应从左侧 28pt 边缘区域开始的右滑
-                            guard value.startLocation.x < 60 else { return }
-                            state = max(0, value.translation.width)
-                        } else {
-                            // 侧边栏已打开：跟踪左滑关闭手势
-                            state = min(0, value.translation.width)
-                        }
+                        guard isSidebarOpen else { return }
+                        state = min(0, value.translation.width)
                     }
                     .onEnded { value in
-                        if !isSidebarOpen {
-                            guard value.startLocation.x < 60 else { return }
-                            let shouldOpen = value.translation.width > sidebarWidth * 0.3
-                                || value.velocity.width > 500
-                            withAnimation(sidebarAnimation) { isSidebarOpen = shouldOpen }
-                        } else {
-                            let shouldClose = value.translation.width < -(sidebarWidth * 0.3)
-                                || value.velocity.width < -500
-                            if shouldClose {
-                                withAnimation(sidebarAnimation) { isSidebarOpen = false }
-                            }
+                        guard isSidebarOpen else { return }
+                        let shouldClose = value.translation.width < -(sidebarWidth * 0.3)
+                            || value.velocity.width < -500
+                        if shouldClose {
+                            withAnimation(sidebarAnimation) { isSidebarOpen = false }
                         }
                     }
             )
+            .onReceive(NotificationCenter.default.publisher(for: .sidebarEdgePanChanged)) { notification in
+                guard !isSidebarOpen,
+                      let translation = notification.userInfo?["translation"] as? CGFloat else { return }
+                edgePanDrag = max(0, translation)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sidebarEdgePanEnded)) { notification in
+                guard let translation = notification.userInfo?["translation"] as? CGFloat,
+                      let velocity = notification.userInfo?["velocity"] as? CGFloat else { return }
+                let shouldOpen = !isSidebarOpen && (translation > sidebarWidth * 0.3 || velocity > 500)
+                let shouldClose = isSidebarOpen && (translation < -(sidebarWidth * 0.3) || velocity < -500)
+                withAnimation(sidebarAnimation) {
+                    if shouldOpen { isSidebarOpen = true }
+                    else if shouldClose { isSidebarOpen = false }
+                    edgePanDrag = 0
+                }
+            }
         }
         .ignoresSafeArea()
         .onChange(of: iOSPage) { oldPage, newPage in
