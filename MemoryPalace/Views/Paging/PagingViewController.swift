@@ -152,7 +152,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
     @objc private func keyboardFrameWillChange(_ notification: Notification) {
         guard hostingControllers.count > 1,
               let frameEnd = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-        let chatHC = hostingControllers[1]
+        let chatHC = hostingControllers[0]
         // keyboardFrameEnd 是 screen coords，转 chat HC view 坐标系算 overlap
         let frameInChat = chatHC.view.convert(frameEnd, from: nil)
         let overlap = max(0, chatHC.view.bounds.maxY - frameInChat.minY)
@@ -167,7 +167,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
 
     @objc private func keyboardWillHide(_ notification: Notification) {
         guard hostingControllers.count > 1 else { return }
-        hostingControllers[1].additionalSafeAreaInsets = .zero
+        hostingControllers[0].additionalSafeAreaInsets = .zero
     }
 
     override func viewDidLayoutSubviews() {
@@ -196,7 +196,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
 
         #if DEBUG
         if hostingControllers.count > 1 {
-            let chatHC = hostingControllers[1]
+            let chatHC = hostingControllers[0]
             PROBE("[PROBE shield] viewDidLayoutSubviews bounds=\(view.bounds) shield=\(homeIndicatorShield.frame) hidden=\(homeIndicatorShield.isHidden) currentPage=\(currentPage) view.safeAreaInsets.bottom=\(view.safeAreaInsets.bottom) window.safeAreaInsets.bottom=\(view.window?.safeAreaInsets.bottom ?? -1) chatHC.frame=\(chatHC.view.frame) chatHC.safeAreaInsets.bottom=\(chatHC.view.safeAreaInsets.bottom) chatHC.additional.bottom=\(chatHC.additionalSafeAreaInsets.bottom)")
         }
         #endif
