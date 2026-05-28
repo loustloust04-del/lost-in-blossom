@@ -1330,6 +1330,7 @@ struct BubbleView: View {
                 .padding(.top, 2)
             }
         }
+        .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
         // (maxWidth: .infinity)，导致 row 空白区 (input bar 后渗 / home indicator 上方那带)
