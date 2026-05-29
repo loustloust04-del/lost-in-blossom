@@ -1154,13 +1154,7 @@ struct BubbleView: View {
                     if hasThinkingContent && thinkingPreviewMode != "hidden" {
                         let displayThinking = liveThinking ? streamingThinkingText : staticThinking
                         let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
-                        let previewStr: String
-                        switch thinkingPreviewMode {
-                        case "prefix":
-                            previewStr = rawPreview
-                        default: // "summary"
-                            previewStr = thinkingSummary.isEmpty ? rawPreview : thinkingSummary
-                        }
+                        let previewStr = thinkingPreviewMode == "prefix" ? rawPreview : (thinkingSummary.isEmpty ? rawPreview : thinkingSummary)
                         Button {
                             showThinkingPanel = true
                         } label: {
