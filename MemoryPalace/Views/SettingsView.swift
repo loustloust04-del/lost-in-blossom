@@ -113,6 +113,8 @@ struct SettingsView: View {
                             .font(.system(size: Theme.SettingsFont.label, weight: .medium))
                         Text("返回")
                             .font(.system(size: Theme.SettingsFont.label))
+                    case .hapticTest:
+                        HapticTestView()
                     }
                     .foregroundColor(Theme.branchIndicator)
                 }
@@ -192,6 +194,8 @@ struct SettingsView: View {
                             .font(.system(size: Theme.F.body))
                             .foregroundColor(Theme.textMuted)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    case .hapticTest:
+                        HapticTestView()
                     }
                 }
                 .padding(20)
