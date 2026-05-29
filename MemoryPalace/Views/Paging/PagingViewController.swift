@@ -65,7 +65,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
     /// V3 SwiftUI overlay 时灵时不灵 → V4 改 UIKit 层（codex 建议 + Apple docs hitTest D3 / safeAreaInsets D2）。
     private let homeIndicatorShield = HomeIndicatorHitShieldUIView()
     private var shieldHiddenByCaller: Bool = false   // 外部（PagingContainerView）显式 hide
-    private var edgePanGesture: UIScreenEdgePanGestureRecognizer?
+    private var edgePanGesture: UIGestureRecognizer?
 
     /// CIFilter 创建 GPU context 有开销，共享一个全局实例。
     /// xcdoc: /documentation/CoreImage/CIFilter-swift.class/colorControls()
@@ -135,12 +135,21 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
         shieldLP.minimumPressDuration = 0.1
         homeIndicatorShield.addGestureRecognizer(shieldLP)
 
-        // Left-edge pan gesture to open sidebar — bypasses UIScrollView panGestureRecognizer
-        let edgePan = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleSidebarEdgePan(_:)))
-        edgePan.edges = .left
-        view.addGestureRecognizer(edgePan)
+        // Left-edge pan zone (60pt) to open sidebar — wider and more reliable than UIScreenEdgePanGestureRecognizer
+        let edgeZone = UIView()
+        edgeZone.backgroundColor = .clear
+        edgeZone.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(edgeZone)
+        NSLayoutConstraint.activate([
+            edgeZone.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            edgeZone.topAnchor.constraint(equalTo: view.topAnchor),
+            edgeZone.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            edgeZone.widthAnchor.constraint(equalToConstant: 60)
+        ])
+        let edgePan = UIPanGestureRecognizer(target: self, action: #selector(handleSidebarEdgePan(_:)))
+        edgeZone.addGestureRecognizer(edgePan)
         self.edgePanGesture = edgePan
-        // Prevent scrollView from stealing the edge-originated pan
+        // Prevent scrollView from stealing edge-originated pan
         scrollView.panGestureRecognizer.require(toFail: edgePan)
 
         // 键盘避让：嵌套 child HC 在 UIKit PagingViewController 下，SwiftUI 默认的
@@ -221,7 +230,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
         }
     }
 
-    @objc private func handleSidebarEdgePan(_ gesture: UIScreenEdgePanGestureRecognizer) {
+    @objc private func handleSidebarEdgePan(_ gesture: UIPanGestureRecognizer) {
         let translation = gesture.translation(in: view).x
         let velocity = gesture.velocity(in: view).x
         switch gesture.state {

@@ -270,7 +270,11 @@ struct ContentView: View {
             let progress = fullSlide > 0 ? chatOffset / fullSlide : 0
 
             ZStack(alignment: .leading) {
-                // ── 底层：侧边栏（永远在这里，永远不动，不需要任何 offset/animation）──
+                // ── 最底层：全屏背景色，填充聊天层缩小后露出的空白 ──
+                Theme.sidebarBg
+                    .ignoresSafeArea()
+
+                // ── 底层：侧边栏（永远在这里，永远不动）──
                 iOSListPage
                     .frame(width: sidebarWidth)
 
