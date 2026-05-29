@@ -14,6 +14,8 @@ struct ConsoleView: View {
     @State private var healthKit = HealthKitService()
     @State private var medicationToggled: Bool = false
     @State private var tappedCardId: String? = nil
+    @State private var memoTabForYou: Bool = true
+    @State private var showMemoBoard: Bool = false
 
     // 今天的 DailyContext（如果没有则为 nil）
     private var todayCtx: DailyContext? {
@@ -104,7 +106,7 @@ struct ConsoleView: View {
             menstrualCard
             stepsCard
             screenTimeCard
-            twitterCard
+            memoCard
         }
     }
 
@@ -353,37 +355,78 @@ struct ConsoleView: View {
         }
     }
 
-    // MARK: - 8. 推特动态
+    // MARK: - 8. 碎碎念
 
-    private var twitterCard: some View {
-        ConsoleCard(id: "twitter", tappedCardId: $tappedCardId) {
-            ConsoleTag(icon: "at", label: "推特动态")
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 3) {
-                    if let count = todayCtx?.tweetCount {
-                        Text("今日 \(count) 条")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(Self.textPrimary)
-                        if let summary = todayCtx?.latestTweetSummary {
-                            Text("最近：\(summary)")
-                                .font(.system(size: 12))
-                                .foregroundColor(Self.textMuted)
-                                .lineLimit(2)
-                        }
-                    } else {
-                        Text("—")
-                            .font(.system(size: 18, weight: .bold))
+    private var memoCard: some View {
+        ConsoleCard(id: "memo", tappedCardId: $tappedCardId, onTap: {
+            if memoTabForYou { showMemoBoard = true }
+        }) {
+            HStack(spacing: 14) {
+                Button { memoTabForYou = true } label: {
+                    Text("给你的")
+                        .font(.system(size: 12, weight: memoTabForYou ? .semibold : .regular))
+                        .foregroundColor(memoTabForYou ? Self.textPrimary : Self.textMuted)
+                        .underline(memoTabForYou)
+                }
+                .buttonStyle(.plain)
+                Button { memoTabForYou = false } label: {
+                    Text("给世界的")
+                        .font(.system(size: 12, weight: !memoTabForYou ? .semibold : .regular))
+                        .foregroundColor(!memoTabForYou ? Self.textPrimary : Self.textMuted)
+                        .underline(!memoTabForYou)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.bottom, 10)
+
+            if memoTabForYou {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("这里会显示最新的留言～")
+                        .font(.system(size: 14))
+                        .foregroundColor(Self.textPrimary)
+                        .lineLimit(2)
+                    HStack {
+                        Text("刚刚")
+                            .font(.system(size: 11))
                             .foregroundColor(Self.textMuted)
-                        Text("Phase 2 接入 Twitter MCP")
+                        Spacer()
+                        Text("查看全部 →")
                             .font(.system(size: 11))
                             .foregroundColor(Self.textMuted)
                     }
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(Color(red: 196/255, green: 184/255, blue: 168/255))
+            } else {
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let count = todayCtx?.tweetCount {
+                            Text("今日 \(count) 条")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(Self.textPrimary)
+                            if let summary = todayCtx?.latestTweetSummary {
+                                Text("最近：\(summary)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Self.textMuted)
+                                    .lineLimit(2)
+                            }
+                        } else {
+                            Text("—")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(Self.textMuted)
+                            Text("Phase 2 接入 Twitter MCP")
+                                .font(.system(size: 11))
+                                .foregroundColor(Self.textMuted)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(Color(red: 196/255, green: 184/255, blue: 168/255))
+                }
             }
+        }
+        .sheet(isPresented: $showMemoBoard) {
+            MemoBoardPlaceholder()
         }
     }
 
@@ -463,6 +506,7 @@ extension ConsoleView {
 private struct ConsoleCard<Content: View>: View {
     let id: String
     @Binding var tappedCardId: String?
+    var onTap: (() -> Void)? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -480,6 +524,35 @@ private struct ConsoleCard<Content: View>: View {
         .contentShape(RoundedRectangle(cornerRadius: 16))
         .onTapGesture {
             tappedCardId = UUID().uuidString
+            onTap?()
+        }
+    }
+}
+
+private struct MemoBoardPlaceholder: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Image(systemName: "envelope.open")
+                    .font(.system(size: 48))
+                    .foregroundColor(Color(red: 168/255, green: 158/255, blue: 142/255))
+                Text("留言板")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(Color(red: 58/255, green: 51/255, blue: 43/255))
+                Text("Coming soon · 后续接入粟粟的贴纸系统")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(red: 181/255, green: 170/255, blue: 154/255))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(red: 248/255, green: 245/255, blue: 240/255))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }
+                }
+            }
         }
     }
 }

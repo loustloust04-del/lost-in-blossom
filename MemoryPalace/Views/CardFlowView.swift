@@ -1053,6 +1053,7 @@ struct BubbleView: View {
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
+    @State private var thinkingPulseTask: Task<Void, Never>? = nil
     private let truncateLength = 300
 
     var isUser: Bool { node.role == "user" }
@@ -1250,12 +1251,6 @@ struct BubbleView: View {
             .if(isUser) { view in
                 view.frame(maxWidth: 500, alignment: .trailing)
             }
-            // 6e: 长按弹出菜单时触发 medium 震动（与系统 context menu haptic 叠加，加重触感）
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                }
-            )
             .contextMenu {
                 if isUser, onEdit != nil {
                     Button(action: {
@@ -1332,6 +1327,27 @@ struct BubbleView: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+        .onChange(of: isThinking) { _, newValue in
+            thinkingPulseTask?.cancel()
+            thinkingPulseTask = nil
+            if newValue {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                thinkingPulseTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        if !Task.isCancelled {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        }
+                    }
+                }
+            } else {
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            }
+        }
+        .onDisappear {
+            thinkingPulseTask?.cancel()
+            thinkingPulseTask = nil
+        }
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
         // (maxWidth: .infinity)，导致 row 空白区 (input bar 后渗 / home indicator 上方那带)
         // 点击都触发 contextMenu。删后命中区缩到气泡视觉本身（line 1238 的 RoundedRectangle），

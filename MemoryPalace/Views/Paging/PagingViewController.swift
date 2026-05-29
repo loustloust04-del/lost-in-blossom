@@ -231,6 +231,9 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
     }
 
     @objc private func handleSidebarEdgePan(_ gesture: UIPanGestureRecognizer) {
+        let pageWidth = scrollView.frame.width
+        let currentPage = Int(round(scrollView.contentOffset.x / max(pageWidth, 1)))
+        guard currentPage == 0 else { return }
         let translation = gesture.translation(in: view).x
         let velocity = gesture.velocity(in: view).x
         switch gesture.state {
