@@ -715,11 +715,8 @@ struct SidebarView: View {
             .padding(.horizontal, isIOSStyle ? 20 : 16)
             .padding(.vertical, isIOSStyle ? 6 : 6)
 
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // ── New Chat 胶囊按钮（紧跟在列表末尾）──────────────────────
             if isIOSStyle {
-                // ── New Chat 胶囊按钮固定底部（模仿 Claude 侧边栏）────────
                 Button(action: createNewConversation) {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
@@ -734,11 +731,13 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                .padding(.bottom, 16)
-                .padding(.top, 8)
-                .background(Theme.sidebarBg)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
+
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
         .background {
             if isIOSStyle {
                 Theme.sidebarBg.ignoresSafeArea()
