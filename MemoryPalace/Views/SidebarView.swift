@@ -715,7 +715,9 @@ struct SidebarView: View {
             .padding(.horizontal, isIOSStyle ? 20 : 16)
             .padding(.vertical, isIOSStyle ? 6 : 6)
 
-            // ── New Chat 胶囊按钮（紧跟在列表末尾）──────────────────────
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .bottomTrailing) {
             if isIOSStyle {
                 Button(action: createNewConversation) {
                     HStack(spacing: 6) {
@@ -725,18 +727,15 @@ struct SidebarView: View {
                             .font(.system(size: 15, weight: .semibold))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 13)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
                     .background(Capsule().fill(Color.black))
                 }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
+                .padding(.trailing, 20)
+                .padding(.bottom, 32)
             }
-
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
         .background {
             if isIOSStyle {
