@@ -25,6 +25,8 @@ extension View {
     @ViewBuilder
     func glassButtonStyleCompat() -> some View {
         self
+            .frame(width: 36, height: 36)
+            .contentShape(Circle())
             .buttonStyle(.plain)
             .background(Circle().fill(.ultraThinMaterial))
             .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
