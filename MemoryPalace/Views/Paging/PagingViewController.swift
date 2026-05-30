@@ -24,7 +24,7 @@ import CoreImage.CIFilterBuiltins
 /// UIImageView 的 frame 由 `viewDidLayoutSubviews` 控制，键盘弹起时 `viewDidLayoutSubviews`
 /// 不 fire（实测 log 印证），根治。参考 `docs/research-wallpaper-uikit-layer.md`。
 @MainActor
-final class PagingViewController: UIViewController, UIScrollViewDelegate {
+final class PagingViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     /// 暴露给 iOSTabBarGestureBlocker 用的 weak ref：sidebar tab 栏横滑时让水平 paging 的
     /// scrollView.panGestureRecognizer require(toFail: tab 栏 blockerPan)。整个 app 只有一个
     /// PagingViewController 实例（外层 SwiftUI iOSLayout 创建），用 static 单例最简洁。
@@ -147,6 +147,7 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
             edgeZone.widthAnchor.constraint(equalToConstant: 60)
         ])
         let edgePan = UIPanGestureRecognizer(target: self, action: #selector(handleSidebarEdgePan(_:)))
+        edgePan.delegate = self
         edgeZone.addGestureRecognizer(edgePan)
         self.edgePanGesture = edgePan
         // Prevent scrollView from stealing edge-originated pan
@@ -230,10 +231,17 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
         }
     }
 
-    @objc private func handleSidebarEdgePan(_ gesture: UIPanGestureRecognizer) {
+    // MARK: - UIGestureRecognizerDelegate
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Only allow sidebar edge pan on page 0 (chat page).
+        // On page 1/2, return false so UIScrollView paging can handle the swipe back.
         let pageWidth = scrollView.frame.width
         let currentPage = Int(round(scrollView.contentOffset.x / max(pageWidth, 1)))
-        guard currentPage == 0 else { return }
+        return currentPage == 0
+    }
+
+    @objc private func handleSidebarEdgePan(_ gesture: UIPanGestureRecognizer) {
         let translation = gesture.translation(in: view).x
         let velocity = gesture.velocity(in: view).x
         switch gesture.state {
