@@ -35,7 +35,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
     @State private var showTrash = false
-    // 当前 iOS page：0=chat, 1=dashboard。侧边栏走 ZStack overlay 不再是 paging page。@State 与 PagingContainerView.currentPage binding，
+    // 当前 iOS page：0=chat, 1=dashboard, 2=archive。侧边栏走 ZStack overlay 不再是 paging page。@State 与 PagingContainerView.currentPage binding，
     // UIKit UIScrollView paging 完成后通过 binding 回写。
     @State private var iOSPage: Int = 0
     // iOSPageDragOffset removed — ScrollView handles drag natively
@@ -283,6 +283,7 @@ struct ContentView: View {
                     PagingContainerView(
                         chatPage: AnyView(injectPagingEnv(iOSChatPage)),
                         dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
+                        archivePage: AnyView(injectPagingEnv(iOSArchivePage)),
                         currentPage: $iOSPage,
                         disableScroll: stickerVM.isEditingStickers,
                         initialPage: 0,
@@ -426,10 +427,10 @@ struct ContentView: View {
 
     // MARK: - iOS Page indicator (debug-mode aware)
 
-    /// 页面指示点：侧边栏已改为 overlay，只显示 chat(1) / dashboard(2) 两个点
+    /// 页面指示点：侧边栏已改为 overlay，显示 chat(0) / dashboard(1) / archive(2) 三个点
     private var pageIndicatorDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<2) { i in
+            ForEach(0..<3) { i in
                 Circle()
                     .fill(iOSPage == i ? Theme.branchIndicator : Theme.textMuted.opacity(0.3))
                     .frame(width: 6, height: 6)
@@ -705,6 +706,12 @@ struct ContentView: View {
     /// 粟粟原 RightPanelView 暂时移出 page 2，后续整合进设置或单独入口
     private var iOSDashboardPage: some View {
         ConsoleView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 右滑 page 3: The Archive（记忆馆）
+    private var iOSArchivePage: some View {
+        ArchivePageView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 

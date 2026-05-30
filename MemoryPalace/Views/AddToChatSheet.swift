@@ -1,11 +1,14 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 
 /// + 号功能面板（Claude App 风格底部 sheet）
 /// 内容：添加文件/照片、选择模型、设置、导入聊天记录、贴纸
 struct AddToChatSheet: View {
     /// 点击「贴纸」后回调——由 CardFlowView 传入，负责打开 StickerKeyboardPanel
     let onOpenSticker: () -> Void
+    /// 选中照片后写入此 Binding，由 CardFlowView 持有并传给 ChatInputBar
+    @Binding var pendingImageData: Data?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
@@ -45,10 +48,19 @@ struct AddToChatSheet: View {
                     )
                 }
                 .onChange(of: photoPickerItems) { _, newItems in
-                    if !newItems.isEmpty {
-                        // TODO: 将图片插入到聊天输入框，Phase 2 实现
-                        photoPickerItems = []
-                        dismiss()
+                    guard let item = newItems.first else { return }
+                    Task {
+                        if let data = try? await item.loadTransferable(type: Data.self),
+                           let uiImage = UIImage(data: data),
+                           let compressed = uiImage.jpegData(compressionQuality: 0.7) {
+                            await MainActor.run {
+                                pendingImageData = compressed
+                            }
+                        }
+                        await MainActor.run {
+                            photoPickerItems = []
+                            dismiss()
+                        }
                     }
                 }
                 .rowEntrance(index: 0, appeared: appeared)

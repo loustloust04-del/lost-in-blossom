@@ -1215,20 +1215,32 @@ final class ConversationViewModel {
     }
 
     /// Send a user message and get a streaming response
-    func sendMessage(_ text: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
+    func sendMessage(_ text: String, imageData: Data? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
         guard let conversation = selectedConversation else { return }
         guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
 
         // 1. Determine parent node (last node in path, or nil for first message)
         let parentId = currentPath.last?.id
 
-        // 2. Create user MessageNode
+        // 2. Build content and contentType
+        let (userContent, userContentType): (String, String) = {
+            guard let data = imageData else { return (text, "text") }
+            let b64 = data.base64EncodedString()
+            let blocks: [[String: Any]] = [
+                ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": b64]],
+                ["type": "text", "text": text]
+            ]
+            let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
+            return (json, "multimodal_text")
+        }()
+
+        // 3. Create user MessageNode
         let userNodeId = UUID().uuidString
         let userNode = MessageNode(
             id: userNodeId,
             role: "user",
-            content: text,
-            contentType: "text",
+            content: userContent,
+            contentType: userContentType,
             createTime: Date(),
             parentId: parentId,
             childrenIds: [],

@@ -19,6 +19,7 @@ import SwiftUI
 struct PagingContainerView: UIViewControllerRepresentable {
     let chatPage: AnyView
     let dashPage: AnyView
+    let archivePage: AnyView
     @Binding var currentPage: Int
     let disableScroll: Bool
     let initialPage: Int
@@ -53,7 +54,8 @@ struct PagingContainerView: UIViewControllerRepresentable {
         let vc = PagingViewController(
             pages: [
                 AnyView(injectChatManagers(chatPage)),
-                AnyView(injectChatManagers(dashPage))
+                AnyView(injectChatManagers(dashPage)),
+                AnyView(injectChatManagers(archivePage))
             ],
             initialPage: initialPage
         )
@@ -75,7 +77,8 @@ struct PagingContainerView: UIViewControllerRepresentable {
         if !isStreaming {
             vc.updatePages([
                 AnyView(injectChatManagers(chatPage)),
-                AnyView(injectChatManagers(dashPage))
+                AnyView(injectChatManagers(dashPage)),
+                AnyView(injectChatManagers(archivePage))
             ])
         } else {
             #if DEBUG

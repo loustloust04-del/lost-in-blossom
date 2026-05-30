@@ -616,6 +616,7 @@ struct SidebarView: View {
                 }
             }
             } // end card container
+            .frame(maxHeight: .infinity)
 
             // Stats footer + settings
             HStack(spacing: 8) {

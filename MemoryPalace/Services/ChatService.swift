@@ -188,12 +188,30 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         resetState(onToken: onToken, onComplete: onComplete, onError: onError)
         streamingThinking = ""
 
-        var apiMessages: [[String: String]] = []
+        var apiMessages: [[String: Any]] = []
         if let sys = systemPrompt, !sys.isEmpty {
             apiMessages.append(["role": "system", "content": sys])
         }
         for msg in messages {
-            apiMessages.append(["role": msg.role, "content": msg.content])
+            // Detect multimodal content and convert to OpenAI vision format
+            if msg.role == "user", msg.content.hasPrefix("[{"),
+               let data = msg.content.data(using: .utf8),
+               let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+                var visionContent: [[String: Any]] = []
+                for block in blocks {
+                    let type = block["type"] as? String ?? ""
+                    if type == "image", let source = block["source"] as? [String: Any],
+                       let b64 = source["data"] as? String,
+                       let mediaType = source["media_type"] as? String {
+                        visionContent.append(["type": "image_url", "image_url": ["url": "data:\(mediaType);base64,\(b64)"]])
+                    } else if type == "text" {
+                        visionContent.append(["type": "text", "text": block["text"] as? String ?? ""])
+                    }
+                }
+                apiMessages.append(["role": msg.role, "content": visionContent])
+            } else {
+                apiMessages.append(["role": msg.role, "content": msg.content])
+            }
         }
 
         var body: [String: Any] = [
@@ -240,7 +258,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         baseURL: String,
         extraHeaders: [String: String]
     ) async throws -> (String, TokenUsage?) {
-        var apiMessages: [[String: String]] = []
+        var apiMessages: [[String: Any]] = []
         if let sys = systemPrompt, !sys.isEmpty {
             apiMessages.append(["role": "system", "content": sys])
         }
@@ -421,7 +439,14 @@ final class AnthropicProvider: BaseChatProvider {
         // Build Anthropic Messages API format
         var apiMessages: [[String: Any]] = []
         for msg in messages {
-            apiMessages.append(["role": msg.role, "content": msg.content])
+            // Detect multimodal content (JSON array string starting with "[{")
+            if msg.role == "user", msg.content.hasPrefix("[{"),
+               let data = msg.content.data(using: .utf8),
+               let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+                apiMessages.append(["role": msg.role, "content": blocks])
+            } else {
+                apiMessages.append(["role": msg.role, "content": msg.content])
+            }
         }
 
         let maxTok = samplingParams?.maxTokens ?? 4096
@@ -481,7 +506,13 @@ final class AnthropicProvider: BaseChatProvider {
     ) async throws -> (String, TokenUsage?) {
         var apiMessages: [[String: Any]] = []
         for msg in messages {
-            apiMessages.append(["role": msg.role, "content": msg.content])
+            if msg.role == "user", msg.content.hasPrefix("[{"),
+               let data = msg.content.data(using: .utf8),
+               let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+                apiMessages.append(["role": msg.role, "content": blocks])
+            } else {
+                apiMessages.append(["role": msg.role, "content": msg.content])
+            }
         }
 
         var body: [String: Any] = [
