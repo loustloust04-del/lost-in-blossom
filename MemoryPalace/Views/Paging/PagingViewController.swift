@@ -24,7 +24,7 @@ import CoreImage.CIFilterBuiltins
 /// UIImageView 的 frame 由 `viewDidLayoutSubviews` 控制，键盘弹起时 `viewDidLayoutSubviews`
 /// 不 fire（实测 log 印证），根治。参考 `docs/research-wallpaper-uikit-layer.md`。
 @MainActor
-final class PagingViewController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+final class PagingViewController: UIViewController, UIScrollViewDelegate {
     /// 暴露给 iOSTabBarGestureBlocker 用的 weak ref：sidebar tab 栏横滑时让水平 paging 的
     /// scrollView.panGestureRecognizer require(toFail: tab 栏 blockerPan)。整个 app 只有一个
     /// PagingViewController 实例（外层 SwiftUI iOSLayout 创建），用 static 单例最简洁。
@@ -135,22 +135,12 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate, UIGest
         shieldLP.minimumPressDuration = 0.1
         homeIndicatorShield.addGestureRecognizer(shieldLP)
 
-        // Left-edge pan zone (60pt) to open sidebar — wider and more reliable than UIScreenEdgePanGestureRecognizer
-        let edgeZone = UIView()
-        edgeZone.backgroundColor = .clear
-        edgeZone.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(edgeZone)
-        NSLayoutConstraint.activate([
-            edgeZone.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            edgeZone.topAnchor.constraint(equalTo: view.topAnchor),
-            edgeZone.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            edgeZone.widthAnchor.constraint(equalToConstant: 60)
-        ])
+        // Left-edge pan (60pt) — attached directly to view with delegate restricting to x < 60,
+        // avoiding a blocking UIView that would shadow SwiftUI buttons in the same zone.
         let edgePan = UIPanGestureRecognizer(target: self, action: #selector(handleSidebarEdgePan(_:)))
         edgePan.delegate = self
-        edgeZone.addGestureRecognizer(edgePan)
+        view.addGestureRecognizer(edgePan)
         self.edgePanGesture = edgePan
-        // Prevent scrollView from stealing edge-originated pan
         scrollView.panGestureRecognizer.require(toFail: edgePan)
 
         // 键盘避让：嵌套 child HC 在 UIKit PagingViewController 下，SwiftUI 默认的
@@ -231,17 +221,10 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate, UIGest
         }
     }
 
-    // MARK: - UIGestureRecognizerDelegate
-
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // Only allow sidebar edge pan on page 0 (chat page).
-        // On page 1/2, return false so UIScrollView paging can handle the swipe back.
+    @objc private func handleSidebarEdgePan(_ gesture: UIPanGestureRecognizer) {
         let pageWidth = scrollView.frame.width
         let currentPage = Int(round(scrollView.contentOffset.x / max(pageWidth, 1)))
-        return currentPage == 0
-    }
-
-    @objc private func handleSidebarEdgePan(_ gesture: UIPanGestureRecognizer) {
+        guard currentPage == 0 else { return }
         let translation = gesture.translation(in: view).x
         let velocity = gesture.velocity(in: view).x
         switch gesture.state {
@@ -426,6 +409,18 @@ final class HomeIndicatorHitShieldUIView: UIView {
         return inside
     }
     @objc func absorbGesture() { /* 吃掉手势，不做任何事 */ }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension PagingViewController: UIGestureRecognizerDelegate {
+    /// Restrict edge pan to the leading 60pt zone. Returning false here transitions
+    /// the recognizer to .failed immediately, so scrollView.panGestureRecognizer
+    /// (which require(toFail:) edgePan) isn't blocked for touches outside that zone.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === edgePanGesture else { return true }
+        return gestureRecognizer.location(in: view).x < 60
+    }
 }
 
 // MARK: - Notification Names for Sidebar Edge Pan

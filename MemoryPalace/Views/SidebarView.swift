@@ -215,6 +215,44 @@ struct SidebarView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
+            // ── 标签列表（iOS 模式，支持 swipe-to-delete）─────────────────
+            if isIOSStyle && !tags.isEmpty {
+                List {
+                    ForEach(tags) { tag in
+                        Button {
+                            selectTab(.tag(id: tag.id))
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(tag.emoji)
+                                    .font(.system(size: 16))
+                                Text(tag.name)
+                                    .font(.system(size: 15))
+                                    .foregroundColor(selectedTagId == tag.id ? Theme.textPrimary : Theme.textSecondary)
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(
+                            selectedTagId == tag.id
+                                ? Theme.accent.opacity(0.3)
+                                : Color.clear
+                        )
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteTag(id: tag.id)
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .listRowSpacing(0)
+                .frame(height: min(CGFloat(tags.count) * 44 + 8, 176))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 4)
+            }
+
             // Chrome-style tab bar + content card
             // iOS 简化模式：隐藏 tab bar，只显示对话列表（固定「全部」视图）
             VStack(spacing: 0) {
@@ -677,8 +715,11 @@ struct SidebarView: View {
             .padding(.horizontal, isIOSStyle ? 20 : 16)
             .padding(.vertical, isIOSStyle ? 6 : 6)
 
-            // ── New Chat 胶囊按钮（居中，60% 宽，圆角 24）────────────────
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if isIOSStyle {
+                // ── New Chat 胶囊按钮固定底部 ─────────────────────────────
                 GeometryReader { geo in
                     Button(action: createNewConversation) {
                         HStack(spacing: 6) {
@@ -689,10 +730,7 @@ struct SidebarView: View {
                         }
                         .foregroundColor(.white)
                         .frame(width: geo.size.width * 0.5, height: 44)
-                        .background(
-                            Capsule()
-                                .fill(Color.black)
-                        )
+                        .background(Capsule().fill(Color.black))
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
@@ -700,9 +738,9 @@ struct SidebarView: View {
                 .frame(height: 44)
                 .padding(.bottom, 24)
                 .padding(.top, 4)
+                .background(Theme.sidebarBg)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
             if isIOSStyle {
                 Theme.sidebarBg.ignoresSafeArea()
