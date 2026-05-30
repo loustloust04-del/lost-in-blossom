@@ -25,7 +25,7 @@ extension View {
     @ViewBuilder
     func glassButtonStyleCompat() -> some View {
         self
-            .frame(width: 36, height: 36)
+            .frame(width: 44, height: 44)
             .contentShape(Circle())
             .buttonStyle(.plain)
             .background(Circle().fill(.ultraThinMaterial))
