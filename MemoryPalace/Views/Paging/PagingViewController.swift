@@ -135,21 +135,12 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
         shieldLP.minimumPressDuration = 0.1
         homeIndicatorShield.addGestureRecognizer(shieldLP)
 
-        // Left-edge pan zone (60pt) to open sidebar — wider and more reliable than UIScreenEdgePanGestureRecognizer
-        let edgeZone = UIView()
-        edgeZone.backgroundColor = .clear
-        edgeZone.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(edgeZone)
-        NSLayoutConstraint.activate([
-            edgeZone.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            edgeZone.topAnchor.constraint(equalTo: view.topAnchor),
-            edgeZone.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            edgeZone.widthAnchor.constraint(equalToConstant: 60)
-        ])
+        // Left-edge pan (60pt) — attached directly to view with delegate restricting to x < 60,
+        // avoiding a blocking UIView that would shadow SwiftUI buttons in the same zone.
         let edgePan = UIPanGestureRecognizer(target: self, action: #selector(handleSidebarEdgePan(_:)))
-        edgeZone.addGestureRecognizer(edgePan)
+        edgePan.delegate = self
+        view.addGestureRecognizer(edgePan)
         self.edgePanGesture = edgePan
-        // Prevent scrollView from stealing edge-originated pan
         scrollView.panGestureRecognizer.require(toFail: edgePan)
 
         // 键盘避让：嵌套 child HC 在 UIKit PagingViewController 下，SwiftUI 默认的
@@ -418,6 +409,18 @@ final class HomeIndicatorHitShieldUIView: UIView {
         return inside
     }
     @objc func absorbGesture() { /* 吃掉手势，不做任何事 */ }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension PagingViewController: UIGestureRecognizerDelegate {
+    /// Restrict edge pan to the leading 60pt zone. Returning false here transitions
+    /// the recognizer to .failed immediately, so scrollView.panGestureRecognizer
+    /// (which require(toFail:) edgePan) isn't blocked for touches outside that zone.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === edgePanGesture else { return true }
+        return gestureRecognizer.location(in: view).x < 60
+    }
 }
 
 // MARK: - Notification Names for Sidebar Edge Pan
