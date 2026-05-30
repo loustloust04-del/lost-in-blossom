@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 import MarkdownUI
 import UniformTypeIdentifiers
 import VariableBlur
@@ -18,6 +19,7 @@ struct CardFlowView: View {
     @FocusState private var inConvSearchFocused: Bool
     @State private var showStickerPanel = false
     @State private var showAddToChat = false
+    @State private var pendingImageData: Data?
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
@@ -267,6 +269,7 @@ struct CardFlowView: View {
                                 ChatInputBar(
                                     viewModel: viewModel, modelContext: modelContext,
                                     profileManager: profileManager, providerManager: pm, presetManager: presetManager,
+                                    pendingImageData: $pendingImageData,
                                     onStickerTap: {
                                         // + 号 → Add to Chat 功能面板（iOS）
                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -365,7 +368,7 @@ struct CardFlowView: View {
                         showStickerPanel = true
                         stickerVM.isEditingStickers = true
                     }
-                })
+                }, pendingImageData: $pendingImageData)
             }
         }
     }
@@ -514,6 +517,7 @@ struct ChatInputBar: View {
     var profileManager: ProfileManager?
     var providerManager: ProviderManager
     var presetManager: PresetManager?
+    var pendingImageData: Binding<Data?> = .constant(nil)
     var onStickerTap: (() -> Void)? = nil
 
     @AppStorage("blurRadius") private var blurRadius = 1.3
@@ -556,6 +560,7 @@ struct ChatInputBar: View {
             isStreaming: viewModel.providerRouter.isStreaming,
             placeholder: inputPlaceholder,
             modelName: currentModel.name,
+            pendingImageData: pendingImageData,
             onSend: { text in send(text) },
             onCancelStream: { viewModel.providerRouter.cancel() },
             onStickerTap: onStickerTap,
@@ -616,7 +621,8 @@ struct ChatInputBar: View {
     /// 返回 true 表示发送成功（子 view 应清空 text），false = 预算被拦（text 保留）
     private func send(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        let imageData = pendingImageData.wrappedValue
+        guard !trimmed.isEmpty || imageData != nil else { return false }
 
         let prof = profileManager?.currentProfile ?? Profile(name: "", emoji: "", description: "", userName: "你", assistantName: "AI")
         let preset = presetManager?.preset(byId: prof.presetId) ?? Preset.balanced
@@ -631,7 +637,8 @@ struct ChatInputBar: View {
         ) else { return false }
 
         // globalWorldBookEntries 已由 ContentView 同步
-        viewModel.sendMessage(trimmed, model: currentModel, profile: prof, preset: preset, providerManager: providerManager, context: modelContext)
+        viewModel.sendMessage(trimmed, imageData: imageData, model: currentModel, profile: prof, preset: preset, providerManager: providerManager, context: modelContext)
+        pendingImageData.wrappedValue = nil
         return true
     }
 }
@@ -660,6 +667,7 @@ extension ChatInputBar: Equatable {
             && lhs.providerManager === rhs.providerManager
             && lhs.presetManager === rhs.presetManager
             && (lhs.onStickerTap == nil) == (rhs.onStickerTap == nil)
+            && (lhs.pendingImageData.wrappedValue != nil) == (rhs.pendingImageData.wrappedValue != nil)
     }
 }
 
@@ -678,16 +686,17 @@ private struct InputFieldContainer: View {
     let isStreaming: Bool
     let placeholder: String
     let modelName: String
+    @Binding var pendingImageData: Data?
     let onSend: (String) -> Bool
     let onCancelStream: () -> Void
     let onStickerTap: (() -> Void)?
     let onModelTap: () -> Void
 
     private var canSend: Bool {
-        isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil
     }
     private var hasText: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil
     }
 
     var body: some View {
@@ -701,6 +710,31 @@ private struct InputFieldContainer: View {
         }()
         #endif
         return VStack(spacing: 0) {
+            // ── 图片预览行（pendingImageData 非 nil 时显示）──────────────
+            if let imgData = pendingImageData, let uiImg = UIImage(data: imgData) {
+                HStack(spacing: 8) {
+                    Image(uiImage: uiImg)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    Text("photo.jpg")
+                        .font(.system(size: 13))
+                        .foregroundColor(Theme.textMuted)
+                    Spacer()
+                    Button {
+                        pendingImageData = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                Divider().padding(.horizontal, 12)
+            }
             // ── 上层：多行文本输入 ──────────────────────────────────────
             ZStack(alignment: .topLeading) {
                 // 隐藏的 Text 尺寸镜像 — 计算 TextEditor 应有的高度
@@ -997,6 +1031,80 @@ struct ThinkingPanelView: View {
     }
 }
 
+// MARK: - Multimodal User Bubble
+
+private struct MultimodalUserBubble: View {
+    let content: String
+    let fontScale: Double
+    let lineSpacingScale: Double
+
+    @State private var showFullImage = false
+
+    private struct ContentBlock {
+        var imageData: Data?
+        var text: String = ""
+    }
+
+    private var parsed: ContentBlock {
+        var block = ContentBlock()
+        guard let data = content.data(using: .utf8),
+              let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+            block.text = content
+            return block
+        }
+        for item in arr {
+            let type = item["type"] as? String ?? ""
+            if type == "image", let source = item["source"] as? [String: Any],
+               let b64 = source["data"] as? String,
+               let imgData = Data(base64Encoded: b64) {
+                block.imageData = imgData
+            } else if type == "text" {
+                block.text = item["text"] as? String ?? ""
+            }
+        }
+        return block
+    }
+
+    var body: some View {
+        let block = parsed
+        VStack(alignment: .leading, spacing: 6) {
+            if let imgData = block.imageData, let uiImg = UIImage(data: imgData) {
+                Image(uiImage: uiImg)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .onTapGesture { showFullImage = true }
+                    .fullScreenCover(isPresented: $showFullImage) {
+                        ZStack(alignment: .topTrailing) {
+                            Color.black.ignoresSafeArea()
+                            Image(uiImage: uiImg)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            Button {
+                                showFullImage = false
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.white)
+                                    .padding(16)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+            }
+            if !block.text.isEmpty {
+                Text(block.text)
+                    .font(FontManager.font(size: 13.5))
+                    .foregroundColor(Theme.textPrimary)
+                    .textSelection(.enabled)
+                    .lineSpacing(4 * (fontScale > 0 ? fontScale : 1.0) * lineSpacingScale)
+            }
+        }
+    }
+}
+
 // MARK: - Branch Info (value type passed to BubbleView)
 
 struct BranchInfo {
@@ -1129,6 +1237,12 @@ struct BubbleView: View {
                             paragraphSpacingScale: paragraphSpacingScale,
                             regexScripts: regexScripts,
                             isUser: true
+                        )
+                    } else if node.contentType == "multimodal_text" {
+                        MultimodalUserBubble(
+                            content: node.content,
+                            fontScale: fontScale,
+                            lineSpacingScale: lineSpacingScale
                         )
                     } else {
                         Text(shouldTruncate ? String(cleaned.prefix(truncateLength)) + "..." : cleaned)
