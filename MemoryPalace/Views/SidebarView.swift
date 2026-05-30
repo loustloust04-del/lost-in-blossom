@@ -719,25 +719,23 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isIOSStyle {
-                // ── New Chat 胶囊按钮固定底部 ─────────────────────────────
-                GeometryReader { geo in
-                    Button(action: createNewConversation) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("New chat")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .frame(width: geo.size.width * 0.5, height: 44)
-                        .background(Capsule().fill(Color.black))
+                // ── New Chat 胶囊按钮固定底部（模仿 Claude 侧边栏）────────
+                Button(action: createNewConversation) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("New chat")
+                            .font(.system(size: 15, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 13)
+                    .background(Capsule().fill(Color.black))
                 }
-                .frame(height: 44)
-                .padding(.bottom, 24)
-                .padding(.top, 4)
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 16)
+                .padding(.top, 8)
                 .background(Theme.sidebarBg)
             }
         }
