@@ -220,7 +220,11 @@ struct SidebarView: View {
                 List {
                     ForEach(tags) { tag in
                         Button {
-                            selectTab(.tag(id: tag.id))
+                            if selectedTagId == tag.id {
+                                selectTab(.all)
+                            } else {
+                                selectTab(.tag(id: tag.id))
+                            }
                         } label: {
                             HStack(spacing: 8) {
                                 Text(tag.emoji)
