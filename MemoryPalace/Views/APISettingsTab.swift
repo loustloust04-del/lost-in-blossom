@@ -452,10 +452,7 @@ struct APISettingsTab: View {
             HStack(spacing: 8) {
 
                 Button("重新连接") {
-                    if let url = URL(string: provider.baseURL) {
-                        CCBridgeWebSocketClient.shared.disconnect()
-                        CCBridgeWebSocketClient.shared.connect(url: url)
-                    }
+                    CCBridgeWebSocketClient.shared.reconnect()
                 }
                 .buttonStyle(.bordered)
             }

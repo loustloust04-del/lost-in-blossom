@@ -35,6 +35,16 @@ final class CCBridgeWebSocketClient: NSObject {
         startTask()
     }
 
+    /// 断开后延迟重连（解决 URLSession invalidate 时序问题）
+    func reconnect() {
+        guard let url else { return }
+        disconnect()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { return }
+            self.connect(url: url)
+        }
+    }
+
     /// 手动断开，禁用自动重连。
     func disconnect() {
         manualClose = true
@@ -88,7 +98,10 @@ final class CCBridgeWebSocketClient: NSObject {
     private func startTask() {
         guard let url else { return }
         session?.invalidateAndCancel()  // 释放旧 session（避免 reconnect 累积资源）
-        let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 300
+        config.waitsForConnectivity = true
+        let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         self.session = session
         let task = session.webSocketTask(with: url)
         self.task = task
