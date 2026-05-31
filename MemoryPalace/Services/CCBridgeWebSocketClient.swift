@@ -196,4 +196,14 @@ extension CCBridgeWebSocketClient: URLSessionWebSocketDelegate {
         let r = reason.flatMap { String(data: $0, encoding: .utf8) }
         handleDisconnect(error: r ?? "closed (\(closeCode.rawValue))")
     }
+
+    // Trust self-signed certificates (VPS nginx)
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let serverTrust = challenge.protectionSpace.serverTrust {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        } else {
+            completionHandler(.performDefaultHandling, nil)
+        }
+    }
 }

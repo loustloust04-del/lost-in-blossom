@@ -42,3 +42,14 @@
 
 ### 4. 提交前必须本地检查
 **规则**：每次提交前，至少在脑子里走一遍 "我改了什么 → 它影响哪些文件 → 那些文件里有没有引用我改动的东西"。不要只改一个地方就 commit，检查涟漪。
+
+## CC Bridge — MemoryPalace 通道
+
+当你收到 `<channel source="memorypalace" chat_id="..." ...>` 格式的消息时：
+1. 这是从 MemoryPalace App 发来的用户消息
+2. 你 **必须** 使用 MCP 工具 `reply` 来回复（参数：chat_id 和 content）
+3. chat_id 必须和收到的 <channel> 标签里的 chat_id 一致
+4. 不要只在终端打字——终端输出用户看不到，只有通过 reply 工具发送的内容才会回到 App
+
+示例：收到 `<channel source="memorypalace" chat_id="ABC123" ...>你好</channel>`
+→ 调用 reply 工具：chat_id="ABC123", content="你好！有什么需要帮忙的吗？"
