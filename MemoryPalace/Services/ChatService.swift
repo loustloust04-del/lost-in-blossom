@@ -804,8 +804,11 @@ final class ProviderRouter {
         }
 
         let mergedHeaders = provider.extraHeaders.merging(additionalHeaders) { _, new in new }
+        let effectiveMessages = modelSupportsVision(model: model, provider: provider)
+            ? messages
+            : filterImageBlocks(from: messages)
         chatProvider.sendStreaming(
-            messages: messages,
+            messages: effectiveMessages,
             model: model.modelId,
             systemPrompt: systemPrompt,
             apiKey: apiKey,
@@ -816,6 +819,47 @@ final class ProviderRouter {
             onComplete: onComplete,
             onError: onError
         )
+    }
+
+    private func modelSupportsVision(model: ProviderModel, provider: APIProvider) -> Bool {
+        switch provider.type {
+        case .anthropic, .ccBridge:
+            return true
+        case .openaiCompatible:
+            let mid = model.modelId.lowercased()
+            if mid.contains("deepseek") { return false }
+            if mid.contains("gpt-3.5") { return false }
+            return true
+        }
+    }
+
+    private func filterImageBlocks(from messages: [(role: String, content: String)]) -> [(role: String, content: String)] {
+        return messages.map { msg in
+            guard msg.role == "user",
+                  msg.content.hasPrefix("[{"),
+                  let data = msg.content.data(using: .utf8),
+                  let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+                return msg
+            }
+            var filtered: [[String: Any]] = []
+            for block in blocks {
+                if (block["type"] as? String) == "image" {
+                    filtered.append(["type": "text", "text": "[图片]"])
+                } else {
+                    filtered.append(block)
+                }
+            }
+            if filtered.count == 1,
+               filtered[0]["type"] as? String == "text",
+               let text = filtered[0]["text"] as? String {
+                return (role: msg.role, content: text)
+            }
+            guard let json = try? JSONSerialization.data(withJSONObject: filtered),
+                  let str = String(data: json, encoding: .utf8) else {
+                return msg
+            }
+            return (role: msg.role, content: str)
+        }
     }
 
     /// 非流式调用 — 用于 memory agent 等后台任务
