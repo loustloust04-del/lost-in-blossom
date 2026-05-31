@@ -10,7 +10,7 @@ struct AddToChatSheet: View {
     let onOpenSticker: () -> Void
     /// 选中照片后写入此 Binding，由 CardFlowView 持有并传给 ChatInputBar
     @Binding var pendingImageData: Data?
-    /// 选中 PDF 文件后写入，由 CardFlowView 持有并传给 ChatInputBar
+    /// 选中文件后写入，由 CardFlowView 持有并传给 ChatInputBar
     @Binding var pendingFileData: Data?
     @Binding var pendingFileName: String?
 
@@ -87,14 +87,14 @@ struct AddToChatSheet: View {
 
                 rowDivider
 
-                // ── 行 1：PDF 文件 ──────────────────────────────────────
+                // ── 行 1：文件 ──────────────────────────────────────────
                 Button {
                     showFilePicker = true
                 } label: {
                     addToChatRow(
                         icon: "doc.fill",
                         iconColor: Color.red.opacity(0.8),
-                        title: "发送 PDF",
+                        title: "发送文件",
                         trailing: nil
                     )
                 }
@@ -209,10 +209,10 @@ struct AddToChatSheet: View {
                 .presentationBackground(Theme.sidebarBg)
             }
         }
-        // PDF 文件选择器
+        // 文件选择器（所有类型）
         .fileImporter(
             isPresented: $showFilePicker,
-            allowedContentTypes: [UTType.pdf],
+            allowedContentTypes: [UTType.item],
             allowsMultipleSelection: false
         ) { result in
             guard let url = (try? result.get())?.first else { return }
