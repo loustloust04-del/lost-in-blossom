@@ -223,16 +223,16 @@ struct AppearanceSettingsTab: View {
         .onAppear {
             importedFonts = FontManager.importedFonts()
         }
-        .fileImporter(
-            isPresented: $showFontImporter,
-            allowedContentTypes: [
-                UTType(filenameExtension: "ttf") ?? .data,
-                UTType(filenameExtension: "otf") ?? .data,
-                UTType(filenameExtension: "ttc") ?? .data,
-            ],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
+        .sheet(isPresented: $showFontImporter) {
+            DocumentPickerView(
+                contentTypes: [
+                    UTType(filenameExtension: "ttf") ?? .data,
+                    UTType(filenameExtension: "otf") ?? .data,
+                    UTType(filenameExtension: "ttc") ?? .data,
+                ],
+                allowsMultipleSelection: true
+            ) { urls in
+                showFontImporter = false
                 for url in urls {
                     guard url.startAccessingSecurityScopedResource() else { continue }
                     defer { url.stopAccessingSecurityScopedResource() }
@@ -241,6 +241,8 @@ struct AppearanceSettingsTab: View {
                     }
                 }
                 importedFonts = FontManager.importedFonts()
+            } onCancel: {
+                showFontImporter = false
             }
         }
     }
@@ -524,16 +526,16 @@ struct IOSAppearancePage: View {
         .onAppear {
             importedFonts = FontManager.importedFonts()
         }
-        .fileImporter(
-            isPresented: $showFontImporter,
-            allowedContentTypes: [
-                UTType(filenameExtension: "ttf") ?? .data,
-                UTType(filenameExtension: "otf") ?? .data,
-                UTType(filenameExtension: "ttc") ?? .data,
-            ],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
+        .sheet(isPresented: $showFontImporter) {
+            DocumentPickerView(
+                contentTypes: [
+                    UTType(filenameExtension: "ttf") ?? .data,
+                    UTType(filenameExtension: "otf") ?? .data,
+                    UTType(filenameExtension: "ttc") ?? .data,
+                ],
+                allowsMultipleSelection: true
+            ) { urls in
+                showFontImporter = false
                 for url in urls {
                     guard url.startAccessingSecurityScopedResource() else { continue }
                     defer { url.stopAccessingSecurityScopedResource() }
@@ -542,6 +544,8 @@ struct IOSAppearancePage: View {
                     }
                 }
                 importedFonts = FontManager.importedFonts()
+            } onCancel: {
+                showFontImporter = false
             }
         }
     }

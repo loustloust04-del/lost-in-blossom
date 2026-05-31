@@ -225,12 +225,10 @@ struct IOSStickerPage: View {
         .navigationTitle("贴纸")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { loadStats() }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [UTType(filenameExtension: "stickerpack") ?? .data],
-            allowsMultipleSelection: false
-        ) { result in
-            importPack(result: result)
+        .sheet(isPresented: $showFileImporter) {
+            DocumentPickerView(contentTypes: [UTType(filenameExtension: "stickerpack") ?? .data]) { urls in
+                importPack(result: .success(urls))
+            } onCancel: {}
         }
     }
 

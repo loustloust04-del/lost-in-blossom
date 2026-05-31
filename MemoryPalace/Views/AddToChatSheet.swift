@@ -210,19 +210,20 @@ struct AddToChatSheet: View {
             }
         }
         // 文件选择器（所有类型）
-        .fileImporter(
-            isPresented: $showFilePicker,
-            allowedContentTypes: [UTType.item],
-            allowsMultipleSelection: false
-        ) { result in
-            guard let url = (try? result.get())?.first else { return }
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url), data.count <= 10_485_760 else { return }
-            let name = url.lastPathComponent
-            pendingFileData = data
-            pendingFileName = name
-            dismiss()
+        .sheet(isPresented: $showFilePicker) {
+            DocumentPickerView(contentTypes: [.item]) { urls in
+                showFilePicker = false
+                guard let url = urls.first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                guard let data = try? Data(contentsOf: url), data.count <= 10_485_760 else { return }
+                let name = url.lastPathComponent
+                pendingFileData = data
+                pendingFileName = name
+                dismiss()
+            } onCancel: {
+                showFilePicker = false
+            }
         }
     }
 

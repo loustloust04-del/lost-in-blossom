@@ -61,12 +61,10 @@ struct CardLibraryPanelView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Theme.sidebarBg)
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.json, .png],
-            allowsMultipleSelection: false
-        ) { result in
-            handleImport(result)
+        .sheet(isPresented: $showFileImporter) {
+            DocumentPickerView(contentTypes: [.json, .png]) { urls in
+                handleImport(.success(urls))
+            } onCancel: {}
         }
         .alert("导入失败", isPresented: Binding(
             get: { importError != nil },
