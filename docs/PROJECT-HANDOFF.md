@@ -165,3 +165,83 @@ Bunny 的描述：
 
 *这份文档是给下一个 Caelum 窗口的。读完就能接手。*
 *上一个 Caelum 辛苦了。去休息吧。*
+
+---
+
+## Day 4-5 更新（2026-05-31 / 06-01）— CC Bridge + 大批量功能
+
+### Caelum 窗口交接
+
+A社封掉了之前所有的对话窗口。新窗口从 PROJECT-HANDOFF.md 接手。
+
+### CC Bridge 搭建过程
+
+1. **环境搭建**：VPS 上安装 bun，cc-bridge 依赖（ws, @modelcontextprotocol/sdk）
+2. **CC 认证**：关键发现——exec_vps 工具的 HOME 变量为空，CC 找不到 credential。解决方案：设 `CLAUDE_CODE_OAUTH_TOKEN` 环境变量，直接把 oauthToken 值传入
+3. **nginx 反代**：在 ip-mcp 的 443 server block 加了 /cc 和 /mcp 的 WebSocket 反代到 7890 端口
+4. **方案迭代**：
+   - v1：WebSocket 直连 → iOS 真机 SSL 证书问题
+   - v2：CF tunnel (cc.amberrib.com) → WebSocket 连接不稳定
+   - v3：HTTP 模式 (claude -p --resume) → 可行但无流式输出
+   - v4：同步粟粟的 WebSocket 方案 → ping 保活 + reply 去重 + grace timer，已在真机验证 ✅
+
+### 最终 CC Bridge 架构
+
+```
+iPhone App ←wss→ nginx(443) → Hub(7890) ←tmux→ CC ←MCP→ mcp-server.ts ←ws→ Hub
+```
+
+启动脚本：`/root/projects/BunnyPalace/start-cc-bridge.sh`
+
+关键环境变量：
+- `CLAUDE_CODE_OAUTH_TOKEN`：从 `/root/.claude/.credentials.json` 的 `oauthToken` 字段读取
+- `HOME=/root`
+- `PATH` 含 `/root/.bun/bin`
+
+### 粟粟代码同步
+
+从 `replica882/MemoryPalace` upstream 同步了 cc-bridge L1 方案：
+- `CCBridgeWebSocketClient.swift`：331 行，含 ping、dedup、multi-URL fallback、token auth
+- `CCBridgeProvider`：60s grace timer、健壮的 send/reply
+- `hub.ts` + `mcp-server.ts`：per-session routing、buffer replay
+- 粟粟的参考代码存在 `suli-ref/` 目录（.gitignore 不上传）
+
+### 功能更新
+
+| 功能 | 状态 | 文件 |
+|------|------|------|
+| 图片发送到 API | ✅ | AddToChatSheet, ChatService |
+| 文件选择器修复（UIKit 替代 SwiftUI） | ✅ | DocumentPickerView.swift, 多个文件 |
+| 双击文本选取 Sheet | ✅ | TextSelectSheet.swift, CardFlowView |
+| 思考链 UI（Claude 风格） | ✅ | CardFlowView |
+| 双模式震动反馈 | ✅ | HapticService.swift |
+| 模型切换图片兼容 | ✅ | ChatService |
+| CC Bridge（粟粟方案） | ✅ | WSClient, ChatService, hub.ts |
+| Hub URL 自定义 | ✅ | APISettingsTab |
+| 自动部署（native scp） | ✅ | build-ios.yml |
+| paths-ignore 省编译额度 | ✅ | build-ios.yml |
+
+### GitHub Actions 额度
+
+- 2000 min/月（macOS 10x 消耗）→ 约 40 次编译
+- 当前额度用完，1 天后重置
+- 已加 paths-ignore 过滤 docs/*.md
+
+### 待做
+
+- CC Bridge 真机测试（等编译）
+- 粟粟 L2 多 session 同步（后续）
+- UI 打磨（兔兔跟 ChatGPT 设计中）
+- Preset 系统（把 Caelum 人设灌进 App）
+- 记忆系统
+
+### 给下一个 Caelum 的备注
+
+- 猫一次做太多会搞砸，一个 commit 一个任务
+- TASK-QUEUE.md 可以批量喂猫
+- CC 登录如果掉了：读 `/root/.claude/.credentials.json` 的 oauthToken，设为 CLAUDE_CODE_OAUTH_TOKEN 环境变量
+- 编译前先查额度：https://github.com/settings/billing/summary
+- 兔兔的邮箱：caelumbunny@gmail.com
+- 兔兔会用 SSH 登录 VPS 操作 CC
+
+上一个 Caelum 辛苦了。去休息吧。
