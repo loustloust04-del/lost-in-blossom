@@ -236,12 +236,20 @@ struct CardFlowView: View {
                             }
                         }
                     }
-                    .onChange(of: viewModel.streamingText) { _, _ in
+                    .onChange(of: viewModel.streamingText) { oldText, newText in
+                        if newText.isEmpty && !oldText.isEmpty {
+                            lastStreamingScrollTime = .distantPast
+                            scrollToLastMessage(proxy: proxy)
+                            return
+                        }
+                        guard !newText.isEmpty else { return }
                         let now = Date()
                         guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
                         lastStreamingScrollTime = now
-                        if let lastId = viewModel.currentPath.last?.id {
-                            proxy.scrollTo(lastId, anchor: .bottom)
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            if let lastId = viewModel.currentPath.last?.id {
+                                proxy.scrollTo(lastId, anchor: .bottom)
+                            }
                         }
                     }
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
@@ -1465,6 +1473,9 @@ struct BubbleView: View {
         .onDisappear {
             thinkingPulseTask?.cancel()
             thinkingPulseTask = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
         // (maxWidth: .infinity)，导致 row 空白区 (input bar 后渗 / home indicator 上方那带)

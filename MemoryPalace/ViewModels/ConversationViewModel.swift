@@ -1301,7 +1301,7 @@ final class ConversationViewModel {
 
         // 5. Stream
         // 6a: 发送触觉反馈
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         providerRouter.sendStreaming(
             model: model,
@@ -1323,9 +1323,9 @@ final class ConversationViewModel {
             onToken: { [weak self] token in
                 guard let self else { return }
                 if isThinking {
-                    // 思考结束、正文开始——6c: rigid 震（转折感），并异步生成一句话总结
+                    // 思考结束、正文开始——6c: warning 震（转折感），并异步生成一句话总结
                     isThinking = false
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
                     let capturedThinking = streamingThinkingText
                     let capturedModel = model
                     let capturedProvider = providerManager
