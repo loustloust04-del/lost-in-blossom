@@ -1215,7 +1215,7 @@ final class ConversationViewModel {
     }
 
     /// Send a user message and get a streaming response
-    func sendMessage(_ text: String, imageData: Data? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
+    func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
         guard let conversation = selectedConversation else { return }
         guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
 
@@ -1224,14 +1224,30 @@ final class ConversationViewModel {
 
         // 2. Build content and contentType
         let (userContent, userContentType): (String, String) = {
-            guard let data = imageData else { return (text, "text") }
-            let b64 = data.base64EncodedString()
-            let blocks: [[String: Any]] = [
-                ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": b64]],
-                ["type": "text", "text": text]
-            ]
-            let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
-            return (json, "multimodal_text")
+            if let data = imageData {
+                let b64 = data.base64EncodedString()
+                let blocks: [[String: Any]] = [
+                    ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": b64]],
+                    ["type": "text", "text": text]
+                ]
+                let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
+                return (json, "multimodal_text")
+            } else if let data = fileData {
+                let b64 = data.base64EncodedString()
+                var docBlock: [String: Any] = [
+                    "type": "document",
+                    "source": ["type": "base64", "media_type": "application/pdf", "data": b64]
+                ]
+                if let name = fileName { docBlock["title"] = name }
+                let blocks: [[String: Any]] = [
+                    docBlock,
+                    ["type": "text", "text": text]
+                ]
+                let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
+                return (json, "multimodal_text")
+            } else {
+                return (text, "text")
+            }
         }()
 
         // 3. Create user MessageNode

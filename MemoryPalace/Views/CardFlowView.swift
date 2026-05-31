@@ -20,6 +20,8 @@ struct CardFlowView: View {
     @State private var showStickerPanel = false
     @State private var showAddToChat = false
     @State private var pendingImageData: Data?
+    @State private var pendingFileData: Data?
+    @State private var pendingFileName: String?
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
@@ -282,6 +284,8 @@ struct CardFlowView: View {
                                     viewModel: viewModel, modelContext: modelContext,
                                     profileManager: profileManager, providerManager: pm, presetManager: presetManager,
                                     pendingImageData: $pendingImageData,
+                                    pendingFileData: $pendingFileData,
+                                    pendingFileName: $pendingFileName,
                                     onStickerTap: {
                                         // + 号 → Add to Chat 功能面板（iOS）
                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -380,7 +384,9 @@ struct CardFlowView: View {
                         showStickerPanel = true
                         stickerVM.isEditingStickers = true
                     }
-                }, pendingImageData: $pendingImageData)
+                }, pendingImageData: $pendingImageData,
+                   pendingFileData: $pendingFileData,
+                   pendingFileName: $pendingFileName)
             }
         }
     }
@@ -530,6 +536,8 @@ struct ChatInputBar: View {
     var providerManager: ProviderManager
     var presetManager: PresetManager?
     var pendingImageData: Binding<Data?> = .constant(nil)
+    var pendingFileData: Binding<Data?> = .constant(nil)
+    var pendingFileName: Binding<String?> = .constant(nil)
     var onStickerTap: (() -> Void)? = nil
 
     @AppStorage("blurRadius") private var blurRadius = 1.3
@@ -573,6 +581,8 @@ struct ChatInputBar: View {
             placeholder: inputPlaceholder,
             modelName: currentModel.name,
             pendingImageData: pendingImageData,
+            pendingFileData: pendingFileData,
+            pendingFileName: pendingFileName,
             onSend: { text in send(text) },
             onCancelStream: { viewModel.providerRouter.cancel() },
             onStickerTap: onStickerTap,
@@ -634,7 +644,9 @@ struct ChatInputBar: View {
     private func send(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageData = pendingImageData.wrappedValue
-        guard !trimmed.isEmpty || imageData != nil else { return false }
+        let fileData = pendingFileData.wrappedValue
+        let fileName = pendingFileName.wrappedValue
+        guard !trimmed.isEmpty || imageData != nil || fileData != nil else { return false }
 
         let prof = profileManager?.currentProfile ?? Profile(name: "", emoji: "", description: "", userName: "你", assistantName: "AI")
         let preset = presetManager?.preset(byId: prof.presetId) ?? Preset.balanced
@@ -649,8 +661,10 @@ struct ChatInputBar: View {
         ) else { return false }
 
         // globalWorldBookEntries 已由 ContentView 同步
-        viewModel.sendMessage(trimmed, imageData: imageData, model: currentModel, profile: prof, preset: preset, providerManager: providerManager, context: modelContext)
+        viewModel.sendMessage(trimmed, imageData: imageData, fileData: fileData, fileName: fileName, model: currentModel, profile: prof, preset: preset, providerManager: providerManager, context: modelContext)
         pendingImageData.wrappedValue = nil
+        pendingFileData.wrappedValue = nil
+        pendingFileName.wrappedValue = nil
         return true
     }
 }
@@ -680,6 +694,7 @@ extension ChatInputBar: Equatable {
             && lhs.presetManager === rhs.presetManager
             && (lhs.onStickerTap == nil) == (rhs.onStickerTap == nil)
             && (lhs.pendingImageData.wrappedValue != nil) == (rhs.pendingImageData.wrappedValue != nil)
+            && (lhs.pendingFileData.wrappedValue != nil) == (rhs.pendingFileData.wrappedValue != nil)
     }
 }
 
@@ -699,16 +714,18 @@ private struct InputFieldContainer: View {
     let placeholder: String
     let modelName: String
     @Binding var pendingImageData: Data?
+    @Binding var pendingFileData: Data?
+    @Binding var pendingFileName: String?
     let onSend: (String) -> Bool
     let onCancelStream: () -> Void
     let onStickerTap: (() -> Void)?
     let onModelTap: () -> Void
 
     private var canSend: Bool {
-        isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil
+        isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
     }
     private var hasText: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
     }
 
     var body: some View {
@@ -736,6 +753,32 @@ private struct InputFieldContainer: View {
                     Spacer()
                     Button {
                         pendingImageData = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                Divider().padding(.horizontal, 12)
+            }
+            // ── PDF 预览行（pendingFileData 非 nil 时显示）────────────────
+            if pendingFileData != nil {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.red.opacity(0.8))
+                        .frame(width: 60, height: 60)
+                    Text(pendingFileName ?? "document.pdf")
+                        .font(.system(size: 13))
+                        .foregroundColor(Theme.textMuted)
+                        .lineLimit(2)
+                    Spacer()
+                    Button {
+                        pendingFileData = nil
+                        pendingFileName = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 18))
@@ -1054,6 +1097,7 @@ private struct MultimodalUserBubble: View {
 
     private struct ContentBlock {
         var imageData: Data?
+        var documentTitle: String?
         var text: String = ""
     }
 
@@ -1070,6 +1114,8 @@ private struct MultimodalUserBubble: View {
                let b64 = source["data"] as? String,
                let imgData = Data(base64Encoded: b64) {
                 block.imageData = imgData
+            } else if type == "document" {
+                block.documentTitle = item["title"] as? String ?? "document.pdf"
             } else if type == "text" {
                 block.text = item["text"] as? String ?? ""
             }
@@ -1105,6 +1151,21 @@ private struct MultimodalUserBubble: View {
                             .buttonStyle(.plain)
                         }
                     }
+            }
+            if let title = block.documentTitle {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.red.opacity(0.8))
+                    Text(title)
+                        .font(FontManager.font(size: 13))
+                        .foregroundColor(Theme.textMuted)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Theme.textMuted.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             if !block.text.isEmpty {
                 Text(block.text)

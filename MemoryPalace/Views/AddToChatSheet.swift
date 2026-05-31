@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// + 号功能面板（Claude App 风格底部 sheet）
 /// 内容：添加文件/照片、选择模型、设置、导入聊天记录、贴纸
@@ -9,6 +10,9 @@ struct AddToChatSheet: View {
     let onOpenSticker: () -> Void
     /// 选中照片后写入此 Binding，由 CardFlowView 持有并传给 ChatInputBar
     @Binding var pendingImageData: Data?
+    /// 选中 PDF 文件后写入，由 CardFlowView 持有并传给 ChatInputBar
+    @Binding var pendingFileData: Data?
+    @Binding var pendingFileName: String?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
@@ -17,8 +21,24 @@ struct AddToChatSheet: View {
 
     @State private var showModelPicker = false
     @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showFilePicker = false
     /// 控制 staggered 入场动画
     @State private var appeared = false
+
+    private func compressImage(_ uiImage: UIImage, maxDimension: CGFloat = 1024) -> Data? {
+        var img = uiImage
+        let maxSide = max(uiImage.size.width, uiImage.size.height)
+        if maxSide > maxDimension {
+            let scale = maxDimension / maxSide
+            let newSize = CGSize(width: uiImage.size.width * scale, height: uiImage.size.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: newSize)
+            img = renderer.image { _ in uiImage.draw(in: CGRect(origin: .zero, size: newSize)) }
+        }
+        if let data = img.jpegData(compressionQuality: 0.8), data.count <= 1_048_576 {
+            return data
+        }
+        return img.jpegData(compressionQuality: 0.5)
+    }
 
     private var currentModelName: String {
         guard let pm = providerManager else { return "未选择" }
@@ -52,7 +72,7 @@ struct AddToChatSheet: View {
                     Task {
                         if let data = try? await item.loadTransferable(type: Data.self),
                            let uiImage = UIImage(data: data),
-                           let compressed = uiImage.jpegData(compressionQuality: 0.7) {
+                           let compressed = compressImage(uiImage) {
                             await MainActor.run {
                                 pendingImageData = compressed
                             }
@@ -67,7 +87,23 @@ struct AddToChatSheet: View {
 
                 rowDivider
 
-                // ── 行 1：选择模型 ─────────────────────────────────────
+                // ── 行 1：PDF 文件 ──────────────────────────────────────
+                Button {
+                    showFilePicker = true
+                } label: {
+                    addToChatRow(
+                        icon: "doc.fill",
+                        iconColor: Color.red.opacity(0.8),
+                        title: "发送 PDF",
+                        trailing: nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .rowEntrance(index: 1, appeared: appeared)
+
+                rowDivider
+
+                // ── 行 2：选择模型 ─────────────────────────────────────
                 Button {
                     showModelPicker = true
                 } label: {
@@ -84,11 +120,11 @@ struct AddToChatSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .rowEntrance(index: 1, appeared: appeared)
+                .rowEntrance(index: 2, appeared: appeared)
 
                 rowDivider
 
-                // ── 行 2：设置 ─────────────────────────────────────────
+                // ── 行 3：设置 ─────────────────────────────────────────
                 Button {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -103,11 +139,11 @@ struct AddToChatSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .rowEntrance(index: 2, appeared: appeared)
+                .rowEntrance(index: 3, appeared: appeared)
 
                 rowDivider
 
-                // ── 行 3：导入聊天记录 ─────────────────────────────────
+                // ── 行 4：导入聊天记录 ─────────────────────────────────
                 Button {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -122,11 +158,11 @@ struct AddToChatSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .rowEntrance(index: 3, appeared: appeared)
+                .rowEntrance(index: 4, appeared: appeared)
 
                 rowDivider
 
-                // ── 行 4：贴纸 ─────────────────────────────────────────
+                // ── 行 5：贴纸 ─────────────────────────────────────────
                 Button {
                     dismiss()
                     // 短暂延迟让 sheet dismiss 动画完成后再展开贴纸面板
@@ -142,7 +178,7 @@ struct AddToChatSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .rowEntrance(index: 4, appeared: appeared)
+                .rowEntrance(index: 5, appeared: appeared)
 
                 Spacer()
             }
@@ -172,6 +208,21 @@ struct AddToChatSheet: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.sidebarBg)
             }
+        }
+        // PDF 文件选择器
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [UTType.pdf],
+            allowsMultipleSelection: false
+        ) { result in
+            guard let url = (try? result.get())?.first else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), data.count <= 10_485_760 else { return }
+            let name = url.lastPathComponent
+            pendingFileData = data
+            pendingFileName = name
+            dismiss()
         }
     }
 
