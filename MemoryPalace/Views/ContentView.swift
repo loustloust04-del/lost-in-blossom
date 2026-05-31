@@ -292,7 +292,7 @@ struct ContentView: View {
                     )
                     .ignoresSafeArea()
                     .allowsHitTesting(progress < 0.1)
-                    .sensoryFeedback(.impact(weight: .light), trigger: iOSPage)
+                    .onChange(of: iOSPage) { _, _ in HapticService.shared.navigation() }
 
                     // 聊天遮罩：侧边栏开时提示聊天区不可交互，点击关闭侧边栏
                     Color.black.opacity(0.28 * progress)

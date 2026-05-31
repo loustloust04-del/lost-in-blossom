@@ -924,6 +924,7 @@ private struct InputFieldContainer: View {
 
     private func triggerSend() {
         if isStreaming { onCancelStream(); return }
+        HapticService.shared.sendMessage()
         if onSend(text) { text = "" }
     }
 }
@@ -1234,7 +1235,6 @@ struct BubbleView: View {
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
-    @State private var thinkingPulseTask: Task<Void, Never>? = nil
     private let truncateLength = 300
 
     var isUser: Bool { node.role == "user" }
@@ -1514,29 +1514,8 @@ struct BubbleView: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .onChange(of: isThinking) { _, newValue in
-            thinkingPulseTask?.cancel()
-            thinkingPulseTask = nil
-            if newValue {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                thinkingPulseTask = Task {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        if !Task.isCancelled {
-                            UISelectionFeedbackGenerator().selectionChanged()
-                        }
-                    }
-                }
-            } else {
-                UINotificationFeedbackGenerator().notificationOccurred(.warning)
-            }
-        }
-        .onDisappear {
-            thinkingPulseTask?.cancel()
-            thinkingPulseTask = nil
-        }
         .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            HapticService.shared.copyText()
         }
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
         // (maxWidth: .infinity)，导致 row 空白区 (input bar 后渗 / home indicator 上方那带)
