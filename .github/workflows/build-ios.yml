@@ -69,4 +69,4 @@ jobs:
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "LostInBlossom.ipa"
-          target: "/root/projects/lib-web/"
+          target: "/var/www/lib-dl/"
