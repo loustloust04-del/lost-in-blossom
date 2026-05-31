@@ -60,13 +60,13 @@ jobs:
           retention-days: 14
 
       - name: Deploy to VPS
-        continue-on-error: true
         if: success()
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: 172.245.88.103
-          port: 48722
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "LostInBlossom.ipa"
-          target: "/var/www/lib-dl/"
+        run: |
+          echo "${{ secrets.VPS_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            LostInBlossom.ipa root@172.245.88.103:/root/projects/lib-web/LostInBlossom.ipa
+          scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            LostInBlossom.ipa root@172.245.88.103:/var/www/lib-dl/LostInBlossom.ipa
+          rm -f /tmp/deploy_key
+          echo "✅ Deployed to VPS"
