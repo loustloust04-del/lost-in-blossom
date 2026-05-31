@@ -5,6 +5,12 @@ import MarkdownUI
 import UniformTypeIdentifiers
 import VariableBlur
 
+private struct TextSelectItem: Identifiable {
+    let id: String
+    let text: String
+    let thinkingText: String?
+}
+
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
@@ -26,6 +32,7 @@ struct CardFlowView: View {
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
     @State private var lastStreamingScrollTime: Date = .distantPast
+    @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
     private func makeBubbleView(for node: MessageNode) -> some View {
@@ -60,6 +67,11 @@ struct CardFlowView: View {
                 return presetScripts + profileScripts
             }()
         )
+        .onTapGesture(count: 2) {
+            let raw = ContentCleaner.clean(node.content, cacheKey: node.id)
+            let result = ContentCleaner.extractThinking(from: raw)
+            textSelectItem = TextSelectItem(id: node.id, text: result.content, thinkingText: result.thinking)
+        }
     }
 
     private func makeRegenerateAction(for node: MessageNode) -> (() -> Void)? {
@@ -387,6 +399,10 @@ struct CardFlowView: View {
                 }, pendingImageData: $pendingImageData,
                    pendingFileData: $pendingFileData,
                    pendingFileName: $pendingFileName)
+            }
+            // 双击消息气泡 → 文本选取 sheet
+            .sheet(item: $textSelectItem) { item in
+                TextSelectSheet(text: item.text, thinkingText: item.thinkingText)
             }
         }
     }
