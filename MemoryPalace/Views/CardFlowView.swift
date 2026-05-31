@@ -1056,15 +1056,19 @@ struct ThinkingPanelView: View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                Spacer()
                 Text("Thought process")
                     .font(.system(size: 17, weight: .semibold))
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
+                Image(systemName: "xmark")
+                    .font(.system(size: 16))
+                    .hidden()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
