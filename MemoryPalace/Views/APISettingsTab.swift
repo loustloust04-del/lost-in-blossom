@@ -425,19 +425,54 @@ struct APISettingsTab: View {
 
     /// CC Bridge 专用状态面板（替换 API Key 输入框）。
     @ViewBuilder
+    @State private var ccHubURLDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? ""
+
     private func ccBridgeStatusContent(provider: APIProvider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(Color.green)
+                    .fill(CCBridgeWebSocketClient.shared.isConnected ? Color.green : Color.gray)
                     .frame(width: 8, height: 8)
-                Text("HTTP 模式")
+                Text(CCBridgeWebSocketClient.shared.isConnected ? "已连接" : "未连接")
                     .font(.system(size: Theme.SettingsFont.secondary))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
 
-            Text("CC Bridge 通过 HTTP 连接 VPS 上的 Claude Code。每条消息独立请求，不需要保持长连接。")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hub URL")
+                    .font(.system(size: Theme.SettingsFont.caption))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    TextField("wss://your-vps-ip/cc", text: $ccHubURLDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: Theme.SettingsFont.secondary))
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    Button("保存并连接") {
+                        UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
+                        if let url = URL(string: ccHubURLDraft) {
+                            CCBridgeWebSocketClient.shared.disconnect()
+                            CCBridgeWebSocketClient.shared.connect(url: url)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(ccHubURLDraft.isEmpty)
+                }
+            }
+
+            Button("重新连接") {
+                let urlStr = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? provider.baseURL
+                if let url = URL(string: urlStr) {
+                    CCBridgeWebSocketClient.shared.disconnect()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        CCBridgeWebSocketClient.shared.connect(url: url)
+                    }
+                }
+            }
+            .buttonStyle(.bordered)
+
+            Text("填入 VPS 的 Hub URL（如 wss://172.245.88.103/cc），保存后自动连接。")
                 .font(.system(size: Theme.SettingsFont.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
