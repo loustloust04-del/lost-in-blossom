@@ -429,33 +429,18 @@ struct APISettingsTab: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(CCBridgeWebSocketClient.shared.isConnected ? Color.green : Color.gray)
+                    .fill(Color.green)
                     .frame(width: 8, height: 8)
-                Text(CCBridgeWebSocketClient.shared.isConnected ? "已连接" : "未连接")
+                Text("HTTP 模式")
                     .font(.system(size: Theme.SettingsFont.secondary))
                     .foregroundStyle(.secondary)
-                if let err = CCBridgeWebSocketClient.shared.lastError,
-                   !CCBridgeWebSocketClient.shared.isConnected {
-                    Text(err)
-                        .font(.system(size: Theme.SettingsFont.caption))
-                        .foregroundStyle(.red.opacity(0.7))
-                        .lineLimit(1)
-                }
                 Spacer()
             }
 
-            Text("CC Bridge 用本地 WebSocket 连接，不需要 API Key。需要先在终端跑 `bash cc-bridge/start_hub.sh` 和 `bash cc-bridge/start_cc.sh`。")
+            Text("CC Bridge 通过 HTTP 连接 VPS 上的 Claude Code。每条消息独立请求，不需要保持长连接。")
                 .font(.system(size: Theme.SettingsFont.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 8) {
-
-                Button("重新连接") {
-                    CCBridgeWebSocketClient.shared.reconnect()
-                }
-                .buttonStyle(.bordered)
-            }
         }
         .padding(.vertical, 4)
     }

@@ -893,8 +893,6 @@ final class ProviderRouter {
 // MARK: - CC Bridge Provider
 
 final class CCBridgeProvider: BaseChatProvider {
-    @ObservationIgnored private let wsClient = CCBridgeWebSocketClient.shared
-    /// ProviderRouter 在发起请求前注入，用于把 tool_event 段回传给 ViewModel
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
 
     override func sendStreaming(
@@ -909,114 +907,95 @@ final class CCBridgeProvider: BaseChatProvider {
         onComplete: @escaping (String, TokenUsage?) -> Void,
         onError: @escaping (String) -> Void
     ) {
-        // sendStreaming 由 ConversationViewModel（@MainActor）调用，整个方法在 main 上跑，
-        // 直接写 @Observable 状态是安全的。
-        // 重置状态（手动做，不走 resetState，因为我们不用 URLSession）
         self.streamingContent = ""
         self.error = nil
         self.isStreaming = true
 
-        // 1. 取最后一条 user 消息
-        //    Task 11 的 ConversationViewModel 已短路 PromptAssembler，messages 只有一条 user
         guard let lastUser = messages.last(where: { $0.role == "user" }) else {
             failNow("没有 user 消息可发", onError: onError)
             return
         }
 
-        // 2. 从 extraHeaders 取路由信息（Task 11 注入），缺失时给防御性默认值
-        //    UUID fallback 不会丢消息：我们把同一 id 写进 payload 发给 hub，CC 回复时
-        //    带回这个 id，handler 仍能命中。只是这条对话跟 MP 的 MessageNode 失联。
-        let chatId    = extraHeaders["X-MP-ChatId"]    ?? UUID().uuidString
-        let messageId = extraHeaders["X-MP-MessageId"] ?? UUID().uuidString
-        let user      = extraHeaders["X-MP-User"]      ?? "tianyi"
+        let chatId = extraHeaders["X-MP-ChatId"] ?? UUID().uuidString
+        let user = extraHeaders["X-MP-User"] ?? "tianyi"
 
-        // 3. 积累 tool_event 段（CC 调用 imprint-memory 后通过 reply tool_calls 上报）
-        //    pendingToolSegments 被 toolEventHandler 和 replyHandler 两个闭包共享捕获；
-        //    两者均在 main thread 调用，无竞争。
-        var pendingToolSegments: [MessageSegment] = []
-        let capturedOnSegments = onSegmentsCallback  // 快照，避免 sendStreaming 返回后被覆盖
-
-        wsClient.toolEventHandler = { [chatId] (evtChatId, toolName, inputJSON, result) in
-            guard evtChatId == chatId else { return }
-            // Q2：不显示 server 前缀，直接用 toolName（CC 已自动去前缀或 mcp-server.ts 直接传工具名）
-            let toolUseSeg = MessageSegment.toolUse(
-                id: UUID().uuidString,
-                name: toolName,
-                inputJSON: inputJSON.isEmpty ? "{}" : inputJSON,
-                integrationName: "imprint-memory",
-                iconName: nil
-            )
-            let toolResultSeg = MessageSegment.toolResult(
-                toolUseId: "",    // CCBridge 路径 toolUseId 无意义，置空
-                text: result,
-                isError: false,
-                integrationName: nil
-            )
-            pendingToolSegments.append(toolUseSeg)
-            if !result.isEmpty { pendingToolSegments.append(toolResultSeg) }
+        // Build HTTP request to Hub
+        guard let url = URL(string: baseURL) else {
+            failNow("无效的 Hub URL: \(baseURL)", onError: onError)
+            return
         }
 
-        // 4. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
-        wsClient.registerReplyHandler(chatId: chatId) { [weak self] replyText in
-            guard let self else { return }
-            self.wsClient.toolEventHandler = nil           // 清除 tool_event 监听
-            self.wsClient.unregisterReplyHandler(chatId: chatId)
-            self.isStreaming = false
-            self.streamingContent = replyText
-            // 若有 tool segments，组合后回传 ViewModel 写入 node.segments
-            if !pendingToolSegments.isEmpty {
-                var segs = pendingToolSegments
-                segs.append(.text(replyText))
-                capturedOnSegments?(segs)
-            }
-            onComplete(replyText, nil)  // CC 不上报 token 用量
-        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120 // CC may take up to 2 min
 
-        // 5. 触发连接（如未连接）
-        if !wsClient.isConnected, let url = URL(string: baseURL) {
-            wsClient.connect(url: url)
-        }
-
-        // 6. 发送 send 帧；若 WS 未连接，send 立即回调 error，走 failNow 分支
         let payload: [String: Any] = [
-            "type":       "send",
-            "chat_id":    chatId,
-            "message_id": messageId,
-            "content":    lastUser.content,
-            "user":       user,
+            "chat_id": chatId,
+            "content": lastUser.content,
+            "user": user,
         ]
-        wsClient.send(payload) { [weak self] err in
-            guard let self else { return }
-            if let err {
-                self.wsClient.toolEventHandler = nil
-                self.wsClient.unregisterReplyHandler(chatId: chatId)
-                self.failNow("CC Bridge WS 发送失败：\(err.localizedDescription)", onError: onError)
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            failNow("JSON 编码失败: \(error)", onError: onError)
+            return
+        }
+
+        // Trust self-signed certificates
+        let delegate = SelfSignedSessionDelegate()
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isStreaming = false
+
+                if let error {
+                    self.error = error.localizedDescription
+                    onError(error.localizedDescription)
+                    return
+                }
+
+                guard let data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "empty"
+                    self.error = "无效响应: \(body)"
+                    onError("无效响应: \(body)")
+                    return
+                }
+
+                if let errMsg = json["error"] as? String {
+                    self.error = errMsg
+                    onError(errMsg)
+                    return
+                }
+
+                let reply = json["content"] as? String ?? json["result"] as? String ?? ""
+                self.streamingContent = reply
+                onComplete(reply, nil)
             }
         }
-    }
-
-    override func sendNonStreaming(
-        messages: [(role: String, content: String)],
-        model: String,
-        systemPrompt: String?,
-        apiKey: String,
-        baseURL: String,
-        extraHeaders: [String: String]
-    ) async throws -> (String, TokenUsage?) {
-        throw NSError(domain: "CCBridge", code: -1,
-                      userInfo: [NSLocalizedDescriptionKey: "CC Bridge 不支持非流式调用"])
-    }
-
-    override func cancel() {
-        // CC 在 tmux 里处理，无法从外部中断；本地只清流式状态
-        isStreaming = false
+        task.resume()
     }
 
     private func failNow(_ msg: String, onError: @escaping (String) -> Void) {
-        DispatchQueue.main.async {
-            self.isStreaming = false
-            self.error = msg
-            onError(msg)
+        self.isStreaming = false
+        self.error = msg
+        onError(msg)
+    }
+}
+
+// URLSession delegate for self-signed certificate trust
+private class SelfSignedSessionDelegate: NSObject, URLSessionDelegate {
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let trust = challenge.protectionSpace.serverTrust {
+            completionHandler(.useCredential, URLCredential(trust: trust))
+        } else {
+            completionHandler(.performDefaultHandling, nil)
         }
     }
 }

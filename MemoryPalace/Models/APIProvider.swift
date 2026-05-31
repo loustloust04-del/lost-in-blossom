@@ -324,7 +324,7 @@ extension APIProvider {
         id: "cc-bridge",
         name: "Claude Code (本地)",
         type: .ccBridge,
-        baseURL: "wss://172.245.88.103/cc",
+        baseURL: "https://172.245.88.103/api/send",
         extraHeaders: [:],
         models: [
             ProviderModel(providerId: "cc-bridge", modelId: "cc-local", name: "Claude Code"),
