@@ -667,13 +667,8 @@ struct ProfileEditorSheet: View {
         Group {
             iOSBody
         }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.json, .png],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
+        .sheet(isPresented: $showFileImporter) {
+            DocumentPickerView(contentTypes: [.json, .png]) { urls in
                 guard let url = urls.first else { return }
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -694,9 +689,7 @@ struct ProfileEditorSheet: View {
                 } catch {
                     importError = error.localizedDescription
                 }
-            case .failure(let error):
-                importError = error.localizedDescription
-            }
+            } onCancel: {}
         }
         .alert("导入失败", isPresented: Binding(
             get: { importError != nil },

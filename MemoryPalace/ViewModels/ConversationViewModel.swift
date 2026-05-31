@@ -1316,9 +1316,6 @@ final class ConversationViewModel {
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)
 
         // 5. Stream
-        // 6a: 发送触觉反馈
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-
         providerRouter.sendStreaming(
             model: model,
             messages: payload.messages,
@@ -1338,10 +1335,9 @@ final class ConversationViewModel {
             },
             onToken: { [weak self] token in
                 guard let self else { return }
+                HapticService.shared.streamingTick()
                 if isThinking {
-                    // 思考结束、正文开始——6c: warning 震（转折感），并异步生成一句话总结
                     isThinking = false
-                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
                     let capturedThinking = streamingThinkingText
                     let capturedModel = model
                     let capturedProvider = providerManager
@@ -1360,6 +1356,7 @@ final class ConversationViewModel {
             },
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
+                HapticService.shared.streamingComplete()
                 assistantNode.content = fullText
                 streamingText = ""
                 streamingThinkingText = ""
@@ -1569,9 +1566,6 @@ final class ConversationViewModel {
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
 
-        // 6a: 发送触觉反馈
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
         providerRouter.sendStreaming(
             model: model,
             messages: payload.messages,
@@ -1589,9 +1583,9 @@ final class ConversationViewModel {
             },
             onToken: { [weak self] token in
                 guard let self else { return }
+                HapticService.shared.streamingTick()
                 if isThinking {
                     isThinking = false
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     let capturedThinking = streamingThinkingText
                     let capturedModel = model
                     let capturedProvider = providerManager
@@ -1610,6 +1604,7 @@ final class ConversationViewModel {
             },
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
+                HapticService.shared.streamingComplete()
                 newNode.content = fullText
                 streamingText = ""
                 streamingThinkingText = ""
@@ -1710,9 +1705,6 @@ final class ConversationViewModel {
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
 
-        // 6a: 发送触觉反馈
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
         providerRouter.sendStreaming(
             model: model,
             messages: payload.messages,
@@ -1730,9 +1722,9 @@ final class ConversationViewModel {
             },
             onToken: { [weak self] token in
                 guard let self else { return }
+                HapticService.shared.streamingTick()
                 if isThinking {
                     isThinking = false
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     let capturedThinking = streamingThinkingText
                     let capturedModel = model
                     let capturedProvider = providerManager
@@ -1751,6 +1743,7 @@ final class ConversationViewModel {
             },
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
+                HapticService.shared.streamingComplete()
                 newAssistantNode.content = fullText
                 streamingText = ""
                 streamingThinkingText = ""

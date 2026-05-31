@@ -5,6 +5,12 @@ import MarkdownUI
 import UniformTypeIdentifiers
 import VariableBlur
 
+private struct TextSelectItem: Identifiable {
+    let id: String
+    let text: String
+    let thinkingText: String?
+}
+
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
@@ -26,6 +32,7 @@ struct CardFlowView: View {
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
     @State private var lastStreamingScrollTime: Date = .distantPast
+    @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
     private func makeBubbleView(for node: MessageNode) -> some View {
@@ -60,6 +67,11 @@ struct CardFlowView: View {
                 return presetScripts + profileScripts
             }()
         )
+        .onTapGesture(count: 2) {
+            let raw = ContentCleaner.clean(node.content, cacheKey: node.id)
+            let result = ContentCleaner.extractThinking(from: raw)
+            textSelectItem = TextSelectItem(id: node.id, text: result.content, thinkingText: result.thinking)
+        }
     }
 
     private func makeRegenerateAction(for node: MessageNode) -> (() -> Void)? {
@@ -387,6 +399,10 @@ struct CardFlowView: View {
                 }, pendingImageData: $pendingImageData,
                    pendingFileData: $pendingFileData,
                    pendingFileName: $pendingFileName)
+            }
+            // 双击消息气泡 → 文本选取 sheet
+            .sheet(item: $textSelectItem) { item in
+                TextSelectSheet(text: item.text, thinkingText: item.thinkingText)
             }
         }
     }
@@ -924,6 +940,7 @@ private struct InputFieldContainer: View {
 
     private func triggerSend() {
         if isStreaming { onCancelStream(); return }
+        HapticService.shared.sendMessage()
         if onSend(text) { text = "" }
     }
 }
@@ -1039,15 +1056,19 @@ struct ThinkingPanelView: View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                Spacer()
                 Text("Thought process")
                     .font(.system(size: 17, weight: .semibold))
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
+                Image(systemName: "xmark")
+                    .font(.system(size: 16))
+                    .hidden()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
@@ -1234,7 +1255,6 @@ struct BubbleView: View {
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
-    @State private var thinkingPulseTask: Task<Void, Never>? = nil
     private let truncateLength = 300
 
     var isUser: Bool { node.role == "user" }
@@ -1514,29 +1534,8 @@ struct BubbleView: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .onChange(of: isThinking) { _, newValue in
-            thinkingPulseTask?.cancel()
-            thinkingPulseTask = nil
-            if newValue {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                thinkingPulseTask = Task {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        if !Task.isCancelled {
-                            UISelectionFeedbackGenerator().selectionChanged()
-                        }
-                    }
-                }
-            } else {
-                UINotificationFeedbackGenerator().notificationOccurred(.warning)
-            }
-        }
-        .onDisappear {
-            thinkingPulseTask?.cancel()
-            thinkingPulseTask = nil
-        }
         .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            HapticService.shared.copyText()
         }
         // 注意：删了 .contentShape(Rectangle())。它会把 contextMenu 命中区扩到整 row 宽
         // (maxWidth: .infinity)，导致 row 空白区 (input bar 后渗 / home indicator 上方那带)

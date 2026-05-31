@@ -25,6 +25,7 @@ struct AppearanceSettingsTab: View {
     // 负向 key：true = 关闭自动半透明。这样 key 缺省（false）= 行为保持原样。
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
     @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
+    @AppStorage("hapticMode") private var hapticModeRaw: String = "typewriter"
 
     @State private var importedFonts: [(fileName: String, fontName: String)] = []
     @State private var showFontImporter = false
@@ -222,16 +223,16 @@ struct AppearanceSettingsTab: View {
         .onAppear {
             importedFonts = FontManager.importedFonts()
         }
-        .fileImporter(
-            isPresented: $showFontImporter,
-            allowedContentTypes: [
-                UTType(filenameExtension: "ttf") ?? .data,
-                UTType(filenameExtension: "otf") ?? .data,
-                UTType(filenameExtension: "ttc") ?? .data,
-            ],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
+        .sheet(isPresented: $showFontImporter) {
+            DocumentPickerView(
+                contentTypes: [
+                    UTType(filenameExtension: "ttf") ?? .data,
+                    UTType(filenameExtension: "otf") ?? .data,
+                    UTType(filenameExtension: "ttc") ?? .data,
+                ],
+                allowsMultipleSelection: true
+            ) { urls in
+                showFontImporter = false
                 for url in urls {
                     guard url.startAccessingSecurityScopedResource() else { continue }
                     defer { url.stopAccessingSecurityScopedResource() }
@@ -240,6 +241,8 @@ struct AppearanceSettingsTab: View {
                     }
                 }
                 importedFonts = FontManager.importedFonts()
+            } onCancel: {
+                showFontImporter = false
             }
         }
     }
@@ -305,6 +308,7 @@ struct IOSAppearancePage: View {
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
     @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
+    @AppStorage("hapticMode") private var hapticModeRaw: String = "typewriter"
 
     @State private var importedFonts: [(fileName: String, fontName: String)] = []
     @State private var showFontImporter = false
@@ -484,6 +488,34 @@ struct IOSAppearancePage: View {
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
+
+            Section("震动反馈") {
+                Picker("模式", selection: Binding(
+                    get: { HapticMode(rawValue: hapticModeRaw) ?? .typewriter },
+                    set: { hapticModeRaw = $0.rawValue }
+                )) {
+                    Text("关闭").tag(HapticMode.off)
+                    Text("打字机（ChatGPT 风格）").tag(HapticMode.typewriter)
+                    Text("精简（Claude 风格）").tag(HapticMode.minimal)
+                }
+                .pickerStyle(.inline)
+
+                switch HapticMode(rawValue: hapticModeRaw) ?? .typewriter {
+                case .off:
+                    Text("不触发任何震动反馈")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
+                case .typewriter:
+                    Text("AI 回复时随文字输出轻微震动，回复完成时震动提示")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
+                case .minimal:
+                    Text("仅在发送消息、复制、删除等操作时提供触觉反馈")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
@@ -494,16 +526,16 @@ struct IOSAppearancePage: View {
         .onAppear {
             importedFonts = FontManager.importedFonts()
         }
-        .fileImporter(
-            isPresented: $showFontImporter,
-            allowedContentTypes: [
-                UTType(filenameExtension: "ttf") ?? .data,
-                UTType(filenameExtension: "otf") ?? .data,
-                UTType(filenameExtension: "ttc") ?? .data,
-            ],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
+        .sheet(isPresented: $showFontImporter) {
+            DocumentPickerView(
+                contentTypes: [
+                    UTType(filenameExtension: "ttf") ?? .data,
+                    UTType(filenameExtension: "otf") ?? .data,
+                    UTType(filenameExtension: "ttc") ?? .data,
+                ],
+                allowsMultipleSelection: true
+            ) { urls in
+                showFontImporter = false
                 for url in urls {
                     guard url.startAccessingSecurityScopedResource() else { continue }
                     defer { url.stopAccessingSecurityScopedResource() }
@@ -512,6 +544,8 @@ struct IOSAppearancePage: View {
                     }
                 }
                 importedFonts = FontManager.importedFonts()
+            } onCancel: {
+                showFontImporter = false
             }
         }
     }

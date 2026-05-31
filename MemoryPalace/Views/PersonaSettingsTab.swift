@@ -1126,8 +1126,16 @@ extension PersonaSettingsTab {
             }
             .background(Theme.sidebarBg)
         }
-        .fileImporter(isPresented: $showPresetImporter, allowedContentTypes: [.json]) { result in
-            handlePresetImport(result)
+        .sheet(isPresented: $showPresetImporter) {
+            DocumentPickerView(contentTypes: [.json]) { urls in
+                showPresetImporter = false
+                guard let url = urls.first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                handlePresetImport(.success(url))
+            } onCancel: {
+                showPresetImporter = false
+            }
         }
     }
 

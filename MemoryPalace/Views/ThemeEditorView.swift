@@ -222,13 +222,8 @@ struct ThemeEditorView: View {
             )
             .ignoresSafeArea()
         }
-        .fileImporter(
-            isPresented: $showImageImporter,
-            allowedContentTypes: [.image],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
+        .sheet(isPresented: $showImageImporter) {
+            DocumentPickerView(contentTypes: [.image]) { urls in
                 guard let url = urls.first else { return }
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer {
@@ -236,15 +231,12 @@ struct ThemeEditorView: View {
                         url.stopAccessingSecurityScopedResource()
                     }
                 }
-
                 do {
                     try manager.setBackgroundImage(from: url, for: themeId)
                 } catch {
                     imageImportError = error.localizedDescription
                 }
-            case .failure(let error):
-                imageImportError = error.localizedDescription
-            }
+            } onCancel: {}
         }
         .alert("背景图导入失败", isPresented: Binding(
             get: { imageImportError != nil },

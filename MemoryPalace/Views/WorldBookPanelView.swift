@@ -128,12 +128,13 @@ struct WorldBookPanelView: View {
                 Text("确定要删除「\(book.name)」吗？包含 \(book.entries.count) 个条目，不可恢复。")
             }
         }
-        .fileImporter(
-            isPresented: $showWBFileImporter,
-            allowedContentTypes: [.json],
-            allowsMultipleSelection: false
-        ) { result in
-            handleWorldBookImport(result)
+        .sheet(isPresented: $showWBFileImporter) {
+            DocumentPickerView(contentTypes: [.json]) { urls in
+                showWBFileImporter = false
+                handleWorldBookImport(.success(urls))
+            } onCancel: {
+                showWBFileImporter = false
+            }
         }
         .alert("导入失败", isPresented: Binding(
             get: { wbImportError != nil },

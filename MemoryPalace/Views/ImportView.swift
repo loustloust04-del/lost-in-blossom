@@ -194,18 +194,13 @@ struct ImportView: View {
         Group {
             iOSBody
         }
-        .fileImporter(
-            isPresented: $showFilePicker,
-            allowedContentTypes: [.json],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    startImport(url: url)
-                }
-            case .failure(let error):
-                print("File picker error: \(error)")
+        .sheet(isPresented: $showFilePicker) {
+            DocumentPickerView(contentTypes: [.json]) { urls in
+                showFilePicker = false
+                guard let url = urls.first else { return }
+                startImport(url: url)
+            } onCancel: {
+                showFilePicker = false
             }
         }
     }

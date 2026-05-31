@@ -957,6 +957,7 @@ struct SidebarView: View {
     }
 
     private func selectTab(_ tab: SidebarTab) {
+        HapticService.shared.navigation()
         switch tab {
         case .all:
             showFavoritesOnly = false
@@ -1153,6 +1154,7 @@ struct SidebarView: View {
     }
 
     private func deleteTag(id: String) {
+        HapticService.shared.deleteAction()
         guard let tag = tags.first(where: { $0.id == id }) else { return }
         let pid = profileManager?.currentProfile.id ?? ""
         // 删除该 tag 的所有 FavoriteItem（仅当前楼层）
