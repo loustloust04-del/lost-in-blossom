@@ -8,3 +8,4 @@
 1. `docs/task-fix-file-picker.md` — 文件选择器修复
 2. `docs/task-text-select-sheet.md` — 双击文本选取
 3. `docs/task-thinking-sheet-ui.md` — 思考链 UI 改版
+4. `docs/task-image-model-compat.md` — 切换模型时过滤图片
