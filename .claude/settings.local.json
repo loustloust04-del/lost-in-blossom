@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "mobai"
+  ],
+  "enableAllProjectMcpServers": true
+}
