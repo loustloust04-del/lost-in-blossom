@@ -23,6 +23,7 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
+    @State private var lastStreamingScrollTime: Date = .distantPast
 
     @ViewBuilder
     private func makeBubbleView(for node: MessageNode) -> some View {
@@ -97,7 +98,7 @@ struct CardFlowView: View {
         proxy.scrollTo(lastId, anchor: .bottom)
         // step2: 动画滚到哨兵 = content 真正的底
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            withAnimation(.easeOut(duration: 0.3)) {
+            withAnimation(.easeOut(duration: 0.25)) {
                 proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
             }
         }
@@ -236,6 +237,9 @@ struct CardFlowView: View {
                         }
                     }
                     .onChange(of: viewModel.streamingText) { _, _ in
+                        let now = Date()
+                        guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
+                        lastStreamingScrollTime = now
                         if let lastId = viewModel.currentPath.last?.id {
                             proxy.scrollTo(lastId, anchor: .bottom)
                         }
