@@ -424,7 +424,6 @@ struct APISettingsTab: View {
     }
 
     /// CC Bridge 专用状态面板（替换 API Key 输入框）。
-    @ViewBuilder
     @State private var ccHubURLDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? ""
 
     private func ccBridgeStatusContent(provider: APIProvider) -> some View {
