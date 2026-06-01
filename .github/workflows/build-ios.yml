@@ -13,8 +13,7 @@ on:
 
 jobs:
   build:
-    runs-on:
-  workflow_dispatch: macos-15
+    runs-on: macos-15
 
     steps:
       - name: Checkout
