@@ -14,19 +14,20 @@ struct TextSelectSheet: View {
                             Text("思考过程")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text(thinking)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
+                            SelectableTextView(
+                                thinking,
+                                font: .systemFont(ofSize: 15),
+                                textColor: .secondaryLabel
+                            )
+                            .frame(minHeight: 60)
                         }
                         .padding()
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     }
 
-                    Text(text)
-                        .font(.system(size: 16))
-                        .textSelection(.enabled)
+                    SelectableTextView(text)
+                        .frame(minHeight: 100)
                 }
                 .padding()
             }

@@ -43,7 +43,7 @@ class HapticService {
     /// streaming 结束时调用
     func streamingComplete() {
         guard mode == .typewriter else { return }
-        notification.notificationOccurred(.success)
+        impactLight.impactOccurred(intensity: 0.6)
     }
 
     // ═══ Claude 模式专用 ═══
@@ -59,7 +59,7 @@ class HapticService {
     /// 复制文本时
     func copyText() {
         guard mode != .off else { return }
-        notification.notificationOccurred(.success)
+        impactLight.impactOccurred(intensity: 0.6)
     }
 
     /// 删除操作（标签删除、消息删除）
