@@ -8,6 +8,7 @@ struct MCPServerConfig: Identifiable, Codable, Hashable {
     var id: String = UUID().uuidString
     var name: String        // 服务器标识符，用作 tool 名称的命名空间前缀（如 "imprint-memory"）
     var url: String         // MCP SSE endpoint URL
+    var authorizationToken: String = ""   // Bearer token（可选，vps-mcp 等需要认证的服务器）
     var isEnabled: Bool = true
 }
 
