@@ -1234,17 +1234,33 @@ final class ConversationViewModel {
                 return (json, "multimodal_text")
             } else if let data = fileData {
                 let b64 = data.base64EncodedString()
-                var docBlock: [String: Any] = [
-                    "type": "document",
-                    "source": ["type": "base64", "media_type": "application/pdf", "data": b64]
-                ]
-                if let name = fileName { docBlock["title"] = name }
-                let blocks: [[String: Any]] = [
-                    docBlock,
-                    ["type": "text", "text": text]
-                ]
-                let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
-                return (json, "multimodal_text")
+                // 根据文件扩展名判断类型
+                let ext = (fileName ?? "").lowercased().components(separatedBy: ".").last ?? ""
+                let imageExts = ["jpg", "jpeg", "png", "gif", "webp"]
+                if imageExts.contains(ext) {
+                    // 图片文件走 image block（跟直接拍照一样）
+                    let mimeType = ext == "png" ? "image/png" : ext == "gif" ? "image/gif" : ext == "webp" ? "image/webp" : "image/jpeg"
+                    let blocks: [[String: Any]] = [
+                        ["type": "image", "source": ["type": "base64", "media_type": mimeType, "data": b64]],
+                        ["type": "text", "text": text]
+                    ]
+                    let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
+                    return (json, "multimodal_text")
+                } else {
+                    // PDF / 其他文件走 document block
+                    let mimeType = ext == "pdf" ? "application/pdf" : "application/octet-stream"
+                    var docBlock: [String: Any] = [
+                        "type": "document",
+                        "source": ["type": "base64", "media_type": mimeType, "data": b64]
+                    ]
+                    if let name = fileName { docBlock["title"] = name }
+                    let blocks: [[String: Any]] = [
+                        docBlock,
+                        ["type": "text", "text": text]
+                    ]
+                    let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
+                    return (json, "multimodal_text")
+                }
             } else {
                 return (text, "text")
             }

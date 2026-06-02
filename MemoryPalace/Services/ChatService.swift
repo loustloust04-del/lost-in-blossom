@@ -941,7 +941,7 @@ final class CCBridgeProvider: BaseChatProvider {
     /// 当前 in-flight 请求的 grace timer，等 reply 最长 60s；
     /// 期间网络抖动 / send err / reconnect 都不立即 fail，等 hub buffer 重放有机会兜底。
     @ObservationIgnored private var replyTimer: Timer?
-    private let replyGracePeriod: TimeInterval = 60
+    private let replyGracePeriod: TimeInterval = 120
     /// CC Bridge 暂不产生 segments，占位以满足 ChatService 统一赋值
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
 
@@ -976,7 +976,7 @@ final class CCBridgeProvider: BaseChatProvider {
         //    带回这个 id，handler 仍能命中。只是这条对话跟 MP 的 MessageNode 失联。
         let chatId    = extraHeaders["X-MP-ChatId"]    ?? UUID().uuidString
         let messageId = extraHeaders["X-MP-MessageId"] ?? UUID().uuidString
-        let user      = extraHeaders["X-MP-User"]      ?? "susu"
+        let user      = extraHeaders["X-MP-User"]      ?? "bunny"
         // L2：可选 tmux session（nil = hub 端 fallback 默认 mp-cc）
         let ccSession = extraHeaders["X-MP-CCSession"]
 
