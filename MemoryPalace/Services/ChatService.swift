@@ -942,6 +942,8 @@ final class CCBridgeProvider: BaseChatProvider {
     /// 期间网络抖动 / send err / reconnect 都不立即 fail，等 hub buffer 重放有机会兜底。
     @ObservationIgnored private var replyTimer: Timer?
     private let replyGracePeriod: TimeInterval = 60
+    /// CC Bridge 暂不产生 segments，占位以满足 ChatService 统一赋值
+    var onSegmentsCallback: (([MessageSegment]) -> Void)?
 
     override func sendStreaming(
         messages: [(role: String, content: String)],
