@@ -19,7 +19,6 @@ struct TextSelectSheet: View {
                                 font: .systemFont(ofSize: 15),
                                 textColor: .secondaryLabel
                             )
-                            .frame(minHeight: 60)
                         }
                         .padding()
                         .background(Color(.systemGray6))
@@ -27,7 +26,6 @@ struct TextSelectSheet: View {
                     }
 
                     SelectableTextView(text)
-                        .frame(minHeight: 100)
                 }
                 .padding()
             }
