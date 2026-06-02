@@ -1004,10 +1004,13 @@ final class CCBridgeProvider: BaseChatProvider {
                          onError: onError)
         }
 
-        // 6. 触发连接（如未连）—— apiKey 作为 LAN 模式下的 token（loopback 留空即可）
-        if !wsClient.isConnected, let url = URL(string: baseURL) {
-            let token: String? = apiKey.isEmpty ? nil : apiKey
-            wsClient.connect(url: url, token: token)
+        // 6. 触发连接（如未连）—— 优先用设置页保存的 URL，fallback 到 provider baseURL
+        if !wsClient.isConnected {
+            let hubURL = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? baseURL
+            if let url = URL(string: hubURL) {
+                let token: String? = apiKey.isEmpty ? nil : apiKey
+                wsClient.connect(url: url, token: token)
+            }
         }
 
         // 7. 发送 send 帧；send err 不立即 fail，让 grace timer 等 reply
