@@ -2,6 +2,13 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+/// 记忆分区过滤：Chats（本地新建）/ Almond（Claude导入）/ Amber（ChatGPT导入）
+fileprivate enum SidebarFilter: Equatable {
+    case chats
+    case almond
+    case amber
+}
+
 /// 左栏 tab 标识 —— 文件级可见，让 SidebarCardShape 等 ViewModifier 能引用。
 fileprivate enum SidebarTab: Hashable {
     case all
@@ -85,6 +92,7 @@ struct SidebarView: View {
     @State private var currentMatchIndex: Int = -1
     @State private var showSortPopover = false
     @State private var showProjectsPage = false
+    @State private var memoryFilter: SidebarFilter = .chats
     @State private var showAllChats = false
     @AppStorage("exportMode") private var exportMode = "lightweight"
     @AppStorage("userName") private var userName = "你"
@@ -183,10 +191,13 @@ struct SidebarView: View {
                 sidebarNavEntry(
                     icon: "bubble.left.and.bubble.right",
                     title: "Chats",
-                    isSelected: !showProjectsPage
+                    isSelected: !showProjectsPage && memoryFilter == .chats
                 ) {
                     debouncedNavAction {
-                        withAnimation(.easeInOut(duration: 0.2)) { showProjectsPage = false }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showProjectsPage = false
+                            memoryFilter = .chats
+                        }
                     }
                 }
                 sidebarNavEntry(
@@ -196,6 +207,22 @@ struct SidebarView: View {
                 ) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) { showProjectsPage = true }
+                    }
+                }
+                sidebarMemoryEntry(emoji: "🌰", title: "Almond", isSelected: !showProjectsPage && memoryFilter == .almond) {
+                    debouncedNavAction {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showProjectsPage = false
+                            memoryFilter = .almond
+                        }
+                    }
+                }
+                sidebarMemoryEntry(emoji: "🪨", title: "Amber", isSelected: !showProjectsPage && memoryFilter == .amber) {
+                    debouncedNavAction {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showProjectsPage = false
+                            memoryFilter = .amber
+                        }
                     }
                 }
             }
@@ -418,8 +445,9 @@ struct SidebarView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             Color.clear.frame(height: 4)
-                            let displayedConversations = showAllChats ? conversations : Array(conversations.prefix(8))
-                            let hasMoreChats = !showAllChats && totalCount > 8
+                            let sourceFiltered = filteredConversations
+                            let displayedConversations = showAllChats ? sourceFiltered : Array(sourceFiltered.prefix(8))
+                            let hasMoreChats = !showAllChats && sourceFiltered.count > 8
                             ForEach(displayedConversations, id: \.id) { conversation in
                                 if renamingConversationId == conversation.id {
                                     TextField("对话名称", text: $renameText)
@@ -774,6 +802,7 @@ struct SidebarView: View {
             refreshList()
         }
         .onChange(of: selectedTagId) { _, _ in refreshList() }
+        .onChange(of: memoryFilter) { _, _ in showAllChats = false; refreshList() }
         .onChange(of: showImporter) { _, showing in if !showing { refreshList() } }
         .onChange(of: showSettings) { _, showing in if !showing { refreshList() } }
         .onChange(of: viewModel.sidebarRefreshTrigger) { _, _ in refreshList() }
@@ -915,6 +944,40 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func sidebarMemoryEntry(emoji: String, title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Text(emoji)
+                    .font(.system(size: 16))
+                    .frame(width: 24, alignment: .center)
+                Text(title)
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textMuted)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.textMuted.opacity(0.5))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Theme.accent.opacity(0.5) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var filteredConversations: [Conversation] {
+        switch memoryFilter {
+        case .chats:   return conversations.filter { $0.source == nil }
+        case .almond:  return conversations.filter { $0.source == "claude" }
+        case .amber:   return conversations.filter { $0.source == "chatgpt" }
+        }
     }
 
     private var isIOSStyle: Bool {

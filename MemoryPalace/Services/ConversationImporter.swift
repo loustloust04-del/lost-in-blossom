@@ -84,6 +84,7 @@ final class ConversationImporter {
                     )
                     conversation.importBatchId = recordId
                     conversation.nodeCount = countDisplayableNodes(incoming.nodes)
+                    conversation.source = "chatgpt"
                     context.insert(conversation)
 
                     for nodePayload in incoming.nodes {
@@ -250,6 +251,7 @@ final class ConversationImporter {
                         )
                         conversation.importBatchId = recordId
                         conversation.nodeCount = countDisplayableNodes(incoming.nodes)
+                        conversation.source = "chatgpt"
                         context.insert(conversation)
 
                         for nodePayload in incoming.nodes {

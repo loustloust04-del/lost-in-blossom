@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MarkdownUI
 
 extension MarkdownUI.Theme {
@@ -80,19 +81,30 @@ extension MarkdownUI.Theme {
                     .markdownMargin(top: 0, bottom: 12 * paragraphSpacingScale)
             }
             .codeBlock { configuration in
-                configuration.label
-                    .relativeLineSpacing(.em(0.25))
-                    .markdownTextStyle {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(.em(0.85))
-                        ForegroundColor(Theme.textPrimary)
+                ZStack(alignment: .topTrailing) {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        configuration.label
+                            .relativeLineSpacing(.em(0.25))
+                            .markdownTextStyle {
+                                FontFamilyVariant(.monospaced)
+                                FontSize(.em(0.85))
+                                ForegroundColor(Theme.textPrimary)
+                            }
+                            .padding(12)
                     }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Theme.accent.opacity(0.72))
-                    )
-                    .markdownMargin(top: 8, bottom: 8)
+                    .background(Theme.mainBg.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    Button {
+                        UIPasteboard.general.string = configuration.content
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                            .padding(8)
+                    }
+                }
+                .markdownMargin(top: 8, bottom: 8)
             }
             .blockquote { configuration in
                 configuration.label
