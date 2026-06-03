@@ -90,26 +90,40 @@ struct AddToChatSheet: View {
                 // ── 行 1：粘贴文件（从 Files App 复制后粘贴）──────────────
                 Button {
                     let pb = UIPasteboard.general
-                    // 尝试从剪贴板读取文件数据
                     let types = pb.types
-                    if let firstType = types.first,
-                       let data = pb.data(forPasteboardType: firstType) {
-                        // 尝试从 URL 获取文件名
+                    let utiExtMap: [String: String] = [
+                        "com.adobe.pdf": "pdf",
+                        "public.json": "json",
+                        "public.plain-text": "txt",
+                        "public.utf8-plain-text": "txt",
+                        "public.text": "txt",
+                        "public.html": "html",
+                        "public.xml": "xml",
+                        "public.comma-separated-values-text": "csv",
+                        "public.png": "png",
+                        "public.jpeg": "jpg",
+                        "com.compuserve.gif": "gif",
+                        "public.webp": "webp",
+                        "public.heic": "heic",
+                    ]
+                    var resolvedExt = ""
+                    var resolvedType = ""
+                    for t in types {
+                        if let ext = utiExtMap[t] { resolvedExt = ext; resolvedType = t; break }
+                        let parts = t.split(separator: ".")
+                        if let last = parts.last {
+                            let s = String(last)
+                            if ["pdf","json","txt","html","csv","png","jpg","jpeg","gif","webp"].contains(s) {
+                                resolvedExt = s; resolvedType = t; break
+                            }
+                        }
+                    }
+                    if resolvedType.isEmpty, let ft = types.first { resolvedType = ft }
+                    if let data = pb.data(forPasteboardType: resolvedType) {
                         let name: String
-                        if let url = pb.url {
-                            name = url.lastPathComponent
-                        } else {
-                            // 根据类型推测扩展名
-                            let ext = firstType.contains("pdf") ? ".pdf" :
-                                      firstType.contains("png") ? ".png" :
-                                      firstType.contains("jpeg") ? ".jpg" :
-                                      firstType.contains("json") ? ".json" : ""
-                            name = "pasted-file\(ext)"
-                        }
-                        if data.count <= 10_485_760 {
-                            pendingFileData = data
-                            pendingFileName = name
-                        }
+                        if let url = pb.url { name = url.lastPathComponent }
+                        else { name = resolvedExt.isEmpty ? "pasted-file" : "pasted-file.\(resolvedExt)" }
+                        if data.count <= 10_485_760 { pendingFileData = data; pendingFileName = name }
                     }
                     dismiss()
                 } label: {
