@@ -77,6 +77,30 @@ const dryRunRunner: TmuxRunner = {
 let tmux: TmuxRunner = process.env.MP_CC_TMUX_DRY_RUN ? dryRunRunner : realTmuxRunner
 export function setTmuxRunner(runner: TmuxRunner) { tmux = runner }
 
+// ── CC 输出流式：tmux capture-pane 差量推送辅助 ──────────────
+// capture-pane 的输出可能带 ANSI 转义码，推给 App 前清掉。
+function stripAnsi(text: string): string {
+  return text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+}
+
+// 找最长公共前缀（按行），返回 current 相对 prev 新增的尾部行。
+// 最简实现，edge case（终端滚动 / 进度条回写）后续再优化。
+function extractDelta(prev: string, current: string): string {
+  const prevLines = prev.split("\n")
+  const currLines = current.split("\n")
+
+  let commonEnd = 0
+  for (let i = 0; i < prevLines.length; i++) {
+    if (prevLines[i] === currLines[i]) {
+      commonEnd = i + 1
+    } else {
+      break
+    }
+  }
+
+  return stripAnsi(currLines.slice(commonEnd).join("\n"))
+}
+
 // MP 客户端集合（/cc 路径连接的 MP 客户端）
 const mpClients = new Set<WebSocket>()
 // MCP 客户端集合（/mcp 路径连接的 MCP server）
@@ -107,6 +131,58 @@ export function startHub(): WebSocketServer {
     process.exit(1)
   }
   const wss = new WebSocketServer({ host: HUB_HOST, port: PORT })
+
+  // ── CC 输出流式轮询 ──────────────────────────────
+  // 不依赖 CC 的 reply 行为：直接轮询 CC tmux pane 的终端内容，
+  // 跟上一次比对，把新增文字实时广播给 MP 客户端（打字机效果）。
+  let lastCapture = ""
+  let isStreaming = false
+  const POLL_INTERVAL_MS = 500      // 轮询间隔
+  const IDLE_THRESHOLD_MS = 3000    // 连续无变化超过此时间认为 CC 停止输出
+  let lastChangeTime = Date.now()
+
+  const captureTimer = setInterval(() => {
+    if (mpClients.size === 0) return            // 没有客户端连接时不轮询
+    if (!tmux.hasSession(TMUX_SESSION)) return
+
+    try {
+      const current = execFileSync("tmux", [
+        "capture-pane", "-t", TMUX_SESSION, "-p", "-S", "-50",  // 捕获最近 50 行
+      ], { encoding: "utf-8" })
+
+      if (current !== lastCapture) {
+        const newContent = extractDelta(lastCapture, current)
+        lastCapture = current
+        lastChangeTime = Date.now()
+
+        if (newContent.trim()) {
+          isStreaming = true
+          const streamMsg = JSON.stringify({
+            type: "cc_stream",
+            content: newContent,
+            timestamp: new Date().toISOString(),
+          })
+          for (const ws of mpClients) {
+            if (ws.readyState === WebSocket.OPEN) ws.send(streamMsg)
+          }
+        }
+      } else if (isStreaming && Date.now() - lastChangeTime > IDLE_THRESHOLD_MS) {
+        // CC 停止输出了
+        isStreaming = false
+        const endMsg = JSON.stringify({
+          type: "cc_stream_end",
+          timestamp: new Date().toISOString(),
+        })
+        for (const ws of mpClients) {
+          if (ws.readyState === WebSocket.OPEN) ws.send(endMsg)
+        }
+      }
+    } catch {
+      // tmux capture-pane 失败（session 可能不存在），下次轮询再试
+    }
+  }, POLL_INTERVAL_MS)
+
+  wss.on("close", () => clearInterval(captureTimer))
 
   wss.on("connection", (ws, req) => {
     // 解析 URL（带 query）
