@@ -88,16 +88,40 @@ struct AddToChatSheet: View {
 
                 rowDivider
 
-                // ── 行 1：文件 ──────────────────────────────────────────
+                // ── 行 1：粘贴文件（从 Files App 复制后粘贴）──────────────
                 Button {
-                    dismiss()
-                    onOpenFilePicker()
+                    let pb = UIPasteboard.general
+                    if let providers = pb.itemProviders as? [NSItemProvider], !providers.isEmpty {
+                        let provider = providers[0]
+                        // 尝试加载为文件数据
+                        if provider.hasItemConformingToTypeIdentifier("public.data") {
+                            provider.loadDataRepresentation(forTypeIdentifier: "public.data") { data, error in
+                                DispatchQueue.main.async {
+                                    if let data = data {
+                                        let name = provider.suggestedName ?? "clipboard-file"
+                                        pendingFileData = data
+                                        pendingFileName = name
+                                        dismiss()
+                                    }
+                                }
+                            }
+                        }
+                    } else if let url = pb.url, url.isFileURL {
+                        // 尝试作为文件 URL
+                        let accessed = url.startAccessingSecurityScopedResource()
+                        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                        if let data = try? Data(contentsOf: url) {
+                            pendingFileData = data
+                            pendingFileName = url.lastPathComponent
+                            dismiss()
+                        }
+                    }
                 } label: {
                     addToChatRow(
-                        icon: "doc.fill",
+                        icon: "doc.on.clipboard",
                         iconColor: Color.red.opacity(0.8),
-                        title: "发送文件",
-                        trailing: nil
+                        title: "粘贴文件",
+                        trailing: Text("在 Files 中复制文件后点此").font(.caption2).foregroundStyle(.secondary)
                     )
                 }
                 .buttonStyle(.plain)
