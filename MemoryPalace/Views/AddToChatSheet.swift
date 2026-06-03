@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 struct AddToChatSheet: View {
     /// 点击「贴纸」后回调——由 CardFlowView 传入，负责打开 StickerKeyboardPanel
     let onOpenSticker: () -> Void
+    /// 点击「发送文件」后回调——由 CardFlowView 在外层弹出文件选择器（避免 sheet 嵌套触摸丢失）
+    let onOpenFilePicker: () -> Void
     /// 选中照片后写入此 Binding，由 CardFlowView 持有并传给 ChatInputBar
     @Binding var pendingImageData: Data?
     /// 选中文件后写入，由 CardFlowView 持有并传给 ChatInputBar
@@ -21,8 +23,6 @@ struct AddToChatSheet: View {
 
     @State private var showModelPicker = false
     @State private var photoPickerItems: [PhotosPickerItem] = []
-    @State private var showFilePicker = false
-    @State private var fileErrorMessage: String?
     /// 控制 staggered 入场动画
     @State private var appeared = false
 
@@ -90,7 +90,8 @@ struct AddToChatSheet: View {
 
                 // ── 行 1：文件 ──────────────────────────────────────────
                 Button {
-                    showFilePicker = true
+                    dismiss()
+                    onOpenFilePicker()
                 } label: {
                     addToChatRow(
                         icon: "doc.fill",
@@ -209,38 +210,6 @@ struct AddToChatSheet: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.sidebarBg)
             }
-        }
-        // 文件选择器（fullScreenCover 避免 sheet 嵌套冲突）
-        .fullScreenCover(isPresented: $showFilePicker) {
-            DocumentPickerView(contentTypes: [.item]) { urls in
-                showFilePicker = false
-                guard let url = urls.first else { return }
-                let accessed = url.startAccessingSecurityScopedResource()
-                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                do {
-                    let data = try Data(contentsOf: url)
-                    if data.count > 10_485_760 {
-                        fileErrorMessage = "文件太大（超过 10MB）"
-                        return
-                    }
-                    let name = url.lastPathComponent
-                    pendingFileData = data
-                    pendingFileName = name
-                    dismiss()
-                } catch {
-                    fileErrorMessage = "读取文件失败: \(error.localizedDescription)"
-                }
-            } onCancel: {
-                showFilePicker = false
-            }
-        }
-        .alert("文件添加失败", isPresented: Binding(
-            get: { fileErrorMessage != nil },
-            set: { if !$0 { fileErrorMessage = nil } }
-        )) {
-            Button("好的") { fileErrorMessage = nil }
-        } message: {
-            Text(fileErrorMessage ?? "")
         }
     }
 

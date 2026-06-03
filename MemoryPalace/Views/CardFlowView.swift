@@ -25,6 +25,8 @@ struct CardFlowView: View {
     @FocusState private var inConvSearchFocused: Bool
     @State private var showStickerPanel = false
     @State private var showAddToChat = false
+    @State private var showFilePicker = false
+    @State private var fileErrorMessage: String?
     @State private var pendingImageData: Data?
     @State private var pendingFileData: Data?
     @State private var pendingFileName: String?
@@ -391,14 +393,53 @@ struct CardFlowView: View {
             }
             // Add to Chat 功能面板（+ 号触发）
             .sheet(isPresented: $showAddToChat) {
-                AddToChatSheet(onOpenSticker: {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        showStickerPanel = true
-                        stickerVM.isEditingStickers = true
+                AddToChatSheet(
+                    onOpenSticker: {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showStickerPanel = true
+                            stickerVM.isEditingStickers = true
+                        }
+                    },
+                    onOpenFilePicker: {
+                        // 延迟 0.4 秒等 AddToChatSheet 完全 dismiss
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            showFilePicker = true
+                        }
+                    },
+                    pendingImageData: $pendingImageData,
+                    pendingFileData: $pendingFileData,
+                    pendingFileName: $pendingFileName
+                )
+            }
+            // 文件选择器——从 CardFlowView 外层弹出，不在任何 sheet 内部（避免触摸事件丢失）
+            .sheet(isPresented: $showFilePicker) {
+                DocumentPickerView(contentTypes: [.item]) { urls in
+                    showFilePicker = false
+                    guard let url = urls.first else { return }
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        let data = try Data(contentsOf: url)
+                        if data.count > 10_485_760 {
+                            fileErrorMessage = "文件太大（超过 10MB）"
+                            return
+                        }
+                        pendingFileData = data
+                        pendingFileName = url.lastPathComponent
+                    } catch {
+                        fileErrorMessage = "读取文件失败: \(error.localizedDescription)"
                     }
-                }, pendingImageData: $pendingImageData,
-                   pendingFileData: $pendingFileData,
-                   pendingFileName: $pendingFileName)
+                } onCancel: {
+                    showFilePicker = false
+                }
+            }
+            .alert("文件添加失败", isPresented: Binding(
+                get: { fileErrorMessage != nil },
+                set: { if !$0 { fileErrorMessage = nil } }
+            )) {
+                Button("好的") { fileErrorMessage = nil }
+            } message: {
+                Text(fileErrorMessage ?? "")
             }
             // 双击消息气泡 → 文本选取 sheet
             .sheet(item: $textSelectItem) { item in

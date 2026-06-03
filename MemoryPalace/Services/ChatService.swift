@@ -470,7 +470,11 @@ final class AnthropicProvider: BaseChatProvider {
         let enabledMCP = mcpServersToInject.filter(\.isEnabled)
         if !enabledMCP.isEmpty {
             body["mcp_servers"] = enabledMCP.map { s -> [String: Any] in
-                ["type": "url", "url": s.url, "name": s.name]
+                var server: [String: Any] = ["type": "url", "url": s.url, "name": s.name]
+                if !s.authorizationToken.isEmpty {
+                    server["authorization_token"] = s.authorizationToken
+                }
+                return server
             }
         }
 

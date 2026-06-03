@@ -36,6 +36,7 @@ struct APISettingsTab: View {
     @State private var showAddMCPForm = false
     @State private var newMCPName = ""
     @State private var newMCPURL = ""
+    @State private var newMCPToken = ""
 
     // MARK: - Constants
 
@@ -614,12 +615,18 @@ struct APISettingsTab: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
+                    SecureField("Authorization Token（可选）", text: $newMCPToken)
+                        .font(.system(size: Theme.SettingsFont.secondary))
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
 
                     HStack(spacing: 8) {
                         Button("取消") {
                             showAddMCPForm = false
                             newMCPName = ""
                             newMCPURL = ""
+                            newMCPToken = ""
                         }
                         .font(.system(size: Theme.SettingsFont.secondary))
                         .foregroundColor(Theme.textSecondary)
@@ -631,14 +638,16 @@ struct APISettingsTab: View {
                             guard let pm = providerManager else { return }
                             let name = newMCPName.trimmingCharacters(in: .whitespaces)
                             let url = newMCPURL.trimmingCharacters(in: .whitespaces)
+                            let token = newMCPToken.trimmingCharacters(in: .whitespaces)
                             guard !name.isEmpty, !url.isEmpty else { return }
                             pm.addOrUpdateMCPServer(
-                                MCPServerConfig(name: name, url: url),
+                                MCPServerConfig(name: name, url: url, authorizationToken: token),
                                 for: pid
                             )
                             showAddMCPForm = false
                             newMCPName = ""
                             newMCPURL = ""
+                            newMCPToken = ""
                         }
                         .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
                         .foregroundColor(Theme.accent)
