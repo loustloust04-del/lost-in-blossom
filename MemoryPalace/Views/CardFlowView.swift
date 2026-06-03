@@ -401,9 +401,24 @@ struct CardFlowView: View {
                         }
                     },
                     onOpenFilePicker: {
-                        // 延迟 0.4 秒等 AddToChatSheet 完全 dismiss
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            showFilePicker = true
+                        // 延迟 0.5 秒等 dismiss 完成，然后用 UIKit 原生 present（绕过 SwiftUI）
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            DocumentPickerHelper.shared.present { urls in
+                                guard let url = urls.first else { return }
+                                let accessed = url.startAccessingSecurityScopedResource()
+                                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                                do {
+                                    let data = try Data(contentsOf: url)
+                                    if data.count > 10_485_760 {
+                                        self.fileErrorMessage = "文件太大（超过 10MB）"
+                                        return
+                                    }
+                                    self.pendingFileData = data
+                                    self.pendingFileName = url.lastPathComponent
+                                } catch {
+                                    self.fileErrorMessage = "读取文件失败: \(error.localizedDescription)"
+                                }
+                            }
                         }
                     },
                     pendingImageData: $pendingImageData,
@@ -411,28 +426,7 @@ struct CardFlowView: View {
                     pendingFileName: $pendingFileName
                 )
             }
-            // 文件选择器——从 CardFlowView 外层弹出，不在任何 sheet 内部（避免触摸事件丢失）
-            .sheet(isPresented: $showFilePicker) {
-                DocumentPickerView(contentTypes: [.item]) { urls in
-                    showFilePicker = false
-                    guard let url = urls.first else { return }
-                    let accessed = url.startAccessingSecurityScopedResource()
-                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                    do {
-                        let data = try Data(contentsOf: url)
-                        if data.count > 10_485_760 {
-                            fileErrorMessage = "文件太大（超过 10MB）"
-                            return
-                        }
-                        pendingFileData = data
-                        pendingFileName = url.lastPathComponent
-                    } catch {
-                        fileErrorMessage = "读取文件失败: \(error.localizedDescription)"
-                    }
-                } onCancel: {
-                    showFilePicker = false
-                }
-            }
+            // 文件选择器通过 DocumentPickerHelper (UIKit) 直接 present，不经过 SwiftUI
             .alert("文件添加失败", isPresented: Binding(
                 get: { fileErrorMessage != nil },
                 set: { if !$0 { fileErrorMessage = nil } }
