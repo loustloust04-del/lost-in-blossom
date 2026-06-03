@@ -1,6 +1,74 @@
 import SwiftUI
 import MarkdownUI
 
+// MARK: - Rich Text 预处理（彩色文字 + spoiler 黑块）
+
+/// `.text` 段在走 Markdown 渲染前的切片结果。
+/// - markdown: 普通 Markdown 文本，走原有 MarkdownUI 路径
+/// - colored: `{color:xxx}...{/color}` 彩色文字
+/// - spoiler: `||...||` 点击展开的黑块
+fileprivate enum RichSegment {
+    case markdown(String)
+    case colored(String, Color)
+    case spoiler(String)
+}
+
+/// 扫描文本，识别 {color:xxx}...{/color} 和 ||...|| 自定义语法，切成片段数组。
+/// 没有命中任何语法时返回单个 .markdown(text)，让上层走原有渲染路径（零成本）。
+fileprivate func parseRichSegments(_ text: String) -> [RichSegment] {
+    var segments: [RichSegment] = []
+
+    let pattern = #"\{color:(\w+)\}(.*?)\{/color\}|\|\|(.+?)\|\|"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+        return [.markdown(text)]
+    }
+
+    let nsText = text as NSString
+    var lastEnd = 0
+    let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+
+    for match in matches {
+        if match.range.location > lastEnd {
+            let plain = nsText.substring(with: NSRange(location: lastEnd, length: match.range.location - lastEnd))
+            if !plain.isEmpty { segments.append(.markdown(plain)) }
+        }
+
+        if match.range(at: 1).location != NSNotFound {
+            let colorName = nsText.substring(with: match.range(at: 1))
+            let content = nsText.substring(with: match.range(at: 2))
+            segments.append(.colored(content, colorFromName(colorName)))
+        } else if match.range(at: 3).location != NSNotFound {
+            let content = nsText.substring(with: match.range(at: 3))
+            segments.append(.spoiler(content))
+        }
+
+        lastEnd = match.range.location + match.range.length
+    }
+
+    if lastEnd < nsText.length {
+        let remaining = nsText.substring(from: lastEnd)
+        if !remaining.isEmpty { segments.append(.markdown(remaining)) }
+    }
+
+    return segments.isEmpty ? [.markdown(text)] : segments
+}
+
+fileprivate func colorFromName(_ name: String) -> Color {
+    switch name.lowercased() {
+    case "red": return .red
+    case "blue": return .blue
+    case "green": return .green
+    case "orange": return .orange
+    case "purple": return .purple
+    case "pink": return .pink
+    case "yellow": return .yellow
+    case "cyan": return .cyan
+    case "white": return .white
+    case "gray", "grey": return .gray
+    default: return Theme.textPrimary
+    }
+}
+
 /// 按顺序渲染 Claude v2 导入的 [MessageSegment]。
 /// - 每段独立折叠（思考 = DisclosureGroup；工具 = 可展开卡片）
 /// - toolUse 后紧跟的同 id toolResult 会合并成一张卡片
@@ -115,14 +183,26 @@ struct MessageSegmentsView: View {
                         .lineSpacing(4 * (fontScale > 0 ? fontScale : 1.0) * lineSpacingScale)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Markdown(applied)
-                        .markdownTheme(.memoryPalace(
-                            fontName: selectedFont,
-                            scale: fontScale > 0 ? fontScale : 1.0,
-                            lineSpacingScale: lineSpacingScale,
-                            paragraphSpacingScale: paragraphSpacingScale
-                        ))
-                        .textSelection(.enabled)
+                    let richSegments = parseRichSegments(applied)
+                    if richSegments.count == 1, case .markdown = richSegments[0] {
+                        // 纯 Markdown，走原有渲染路径（零成本）
+                        Markdown(applied)
+                            .markdownTheme(.memoryPalace(
+                                fontName: selectedFont,
+                                scale: fontScale > 0 ? fontScale : 1.0,
+                                lineSpacingScale: lineSpacingScale,
+                                paragraphSpacingScale: paragraphSpacingScale
+                            ))
+                            .textSelection(.enabled)
+                    } else {
+                        // 混合内容，逐段渲染
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(richSegments.enumerated()), id: \.offset) { _, seg in
+                                richSegmentView(seg)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         case .thinking(let s):
@@ -158,6 +238,52 @@ struct MessageSegmentsView: View {
                     .foregroundColor(Theme.textMuted)
             }
         }
+    }
+
+    /// 混合 rich text 模式下的单段渲染分发。
+    @ViewBuilder
+    private func richSegmentView(_ seg: RichSegment) -> some View {
+        let scale = fontScale > 0 ? fontScale : 1.0
+        switch seg {
+        case .markdown(let md):
+            Markdown(md)
+                .markdownTheme(.memoryPalace(
+                    fontName: selectedFont,
+                    scale: scale,
+                    lineSpacingScale: lineSpacingScale,
+                    paragraphSpacingScale: paragraphSpacingScale
+                ))
+                .textSelection(.enabled)
+        case .colored(let text, let color):
+            Text(text)
+                .foregroundColor(color)
+                .font(.system(size: 13.5 * scale))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .spoiler(let text):
+            SpoilerView(text: text)
+                .font(.system(size: 13.5 * scale))
+        }
+    }
+}
+
+// MARK: - Spoiler 黑块
+
+/// `||...||` 隐藏文字：默认黑块遮罩，点击展开。
+private struct SpoilerView: View {
+    let text: String
+    @State private var revealed = false
+
+    var body: some View {
+        Text(text)
+            .foregroundColor(revealed ? Theme.textPrimary : .clear)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(revealed ? Theme.mainBg.opacity(0.3) : Theme.textPrimary)
+            )
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { revealed.toggle() } }
     }
 }
 
