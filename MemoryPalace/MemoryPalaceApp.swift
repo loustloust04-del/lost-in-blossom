@@ -444,6 +444,21 @@ struct MemoryPalaceApp: App {
                 .environment(rightPanelNavigator)
                 .modelContainer(profileManager.container)
                 .id(profileManager.currentProfile.id)
+                .onOpenURL { url in
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        let data = try Data(contentsOf: url)
+                        let name = url.lastPathComponent
+                        NotificationCenter.default.post(
+                            name: Notification.Name("incomingFileReceived"),
+                            object: nil,
+                            userInfo: ["data": data, "name": name]
+                        )
+                    } catch {
+                        print("Failed to open file: \(error)")
+                    }
+                }
         }
     }
 }

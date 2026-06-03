@@ -55,6 +55,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "保存便签图片到相册"
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         INFOPLIST_KEY_NSHealthShareUsageDescription: "Lost in Blossom 需要读取你的步数和睡眠数据，让 Caelum 关心你的健康。"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"

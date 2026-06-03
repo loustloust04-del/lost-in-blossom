@@ -392,6 +392,14 @@ struct CardFlowView: View {
                 }
             }
             // Add to Chat 功能面板（+ 号触发）
+            // 从 Files App "用 Lost in Blossom 打开" 接收文件
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("incomingFileReceived"))) { notif in
+                if let data = notif.userInfo?["data"] as? Data,
+                   let name = notif.userInfo?["name"] as? String {
+                    pendingFileData = data
+                    pendingFileName = name
+                }
+            }
             .sheet(isPresented: $showAddToChat) {
                 AddToChatSheet(
                     onOpenSticker: {
