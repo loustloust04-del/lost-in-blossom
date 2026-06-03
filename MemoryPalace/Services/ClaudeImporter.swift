@@ -99,6 +99,7 @@ final class ClaudeImporter {
                     )
                     conversation.importBatchId = recordId
                     conversation.nodeCount = countDisplayableNodes(incoming.nodes)
+                    conversation.source = "claude"
                     context.insert(conversation)
 
                     for nodePayload in incoming.nodes {
@@ -291,6 +292,7 @@ final class ClaudeImporter {
                         )
                         conversation.importBatchId = recordId
                         conversation.nodeCount = countDisplayableNodes(incoming.nodes)
+                        conversation.source = "claude"
                         context.insert(conversation)
 
                         for nodePayload in incoming.nodes {
