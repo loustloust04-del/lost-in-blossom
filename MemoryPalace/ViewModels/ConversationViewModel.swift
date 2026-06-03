@@ -1233,12 +1233,11 @@ final class ConversationViewModel {
                 let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
                 return (json, "multimodal_text")
             } else if let data = fileData {
-                let b64 = data.base64EncodedString()
-                // 根据文件扩展名判断类型
                 let ext = (fileName ?? "").lowercased().components(separatedBy: ".").last ?? ""
-                let imageExts = ["jpg", "jpeg", "png", "gif", "webp"]
+                let imageExts = ["jpg", "jpeg", "png", "gif", "webp", "heic"]
+                let textExts = ["json", "txt", "md", "csv", "html", "xml", "swift", "py", "js", "ts", "yaml", "yml", "toml", "log", "sh", "css"]
                 if imageExts.contains(ext) {
-                    // 图片文件走 image block（跟直接拍照一样）
+                    let b64 = data.base64EncodedString()
                     let mimeType = ext == "png" ? "image/png" : ext == "gif" ? "image/gif" : ext == "webp" ? "image/webp" : "image/jpeg"
                     let blocks: [[String: Any]] = [
                         ["type": "image", "source": ["type": "base64", "media_type": mimeType, "data": b64]],
@@ -1246,20 +1245,31 @@ final class ConversationViewModel {
                     ]
                     let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
                     return (json, "multimodal_text")
-                } else {
-                    // PDF / 其他文件走 document block
-                    let mimeType = ext == "pdf" ? "application/pdf" : "application/octet-stream"
+                } else if textExts.contains(ext) {
+                    let fileContent = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) ?? "[无法解码文件内容]"
+                    let maxChars = 100_000
+                    let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断至前 100K 字符]" : fileContent
+                    let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
+                    return (combined, "text")
+                } else if ext == "pdf" {
+                    let b64 = data.base64EncodedString()
                     var docBlock: [String: Any] = [
                         "type": "document",
-                        "source": ["type": "base64", "media_type": mimeType, "data": b64]
+                        "source": ["type": "base64", "media_type": "application/pdf", "data": b64]
                     ]
                     if let name = fileName { docBlock["title"] = name }
-                    let blocks: [[String: Any]] = [
-                        docBlock,
-                        ["type": "text", "text": text]
-                    ]
+                    let blocks: [[String: Any]] = [docBlock, ["type": "text", "text": text]]
                     let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
                     return (json, "multimodal_text")
+                } else {
+                    if let fileContent = String(data: data, encoding: .utf8), !fileContent.isEmpty {
+                        let maxChars = 100_000
+                        let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断]" : fileContent
+                        let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
+                        return (combined, "text")
+                    } else {
+                        return ("[无法读取 \(fileName ?? "file")：不支持的格式]" + (text.isEmpty ? "" : "\n\n" + text), "text")
+                    }
                 }
             } else {
                 return (text, "text")

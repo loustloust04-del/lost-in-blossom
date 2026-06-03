@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ImportView: View {
     @Environment(\.modelContext) private var modelContext
@@ -8,9 +9,12 @@ struct ImportView: View {
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
     @State private var importer: ConversationImporter?
     @State private var claudeImporter: ClaudeImporter?
-    @State private var showFilePicker = false
     @State private var selectedProvider: String = "chatgpt"
     @State private var mergeMode: Bool = false
+    @State private var importURL: String = ""
+    @State private var isDownloading = false
+    @State private var downloadProgress: Double = 0
+    @State private var downloadError: String?
 
     private var isImporting: Bool {
         importer?.isImporting == true || claudeImporter?.isImporting == true
@@ -130,10 +134,6 @@ struct ImportView: View {
         "只追加本地没有的对话，已有对话保留本地版本。"
     }
 
-    private var actionButtonTitle: String {
-        mergeMode ? "选择 \(providerName) 文件（叠加）" : "选择 \(providerName) 文件"
-    }
-
     private var completionSummaryText: String {
         if currentAddedCount == 0 && currentUpdatedCount == 0 {
             if currentIgnoredCount > 0 {
@@ -193,15 +193,6 @@ struct ImportView: View {
         let _ = themeManager?.themeChangeID
         Group {
             iOSBody
-        }
-        .sheet(isPresented: $showFilePicker) {
-            DocumentPickerView(contentTypes: [.json]) { urls in
-                showFilePicker = false
-                guard let url = urls.first else { return }
-                startImport(url: url)
-            } onCancel: {
-                showFilePicker = false
-            }
         }
     }
 
@@ -300,8 +291,14 @@ struct ImportView: View {
             .listRowSeparator(.hidden)
 
             Section {
-                Button { presentFilePicker() } label: {
-                    HStack { Spacer(); Text("重新选文件"); Spacer() }
+                Button {
+                    switch selectedProvider {
+                    case "claude": claudeImporter = nil
+                    default: importer = nil
+                    }
+                    downloadError = nil
+                } label: {
+                    HStack { Spacer(); Text("返回"); Spacer() }
                         .font(.system(size: Theme.F.body, weight: .semibold))
                         .foregroundColor(.white)
                         .contentShape(Rectangle())
@@ -348,22 +345,72 @@ struct ImportView: View {
         .listRowSeparator(.hidden)
 
         Section {
-            Button {
-                presentFilePicker()
-            } label: {
-                HStack(spacing: 8) {
-                    Spacer()
-                    Image(systemName: "doc.badge.plus")
-                    Text(actionButtonTitle)
-                    Spacer()
+            VStack(spacing: 8) {
+                TextField("输入文件 URL", text: $importURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 14))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .disabled(isImporting || isDownloading)
+
+                if isDownloading {
+                    VStack(spacing: 4) {
+                        ProgressView(value: downloadProgress)
+                            .tint(Theme.softBlue)
+                        Text("正在下载... \(Int(downloadProgress * 100))%")
+                            .font(.caption)
+                            .foregroundColor(Theme.textSecondary)
+                    }
                 }
-                .font(.system(size: Theme.F.body, weight: .semibold))
-                .foregroundColor(.white)
-                .contentShape(Rectangle())
+
+                if let error = downloadError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(Theme.danger)
+                }
+
+                Button(mergeMode ? "下载并导入（叠加）" : "下载并导入") {
+                    downloadAndImport()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.softBlue)
+                .disabled(importURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isImporting || isDownloading)
             }
-            .buttonStyle(.plain)
-            .listRowBackground(Theme.branchIndicator)
+
+            HStack(spacing: 8) {
+                Button("ChatGPT 记录") {
+                    importURL = "http://172.245.88.103/imports/chatgpt-conversations.json"
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+                .disabled(isImporting || isDownloading)
+
+                Button("Claude 记录") {
+                    importURL = "http://172.245.88.103/imports/claude-conversations.json"
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+                .disabled(isImporting || isDownloading)
+            }
+
+            Text("—— 或 ——")
+                .font(.caption)
+                .foregroundColor(Theme.textMuted)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
+
+            Button("从剪贴板粘贴 JSON") {
+                pasteAndImport()
+            }
+            .font(.system(size: 14))
+            .buttonStyle(.bordered)
+            .disabled(isImporting || isDownloading)
+
+            Text("适合小文件。Files → 长按文件 → 拷贝 → 点此")
+                .font(.caption2)
+                .foregroundColor(Theme.textMuted)
         }
+        .listRowBackground(Theme.mainBg)
         .listRowSeparator(.hidden)
     }
 
@@ -537,121 +584,86 @@ struct ImportView: View {
         )
     }
 
-    private var macOSBody: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 8) {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 36))
-                    .foregroundColor(Theme.softBlue)
-
-                Text("导入对话")
-                    .font(.title2.weight(.medium))
-                    .foregroundColor(Theme.textPrimary)
-
-                Text("选择导出文件 conversations.json")
-                    .font(.subheadline)
-                    .foregroundColor(Theme.textSecondary)
-            }
-
-            Picker("数据来源", selection: $selectedProvider) {
-                Text("ChatGPT").tag("chatgpt")
-                Text("Claude").tag("claude")
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 240)
-            .disabled(isImporting)
-
-            if isImporting {
-                VStack(spacing: 12) {
-                    ProgressView(value: currentProgress)
-                        .tint(Theme.softBlue)
-
-                    Text(currentStatus)
-                        .font(.caption)
-                        .foregroundColor(Theme.textSecondary)
-
-                    if currentProcessedCount > 0 {
-                        Text("已处理 \(currentProcessedCount) 条记录")
-                            .font(.caption)
-                            .foregroundColor(Theme.textMuted)
-                    }
-
-                    if let error = currentError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(Theme.danger)
-                    }
-                }
-                .padding(.horizontal, 24)
-            } else if importDone {
-                VStack(spacing: 12) {
-                    Text(completionSummaryText)
-                        .font(.subheadline)
-                        .foregroundColor(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
-
-                    resultBreakdownSection
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button("完成") {
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.softBlue)
-                }
-            } else {
-                Toggle("叠加导入（不覆盖已有对话）", isOn: $mergeMode)
-                    .font(.system(size: Theme.F.label))
-                    .foregroundColor(Theme.textSecondary)
-                    .disabled(isImporting)
-
-                Button("选择文件...") {
-                    presentFilePicker()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.softBlue)
-
-                if let error = currentError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(Theme.danger)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                }
-            }
-
-            Button("取消") {
-                dismiss()
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(Theme.textMuted)
-            .disabled(isImporting)
+    private func downloadAndImport() {
+        let trimmed = importURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed) else {
+            downloadError = "无效的 URL"
+            return
         }
-        .padding(32)
-        .frame(width: 420, height: 400)
-        .background(Theme.cream)
+
+        isDownloading = true
+        downloadProgress = 0
+        downloadError = nil
+
+        let delegate = DownloadDelegate { progress in
+            Task { @MainActor in
+                downloadProgress = progress
+            }
+        }
+
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let task = session.downloadTask(with: url) { tempURL, _, error in
+            Task { @MainActor in
+                isDownloading = false
+
+                if let error = error {
+                    downloadError = "下载失败：\(error.localizedDescription)"
+                    return
+                }
+
+                guard let tempURL = tempURL else {
+                    downloadError = "下载失败：没有收到文件"
+                    return
+                }
+
+                let destURL = FileManager.default.temporaryDirectory.appendingPathComponent("downloaded_import.json")
+                try? FileManager.default.removeItem(at: destURL)
+                do {
+                    try FileManager.default.moveItem(at: tempURL, to: destURL)
+                    startImport(url: destURL)
+                } catch {
+                    downloadError = "文件处理失败：\(error.localizedDescription)"
+                }
+            }
+        }
+        task.resume()
     }
 
-    private func presentFilePicker() {
+    private func pasteAndImport() {
         guard !isImporting else { return }
-
-        switch selectedProvider {
-        case "claude":
-            claudeImporter = nil
-        default:
-            importer = nil
+        let pb = UIPasteboard.general
+        let jsonTypes = ["public.json", "public.plain-text", "public.utf8-plain-text", "public.text"]
+        var data: Data?
+        for type in jsonTypes {
+            if let d = pb.data(forPasteboardType: type) { data = d; break }
         }
+        if data == nil, let str = pb.string { data = str.data(using: .utf8) }
 
-        showFilePicker = true
+        guard let jsonData = data else {
+            downloadError = "剪贴板里没有 JSON 数据。在 Files 中长按文件 → 拷贝。"
+            return
+        }
+        guard (try? JSONSerialization.jsonObject(with: jsonData)) != nil else {
+            downloadError = "剪贴板内容不是有效 JSON。"
+            return
+        }
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard_import.json")
+        try? FileManager.default.removeItem(at: tempURL)
+        do {
+            try jsonData.write(to: tempURL)
+            startImport(url: tempURL)
+        } catch {
+            downloadError = "写入临时文件失败：\(error.localizedDescription)"
+        }
     }
 
     private func startImport(url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
+        let isSecurityScoped = url.startAccessingSecurityScopedResource()
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("import_conversations.json")
         try? FileManager.default.removeItem(at: tempURL)
         try? FileManager.default.copyItem(at: url, to: tempURL)
-        url.stopAccessingSecurityScopedResource()
+        if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
 
         let container = modelContext.container
 
@@ -680,6 +692,23 @@ struct ImportView: View {
                 }
                 try? FileManager.default.removeItem(at: tempURL)
             }
+        }
+    }
+}
+
+private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
+    let onProgress: (Double) -> Void
+
+    init(onProgress: @escaping (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if totalBytesExpectedToWrite > 0 {
+            let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            onProgress(progress)
         }
     }
 }
