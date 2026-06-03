@@ -91,31 +91,28 @@ struct AddToChatSheet: View {
                 // ── 行 1：粘贴文件（从 Files App 复制后粘贴）──────────────
                 Button {
                     let pb = UIPasteboard.general
-                    if let providers = pb.itemProviders as? [NSItemProvider], !providers.isEmpty {
-                        let provider = providers[0]
-                        // 尝试加载为文件数据
-                        if provider.hasItemConformingToTypeIdentifier("public.data") {
-                            provider.loadDataRepresentation(forTypeIdentifier: "public.data") { data, error in
-                                DispatchQueue.main.async {
-                                    if let data = data {
-                                        let name = provider.suggestedName ?? "clipboard-file"
-                                        pendingFileData = data
-                                        pendingFileName = name
-                                        dismiss()
-                                    }
-                                }
-                            }
+                    // 尝试从剪贴板读取文件数据
+                    let types = pb.types
+                    if let firstType = types.first,
+                       let data = pb.data(forPasteboardType: firstType) {
+                        // 尝试从 URL 获取文件名
+                        let name: String
+                        if let url = pb.url {
+                            name = url.lastPathComponent
+                        } else {
+                            // 根据类型推测扩展名
+                            let ext = firstType.contains("pdf") ? ".pdf" :
+                                      firstType.contains("png") ? ".png" :
+                                      firstType.contains("jpeg") ? ".jpg" :
+                                      firstType.contains("json") ? ".json" : ""
+                            name = "pasted-file\(ext)"
                         }
-                    } else if let url = pb.url, url.isFileURL {
-                        // 尝试作为文件 URL
-                        let accessed = url.startAccessingSecurityScopedResource()
-                        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                        if let data = try? Data(contentsOf: url) {
+                        if data.count <= 10_485_760 {
                             pendingFileData = data
-                            pendingFileName = url.lastPathComponent
-                            dismiss()
+                            pendingFileName = name
                         }
                     }
+                    dismiss()
                 } label: {
                     addToChatRow(
                         icon: "doc.on.clipboard",
