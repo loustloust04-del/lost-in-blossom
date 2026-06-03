@@ -35,7 +35,17 @@ final class ClaudeImporter {
             await MainActor.run { statusMessage = "正在解析 JSON..." }
 
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let isoFmt = ISO8601DateFormatter()
+            isoFmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let isoFmtNoFrac = ISO8601DateFormatter()
+            isoFmtNoFrac.formatOptions = [.withInternetDateTime]
+            decoder.dateDecodingStrategy = .custom { decoder in
+                let c = try decoder.singleValueContainer()
+                let s = try c.decode(String.self)
+                if let d = isoFmt.date(from: s) { return d }
+                if let d = isoFmtNoFrac.date(from: s) { return d }
+                throw DecodingError.dataCorruptedError(in: c, debugDescription: "Cannot parse date: \(s)")
+            }
             let rawConversations = try decoder.decode([ClaudeRawConversation].self, from: data)
             let total = rawConversations.count
             await MainActor.run {
@@ -166,7 +176,17 @@ final class ClaudeImporter {
             await MainActor.run { statusMessage = "正在解析 JSON..." }
 
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let isoFmt = ISO8601DateFormatter()
+            isoFmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let isoFmtNoFrac = ISO8601DateFormatter()
+            isoFmtNoFrac.formatOptions = [.withInternetDateTime]
+            decoder.dateDecodingStrategy = .custom { decoder in
+                let c = try decoder.singleValueContainer()
+                let s = try c.decode(String.self)
+                if let d = isoFmt.date(from: s) { return d }
+                if let d = isoFmtNoFrac.date(from: s) { return d }
+                throw DecodingError.dataCorruptedError(in: c, debugDescription: "Cannot parse date: \(s)")
+            }
             let rawConversations = try decoder.decode([ClaudeRawConversation].self, from: data)
             let total = rawConversations.count
             await MainActor.run {
