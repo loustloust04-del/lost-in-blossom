@@ -206,6 +206,9 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                         visionContent.append(["type": "image_url", "image_url": ["url": "data:\(mediaType);base64,\(b64)"]])
                     } else if type == "text" {
                         visionContent.append(["type": "text", "text": block["text"] as? String ?? ""])
+                    } else if type == "document" {
+                        let title = block["title"] as? String ?? "document"
+                        visionContent.append(["type": "text", "text": "[附件: \(title) — 此模型不支持文件，请用 Claude 查看]"])
                     }
                 }
                 apiMessages.append(["role": msg.role, "content": visionContent])
