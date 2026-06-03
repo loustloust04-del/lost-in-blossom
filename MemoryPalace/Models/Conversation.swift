@@ -32,6 +32,9 @@ final class Conversation {
     /// Links to ImportRecord.id for batch undo
     var importBatchId: UUID?
 
+    /// nil = native (App内新建), "claude" = Claude导入, "chatgpt" = ChatGPT导入
+    var source: String?
+
     /// 记忆参与开关（默认 true）
     /// false = 此对话不贡献记忆到楼层池，也不接收记忆注入
     var memoryEnabled: Bool = true
