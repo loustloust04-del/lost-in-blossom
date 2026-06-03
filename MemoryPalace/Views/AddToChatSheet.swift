@@ -9,7 +9,6 @@ struct AddToChatSheet: View {
     /// 点击「贴纸」后回调——由 CardFlowView 传入，负责打开 StickerKeyboardPanel
     let onOpenSticker: () -> Void
     /// 点击「发送文件」后回调——由 CardFlowView 在外层弹出文件选择器（避免 sheet 嵌套触摸丢失）
-    let onOpenFilePicker: () -> Void
     /// 选中照片后写入此 Binding，由 CardFlowView 持有并传给 ChatInputBar
     @Binding var pendingImageData: Data?
     /// 选中文件后写入，由 CardFlowView 持有并传给 ChatInputBar

@@ -408,33 +408,12 @@ struct CardFlowView: View {
                             stickerVM.isEditingStickers = true
                         }
                     },
-                    onOpenFilePicker: {
-                        // 延迟 0.5 秒等 dismiss 完成，然后用 UIKit 原生 present（绕过 SwiftUI）
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            DocumentPickerHelper.shared.present { urls in
-                                guard let url = urls.first else { return }
-                                let accessed = url.startAccessingSecurityScopedResource()
-                                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                                do {
-                                    let data = try Data(contentsOf: url)
-                                    if data.count > 10_485_760 {
-                                        self.fileErrorMessage = "文件太大（超过 10MB）"
-                                        return
-                                    }
-                                    self.pendingFileData = data
-                                    self.pendingFileName = url.lastPathComponent
-                                } catch {
-                                    self.fileErrorMessage = "读取文件失败: \(error.localizedDescription)"
-                                }
-                            }
-                        }
-                    },
+
                     pendingImageData: $pendingImageData,
                     pendingFileData: $pendingFileData,
                     pendingFileName: $pendingFileName
                 )
             }
-            // 文件选择器通过 DocumentPickerHelper (UIKit) 直接 present，不经过 SwiftUI
             .alert("文件添加失败", isPresented: Binding(
                 get: { fileErrorMessage != nil },
                 set: { if !$0 { fileErrorMessage = nil } }
