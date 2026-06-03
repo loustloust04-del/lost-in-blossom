@@ -117,7 +117,7 @@ struct AddToChatSheet: View {
                         icon: "doc.on.clipboard",
                         iconColor: Color.red.opacity(0.8),
                         title: "粘贴文件",
-                        trailing: Text("在 Files 中复制文件后点此").font(.caption2).foregroundStyle(.secondary)
+                        trailing: AnyView(Text("在 Files 中复制文件后点此").font(.caption2).foregroundStyle(.secondary))
                     )
                 }
                 .buttonStyle(.plain)
