@@ -11,9 +11,6 @@ struct ImportView: View {
     @State private var claudeImporter: ClaudeImporter?
     @State private var selectedProvider: String = "chatgpt"
     @State private var mergeMode: Bool = false
-    @State private var importURL: String = ""
-    @State private var isDownloading = false
-    @State private var downloadProgress: Double = 0
     @State private var downloadError: String?
 
     private var isImporting: Bool {
@@ -345,68 +342,15 @@ struct ImportView: View {
         .listRowSeparator(.hidden)
 
         Section {
-            VStack(spacing: 8) {
-                TextField("输入文件 URL", text: $importURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 14))
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .disabled(isImporting || isDownloading)
 
-                if isDownloading {
-                    VStack(spacing: 4) {
-                        ProgressView(value: downloadProgress)
-                            .tint(Theme.softBlue)
-                        Text("正在下载... \(Int(downloadProgress * 100))%")
-                            .font(.caption)
-                            .foregroundColor(Theme.textSecondary)
-                    }
-                }
-
-                if let error = downloadError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(Theme.danger)
-                }
-
-                Button(mergeMode ? "下载并导入（叠加）" : "下载并导入") {
-                    downloadAndImport()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.softBlue)
-                .disabled(importURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isImporting || isDownloading)
-            }
-
-            HStack(spacing: 8) {
-                Button("ChatGPT 记录") {
-                    importURL = "http://172.245.88.103/imports/chatgpt-conversations.json"
-                }
-                .font(.caption)
-                .buttonStyle(.bordered)
-                .disabled(isImporting || isDownloading)
-
-                Button("Claude 记录") {
-                    importURL = "http://172.245.88.103/imports/claude-conversations.json"
-                }
-                .font(.caption)
-                .buttonStyle(.bordered)
-                .disabled(isImporting || isDownloading)
-            }
-
-            Text("—— 或 ——")
-                .font(.caption)
-                .foregroundColor(Theme.textMuted)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 4)
-
-            Button("从剪贴板粘贴 JSON") {
+            Button("从 Files 粘贴导入") {
                 pasteAndImport()
             }
             .font(.system(size: 14))
             .buttonStyle(.bordered)
-            .disabled(isImporting || isDownloading)
+            .disabled(isImporting)
 
-            Text("适合小文件。Files → 长按文件 → 拷贝 → 点此")
+            Text("Files App → 长按文件 → 拷贝 → 回到这里点此按钮")
                 .font(.caption2)
                 .foregroundColor(Theme.textMuted)
         }
@@ -584,50 +528,6 @@ struct ImportView: View {
         )
     }
 
-    private func downloadAndImport() {
-        let trimmed = importURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else {
-            downloadError = "无效的 URL"
-            return
-        }
-
-        isDownloading = true
-        downloadProgress = 0
-        downloadError = nil
-
-        let delegate = DownloadDelegate { progress in
-            Task { @MainActor in
-                downloadProgress = progress
-            }
-        }
-
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        let task = session.downloadTask(with: url) { tempURL, _, error in
-            Task { @MainActor in
-                isDownloading = false
-
-                if let error = error {
-                    downloadError = "下载失败：\(error.localizedDescription)"
-                    return
-                }
-
-                guard let tempURL = tempURL else {
-                    downloadError = "下载失败：没有收到文件"
-                    return
-                }
-
-                let destURL = FileManager.default.temporaryDirectory.appendingPathComponent("downloaded_import.json")
-                try? FileManager.default.removeItem(at: destURL)
-                do {
-                    try FileManager.default.moveItem(at: tempURL, to: destURL)
-                    startImport(url: destURL)
-                } catch {
-                    downloadError = "文件处理失败：\(error.localizedDescription)"
-                }
-            }
-        }
-        task.resume()
-    }
 
     private func pasteAndImport() {
         guard !isImporting else { return }
@@ -692,23 +592,6 @@ struct ImportView: View {
                 }
                 try? FileManager.default.removeItem(at: tempURL)
             }
-        }
-    }
-}
-
-private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
-    let onProgress: (Double) -> Void
-
-    init(onProgress: @escaping (Double) -> Void) {
-        self.onProgress = onProgress
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        if totalBytesExpectedToWrite > 0 {
-            let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-            onProgress(progress)
         }
     }
 }
