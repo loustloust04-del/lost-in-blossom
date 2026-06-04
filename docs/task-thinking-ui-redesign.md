@@ -1,77 +1,162 @@
-# 思考链 UI 重设计 — Claude 网页版风格
+# 思考链 UI 重设计 — sheet 弹出 → 内联折叠展开
 
-> 当前 ThinkingBlockView 太简陋（chevron + "思考"），而且有空白框 bug。
-> 重设计为 Claude 网页版风格。参考截图：Bunny 发的 FullSizeRender.jpg。
+> 当前：点击摘要行弹出 ThinkingPanelView bottom sheet。
+> 问题：有概率弹出空白框（extractThinking 返回空时 sheet 仍弹出）。
+> 改为：Claude 网页版风格，点击摘要行在气泡内原地展开。
 
 ---
 
-## Bug 修复
+## 当前实现（要改的部分）
 
-**空白框问题：** 思考链展开后有概率显示空白。
+文件：`MemoryPalace/Views/CardFlowView.swift`
 
-根因猜测：`text` 为空字符串或纯空白字符时仍渲染了 ThinkingBlockView。
-
-修复：在 `MessageSegmentsView.swift` 的 segment 匹配处加 guard：
+### 摘要行（约 1385 行）— 保留，改点击行为
 
 ```swift
-case .thinking(let s):
-    if !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        ThinkingBlockView(text: s)
+Button {
+    showThinkingPanel = true  // ← 改为 toggle 内联展开
+} label: {
+    HStack(spacing: 5) {
+        Image(systemName: "clock")
+        // ... 摘要文字
     }
+}
+```
+
+摘要行本身的设计（clock 图标 + 前 40 字预览 + 一行截断）已经很好，保留。
+
+### sheet（约 1569 行）— 删掉
+
+```swift
+.sheet(isPresented: $showThinkingPanel) {
+    ThinkingPanelView(...)
+    .presentationDetents([.medium, .large])
+}
+```
+
+删掉这个 sheet binding。ThinkingPanelView 不再使用（或保留给旧聊天 TextSelectSheet 用）。
+
+---
+
+## 新实现
+
+### 状态变量
+
+把 `@State private var showThinkingPanel = false` 改为：
+
+```swift
+@State private var thinkingExpanded = false
+@State private var thinkingShowFull = false  // "Show more" 控制
+```
+
+### 摘要行点击 → 原地展开
+
+```swift
+Button {
+    withAnimation(.easeInOut(duration: 0.15)) {
+        thinkingExpanded.toggle()
+    }
+} label: {
+    HStack(spacing: 5) {
+        Image(systemName: "clock")
+            .font(.system(size: 11))
+        if liveThinking && isThinking {
+            ThinkingBreathLabel()
+        } else {
+            Text(previewStr)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        Spacer()
+        Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
+            .font(.system(size: 9))
+    }
+    .foregroundColor(Theme.textMuted.opacity(0.7))
+    .contentShape(Rectangle())
+}
+.buttonStyle(.plain)
+```
+
+### 展开区域（摘要行下方渲染）
+
+```swift
+if thinkingExpanded {
+    let thinkingText = liveThinking ? streamingThinkingText : staticThinking
+
+    if !thinkingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+            // 左侧竖线 + 内容
+            HStack(alignment: .top, spacing: 8) {
+                Rectangle()
+                    .fill(Theme.textMuted.opacity(0.2))
+                    .frame(width: 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    let display = thinkingShowFull ? thinkingText : String(thinkingText.prefix(300))
+
+                    Text(display)
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.textMuted)
+                        .textSelection(.enabled)
+
+                    // 超过 300 字 → 渐变淡出 + Show more
+                    if !thinkingShowFull && thinkingText.count > 300 {
+                        LinearGradient(
+                            colors: [Theme.textMuted.opacity(0.3), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 30)
+
+                        Button(thinkingShowFull ? "Show less" : "Show more") {
+                            thinkingShowFull.toggle()
+                        }
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.branchIndicator)
+                    }
+
+                    // Done 标记（非流式时）
+                    if !isThinking {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 11))
+                            Text("Done")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundColor(Theme.textMuted.opacity(0.5))
+                    }
+                }
+            }
+            .padding(.leading, 4)
+        }
+        .padding(.top, 4)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+}
 ```
 
 ---
 
-## UI 重设计
+## 空白框 Bug — 同时修复
 
-参考 Claude 网页版的 thinking 展示。当前文件：`MessageSegmentsView.swift`，`ThinkingBlockView`（约 295 行）。
-
-### 折叠状态（默认）
-
-```
-[⏳ 思考摘要文字（第一行或前30字）...        ∨ ]
-```
-
-- 左侧时钟图标（SF Symbol: `clock`）
-- 摘要文字：thinking 内容的第一行或前 30 个字 + "..."
-- 字体：12pt，灰色（Theme.textMuted）
-- 右侧展开箭头 chevron.down
-- 整行可点击
-
-### 展开状态
-
-```
-[⏳ 思考摘要文字...                         ∧ ]
-┃
-┃  思考内容正文……
-┃  第二行……
-┃  第三行……
-┃  ░░░░░░░░ 渐变淡出（如果超过阈值）░░░░░░░░
-┃  Show more                        ← 文字按钮
-┃
-[✓ Done]
-```
-
-- 左侧竖线：2pt 宽，灰色，贴着正文左边缘
-- 正文字体：13pt，Theme.textMuted
-- 如果内容超过 300 字：
-  - 默认只显示前 300 字
-  - 底部线性渐变淡出（从不透明到透明，高度约 40pt）
-  - "Show more" 文字按钮，点击展开全文
-  - 展开后改为 "Show less"
-- 底部 Done 标记：✓ 图标 + "Done" 文字，浅灰色
-
-### 设计要点
-
-- 折叠/展开动画保持现有的 `.easeInOut(duration: 0.15)`
-- 整行可点击区域不变（`.contentShape(Rectangle())`）
-- textSelection(.enabled) 保持
-- 配色全部跟 Theme 走，不硬编码颜色
+在展开区域加了 `if !thinkingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty` guard。
+thinking 为空时不渲染任何内容，不会出现空白框。
 
 ---
 
-## 文件
+## ⚠️ 不要碰的东西
 
-`MemoryPalace/Views/MessageSegmentsView.swift`，`ThinkingBlockView` 结构体（约 295 行）
+- 摘要行的预览逻辑（thinkingPreviewMode / thinkingSummary）不变
+- 流式思考（liveThinking / ThinkingBreathLabel）不变
+- 旧聊天记录里 MessageSegmentsView 的 ThinkingBlockView 不动（那是另一个组件）
+- TextSelectSheet 里如果引用了 ThinkingPanelView，保留
 
-整个改动限制在这一个 struct 内。不需要改 MessageSegment 模型或 ChatService。
+---
+
+## 文件改动范围
+
+只改 `CardFlowView.swift`：
+- 删掉 `.sheet(isPresented: $showThinkingPanel)` 那段
+- `showThinkingPanel` → `thinkingExpanded`
+- 摘要行 Button action 改为 toggle
+- 摘要行下方加展开区域
