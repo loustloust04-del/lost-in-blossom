@@ -452,8 +452,7 @@ struct APISettingsTab: View {
                     Button("保存并连接") {
                         UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
                         if let url = URL(string: ccHubURLDraft) {
-                            CCBridgeWebSocketClient.shared.disconnect()
-                            CCBridgeWebSocketClient.shared.connect(url: url)
+                            CCBridgeWebSocketClient.shared.forceReconnect(url: url)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -464,10 +463,7 @@ struct APISettingsTab: View {
             Button("重新连接") {
                 let urlStr = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? provider.baseURL
                 if let url = URL(string: urlStr) {
-                    CCBridgeWebSocketClient.shared.disconnect()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        CCBridgeWebSocketClient.shared.connect(url: url)
-                    }
+                    CCBridgeWebSocketClient.shared.forceReconnect(url: url)
                 }
             }
             .buttonStyle(.bordered)

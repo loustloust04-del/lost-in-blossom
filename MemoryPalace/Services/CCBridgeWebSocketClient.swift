@@ -83,11 +83,22 @@ final class CCBridgeWebSocketClient: NSObject {
         task = nil
         session?.invalidateAndCancel()
         session = nil
+        urls = []
+        url = nil
         // disconnect() 默认来自主线程 UI；直接同步更新，避免 stale window
         if Thread.isMainThread {
             isConnected = false
         } else {
             DispatchQueue.main.sync { self.isConnected = false }
+        }
+    }
+
+    /// 强制重连：断开旧连接，等待底层 TCP 资源释放后重建。
+    /// 给 UI 按钮用——比 disconnect()+connect() 更可靠。
+    func forceReconnect(url: URL, token: String? = nil) {
+        disconnect()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.connect(url: url, token: token)
         }
     }
 
