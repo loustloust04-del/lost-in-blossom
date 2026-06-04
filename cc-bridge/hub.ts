@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws"
 import { execFileSync } from "node:child_process"
+import { readdirSync, readFileSync, unlinkSync } from "node:fs"
 
 const PORT = 7890
 const TMUX_SESSION = process.env.MP_CC_TMUX_SESSION ?? "mp-cc"
@@ -143,42 +144,78 @@ export function startHub(): WebSocketServer {
 
   const captureTimer = setInterval(() => {
     if (mpClients.size === 0) return            // 没有客户端连接时不轮询
-    if (!tmux.hasSession(TMUX_SESSION)) return
 
-    try {
-      const current = execFileSync("tmux", [
-        "capture-pane", "-t", TMUX_SESSION, "-p", "-S", "-50",  // 捕获最近 50 行
-      ], { encoding: "utf-8" })
+    // ── cc_stream：tmux capture-pane 差量推送（需要 tmux session）──
+    if (tmux.hasSession(TMUX_SESSION)) {
+      try {
+        const current = execFileSync("tmux", [
+          "capture-pane", "-t", TMUX_SESSION, "-p", "-S", "-50",  // 捕获最近 50 行
+        ], { encoding: "utf-8" })
 
-      if (current !== lastCapture) {
-        const newContent = extractDelta(lastCapture, current)
-        lastCapture = current
-        lastChangeTime = Date.now()
+        if (current !== lastCapture) {
+          const newContent = extractDelta(lastCapture, current)
+          lastCapture = current
+          lastChangeTime = Date.now()
 
-        if (newContent.trim()) {
-          isStreaming = true
-          const streamMsg = JSON.stringify({
-            type: "cc_stream",
-            content: newContent,
+          if (newContent.trim()) {
+            isStreaming = true
+            const streamMsg = JSON.stringify({
+              type: "cc_stream",
+              content: newContent,
+              timestamp: new Date().toISOString(),
+            })
+            for (const ws of mpClients) {
+              if (ws.readyState === WebSocket.OPEN) ws.send(streamMsg)
+            }
+          }
+        } else if (isStreaming && Date.now() - lastChangeTime > IDLE_THRESHOLD_MS) {
+          // CC 停止输出了
+          isStreaming = false
+          const endMsg = JSON.stringify({
+            type: "cc_stream_end",
             timestamp: new Date().toISOString(),
           })
           for (const ws of mpClients) {
-            if (ws.readyState === WebSocket.OPEN) ws.send(streamMsg)
+            if (ws.readyState === WebSocket.OPEN) ws.send(endMsg)
           }
         }
-      } else if (isStreaming && Date.now() - lastChangeTime > IDLE_THRESHOLD_MS) {
-        // CC 停止输出了
-        isStreaming = false
-        const endMsg = JSON.stringify({
-          type: "cc_stream_end",
-          timestamp: new Date().toISOString(),
-        })
-        for (const ws of mpClients) {
-          if (ws.readyState === WebSocket.OPEN) ws.send(endMsg)
+      } catch {
+        // tmux capture-pane 失败（session 可能不存在），下次轮询再试
+      }
+    }
+
+    // ── cc_thinking：Stop hook 把 thinking 写入 /tmp/cc-thinking-*.json，
+    // 这里检测、广播、删除（文件系统做 IPC，与 tmux session 无关）──
+    try {
+      const files = readdirSync("/tmp")
+        .filter(f => f.startsWith("cc-thinking-") && f.endsWith(".json"))
+        .sort()  // 按时间戳排序，多个则依次广播
+
+      for (const file of files) {
+        const fullPath = `/tmp/${file}`
+        try {
+          const raw = readFileSync(fullPath, "utf-8")
+          const data = JSON.parse(raw)
+
+          if (data.thinking) {
+            const thinkingMsg = JSON.stringify({
+              type: "cc_thinking",
+              thinking: data.thinking,
+              session_id: data.session_id || "",
+              timestamp: data.timestamp || new Date().toISOString(),
+            })
+            for (const ws of mpClients) {
+              if (ws.readyState === WebSocket.OPEN) ws.send(thinkingMsg)
+            }
+          }
+
+          unlinkSync(fullPath)
+        } catch {
+          // 单个文件解析失败，跳过，下次轮询再试
         }
       }
     } catch {
-      // tmux capture-pane 失败（session 可能不存在），下次轮询再试
+      // /tmp 读取失败，忽略
     }
   }, POLL_INTERVAL_MS)
 
