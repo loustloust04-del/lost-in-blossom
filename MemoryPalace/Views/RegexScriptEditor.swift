@@ -115,7 +115,8 @@ struct RegexScriptEditor: View {
                 .padding(16)
             }
         }
-        .frame(width: 460, height: 520)
+        .frame(maxWidth: 500, minHeight: 480)
+        .frame(maxWidth: .infinity)  // 比 500 窄的屏幕（iPhone）自适应填满，避免标签被裁切
         .background(Theme.sidebarBg)
     }
 
