@@ -434,7 +434,7 @@ struct APISettingsTab: View {
                     .font(.system(size: Theme.SettingsFont.caption))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 6) {
-                    TextField("wss://your-vps-ip/cc", text: $ccHubURLDraft)
+                    TextField("ws://172.245.88.103:8890/cc", text: $ccHubURLDraft)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: Theme.SettingsFont.secondary))
                         .autocapitalization(.none)
@@ -442,7 +442,8 @@ struct APISettingsTab: View {
                     Button("保存并连接") {
                         UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
                         if let url = URL(string: ccHubURLDraft) {
-                            CCBridgeWebSocketClient.shared.forceReconnect(url: url)
+                            let token: String? = provider.apiKey.isEmpty ? nil : provider.apiKey
+                            CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -453,7 +454,8 @@ struct APISettingsTab: View {
             Button("重新连接") {
                 let urlStr = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? provider.baseURL
                 if let url = URL(string: urlStr) {
-                    CCBridgeWebSocketClient.shared.forceReconnect(url: url)
+                    let token: String? = provider.apiKey.isEmpty ? nil : provider.apiKey
+                    CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
                 }
             }
             .buttonStyle(.bordered)
