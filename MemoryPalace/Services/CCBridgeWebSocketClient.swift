@@ -8,6 +8,14 @@ struct CCBridgeRemoteError: LocalizedError {
     var errorDescription: String? { reason }
 }
 
+/// CC 执行任务时推送过来的一段思考链（来自 hub 的 cc_thinking 广播）。
+struct CCThinkingBlock: Identifiable {
+    let id = UUID()
+    let thinking: String
+    let sessionId: String
+    let timestamp: Date
+}
+
 @Observable
 final class CCBridgeWebSocketClient: NSObject {
     static let shared = CCBridgeWebSocketClient()
@@ -16,6 +24,9 @@ final class CCBridgeWebSocketClient: NSObject {
 
     private(set) var isConnected: Bool = false
     private(set) var lastError: String?
+
+    /// 最新收到的 CC thinking block（hub 通过 cc_thinking 推送）。UI 观察此属性展示折叠思考链。
+    private(set) var latestThinking: CCThinkingBlock?
 
     // MARK: - Private state
 
@@ -256,6 +267,17 @@ final class CCBridgeWebSocketClient: NSObject {
                 guard let self else { return }
                 if let h = self.spawnHandlers.removeValue(forKey: name) {
                     DispatchQueue.main.async { h(.failure(CCBridgeRemoteError(reason: reason))) }
+                }
+            }
+        case "cc_thinking":
+            if let thinking = obj["thinking"] as? String {
+                let block = CCThinkingBlock(
+                    thinking: thinking,
+                    sessionId: obj["session_id"] as? String ?? "",
+                    timestamp: Date()
+                )
+                DispatchQueue.main.async { [weak self] in
+                    self?.latestThinking = block
                 }
             }
         case "list_sessions_result":

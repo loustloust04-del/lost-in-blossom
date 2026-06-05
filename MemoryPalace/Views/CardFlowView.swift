@@ -56,6 +56,7 @@ struct CardFlowView: View {
             thinkingSummary: thinkingSummaryForNode,
             isHighlighted: isNodeHighlighted,
             isSearchMatch: isNodeSearchMatch,
+            isLastAssistant: node.role == "assistant" && node.id == viewModel.currentPath.last?.id,
             onToggleFavorite: { viewModel.toggleFavorite(node) },
             onTogglePin: { viewModel.togglePin(node) },
             onSoftDelete: { viewModel.softDelete(node) },
@@ -1245,6 +1246,8 @@ struct BubbleView: View {
     var thinkingSummary: String = ""
     var isHighlighted: Bool = false
     var isSearchMatch: Bool = false
+    /// 当前对话路径的最后一条 assistant 消息。CC 思考链（latestThinking）只挂在这条气泡上。
+    var isLastAssistant: Bool = false
     let onToggleFavorite: () -> Void
     let onTogglePin: () -> Void
     let onSoftDelete: () -> Void
@@ -1302,6 +1305,10 @@ struct BubbleView: View {
 
             // Bubble
             VStack(alignment: .leading, spacing: 6) {
+                // CC 思考链：只挂在最后一条 assistant 气泡上（latestThinking 仅 CC 会话会被设置）
+                if !isUser, isLastAssistant, let ccThinking = CCBridgeWebSocketClient.shared.latestThinking {
+                    CCThinkingView(block: ccThinking)
+                }
                 let rawCleaned = ContentCleaner.clean(node.content, cacheKey: "\(node.id)_\(node.content.count)")
                 let thinkingResult = isUser ? nil : ContentCleaner.extractThinking(from: rawCleaned)
                 let cleaned = thinkingResult?.content ?? rawCleaned
