@@ -34,6 +34,11 @@ final class CCBridgeWebSocketClient: NSObject {
         thinkingBlocks.values.max(by: { $0.timestamp < $1.timestamp })
     }
 
+    /// CC 终端的最新流式输出（hub 通过 cc_stream 推送）。
+    private(set) var streamContent: String = ""
+    /// CC 是否正在输出。
+    private(set) var isCCStreaming: Bool = false
+
     // MARK: - Private state
 
     @ObservationIgnored private var task: URLSessionWebSocketTask?
@@ -292,6 +297,22 @@ final class CCBridgeWebSocketClient: NSObject {
                 DispatchQueue.main.async { [weak self] in
                     self?.thinkingBlocks[sessionId] = block
                 }
+            }
+        case "cc_stream":
+            if let content = obj["content"] as? String {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    if !self.isCCStreaming {
+                        self.streamContent = ""  // 新一轮，先清空旧内容
+                    }
+                    self.streamContent += content
+                    self.isCCStreaming = true
+                }
+            }
+        case "cc_stream_end":
+            DispatchQueue.main.async { [weak self] in
+                self?.isCCStreaming = false
+                // 不清空 streamContent，等下一次 cc_stream 开始时再清
             }
         case "list_sessions_result":
             let sessions = obj["sessions"] as? [String] ?? []
