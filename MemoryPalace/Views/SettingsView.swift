@@ -19,6 +19,7 @@ struct SettingsView: View {
         case general = "通用"
         case data = "数据与备份"
         case api = "API"
+        case mcp = "MCP 工具"
         case persona = "Prompt"
         case regex = "正则"
         case rightPanel = "右栏"
@@ -49,6 +50,7 @@ struct SettingsView: View {
                     settingsButton(icon: "gearshape", title: "通用", color: Theme.textSecondary, tab: .general)
                     settingsButton(icon: "archivebox", title: "数据与备份", color: Theme.textSecondary, tab: .data)
                     settingsButton(icon: "network", title: "API", color: Theme.textSecondary, tab: .api)
+                    settingsButton(icon: "wrench.and.screwdriver", title: "🔧 MCP 工具", color: Theme.textSecondary, tab: .mcp)
                     settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
                     settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
                 }
@@ -79,6 +81,7 @@ struct SettingsView: View {
                 case .theme: IOSThemePage()
                 case .persona: PersonaSettingsTab()
                 case .api: APISettingsTab()
+                case .mcp: MCPSettingsTab()
                 case .memory: IOSMemoryPage()
                 case .regex: IOSRegexPage()
                 case .sticker:
@@ -175,6 +178,8 @@ struct SettingsView: View {
                         PersonaSettingsTab()
                     case .api:
                         APISettingsTab()
+                    case .mcp:
+                        MCPSettingsTab()
                     case .memory:
                         MemorySettingsTab()
                     case .regex:
