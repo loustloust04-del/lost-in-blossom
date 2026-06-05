@@ -32,12 +32,6 @@ struct APISettingsTab: View {
 
     @State private var cloudSyncMessage: String? = nil
 
-    // MCP server add form state
-    @State private var showAddMCPForm = false
-    @State private var newMCPName = ""
-    @State private var newMCPURL = ""
-    @State private var newMCPToken = ""
-
     // MARK: - Constants
 
     static let customOpenAIId = "__custom_openai__"
@@ -192,15 +186,6 @@ struct APISettingsTab: View {
                 }
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
-
-                // MCP 工具服务器 — 仅 Anthropic provider 显示
-                if selectedProvider?.type == .anthropic {
-                    Section("MCP 工具服务器") {
-                        mcpServersContent
-                    }
-                    .listRowBackground(Theme.mainBg)
-                    .listRowSeparator(.hidden)
-                }
 
                 Section("模型") {
                     modelListContent
@@ -540,136 +525,6 @@ struct APISettingsTab: View {
                             .font(.system(size: Theme.SettingsFont.secondary))
                     }
                     .foregroundColor(.red.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    // MARK: - MCP Servers Section
-
-    @ViewBuilder
-    private var mcpServersContent: some View {
-        let pid = effectiveProviderId.isEmpty ? apiSelectedProviderId : effectiveProviderId
-        let servers = providerManager?.providers.first(where: { $0.id == pid })?.mcpServers ?? []
-
-        VStack(alignment: .leading, spacing: 10) {
-            // 说明文本
-            Text("连接 MCP 工具服务器（Anthropic beta），可让 Caelum 自动调用 imprint-memory 等工具。")
-                .font(.system(size: Theme.SettingsFont.caption))
-                .foregroundColor(Theme.textSecondary)
-
-            // 已有服务器列表
-            ForEach(servers) { server in
-                HStack(spacing: 8) {
-                    // 启用切换
-                    Button {
-                        guard let pm = providerManager else { return }
-                        var updated = server
-                        updated.isEnabled.toggle()
-                        pm.addOrUpdateMCPServer(updated, for: pid)
-                    } label: {
-                        Image(systemName: server.isEnabled ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 16))
-                            .foregroundColor(server.isEnabled ? Theme.accent : Theme.textMuted)
-                    }
-                    .buttonStyle(.plain)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(server.name)
-                            .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
-                            .foregroundColor(Theme.textPrimary)
-                        Text(server.url)
-                            .font(.system(size: Theme.SettingsFont.caption))
-                            .foregroundColor(Theme.textSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-
-                    Spacer()
-
-                    // 删除按钮
-                    Button {
-                        guard let pm = providerManager else { return }
-                        pm.removeMCPServer(id: server.id, from: pid)
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 13))
-                            .foregroundColor(.red.opacity(0.6))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.vertical, 4)
-            }
-
-            // 添加表单
-            if showAddMCPForm {
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField("名称 (如 imprint-memory)", text: $newMCPName)
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    TextField("URL (如 https://imprint.amberrib.com/sse)", text: $newMCPURL)
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                    SecureField("Authorization Token（可选）", text: $newMCPToken)
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-
-                    HStack(spacing: 8) {
-                        Button("取消") {
-                            showAddMCPForm = false
-                            newMCPName = ""
-                            newMCPURL = ""
-                            newMCPToken = ""
-                        }
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .foregroundColor(Theme.textSecondary)
-                        .buttonStyle(.plain)
-
-                        Spacer()
-
-                        Button("保存") {
-                            guard let pm = providerManager else { return }
-                            let name = newMCPName.trimmingCharacters(in: .whitespaces)
-                            let url = newMCPURL.trimmingCharacters(in: .whitespaces)
-                            let token = newMCPToken.trimmingCharacters(in: .whitespaces)
-                            guard !name.isEmpty, !url.isEmpty else { return }
-                            pm.addOrUpdateMCPServer(
-                                MCPServerConfig(name: name, url: url, authorizationToken: token),
-                                for: pid
-                            )
-                            showAddMCPForm = false
-                            newMCPName = ""
-                            newMCPURL = ""
-                            newMCPToken = ""
-                        }
-                        .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
-                        .foregroundColor(Theme.accent)
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.top, 4)
-            }
-
-            // 添加按钮
-            if !showAddMCPForm {
-                Button {
-                    showAddMCPForm = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 13))
-                        Text("添加 MCP 服务器")
-                            .font(.system(size: Theme.SettingsFont.secondary))
-                    }
-                    .foregroundColor(Theme.accent)
                 }
                 .buttonStyle(.plain)
             }
