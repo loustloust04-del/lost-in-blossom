@@ -1658,18 +1658,28 @@ struct SidebarView: View {
         var descriptor = FetchDescriptor<Conversation>(sortBy: sortBy)
         descriptor.predicate = normalPredicate(search: searchText, interval: interval, favoritesOnly: showFavoritesOnly)
 
-        if let count = try? modelContext.fetchCount(descriptor) {
-            totalCount = count
-        }
-
-        descriptor.fetchOffset = offset
-        descriptor.fetchLimit = pageSize
-
-        if let results = try? modelContext.fetch(descriptor) {
-            if offset == 0 {
-                conversations = results
-            } else {
-                conversations.append(contentsOf: results)
+        if memoryFilter == .chats {
+            // Chats：分页加载
+            if let count = try? modelContext.fetchCount(descriptor) {
+                totalCount = count
+            }
+            descriptor.fetchOffset = offset
+            descriptor.fetchLimit = pageSize
+            if let results = try? modelContext.fetch(descriptor) {
+                if offset == 0 {
+                    conversations = results
+                } else {
+                    conversations.append(contentsOf: results)
+                }
+            }
+        } else {
+            // Amber / Almond：全量加载 + 前端 source 过滤
+            // 124 条 chatgpt 对话不会有性能问题，分页会导致 source 过滤后数量不准
+            if let results = try? modelContext.fetch(descriptor) {
+                let sourceKey = memoryFilter == .amber ? "chatgpt" : "claude"
+                let filtered = results.filter { $0.source == sourceKey }
+                conversations = Array(filtered.sorted { ($0.updateTime ?? .distantPast) > ($1.updateTime ?? .distantPast) })
+                totalCount = filtered.count
             }
         }
 
