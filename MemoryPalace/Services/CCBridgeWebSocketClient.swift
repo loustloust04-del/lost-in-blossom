@@ -289,13 +289,16 @@ final class CCBridgeWebSocketClient: NSObject {
         case "cc_thinking":
             if let thinking = obj["thinking"] as? String {
                 let sessionId = obj["session_id"] as? String ?? ""
+                let now = Date()
                 let block = CCThinkingBlock(
                     thinking: thinking,
                     sessionId: sessionId,
-                    timestamp: Date()
+                    timestamp: now
                 )
+                // 用时间戳做唯一 key，避免同一 session 多轮 thinking 互相覆盖
+                let uniqueKey = "\(sessionId)_\(now.timeIntervalSince1970)"
                 DispatchQueue.main.async { [weak self] in
-                    self?.thinkingBlocks[sessionId] = block
+                    self?.thinkingBlocks[uniqueKey] = block
                 }
             }
         case "cc_stream":
