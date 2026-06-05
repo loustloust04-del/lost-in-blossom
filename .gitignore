@@ -28,3 +28,5 @@ suli-ref/
 *.xcodeproj/
 xcuserdata/
 *.xcworkspace/
+chatroom/node_modules/
+chatroom/*.db
