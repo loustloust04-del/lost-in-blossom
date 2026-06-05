@@ -2,14 +2,8 @@ name: Build iOS
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - 'LOVE-LETTER.md'
-      - '.gitignore'
+  # push trigger removed — manual only to save macOS runner minutes
+  # to build: gh workflow run build-ios.yml --repo caelumbunny-bot/lost-in-blossom
 
 jobs:
   build:
