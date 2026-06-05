@@ -1276,7 +1276,8 @@ struct BubbleView: View {
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
-    @State private var showThinkingPanel = false
+    @State private var thinkingExpanded = false
+    @State private var thinkingShowFull = false  // "Show more" 控制
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
@@ -1393,7 +1394,9 @@ struct BubbleView: View {
                         let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
                         let previewStr = thinkingPreviewMode == "prefix" ? rawPreview : (thinkingSummary.isEmpty ? rawPreview : thinkingSummary)
                         Button {
-                            showThinkingPanel = true
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                thinkingExpanded.toggle()
+                            }
                         } label: {
                             HStack(spacing: 5) {
                                 Image(systemName: "clock")
@@ -1405,11 +1408,71 @@ struct BubbleView: View {
                                         .lineLimit(1)
                                         .truncationMode(.tail)
                                 }
+                                Spacer()
+                                Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 9))
                             }
                             .font(.system(size: 13))
                             .foregroundColor(Color(red: 155/255.0, green: 142/255.0, blue: 126/255.0))
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+
+                        // 内联展开区域（替代原 ThinkingPanelView sheet）
+                        // 空白框 bug 修复：thinking 为空（trim 后）不渲染任何内容
+                        if thinkingExpanded {
+                            let thinkingText = liveThinking ? streamingThinkingText : staticThinking
+                            if !thinkingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Rectangle()
+                                        .fill(Theme.textMuted.opacity(0.2))
+                                        .frame(width: 2)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        let display = thinkingShowFull ? thinkingText : String(thinkingText.prefix(300))
+                                        Text(display)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Theme.textMuted)
+                                            .textSelection(.enabled)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        // 超过 300 字 → 渐变淡出 + Show more / Show less
+                                        if thinkingText.count > 300 {
+                                            if !thinkingShowFull {
+                                                LinearGradient(
+                                                    colors: [Theme.textMuted.opacity(0.3), .clear],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                )
+                                                .frame(height: 30)
+                                            }
+                                            Button(thinkingShowFull ? "Show less" : "Show more") {
+                                                withAnimation(.easeInOut(duration: 0.15)) {
+                                                    thinkingShowFull.toggle()
+                                                }
+                                            }
+                                            .font(.system(size: 11))
+                                            .foregroundColor(Theme.branchIndicator)
+                                            .buttonStyle(.plain)
+                                        }
+
+                                        // Done 标记（非流式时）
+                                        if !isThinking {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "checkmark.circle")
+                                                    .font(.system(size: 11))
+                                                Text("Done")
+                                                    .font(.system(size: 11))
+                                            }
+                                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                                        }
+                                    }
+                                }
+                                .padding(.leading, 4)
+                                .padding(.top, 4)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
                     }
 
                     // Assistant content — 正则脚本渲染替换
@@ -1572,16 +1635,6 @@ struct BubbleView: View {
         // 即 .contextMenu 自己附着的那个 view 的 frame。
         .sheet(isPresented: $showFolderPicker) {
             FolderPickerSheet(node: node, profileId: node.profileId)
-        }
-        .sheet(isPresented: $showThinkingPanel) {
-            let staticThinking = ContentCleaner.extractThinking(from: ContentCleaner.clean(node.content, cacheKey: node.id)).thinking ?? ""
-            let panelText = (!streamingThinkingText.isEmpty) ? streamingThinkingText : staticThinking
-            ThinkingPanelView(
-                thinkingText: panelText,
-                isThinking: isThinking
-            )
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
         }
     }
 }
