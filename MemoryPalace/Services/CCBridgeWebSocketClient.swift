@@ -25,8 +25,14 @@ final class CCBridgeWebSocketClient: NSObject {
     private(set) var isConnected: Bool = false
     private(set) var lastError: String?
 
-    /// 最新收到的 CC thinking block（hub 通过 cc_thinking 推送）。UI 观察此属性展示折叠思考链。
-    private(set) var latestThinking: CCThinkingBlock?
+    /// CC thinking block 按 session_id 存储（hub 通过 cc_thinking 推送）。
+    /// 改为字典后，每条会话各自保留自己的思考链，不会被后到的新 thinking 覆盖。
+    private(set) var thinkingBlocks: [String: CCThinkingBlock] = [:]
+
+    /// 最新一条 thinking 的快捷访问（向后兼容）。@Observable 计算属性，随 thinkingBlocks 变化更新。
+    var latestThinking: CCThinkingBlock? {
+        thinkingBlocks.values.max(by: { $0.timestamp < $1.timestamp })
+    }
 
     // MARK: - Private state
 
@@ -277,13 +283,14 @@ final class CCBridgeWebSocketClient: NSObject {
             }
         case "cc_thinking":
             if let thinking = obj["thinking"] as? String {
+                let sessionId = obj["session_id"] as? String ?? ""
                 let block = CCThinkingBlock(
                     thinking: thinking,
-                    sessionId: obj["session_id"] as? String ?? "",
+                    sessionId: sessionId,
                     timestamp: Date()
                 )
                 DispatchQueue.main.async { [weak self] in
-                    self?.latestThinking = block
+                    self?.thinkingBlocks[sessionId] = block
                 }
             }
         case "list_sessions_result":
