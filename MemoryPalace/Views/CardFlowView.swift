@@ -1278,6 +1278,8 @@ struct BubbleView: View {
     @State private var showFolderPicker = false
     @State private var thinkingExpanded = false
     @State private var thinkingShowFull = false  // "Show more" 控制
+    @State private var showArtifactCanvas = false
+    @State private var detectedArtifact: ArtifactContent? = nil
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
@@ -1501,6 +1503,14 @@ struct BubbleView: View {
                     }
                 }
 
+                // Artifact canvas card (assistant only, not during streaming)
+                if !isUser && !isStreaming, let artifact = ArtifactDetector.find(in: cleaned) {
+                    ArtifactCardView(artifact: artifact) {
+                        detectedArtifact = artifact
+                        showArtifactCanvas = true
+                    }
+                }
+
                 if !expandAllMessages && cleaned.count > truncateLength {
                     // 按钮出现时才挂 HStack，避免空 HStack 吃掉 VStack 的
                     // spacing: 6（上下共 12pt）造成气泡底部多一截留白。
@@ -1635,6 +1645,11 @@ struct BubbleView: View {
         // 即 .contextMenu 自己附着的那个 view 的 frame。
         .sheet(isPresented: $showFolderPicker) {
             FolderPickerSheet(node: node, profileId: node.profileId)
+        }
+        .sheet(isPresented: $showArtifactCanvas) {
+            if let artifact = detectedArtifact {
+                ArtifactCanvasSheet(artifact: artifact)
+            }
         }
     }
 }
