@@ -20,7 +20,8 @@ struct PromptAssembler {
         chatHistory: [(role: String, content: String)],
         worldBooks: [WorldBook] = [],
         globalEntries: [WorldBookEntry] = [],
-        contextSummary: String? = nil
+        contextSummary: String? = nil,
+        projectInstructions: String? = nil
     ) -> (systemPrompt: String?, messages: [(role: String, content: String)]) {
 
         let contextDepth = preset.sampling.contextDepth
@@ -148,6 +149,11 @@ struct PromptAssembler {
         // 上下文摘要注入（记忆之后、对话历史之前）
         if let summary = contextSummary, !summary.isEmpty {
             systemParts.append((tag: "contextSummary", content: "[对话历史摘要]\n\(summary)"))
+        }
+
+        // 项目指令注入
+        if let proj = projectInstructions, !proj.isEmpty {
+            systemParts.append((tag: "projectInstructions", content: "[项目指令]\n\(proj)"))
         }
 
         let systemPrompt = systemParts.isEmpty ? nil : systemParts.map(\.content).joined(separator: "\n\n")

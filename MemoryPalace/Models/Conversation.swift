@@ -39,6 +39,9 @@ final class Conversation {
     /// false = 此对话不贡献记忆到楼层池，也不接收记忆注入
     var memoryEnabled: Bool = true
 
+    /// 所属项目 ID（nil = 不属于任何项目）
+    var projectId: String?
+
     init(id: String, title: String, createTime: Date, updateTime: Date, currentNodeId: String, provider: String = "chatgpt", profileId: String = "") {
         self.id = id
         self.title = title

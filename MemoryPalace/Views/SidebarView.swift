@@ -93,6 +93,7 @@ struct SidebarView: View {
     @State private var showSortPopover = false
     @State private var showProjectsPage = false
     @State private var memoryFilter: SidebarFilter = .chats
+    @State private var moveToProjectConversation: Conversation? = nil
     @State private var showAllChats = false
     @AppStorage("exportMode") private var exportMode = "lightweight"
     @AppStorage("userName") private var userName = "你"
@@ -414,21 +415,8 @@ struct SidebarView: View {
                     }
                 }
             } else if showProjectsPage {
-                // MARK: - Projects (Coming Soon)
-                VStack(spacing: 12) {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 36))
-                        .foregroundColor(Theme.textMuted.opacity(0.4))
-                    Text("Projects")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Theme.textPrimary)
-                    Text("Coming Soon")
-                        .font(.system(size: 14))
-                        .foregroundColor(Theme.textMuted)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, 60)
-
+                // MARK: - Projects
+                ProjectsView(profileId: profileId, viewModel: viewModel)
                 Spacer(minLength: 0)
             } else {
                 // MARK: - Normal Conversation List
@@ -528,6 +516,12 @@ struct SidebarView: View {
                                                 exportConversation(conversation)
                                             }) {
                                                 Label("导出为 Markdown", systemImage: "doc.text")
+                                            }
+
+                                            Button(action: {
+                                                moveToProjectConversation = conversation
+                                            }) {
+                                                Label("移动到项目", systemImage: "folder")
                                             }
 
                                             Divider()
@@ -817,6 +811,9 @@ struct SidebarView: View {
                 userName: userName,
                 assistantName: assistantName
             )
+        }
+        .sheet(item: $moveToProjectConversation) { conversation in
+            ProjectPickerSheet(conversation: conversation, profileId: profileId)
         }
     }
 

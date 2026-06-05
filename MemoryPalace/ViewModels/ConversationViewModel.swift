@@ -1109,6 +1109,16 @@ final class ConversationViewModel {
         // 读取上下文摘要
         let contextSummary = ContextSummarizer.load(conversationId: currentConvId)?.summary
 
+        // 读取项目指令
+        var projectInstructions: String? = nil
+        if let projId = selectedConversation?.projectId, !projId.isEmpty {
+            let pid = projId
+            let projFetch = FetchDescriptor<Project>(predicate: #Predicate { $0.id == pid })
+            if let proj = try? context.fetch(projFetch).first, !proj.instructions.isEmpty {
+                projectInstructions = proj.instructions
+            }
+        }
+
         let result = PromptAssembler.assemble(
             preset: preset,
             profile: profile,
@@ -1116,7 +1126,8 @@ final class ConversationViewModel {
             chatHistory: chatHistory,
             worldBooks: worldBooks,
             globalEntries: globalEntries,
-            contextSummary: contextSummary
+            contextSummary: contextSummary,
+            projectInstructions: projectInstructions
         )
 
         return (systemPrompt: result.systemPrompt, messages: result.messages, sampling: preset.sampling)
@@ -1800,7 +1811,7 @@ final class ConversationViewModel {
     }
 
     /// Create a new empty conversation for chatting
-    func createNewConversation(title: String, profileId: String, context: ModelContext) -> Conversation {
+    func createNewConversation(title: String, profileId: String, context: ModelContext, projectId: String? = nil) -> Conversation {
         let rootId = UUID().uuidString
         let conversation = Conversation(
             id: UUID().uuidString,
@@ -1811,6 +1822,7 @@ final class ConversationViewModel {
             provider: "api",
             profileId: profileId
         )
+        conversation.projectId = projectId
         context.insert(conversation)
 
         // Create invisible root node

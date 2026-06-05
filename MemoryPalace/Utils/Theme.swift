@@ -64,4 +64,11 @@ extension Color {
             opacity: alpha
         )
     }
+
+    /// Init from a hex string like "6B7CB3" or "#6B7CB3"
+    init(hexString: String) {
+        let stripped = hexString.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        let value = UInt(stripped, radix: 16) ?? 0x6B7CB3
+        self.init(hex: value)
+    }
 }
