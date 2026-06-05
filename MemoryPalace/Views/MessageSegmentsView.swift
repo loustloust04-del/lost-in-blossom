@@ -557,3 +557,38 @@ private struct AttachmentCardView: View {
         )
     }
 }
+
+
+// MARK: - Rich Segment Renderer (extracted for type-checker)
+
+/// 单个富文本片段渲染器。从 CardFlowView 的 ForEach 里提取出来，
+/// 避免 switch 在 @ViewBuilder 里导致 "unable to type-check" 编译错误。
+struct RichSegmentRenderer: View {
+    let segment: RichSegment
+    let selectedFont: String
+    let fontScale: CGFloat
+    let lineSpacingScale: CGFloat
+    let paragraphSpacingScale: CGFloat
+
+    var body: some View {
+        switch segment {
+        case .markdown(let md):
+            Markdown(md)
+                .markdownTheme(.memoryPalace(
+                    fontName: selectedFont,
+                    scale: fontScale,
+                    lineSpacingScale: lineSpacingScale,
+                    paragraphSpacingScale: paragraphSpacingScale
+                ))
+                .textSelection(.enabled)
+        case .colored(let text, let color):
+            Text(text)
+                .foregroundColor(color)
+                .font(.system(size: 13.5 * fontScale))
+                .textSelection(.enabled)
+        case .spoiler(let text):
+            SpoilerView(text: text)
+                .font(.system(size: 13.5 * fontScale))
+        }
+    }
+}

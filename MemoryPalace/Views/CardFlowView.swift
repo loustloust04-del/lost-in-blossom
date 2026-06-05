@@ -1309,7 +1309,7 @@ struct BubbleView: View {
             // Bubble
             VStack(alignment: .leading, spacing: 6) {
                 // CC 思考链：只挂在最后一条 assistant 气泡上（latestThinking 仅 CC 会话会被设置）
-                if !isUser, isLastAssistant, let ccThinking = CCBridgeWebSocketClient.shared.latestThinking {
+                if !isUser, isLastAssistant, CCBridgeWebSocketClient.shared.isConnected, let ccThinking = CCBridgeWebSocketClient.shared.latestThinking {
                     CCThinkingView(block: ccThinking)
                 }
                 let rawCleaned = ContentCleaner.clean(node.content, cacheKey: "\(node.id)_\(node.content.count)")
@@ -1508,25 +1508,7 @@ struct BubbleView: View {
                             let scale = fontScale > 0 ? fontScale : 1.0
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(richSegs.enumerated()), id: \.offset) { _, seg in
-                                    switch seg {
-                                    case .markdown(let md):
-                                        Markdown(md)
-                                            .markdownTheme(.memoryPalace(
-                                                fontName: selectedFont,
-                                                scale: scale,
-                                                lineSpacingScale: lineSpacingScale,
-                                                paragraphSpacingScale: paragraphSpacingScale
-                                            ))
-                                            .textSelection(.enabled)
-                                    case .colored(let text, let color):
-                                        Text(text)
-                                            .foregroundColor(color)
-                                            .font(.system(size: 13.5 * scale))
-                                            .textSelection(.enabled)
-                                    case .spoiler(let text):
-                                        SpoilerView(text: text)
-                                            .font(.system(size: 13.5 * scale))
-                                    }
+                                    RichSegmentRenderer(segment: seg, selectedFont: selectedFont, fontScale: scale, lineSpacingScale: lineSpacingScale, paragraphSpacingScale: paragraphSpacingScale)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1535,7 +1517,7 @@ struct BubbleView: View {
                 }
 
                 // Artifact canvas card (assistant only, not during streaming)
-                if let artifact = artifactForCard {
+                if !isUser && !isStreaming, let artifact = ArtifactDetector.find(in: cleaned) {
                     ArtifactCardView(artifact: artifact) {
                         detectedArtifact = artifact
                         showArtifactCanvas = true

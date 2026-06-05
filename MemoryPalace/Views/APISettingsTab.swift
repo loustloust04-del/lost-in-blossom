@@ -442,7 +442,7 @@ struct APISettingsTab: View {
                     Button("保存并连接") {
                         UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
                         if let url = URL(string: ccHubURLDraft) {
-                            let token: String? = provider.apiKey.isEmpty ? nil : provider.apiKey
+                            let token: String? = (apiKeys[provider.id] ?? "").isEmpty ? nil : apiKeys[provider.id]
                             CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
                         }
                     }
@@ -454,7 +454,7 @@ struct APISettingsTab: View {
             Button("重新连接") {
                 let urlStr = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? provider.baseURL
                 if let url = URL(string: urlStr) {
-                    let token: String? = provider.apiKey.isEmpty ? nil : provider.apiKey
+                    let token: String? = (apiKeys[provider.id] ?? "").isEmpty ? nil : apiKeys[provider.id]
                     CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
                 }
             }
