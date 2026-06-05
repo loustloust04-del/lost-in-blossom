@@ -7,7 +7,7 @@ import MarkdownUI
 /// - markdown: 普通 Markdown 文本，走原有 MarkdownUI 路径
 /// - colored: `{color:xxx}...{/color}` 彩色文字
 /// - spoiler: `||...||` 点击展开的黑块
-fileprivate enum RichSegment {
+enum RichSegment {
     case markdown(String)
     case colored(String, Color)
     case spoiler(String)
@@ -15,7 +15,7 @@ fileprivate enum RichSegment {
 
 /// 扫描文本，识别 {color:xxx}...{/color} 和 ||...|| 自定义语法，切成片段数组。
 /// 没有命中任何语法时返回单个 .markdown(text)，让上层走原有渲染路径（零成本）。
-fileprivate func parseRichSegments(_ text: String) -> [RichSegment] {
+func parseRichSegments(_ text: String) -> [RichSegment] {
     var segments: [RichSegment] = []
     var remaining = text[text.startIndex...]
 
@@ -93,7 +93,7 @@ fileprivate func parseRichSegments(_ text: String) -> [RichSegment] {
     return segments.isEmpty ? [.markdown(text)] : segments
 }
 
-fileprivate func colorFromName(_ name: String) -> Color {
+func colorFromName(_ name: String) -> Color {
     switch name.lowercased() {
     case "red": return .red
     case "blue": return .blue
@@ -334,7 +334,7 @@ struct MessageSegmentsView: View {
 // MARK: - Spoiler 黑块
 
 /// `||...||` 隐藏文字：默认黑块遮罩，点击展开。
-private struct SpoilerView: View {
+struct SpoilerView: View {
     let text: String
     @State private var revealed = false
 

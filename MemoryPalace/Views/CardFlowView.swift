@@ -1494,14 +1494,43 @@ struct BubbleView: View {
                         }
                         .padding(.vertical, 4)
                     } else if !displayText.isEmpty {
-                        Markdown(displayText)
-                            .markdownTheme(.memoryPalace(
-                                fontName: selectedFont,
-                                scale: fontScale > 0 ? fontScale : 1.0,
-                                lineSpacingScale: lineSpacingScale,
-                                paragraphSpacingScale: paragraphSpacingScale
-                            ))
-                            .textSelection(.enabled)
+                        let richSegs = parseRichSegments(displayText)
+                        if richSegs.count == 1, case .markdown = richSegs[0] {
+                            Markdown(displayText)
+                                .markdownTheme(.memoryPalace(
+                                    fontName: selectedFont,
+                                    scale: fontScale > 0 ? fontScale : 1.0,
+                                    lineSpacingScale: lineSpacingScale,
+                                    paragraphSpacingScale: paragraphSpacingScale
+                                ))
+                                .textSelection(.enabled)
+                        } else {
+                            let scale = fontScale > 0 ? fontScale : 1.0
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(Array(richSegs.enumerated()), id: \.offset) { _, seg in
+                                    switch seg {
+                                    case .markdown(let md):
+                                        Markdown(md)
+                                            .markdownTheme(.memoryPalace(
+                                                fontName: selectedFont,
+                                                scale: scale,
+                                                lineSpacingScale: lineSpacingScale,
+                                                paragraphSpacingScale: paragraphSpacingScale
+                                            ))
+                                            .textSelection(.enabled)
+                                    case .colored(let text, let color):
+                                        Text(text)
+                                            .foregroundColor(color)
+                                            .font(.system(size: 13.5 * scale))
+                                            .textSelection(.enabled)
+                                    case .spoiler(let text):
+                                        SpoilerView(text: text)
+                                            .font(.system(size: 13.5 * scale))
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
 
