@@ -29,7 +29,7 @@ final class ChatroomService {
     // 编排器地址（从 UserDefaults 读，默认用 VPS IP）
     var baseURL: String {
         UserDefaults.standard.string(forKey: "chatroomBaseURL")
-            ?? "http://172.245.88.103:3300"
+            ?? "https://172.245.88.103"
     }
 
     private(set) var sessions: [ChatroomSession] = []

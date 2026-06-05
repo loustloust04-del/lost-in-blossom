@@ -1015,7 +1015,7 @@ final class CCBridgeProvider: BaseChatProvider {
         if !wsClient.isConnected {
             let hubURL = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? baseURL
             if let url = URL(string: hubURL) {
-                let token: String? = apiKey.isEmpty ? nil : apiKey
+                let token: String? = { let t = UserDefaults.standard.string(forKey: "ccBridgeHubToken") ?? ""; return t.isEmpty ? nil : t }()
                 wsClient.connect(url: url, token: token)
             }
         }

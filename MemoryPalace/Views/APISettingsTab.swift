@@ -416,6 +416,7 @@ struct APISettingsTab: View {
 
     /// CC Bridge 专用状态面板（替换 API Key 输入框）。
     @State private var ccHubURLDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? ""
+    @State private var ccHubTokenDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubToken") ?? ""
 
     private func ccBridgeStatusContent(provider: APIProvider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -433,28 +434,40 @@ struct APISettingsTab: View {
                 Text("Hub URL")
                     .font(.system(size: Theme.SettingsFont.caption))
                     .foregroundStyle(.secondary)
-                HStack(spacing: 6) {
-                    TextField("ws://172.245.88.103:8890/cc", text: $ccHubURLDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: Theme.SettingsFont.secondary))
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                    Button("保存并连接") {
-                        UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
-                        if let url = URL(string: ccHubURLDraft) {
-                            let token: String? = (apiKeys[provider.id] ?? "").isEmpty ? nil : apiKeys[provider.id]
-                            CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
-                        }
+                TextField("ws://172.245.88.103:8890/cc", text: $ccHubURLDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: Theme.SettingsFont.secondary))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hub Token")
+                    .font(.system(size: Theme.SettingsFont.caption))
+                    .foregroundStyle(.secondary)
+                SecureField("粘贴 Hub 鉴权 Token", text: $ccHubTokenDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: Theme.SettingsFont.secondary))
+            }
+
+            HStack(spacing: 8) {
+                Button("保存并连接") {
+                    UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
+                    UserDefaults.standard.set(ccHubTokenDraft, forKey: "ccBridgeHubToken")
+                    if let url = URL(string: ccHubURLDraft) {
+                        let token: String? = ccHubTokenDraft.isEmpty ? nil : ccHubTokenDraft
+                        CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(ccHubURLDraft.isEmpty)
                 }
+                .buttonStyle(.bordered)
+                .disabled(ccHubURLDraft.isEmpty)
             }
 
             Button("重新连接") {
                 let urlStr = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? provider.baseURL
+                let savedToken = UserDefaults.standard.string(forKey: "ccBridgeHubToken") ?? ""
                 if let url = URL(string: urlStr) {
-                    let token: String? = (apiKeys[provider.id] ?? "").isEmpty ? nil : apiKeys[provider.id]
+                    let token: String? = savedToken.isEmpty ? nil : savedToken
                     CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
                 }
             }
