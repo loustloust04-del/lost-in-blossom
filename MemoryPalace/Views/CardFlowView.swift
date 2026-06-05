@@ -1478,7 +1478,9 @@ struct BubbleView: View {
                     }
 
                     // Assistant content — 正则脚本渲染替换
-                    let rawDisplay = shouldTruncate ? String(cleaned.prefix(truncateLength)) + "\n\n..." : cleaned
+                    let artifactForCard: ArtifactContent? = (!isUser && !isStreaming) ? ArtifactDetector.find(in: cleaned) : nil
+                    let cleanedForDisplay = artifactForCard != nil ? ArtifactDetector.stripFirst(in: cleaned) : cleaned
+                    let rawDisplay = shouldTruncate ? String(cleanedForDisplay.prefix(truncateLength)) + "\n\n..." : cleanedForDisplay
                     let displayText = node.role == "assistant" && !regexScripts.isEmpty
                         ? RegexEngine.apply(scripts: regexScripts, text: rawDisplay, messagePlacement: 2, isMarkdown: true)
                         : rawDisplay
@@ -1504,7 +1506,7 @@ struct BubbleView: View {
                 }
 
                 // Artifact canvas card (assistant only, not during streaming)
-                if !isUser && !isStreaming, let artifact = ArtifactDetector.find(in: cleaned) {
+                if let artifact = artifactForCard {
                     ArtifactCardView(artifact: artifact) {
                         detectedArtifact = artifact
                         showArtifactCanvas = true

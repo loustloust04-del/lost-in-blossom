@@ -62,6 +62,7 @@ final class CCBridgeWebSocketClient: NSObject {
     /// 开始连接，支持多 URL fallback。优先连 urls[0]，失败 reconnect 时轮换到下一个。
     /// 典型用法：urls = [LAN URL, Tailscale URL]，在家走 LAN，出门走 Tailscale。
     func connect(urls inputURLs: [URL], token: String? = nil) {
+        print("[CCBridge] connect called, urls=\(inputURLs), isConnected=\(isConnected), hasTask=\(task != nil)")
         let finalURLs = inputURLs.map { url -> URL in
             guard let token, !token.isEmpty,
                   var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
@@ -107,9 +108,13 @@ final class CCBridgeWebSocketClient: NSObject {
     /// 强制重连：断开旧连接，等待底层 TCP 资源释放后重建。
     /// 给 UI 按钮用——比 disconnect()+connect() 更可靠。
     func forceReconnect(url: URL, token: String? = nil) {
+        print("[CCBridge] forceReconnect called, url=\(url)")
         disconnect()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.connect(url: url, token: token)
+        print("[CCBridge] disconnected, scheduling connect in 0.3s")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { print("[CCBridge] self is nil after delay"); return }
+            print("[CCBridge] connecting to \(url)")
+            self.connect(url: url, token: token)
         }
     }
 
@@ -184,7 +189,8 @@ final class CCBridgeWebSocketClient: NSObject {
     // MARK: - Internal
 
     private func startTask() {
-        guard let url else { return }
+        guard let url else { print("[CCBridge] startTask: url is nil"); return }
+        print("[CCBridge] startTask: \(url)")
         session?.invalidateAndCancel()  // 释放旧 session（避免 reconnect 累积资源）
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         self.session = session

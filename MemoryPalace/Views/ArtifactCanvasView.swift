@@ -66,7 +66,61 @@ enum ArtifactDetector {
         return nil
     }
 
-    private static func classify(code: String, lang: String) -> ArtifactContent? {
+
+    /// 从内容中移除第一个可渲染代码块，返回剩余内容。
+    static func stripFirst(in content: String) -> String {
+        let lines = content.components(separatedBy: "\n")
+        var result: [String] = []
+        var inBlock = false
+        var blockLang = ""
+        var blockStartIdx = 0
+        var blockLines: [String] = []
+        var removed = false
+
+        for (i, line) in lines.enumerated() {
+            if removed {
+                result.append(line)
+                continue
+            }
+            if !inBlock {
+                let stripped = line.trimmingCharacters(in: .whitespaces)
+                if stripped.hasPrefix("```") {
+                    let lang = String(stripped.dropFirst(3)).trimmingCharacters(in: .whitespaces).lowercased()
+                    inBlock = true
+                    blockLang = lang
+                    blockStartIdx = i
+                    blockLines = []
+                } else {
+                    result.append(line)
+                }
+            } else {
+                if line.trimmingCharacters(in: .whitespaces) == "```" {
+                    let code = blockLines.joined(separator: "\n")
+                    if classify(code: code, lang: blockLang) != nil {
+                        removed = true
+                    } else {
+                        result.append(lines[blockStartIdx])
+                        result.append(contentsOf: blockLines)
+                        result.append(line)
+                    }
+                    inBlock = false
+                    blockLang = ""
+                    blockLines = []
+                } else {
+                    blockLines.append(line)
+                }
+            }
+        }
+
+        if inBlock {
+            result.append(lines[blockStartIdx])
+            result.append(contentsOf: blockLines)
+        }
+
+        return result.joined(separator: "\n")
+    }
+
+    static func classify(code: String, lang: String) -> ArtifactContent? {
         switch lang {
         case "html": return ArtifactContent(code: code, type: .html)
         case "svg": return ArtifactContent(code: code, type: .svg)
