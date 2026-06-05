@@ -253,19 +253,24 @@ struct APISettingsTab: View {
             let binding = Binding<String>(
                 get: { activeProviderId },
                 set: { newId in
-                    if !newId.isEmpty, newId != activeProviderId {
-                        handleUseProvider(newId)
+                    if newId != activeProviderId {
+                        if newId.isEmpty {
+                            // 选了"（默认）" → 清除 selectedChatModel，聊天页回退到 CC + 收藏模型
+                            selectedChatModelId = ""
+                            apiSelectedProviderId = ""
+                        } else {
+                            handleUseProvider(newId)
+                        }
                     }
                 }
             )
 
             Picker("", selection: binding) {
+                // 默认/空选项 — 始终可选；选了它聊天页显示 CC 本地模型 + 收藏模型
+                Text("（默认）").tag("")
+
                 ForEach(pm.savedAPIProviders, id: \.id) { p in
                     Text(p.name).tag(p.id)
-                }
-                // 当前 selectedChatModel 未指向任何 saved API 时的占位 tag
-                if !pm.savedAPIProviders.contains(where: { $0.id == activeProviderId }) {
-                    Text("（未选择）").tag("")
                 }
             }
             .labelsHidden()
