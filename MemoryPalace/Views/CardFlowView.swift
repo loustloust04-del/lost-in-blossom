@@ -1440,14 +1440,6 @@ struct BubbleView: View {
 
                                         // 超过 300 字 → 渐变淡出 + Show more / Show less
                                         if thinkingText.count > 300 {
-                                            if !thinkingShowFull {
-                                                LinearGradient(
-                                                    colors: [Theme.textMuted.opacity(0.3), .clear],
-                                                    startPoint: .top,
-                                                    endPoint: .bottom
-                                                )
-                                                .frame(height: 30)
-                                            }
                                             Button(thinkingShowFull ? "Show less" : "Show more") {
                                                 withAnimation(.easeInOut(duration: 0.15)) {
                                                     thinkingShowFull.toggle()
