@@ -217,12 +217,6 @@ struct MessageSegmentsView: View {
             if !applied.isEmpty {
                 if isUser {
                     let richSegs = parseRichSegments(applied)
-                    #if DEBUG
-                    if applied.contains("{color:") || applied.contains("||") {
-                        print("[RichText] INPUT: \(applied.prefix(300))")
-                        print("[RichText] SEGMENTS: \(richSegs.count) types: \(richSegs.map { switch $0 { case .markdown: return "md"; case .colored: return "color"; case .spoiler: return "spoiler" } })")
-                    }
-                    #endif
                     if richSegs.count == 1, case .markdown = richSegs[0] {
                         // 纯文本，保留用户气泡字体路径
                         Text(applied)
@@ -242,12 +236,6 @@ struct MessageSegmentsView: View {
                     }
                 } else {
                     let richSegments = parseRichSegments(applied)
-                    #if DEBUG
-                    if applied.contains("{color:") || applied.contains("||") {
-                        print("[RichText] INPUT: \(applied.prefix(300))")
-                        print("[RichText] SEGMENTS: \(richSegments.count) types: \(richSegments.map { switch $0 { case .markdown: return "md"; case .colored: return "color"; case .spoiler: return "spoiler" } })")
-                    }
-                    #endif
                     if richSegments.count == 1, case .markdown = richSegments[0] {
                         // 纯 Markdown，走原有渲染路径（零成本）
                         Markdown(applied)
