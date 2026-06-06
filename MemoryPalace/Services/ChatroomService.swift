@@ -39,20 +39,29 @@ final class ChatroomService {
     private(set) var streamingContent: String = ""
 
     // 创建聊天室
+    // preset slots/names 可选；为 nil 时 body 不带这些字段，后端走原有 system prompt 文本（向后兼容）。
     func startSession(
         topic: String,
         aiAModel: String, aiAName: String, aiASystem: String,
-        aiBModel: String, aiBName: String, aiBSystem: String
+        aiBModel: String, aiBName: String, aiBSystem: String,
+        aiAPresetSlots: [[String: Any]]? = nil,
+        aiBPresetSlots: [[String: Any]]? = nil,
+        aiAPresetName: String? = nil,
+        aiBPresetName: String? = nil
     ) async throws -> String {
         let url = URL(string: "\(baseURL)/chatroom/start")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "topic": topic,
             "ai_a_model": aiAModel, "ai_a_name": aiAName, "ai_a_system": aiASystem,
             "ai_b_model": aiBModel, "ai_b_name": aiBName, "ai_b_system": aiBSystem,
         ]
+        if let slots = aiAPresetSlots { body["ai_a_preset_slots"] = slots }
+        if let slots = aiBPresetSlots { body["ai_b_preset_slots"] = slots }
+        if let name = aiAPresetName { body["ai_a_preset_name"] = name }
+        if let name = aiBPresetName { body["ai_b_preset_name"] = name }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: req)
         let result = try JSONDecoder().decode([String: String].self, from: data)

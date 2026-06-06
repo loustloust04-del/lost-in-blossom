@@ -212,10 +212,34 @@ struct CreateChatroomView: View {
 
     // MARK: - Actions
 
+    /// 把选中的 Preset 序列化成后端要的 slot 数组（只取启用的插槽）。没选 → nil。
+    private func presetSlots(for presetId: String?) -> [[String: Any]]? {
+        guard let id = presetId, let preset = presetManager?.preset(byId: id) else { return nil }
+        return preset.prompts.filter { $0.isEnabled }.map { slot in
+            [
+                "role": slot.role,
+                "content": slot.content,
+                "injection_depth": slot.injectionDepth,
+                "injection_order": slot.injectionOrder,
+                "is_marker": slot.isMarker,
+                "name": slot.name,
+            ]
+        }
+    }
+
+    private func presetName(for presetId: String?) -> String? {
+        guard let id = presetId else { return nil }
+        return presetManager?.preset(byId: id)?.name
+    }
+
     private func start() {
         guard canStart else { return }
         isCreating = true
         errorMessage = nil
+        let aiASlots = presetSlots(for: aiAPresetId)
+        let aiBSlots = presetSlots(for: aiBPresetId)
+        let aiAPName = presetName(for: aiAPresetId)
+        let aiBPName = presetName(for: aiBPresetId)
         Task {
             do {
                 let id = try await service.startSession(
@@ -225,7 +249,11 @@ struct CreateChatroomView: View {
                     aiASystem: aiASystem,
                     aiBModel: aiBModel,
                     aiBName: aiBName.trimmingCharacters(in: .whitespaces),
-                    aiBSystem: aiBSystem
+                    aiBSystem: aiBSystem,
+                    aiAPresetSlots: aiASlots,
+                    aiBPresetSlots: aiBSlots,
+                    aiAPresetName: aiAPName,
+                    aiBPresetName: aiBPName
                 )
                 let newSession = ChatroomSession(
                     id: id,
