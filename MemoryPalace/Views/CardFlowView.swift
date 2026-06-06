@@ -1494,6 +1494,8 @@ struct BubbleView: View {
                                 "text-color": Theme.textPrimary.toHex(),
                                 "text-muted": Theme.textMuted.toHex(),
                                 "code-bg": Theme.mainBg.toHex(),
+                                "link-color": Theme.accent.toHex(),
+                                "spoiler-bg": Theme.textMuted.toHex(),
                                 "font-size": "\(13.5 * (fontScale > 0 ? fontScale : 1.0))px",
                                 "line-height": "\(1.5 * lineSpacingScale)"
                             ],
