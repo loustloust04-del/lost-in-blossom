@@ -169,6 +169,8 @@ extension BaseChatProvider: URLSessionDataDelegate {
 final class OpenAICompatibleProvider: BaseChatProvider {
     /// DeepSeek reasoning_content 流式 buffer（其他模型为空）
     private var streamingThinking: String = ""
+    /// Gateway [thinking]...[/thinking] 标记追踪（Claude thinking via OpenAI format）
+    private var isInGatewayThinking = false
     /// 流式结束时若有 thinking 内容则调用（构造 MessageSegment 列表）
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
     /// 实时发送每个 reasoning_content chunk（逐字显示思考链用）
@@ -187,6 +189,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     ) {
         resetState(onToken: onToken, onComplete: onComplete, onError: onError)
         streamingThinking = ""
+        isInGatewayThinking = false
 
         var apiMessages: [[String: Any]] = []
         if let sys = systemPrompt, !sys.isEmpty {
@@ -387,8 +390,36 @@ final class OpenAICompatibleProvider: BaseChatProvider {
 
         if let content = delta["content"] as? String {
             DispatchQueue.main.async { [self] in
-                streamingContent += content
-                onToken?(content)
+                // Gateway [thinking]...[/thinking] 标记路由：
+                // thinking 标记之间的 token 走 onThinkingToken，其余走 onToken
+                if content.contains("[thinking]") {
+                    isInGatewayThinking = true
+                    let after = content.components(separatedBy: "[thinking]").last ?? ""
+                    let trimmed = after.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        streamingThinking += trimmed
+                        onThinkingToken?(trimmed)
+                    }
+                } else if content.contains("[/thinking]") {
+                    let parts = content.components(separatedBy: "[/thinking]")
+                    let before = (parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !before.isEmpty {
+                        streamingThinking += before
+                        onThinkingToken?(before)
+                    }
+                    isInGatewayThinking = false
+                    let after = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                    if !after.isEmpty {
+                        streamingContent += after
+                        onToken?(after)
+                    }
+                } else if isInGatewayThinking {
+                    streamingThinking += content
+                    onThinkingToken?(content)
+                } else {
+                    streamingContent += content
+                    onToken?(content)
+                }
             }
         }
     }
