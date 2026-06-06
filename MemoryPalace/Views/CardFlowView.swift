@@ -260,10 +260,15 @@ struct CardFlowView: View {
                             return
                         }
                         guard !newText.isEmpty else { return }
+                        // 用户手动上滑时暂停自动滚底，避免弹跳
+                        guard isAtBottom else { return }
                         let now = Date()
                         guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
                         lastStreamingScrollTime = now
-                        withAnimation(.easeOut(duration: 0.25)) {
+                        // 不带动画滚底：避免 withAnimation 与 WebView 高度变化同帧竞争导致白屏
+                        var tx = Transaction()
+                        tx.disablesAnimations = true
+                        withTransaction(tx) {
                             if let lastId = viewModel.currentPath.last?.id {
                                 proxy.scrollTo(lastId, anchor: .bottom)
                             }
@@ -1280,7 +1285,7 @@ struct BubbleView: View {
     @State private var thinkingShowFull = false  // "Show more" 控制
     @State private var showArtifactCanvas = false
     @State private var detectedArtifact: ArtifactContent? = nil
-    @State private var messageWebViewHeight: CGFloat = 44
+    @State private var messageWebViewHeight: CGFloat = 0
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
