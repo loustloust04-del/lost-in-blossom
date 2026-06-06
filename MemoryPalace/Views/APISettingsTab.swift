@@ -416,7 +416,6 @@ struct APISettingsTab: View {
 
     /// CC Bridge 专用状态面板（替换 API Key 输入框）。
     @State private var ccHubURLDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? ""
-    @State private var ccHubTokenDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubToken") ?? ""
 
     private func ccBridgeStatusContent(provider: APIProvider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -439,41 +438,12 @@ struct APISettingsTab: View {
                     .font(.system(size: Theme.SettingsFont.secondary))
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Hub Token")
-                    .font(.system(size: Theme.SettingsFont.caption))
-                    .foregroundStyle(.secondary)
-                SecureField("粘贴 Hub 鉴权 Token", text: $ccHubTokenDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: Theme.SettingsFont.secondary))
-            }
-
-            HStack(spacing: 8) {
-                Button("保存并连接") {
-                    UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
-                    UserDefaults.standard.set(ccHubTokenDraft, forKey: "ccBridgeHubToken")
-                    if let url = URL(string: ccHubURLDraft) {
-                        let token: String? = ccHubTokenDraft.isEmpty ? nil : ccHubTokenDraft
-                        CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
+                    .onSubmit {
+                        UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
                     }
-                }
-                .buttonStyle(.bordered)
-                .disabled(ccHubURLDraft.isEmpty)
             }
 
-            Button("重新连接") {
-                let urlStr = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? provider.baseURL
-                let savedToken = UserDefaults.standard.string(forKey: "ccBridgeHubToken") ?? ""
-                if let url = URL(string: urlStr) {
-                    let token: String? = savedToken.isEmpty ? nil : savedToken
-                    CCBridgeWebSocketClient.shared.forceReconnect(url: url, token: token)
-                }
-            }
-            .buttonStyle(.bordered)
-
-            Text("填入 VPS 的 Hub URL（如 wss://172.245.88.103/cc），保存后自动连接。")
+            Text("填入 Hub URL 后回车保存，连接由 CC 面板内的操作自动触发。")
                 .font(.system(size: Theme.SettingsFont.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

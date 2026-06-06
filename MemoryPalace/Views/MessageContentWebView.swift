@@ -47,6 +47,9 @@ struct MessageContentWebView: UIViewRepresentable {
         var pageLoaded = false
         var pendingContent: String = ""
         var pendingTheme: [String: String] = [:]
+        // 去重：避免 dynamicHeight 变化触发 updateUIView → 重新渲染 → 代码块折叠状态被重置
+        private var lastRenderedContent: String = ""
+        private var lastRenderedTheme: [String: String] = [:]
 
         init(_ parent: MessageContentWebView) { self.parent = parent }
 
@@ -76,18 +79,29 @@ struct MessageContentWebView: UIViewRepresentable {
         }
 
         func renderContent(in webView: WKWebView) {
-            // 先更新主题
-            if !pendingTheme.isEmpty {
+            let contentChanged = pendingContent != lastRenderedContent
+            let themeChanged = pendingTheme != lastRenderedTheme
+
+            // 内容和主题都没变 → 跳过渲染，保持 WebView 内部状态（代码块折叠等）
+            guard contentChanged || themeChanged else { return }
+
+            // 更新主题（只在变化时）
+            if themeChanged {
+                lastRenderedTheme = pendingTheme
                 let themeJSON = (try? JSONSerialization.data(withJSONObject: pendingTheme))
                     .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
                 webView.evaluateJavaScript("updateTheme(\(themeJSON))")
             }
-            // 渲染内容
-            let escaped = pendingContent
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "`", with: "\\`")
-                .replacingOccurrences(of: "$", with: "\\$")
-            webView.evaluateJavaScript("render(`\(escaped)`)")
+
+            // 渲染内容（只在变化时）
+            if contentChanged {
+                lastRenderedContent = pendingContent
+                let escaped = pendingContent
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "`", with: "\\`")
+                    .replacingOccurrences(of: "$", with: "\\$")
+                webView.evaluateJavaScript("render(`\(escaped)`)")
+            }
         }
     }
 }
