@@ -59,6 +59,44 @@ pre code {
     line-height: 1.5;
 }
 
+/* 代码块折叠 */
+.code-fold-wrapper {
+    margin: 8px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--code-bg);
+}
+.code-fold-wrapper pre {
+    margin: 0;
+    border-radius: 0;
+    max-height: 2000px;
+    transition: max-height 0.3s ease;
+}
+.code-fold-wrapper.collapsed pre {
+    max-height: 0;
+    padding: 0 12px;
+    overflow: hidden;
+}
+.code-fold-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    font-family: var(--code-font);
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+.code-fold-header .chevron {
+    transition: transform 0.3s ease;
+    font-size: 10px;
+}
+.code-fold-wrapper.collapsed .chevron {
+    transform: rotate(-90deg);
+}
+
 /* 引用 */
 blockquote {
     border-left: 3px solid var(--text-muted);
@@ -135,7 +173,42 @@ function render(markdown) {
         headerIds: false,   // 不给标题加 id
         mangle: false       // 不转义邮箱
     });
+    foldCodeBlocks();
     notifyHeight();
+}
+
+// ── 代码块折叠 ──
+function foldCodeBlocks() {
+    var FOLD_THRESHOLD = 6; // 超过6行才折叠
+    var pres = document.querySelectorAll("#content > pre, #content pre");
+    pres.forEach(function(pre) {
+        if (pre.closest(".code-fold-wrapper")) return; // 已经处理过
+        var code = pre.querySelector("code");
+        if (!code) return;
+        var text = code.textContent || "";
+        var lines = text.split("\n");
+        // 去掉末尾空行
+        while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+        if (lines.length <= FOLD_THRESHOLD) return;
+        // 获取语言标签
+        var lang = "";
+        var cls = code.className || "";
+        var m = cls.match(/language-(\w+)/);
+        if (m) lang = m[1];
+        // 创建折叠容器
+        var wrapper = document.createElement("div");
+        wrapper.className = "code-fold-wrapper collapsed";
+        var header = document.createElement("div");
+        header.className = "code-fold-header";
+        header.innerHTML = "<span>" + (lang ? lang + " · " : "") + lines.length + " lines</span><span class=\"chevron\">▶</span>";
+        header.onclick = function() {
+            wrapper.classList.toggle("collapsed");
+            setTimeout(notifyHeight, 350);
+        };
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+    });
 }
 
 // ── 主题更新 ──
