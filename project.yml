@@ -27,6 +27,11 @@ targets:
       iOS: "18.0"
     sources:
       - path: MemoryPalace
+      # 显式声明 message-renderer.html 进 Copy Bundle Resources。
+      # XcodeGen 默认就把 .html 归到 resources phase，这里再写一遍保证万无一失
+      # （Bundle.main.url(forResource:"message-renderer") 运行时必须能找到）。
+      - path: MemoryPalace/Resources/message-renderer.html
+        buildPhase: resources
     dependencies:
       - package: MarkdownUI
       - package: VariableBlur
