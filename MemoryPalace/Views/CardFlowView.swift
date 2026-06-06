@@ -1505,6 +1505,10 @@ struct BubbleView: View {
 
                 // Artifact canvas card (assistant only, not during streaming)
                 if !isUser && !isStreaming, let artifact = ArtifactDetector.find(in: cleaned) {
+                    ArtifactCodeFoldView(
+                        code: artifact.code,
+                        language: artifact.type.label
+                    )
                     ArtifactCardView(artifact: artifact) {
                         detectedArtifact = artifact
                         showArtifactCanvas = true
