@@ -77,11 +77,15 @@ struct CreateChatroomView: View {
         .background(Theme.sidebarBg)
         .task {
             await service.fetchModels()
-            if aiAModel.isEmpty, let first = service.availableModels.first {
-                aiAModel = first.id
+            if aiAModel.isEmpty {
+                // AI A (Caelum) → prefer Anthropic/Claude; fallback to first
+                aiAModel = service.availableModels.first(where: { $0.id.contains("claude") || $0.id.contains("anthropic") })?.id
+                    ?? service.availableModels.first?.id ?? ""
             }
-            if aiBModel.isEmpty, let first = service.availableModels.first {
-                aiBModel = first.id
+            if aiBModel.isEmpty {
+                // AI B (DeepSeek) → prefer DeepSeek; fallback to first
+                aiBModel = service.availableModels.first(where: { $0.id.contains("deepseek") })?.id
+                    ?? service.availableModels.first?.id ?? ""
             }
         }
     }
