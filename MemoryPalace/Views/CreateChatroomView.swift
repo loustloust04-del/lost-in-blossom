@@ -6,14 +6,17 @@ struct CreateChatroomView: View {
 
     private var service = ChatroomService.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(PresetManager.self) private var presetManager: PresetManager?
 
     @State private var topic = ""
     @State private var aiAName = "Caelum"
     @State private var aiAModel = ""
     @State private var aiASystem = ""
+    @State private var aiAPresetId: String? = nil
     @State private var aiBName = "DeepSeek"
     @State private var aiBModel = ""
     @State private var aiBSystem = ""
+    @State private var aiBPresetId: String? = nil
     @State private var isCreating = false
     @State private var errorMessage: String?
 
@@ -49,7 +52,8 @@ struct CreateChatroomView: View {
                         accent: .blue,
                         name: $aiAName,
                         model: $aiAModel,
-                        system: $aiASystem
+                        system: $aiASystem,
+                        presetId: $aiAPresetId
                     )
 
                     aiSection(
@@ -57,7 +61,8 @@ struct CreateChatroomView: View {
                         accent: .green,
                         name: $aiBName,
                         model: $aiBModel,
-                        system: $aiBSystem
+                        system: $aiBSystem,
+                        presetId: $aiBPresetId
                     )
 
                     if let errorMessage {
@@ -116,8 +121,11 @@ struct CreateChatroomView: View {
         accent: Color,
         name: Binding<String>,
         model: Binding<String>,
-        system: Binding<String>
+        system: Binding<String>,
+        presetId: Binding<String?>
     ) -> some View {
+        // 选中的 Preset（nil = 无预设，走自由文本）
+        let selectedPreset = presetId.wrappedValue.flatMap { id in presetManager?.preset(byId: id) }
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Circle().fill(accent).frame(width: 8, height: 8)
@@ -144,17 +152,53 @@ struct CreateChatroomView: View {
                 .tint(Theme.branchIndicator)
             }
 
-            fieldSection("System Prompt（可选）") {
-                TextEditor(text: system)
-                    .font(.system(size: Theme.F.body))
-                    .frame(minHeight: 60)
-                    .padding(6)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.mainBg.opacity(0.8)))
-                    .scrollContentBackground(.hidden)
+            fieldSection("预设") {
+                Picker("预设", selection: presetId) {
+                    Text("无预设").tag(String?.none)
+                    ForEach(presetManager?.allPresets ?? []) { preset in
+                        Text(preset.name).tag(String?.some(preset.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Theme.branchIndicator)
+            }
+
+            // 选了 Preset → System Prompt 只读预览 main slot；没选 → 自由文本输入
+            if let preset = selectedPreset {
+                fieldSection("System Prompt（来自预设，只读）") {
+                    Text(presetMainPreview(preset))
+                        .font(.system(size: Theme.F.body))
+                        .foregroundColor(Theme.textMuted)
+                        .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
+                        .padding(6)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.mainBg.opacity(0.5)))
+                        .textSelection(.enabled)
+                }
+            } else {
+                fieldSection("System Prompt（可选）") {
+                    TextEditor(text: system)
+                        .font(.system(size: Theme.F.body))
+                        .frame(minHeight: 60)
+                        .padding(6)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.mainBg.opacity(0.8)))
+                        .scrollContentBackground(.hidden)
+                }
             }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.mainBg.opacity(0.4)))
+    }
+
+    /// 取 Preset 的 main slot 内容作为只读预览；没有就退回第一个有内容的 system 插槽。
+    private func presetMainPreview(_ preset: Preset) -> String {
+        if let main = preset.prompts.first(where: { $0.id == PromptSlot.mainId }),
+           !main.content.isEmpty {
+            return main.content
+        }
+        if let firstFilled = preset.prompts.first(where: { $0.role == "system" && !$0.content.isEmpty }) {
+            return firstFilled.content
+        }
+        return "（此预设的 main 指令为空，将注入其它启用的插槽）"
     }
 
     private func fieldSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
