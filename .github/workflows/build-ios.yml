@@ -54,11 +54,12 @@ jobs:
 
       - name: Upload .ipa
         if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: LostInBlossom-Debug
           path: LostInBlossom.ipa
-          retention-days: 14
+          retention-days: 1
 
       - name: Deploy to VPS
         if: success()
@@ -71,4 +72,3 @@ jobs:
             LostInBlossom.ipa root@172.245.88.103:/var/www/lib-dl/LostInBlossom.ipa
           rm -f /tmp/deploy_key
           echo "✅ Deployed to VPS"
-
