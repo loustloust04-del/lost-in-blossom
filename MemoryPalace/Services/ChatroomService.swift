@@ -12,6 +12,9 @@ struct ChatroomSession: Codable, Identifiable {
     let rounds: Int
     let created_at: String
     let ended_at: String?
+    // 可选：绑定的 Preset 名称（老 session / 没选预设时为 nil）
+    var ai_a_preset_name: String? = nil
+    var ai_b_preset_name: String? = nil
 }
 
 struct ChatroomMessage: Codable, Identifiable {

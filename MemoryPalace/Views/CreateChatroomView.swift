@@ -265,7 +265,9 @@ struct CreateChatroomView: View {
                     status: "active",
                     rounds: 0,
                     created_at: "",
-                    ended_at: nil
+                    ended_at: nil,
+                    ai_a_preset_name: aiAPName,
+                    ai_b_preset_name: aiBPName
                 )
                 await MainActor.run {
                     isCreating = false

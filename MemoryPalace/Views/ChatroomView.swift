@@ -40,10 +40,10 @@ struct ChatroomView: View {
                     .foregroundColor(Theme.textPrimary)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    nameTag(session.ai_a_name, color: .blue)
+                    nameTag(session.ai_a_name, preset: session.ai_a_preset_name, color: .blue)
                     Text("·")
                         .foregroundColor(Theme.textMuted)
-                    nameTag(session.ai_b_name, color: .green)
+                    nameTag(session.ai_b_name, preset: session.ai_b_preset_name, color: .green)
                 }
             }
 
@@ -65,10 +65,18 @@ struct ChatroomView: View {
         .padding(.vertical, 10)
     }
 
-    private func nameTag(_ name: String, color: Color) -> some View {
-        Text(name)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(color)
+    private func nameTag(_ name: String, preset: String? = nil, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Text(name)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(color)
+            if let preset, !preset.isEmpty {
+                Text("· \(preset)")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textMuted)
+                    .lineLimit(1)
+            }
+        }
     }
 
     // MARK: - Messages
