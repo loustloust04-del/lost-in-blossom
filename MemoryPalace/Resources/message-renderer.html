@@ -148,10 +148,30 @@ th { background: var(--code-bg); font-weight: 600; }
 </script>
 <script>
 // ── 富文本预处理 ──
+var richColorMap = {
+    red:     '#C25B61',
+    blue:    '#5878A4',
+    purple:  '#907AB3',
+    green:   '#5E9474',
+    orange:  '#C4855A',
+    yellow:  '#B89B3E',
+    pink:    '#C4748E',
+    cyan:    '#4E9DA8',
+    brown:   '#9E7B5D',
+    magenta: '#A86B94',
+    violet:  '#8B72B0',
+    gold:    '#B8963E',
+    crimson: '#B44D5A',
+    indigo:  '#6B6BAD',
+    teal:    '#4D9489'
+};
 function preprocessRichText(text) {
-    // {color:xxx}文字{/color} → <span>
+    // {color:xxx}文字{/color} → <span>（颜色名映射为柔和色调）
     text = text.replace(/\{color:(\w+)\}([\s\S]*?)\{\/color\}/g,
-        '<span class="rich-color" style="color:$1">$2</span>');
+        function(match, color, inner) {
+            var mapped = richColorMap[color.toLowerCase()] || color;
+            return '<span class="rich-color" style="color:' + mapped + '">' + inner + '</span>';
+        });
     // ||spoiler|| → 点击展开的黑块
     text = text.replace(/\|\|(.+?)\|\|/g,
         '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
