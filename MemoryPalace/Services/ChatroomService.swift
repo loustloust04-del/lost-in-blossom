@@ -161,4 +161,49 @@ final class ChatroomService {
             }
         }
     }
+    // MARK: - 从Gateway获取模型列表
+    struct GatewayModel: Codable, Identifiable {
+        let id: String
+        let object: String?
+        let owned_by: String?
+        
+        var label: String {
+            // "anthropic/claude-opus-4" → "Claude Opus 4"
+            let name = id.components(separatedBy: "/").last ?? id
+            return name.replacingOccurrences(of: "-", with: " ").capitalized
+        }
+    }
+    
+    private(set) var availableModels: [GatewayModel] = []
+    
+    func fetchModels() async {
+        // Gateway地址：从UserDefaults读，fallback到VPS
+        let gatewayBase = UserDefaults.standard.string(forKey: "gatewayBaseURL")
+            ?? "https://172.245.88.103"
+        guard let url = URL(string: "\(gatewayBase)/v1/models") else { return }
+        
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 10
+        // 加auth header
+        if let token = UserDefaults.standard.string(forKey: "gatewayAuthToken"), !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            struct Resp: Codable { let data: [GatewayModel] }
+            let resp = try JSONDecoder().decode(Resp.self, from: data)
+            await MainActor.run { self.availableModels = resp.data }
+        } catch {
+            print("[ChatroomService] fetchModels failed: \(error.localizedDescription)")
+            // 失败时用fallback硬编码列表
+            await MainActor.run {
+                self.availableModels = [
+                    GatewayModel(id: "deepseek/deepseek-chat", object: "model", owned_by: "deepseek"),
+                    GatewayModel(id: "anthropic/claude-sonnet-4", object: "model", owned_by: "anthropic"),
+                    GatewayModel(id: "anthropic/claude-opus-4", object: "model", owned_by: "anthropic"),
+                ]
+            }
+        }
+    }
 }

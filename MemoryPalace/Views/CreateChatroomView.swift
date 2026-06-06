@@ -9,10 +9,10 @@ struct CreateChatroomView: View {
 
     @State private var topic = ""
     @State private var aiAName = "Caelum"
-    @State private var aiAModel = ChatroomModelOption.options[1].id
+    @State private var aiAModel = ""
     @State private var aiASystem = ""
     @State private var aiBName = "DeepSeek"
-    @State private var aiBModel = ChatroomModelOption.options[0].id
+    @State private var aiBModel = ""
     @State private var aiBSystem = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
@@ -70,6 +70,15 @@ struct CreateChatroomView: View {
             }
         }
         .background(Theme.sidebarBg)
+        .task {
+            await service.fetchModels()
+            if aiAModel.isEmpty, let first = service.availableModels.first {
+                aiAModel = first.id
+            }
+            if aiBModel.isEmpty, let first = service.availableModels.first {
+                aiBModel = first.id
+            }
+        }
     }
 
     // MARK: - Header
@@ -127,8 +136,8 @@ struct CreateChatroomView: View {
 
             fieldSection("模型") {
                 Picker("模型", selection: model) {
-                    ForEach(ChatroomModelOption.options) { option in
-                        Text(option.label).tag(option.id)
+                    ForEach(service.availableModels) { model in
+                        Text(model.label).tag(model.id)
                     }
                 }
                 .pickerStyle(.menu)
@@ -201,15 +210,3 @@ struct CreateChatroomView: View {
     }
 }
 
-// MARK: - Model Options
-
-struct ChatroomModelOption: Identifiable {
-    let id: String
-    let label: String
-
-    static let options: [ChatroomModelOption] = [
-        ChatroomModelOption(id: "deepseek/deepseek-chat", label: "DeepSeek Chat"),
-        ChatroomModelOption(id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4"),
-        ChatroomModelOption(id: "anthropic/claude-opus-4", label: "Claude Opus 4"),
-    ]
-}
