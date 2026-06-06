@@ -66,6 +66,7 @@ struct PagingContainerView: UIViewControllerRepresentable {
         }
         vc.setScrollEnabled(!disableScroll)
         vc.setShieldHiddenByCaller(disableScroll)   // sticker 编辑时让 home indicator 给 toolbar
+        vc.loadViewIfNeeded()   // 确保 viewDidLoad 在 applyWallpaper 之前跑完，防止 viewDidLoad 里的 backgroundColor = .clear 覆盖主题色
         vc.applyWallpaper(wallpaper)
         return vc
     }
