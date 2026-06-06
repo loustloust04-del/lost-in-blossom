@@ -1280,6 +1280,7 @@ struct BubbleView: View {
     @State private var thinkingShowFull = false  // "Show more" 控制
     @State private var showArtifactCanvas = false
     @State private var detectedArtifact: ArtifactContent? = nil
+    @State private var messageWebViewHeight: CGFloat = 44
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
@@ -1486,25 +1487,19 @@ struct BubbleView: View {
                         }
                         .padding(.vertical, 4)
                     } else if !displayText.isEmpty {
-                        let richSegs = parseRichSegments(displayText)
-                        if richSegs.count == 1, case .markdown = richSegs[0] {
-                            Markdown(displayText)
-                                .markdownTheme(.memoryPalace(
-                                    fontName: selectedFont,
-                                    scale: fontScale > 0 ? fontScale : 1.0,
-                                    lineSpacingScale: lineSpacingScale,
-                                    paragraphSpacingScale: paragraphSpacingScale
-                                ))
-                                .textSelection(.enabled)
-                        } else {
-                            let scale = fontScale > 0 ? fontScale : 1.0
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(Array(richSegs.enumerated()), id: \.offset) { _, seg in
-                                    RichSegmentRenderer(segment: seg, selectedFont: selectedFont, fontScale: scale, lineSpacingScale: lineSpacingScale, paragraphSpacingScale: paragraphSpacingScale)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        // 混合架构：用 WebView 渲染消息内容（支持富文本 + Markdown + 代码高亮）
+                        MessageContentWebView(
+                            content: displayText,
+                            themeColors: [
+                                "text-color": Theme.textPrimary.toHex(),
+                                "text-muted": Theme.textMuted.toHex(),
+                                "code-bg": Theme.mainBg.toHex(),
+                                "font-size": "\(13.5 * (fontScale > 0 ? fontScale : 1.0))px",
+                                "line-height": "\(1.5 * lineSpacingScale)"
+                            ],
+                            dynamicHeight: $messageWebViewHeight
+                        )
+                        .frame(height: messageWebViewHeight)
                     }
                 }
 
