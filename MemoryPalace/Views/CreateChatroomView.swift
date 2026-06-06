@@ -126,7 +126,7 @@ struct CreateChatroomView: View {
     ) -> some View {
         // 选中的 Preset（nil = 无预设，走自由文本）
         let selectedPreset = presetId.wrappedValue.flatMap { id in presetManager?.preset(byId: id) }
-        VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Circle().fill(accent).frame(width: 8, height: 8)
                 Text(title)
