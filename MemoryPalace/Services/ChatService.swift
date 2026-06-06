@@ -1029,8 +1029,15 @@ final class CCBridgeProvider: BaseChatProvider {
             self.replyTimer = nil
             self.wsClient.unregisterReplyHandler(chatId: chatId)
             self.isStreaming = false
-            self.streamingContent = replyText
-            onComplete(replyText, nil)  // CC 不上报 token 用量
+            // 将本轮 pending thinking 嵌入 content，使历史消息也能展示思考链
+            let contentToSave: String
+            if let think = self.wsClient.consumePendingThinking(), !think.thinking.isEmpty {
+                contentToSave = "[thinking]\(think.thinking)[/thinking]\(replyText)"
+            } else {
+                contentToSave = replyText
+            }
+            self.streamingContent = contentToSave
+            onComplete(contentToSave, nil)  // CC 不上报 token 用量
         }
 
         // 5. grace timer：60s 内仍没等到 reply 才 fail

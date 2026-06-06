@@ -34,6 +34,16 @@ final class CCBridgeWebSocketClient: NSObject {
         thinkingBlocks.values.max(by: { $0.timestamp < $1.timestamp })
     }
 
+    /// 未被消费的最新 thinking（每轮回复来临时消费一次，嵌入 content）。
+    @ObservationIgnored private var pendingThinking: CCThinkingBlock? = nil
+
+    /// 取并清除 pending thinking（供 CCBridgeProvider 在 reply 到达时调用）。
+    func consumePendingThinking() -> CCThinkingBlock? {
+        let block = pendingThinking
+        pendingThinking = nil
+        return block
+    }
+
     /// CC 终端的最新流式输出（hub 通过 cc_stream 推送）。
     private(set) var streamContent: String = ""
     /// CC 是否正在输出。
@@ -299,6 +309,7 @@ final class CCBridgeWebSocketClient: NSObject {
                 let uniqueKey = "\(sessionId)_\(now.timeIntervalSince1970)"
                 DispatchQueue.main.async { [weak self] in
                     self?.thinkingBlocks[uniqueKey] = block
+                    self?.pendingThinking = block  // 等待下一条 reply 消费嵌入
                 }
             }
         case "cc_stream":

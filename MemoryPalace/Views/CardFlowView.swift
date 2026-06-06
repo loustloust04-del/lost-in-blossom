@@ -1309,13 +1309,16 @@ struct BubbleView: View {
 
             // Bubble
             VStack(alignment: .leading, spacing: 6) {
-                // CC 思考链：只挂在最后一条 assistant 气泡上（latestThinking 仅 CC 会话会被设置）
-                if !isUser, isLastAssistant, CCBridgeWebSocketClient.shared.isConnected, let ccThinking = CCBridgeWebSocketClient.shared.latestThinking {
-                    CCThinkingView(block: ccThinking)
-                }
                 let rawCleaned = ContentCleaner.clean(node.content, cacheKey: "\(node.id)_\(node.content.count)")
                 let thinkingResult = isUser ? nil : ContentCleaner.extractThinking(from: rawCleaned)
                 let cleaned = thinkingResult?.content ?? rawCleaned
+                // CC 思考链：content 已嵌入 [thinking]…[/thinking] 时由下方 ThinkingBlockView 渲染；
+                // 只有 streaming 中 content 尚未嵌入时才用 CCThinkingView（isLastAssistant 限定）。
+                if !isUser, isLastAssistant, CCBridgeWebSocketClient.shared.isConnected,
+                   let ccThinking = CCBridgeWebSocketClient.shared.latestThinking,
+                   (thinkingResult?.thinking ?? "").isEmpty {
+                    CCThinkingView(block: ccThinking)
+                }
                 let shouldTruncate = !expandAllMessages && !isExpanded && cleaned.count > truncateLength
 
                 if isUser {
