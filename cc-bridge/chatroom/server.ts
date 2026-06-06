@@ -29,6 +29,10 @@ db.exec(`
     ai_b_model TEXT,
     ai_b_name TEXT,
     ai_b_system TEXT DEFAULT '',
+    ai_a_preset_slots TEXT,
+    ai_b_preset_slots TEXT,
+    ai_a_preset_name TEXT,
+    ai_b_preset_name TEXT,
     status TEXT DEFAULT 'active',
     rounds INTEGER DEFAULT 0,
     max_rounds INTEGER DEFAULT 20,
@@ -36,6 +40,15 @@ db.exec(`
     ended_at TEXT
   )
 `)
+
+// 老库升级：已存在的表补上 preset 列（列已存在时 ALTER 报错，忽略即可）
+function ensureColumn(table: string, column: string, type: string) {
+  try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`) } catch {}
+}
+ensureColumn("chatroom_sessions", "ai_a_preset_slots", "TEXT")
+ensureColumn("chatroom_sessions", "ai_b_preset_slots", "TEXT")
+ensureColumn("chatroom_sessions", "ai_a_preset_name", "TEXT")
+ensureColumn("chatroom_sessions", "ai_b_preset_name", "TEXT")
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS chatroom_messages (
@@ -74,6 +87,47 @@ function broadcastSSE(sessionId: string, event: string, data: object) {
   }
 }
 
+// ── Preset Slot ──────────────────────────────────────────────
+interface PresetSlot {
+  role?: string
+  content?: string
+  injection_depth?: number
+  injection_order?: number
+  is_marker?: boolean
+  name?: string
+}
+
+// 按 injection_order 排序后注入：depth=0 放开头，depth>0 从末尾数第 N 条插入，marker 跳过。
+function buildPresetMessages(
+  slots: PresetSlot[],
+  conversation: { role: string; content: string }[],
+  antiPrefix: string,
+): { role: string; content: string }[] {
+  const usable = slots
+    .filter((s) => !s.is_marker && (s.content ?? "").trim() !== "")
+    .sort((a, b) => (a.injection_order ?? 100) - (b.injection_order ?? 100))
+
+  const depth0 = usable.filter((s) => (s.injection_depth ?? 0) === 0)
+  const depthN = usable.filter((s) => (s.injection_depth ?? 0) > 0)
+
+  const result: { role: string; content: string }[] = []
+  // depth=0 插槽按顺序放在最前
+  for (const s of depth0) {
+    result.push({ role: s.role || "system", content: s.content ?? "" })
+  }
+  // 反前缀提醒
+  result.push({ role: "system", content: antiPrefix })
+  // 对话历史
+  result.push(...conversation)
+  // depth>0 从末尾数第 N 条插入
+  for (const s of depthN) {
+    const depth = s.injection_depth ?? 0
+    const idx = Math.max(0, result.length - depth)
+    result.splice(idx, 0, { role: s.role || "system", content: s.content ?? "" })
+  }
+  return result
+}
+
 // ── AI API Call ──────────────────────────────────────────────
 interface AICallOptions {
   model: string
@@ -81,10 +135,11 @@ interface AICallOptions {
   messages: { role: string; content: string }[]
   sessionId: string
   speakerRole: string  // "ai_a" or "ai_b"
+  presetSlots?: PresetSlot[] | null
 }
 
 async function callAI(opts: AICallOptions): Promise<string> {
-  const { model, systemPrompt, messages, sessionId, speakerRole } = opts
+  const { model, systemPrompt, messages, sessionId, speakerRole, presetSlots } = opts
 
   // 判断走 OpenRouter 还是 DeepSeek 直连
   const isDeepSeek = model.startsWith("deepseek") && !model.includes("/")
@@ -93,14 +148,19 @@ async function callAI(opts: AICallOptions): Promise<string> {
 
   // 自动追加：不要模仿输入的 [角色名]: 前缀格式
   const antiPrefix = "Direct reply only. Never prefix your response with any name tag like [Name]: or brackets."
-  const fullSystem = systemPrompt ? systemPrompt + " " + antiPrefix : antiPrefix
+
+  // 有 preset slots → 按楼层注入；否则回退到原有 system prompt 文本
+  let finalMessages: { role: string; content: string }[]
+  if (presetSlots && presetSlots.length > 0) {
+    finalMessages = buildPresetMessages(presetSlots, messages, antiPrefix)
+  } else {
+    const fullSystem = systemPrompt ? systemPrompt + " " + antiPrefix : antiPrefix
+    finalMessages = [{ role: "system", content: fullSystem }, ...messages]
+  }
 
   const body: any = {
     model,
-    messages: [
-      { role: "system", content: fullSystem },
-      ...messages,
-    ],
+    messages: finalMessages,
     stream: true,
   }
 
@@ -191,6 +251,14 @@ async function runRound(sessionId: string) {
     "SELECT role, content FROM chatroom_messages WHERE session_id = ? ORDER BY id"
   ).all(sessionId) as { role: string; content: string }[]
 
+  // 解析两个 AI 的 preset slots（没有就是 null，callAI 会回退到 system prompt 文本）
+  const parseSlots = (raw: string | null): PresetSlot[] | null => {
+    if (!raw) return null
+    try { return JSON.parse(raw) as PresetSlot[] } catch { return null }
+  }
+  const slotsA = parseSlots(session.ai_a_preset_slots)
+  const slotsB = parseSlots(session.ai_b_preset_slots)
+
   // AI A 发言
   broadcastSSE(sessionId, "turn_start", { role: "ai_a", name: session.ai_a_name })
   const messagesForA = assembleMessages(allMessages, "ai_a", session.ai_a_name, session.ai_b_name)
@@ -200,6 +268,7 @@ async function runRound(sessionId: string) {
     messages: messagesForA,
     sessionId,
     speakerRole: "ai_a",
+    presetSlots: slotsA,
   })
 
   // 存 A 的消息
@@ -218,6 +287,7 @@ async function runRound(sessionId: string) {
     messages: messagesForB,
     sessionId,
     speakerRole: "ai_b",
+    presetSlots: slotsB,
   })
 
   // 存 B 的消息
@@ -247,9 +317,16 @@ app.post("/chatroom/start", async (c) => {
   const body = await c.req.json()
   const id = crypto.randomUUID()
 
-  db.query(`INSERT INTO chatroom_sessions 
-    (id, topic, ai_a_model, ai_a_name, ai_a_system, ai_b_model, ai_b_name, ai_b_system)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  // preset slots/names 可选；没传就存 null，runRound 回退到 system prompt 文本
+  const aiAPresetSlots = body.ai_a_preset_slots ? JSON.stringify(body.ai_a_preset_slots) : null
+  const aiBPresetSlots = body.ai_b_preset_slots ? JSON.stringify(body.ai_b_preset_slots) : null
+  const aiAPresetName = body.ai_a_preset_name || null
+  const aiBPresetName = body.ai_b_preset_name || null
+
+  db.query(`INSERT INTO chatroom_sessions
+    (id, topic, ai_a_model, ai_a_name, ai_a_system, ai_b_model, ai_b_name, ai_b_system,
+     ai_a_preset_slots, ai_b_preset_slots, ai_a_preset_name, ai_b_preset_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     body.topic || "自由对话",
@@ -259,6 +336,10 @@ app.post("/chatroom/start", async (c) => {
     body.ai_b_model || "deepseek/deepseek-chat",
     body.ai_b_name || "AI B",
     body.ai_b_system || "",
+    aiAPresetSlots,
+    aiBPresetSlots,
+    aiAPresetName,
+    aiBPresetName,
   )
 
   // 用话题作为第一条用户消息，启动对话
