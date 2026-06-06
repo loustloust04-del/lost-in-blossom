@@ -32,7 +32,7 @@ final class ChatroomService {
     // 编排器地址（从 UserDefaults 读，默认用 VPS IP）
     var baseURL: String {
         UserDefaults.standard.string(forKey: "chatroomBaseURL")
-            ?? "https://172.245.88.103"
+            ?? "https://blossom.amberrib.com"
     }
 
     private(set) var sessions: [ChatroomSession] = []
@@ -191,7 +191,7 @@ final class ChatroomService {
     func fetchModels() async {
         // Gateway地址：从UserDefaults读，fallback到VPS
         let gatewayBase = UserDefaults.standard.string(forKey: "gatewayBaseURL")
-            ?? "https://172.245.88.103"
+            ?? "https://blossom.amberrib.com"
         guard let url = URL(string: "\(gatewayBase)/v1/models") else { return }
         
         var req = URLRequest(url: url)
