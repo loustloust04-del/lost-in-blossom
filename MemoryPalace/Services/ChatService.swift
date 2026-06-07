@@ -1042,12 +1042,14 @@ final class CCBridgeProvider: BaseChatProvider {
             onComplete(contentToSave, nil)  // CC 不上报 token 用量
         }
 
-        // 4b. 注册 stream handler：cc_stream token → onToken 实时流式输出
-        wsClient.registerStreamHandler { [weak self] token in
-            guard let self else { return }
-            self.streamingContent += token
-            onToken(token)
-        }
+        // 4b. cc_stream 流式暂时关闭：capture-pane 无法区分回复文本和 terminal 噪音
+        // （工具调用、文件操作、进度条全混在一起）。CC 回复走 replyHandler 一次性干净显示。
+        // TODO: 后续用 MCP 工具的 streaming 回调做正确的聊天流式，再打开这里。
+        // wsClient.registerStreamHandler { [weak self] token in
+        //     guard let self else { return }
+        //     self.streamingContent += token
+        //     onToken(token)
+        // }
 
         // 5. grace timer：60s 内仍没等到 reply 才 fail
         //    期间 send err / 网络抖动 / reconnect 都不立即 fail，给 hub buffer replay 机会
