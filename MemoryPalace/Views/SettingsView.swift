@@ -28,6 +28,7 @@ struct SettingsView: View {
         case notifications = "通知"
         case appearance = "外观"
         case theme = "主题"
+        case health = "健康"
         case debug = "开发调试"
         case hapticTest = "震动测试"
     }
@@ -89,6 +90,7 @@ struct SettingsView: View {
                 case .rightPanel:
                     IOSRightPanelPage()
                 case .data: DataSettingsTab()
+                case .health: HealthSettingsTab()
                 case .notifications: IOSNotificationPage()
                 case .debug: IOSDebugPage()
                 case .hapticTest: HapticTestView()
