@@ -48,6 +48,8 @@ final class CCBridgeWebSocketClient: NSObject {
     private(set) var streamContent: String = ""
     /// CC 是否正在输出。
     private(set) var isCCStreaming: Bool = false
+    /// CC 流式输出回调：每个 cc_stream token 到达时触发
+    private var streamHandler: ((String) -> Void)?
 
     // MARK: - Private state
 
@@ -163,6 +165,13 @@ final class CCBridgeWebSocketClient: NSObject {
 
     /// 注册一个 chat_id 对应的回复处理器（Task 9 的 CCBridgeProvider 使用）。
     /// handler 在 main queue 上调用。
+    func registerStreamHandler(_ handler: @escaping (String) -> Void) {
+        streamHandler = handler
+    }
+    func unregisterStreamHandler() {
+        streamHandler = nil
+    }
+
     func registerReplyHandler(chatId: String, handler: @escaping (String) -> Void) {
         handlersQueue.async { self.replyHandlers[chatId] = handler }
     }
@@ -321,6 +330,7 @@ final class CCBridgeWebSocketClient: NSObject {
                     }
                     self.streamContent += content
                     self.isCCStreaming = true
+                    self.streamHandler?(content)
                 }
             }
         case "cc_stream_end":

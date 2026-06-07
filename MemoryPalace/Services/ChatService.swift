@@ -968,6 +968,7 @@ final class ProviderRouter {
     func cancel() {
         openAIProvider.cancel()
         anthropicProvider.cancel()
+        CCBridgeWebSocketClient.shared.unregisterStreamHandler()
         ccBridgeProvider.cancel()
     }
 }
@@ -1028,6 +1029,7 @@ final class CCBridgeProvider: BaseChatProvider {
             self.replyTimer?.invalidate()
             self.replyTimer = nil
             self.wsClient.unregisterReplyHandler(chatId: chatId)
+            self.wsClient.unregisterStreamHandler()
             self.isStreaming = false
             // 将本轮 pending thinking 嵌入 content，使历史消息也能展示思考链
             let contentToSave: String
@@ -1040,11 +1042,19 @@ final class CCBridgeProvider: BaseChatProvider {
             onComplete(contentToSave, nil)  // CC 不上报 token 用量
         }
 
+        // 4b. 注册 stream handler：cc_stream token → onToken 实时流式输出
+        wsClient.registerStreamHandler { [weak self] token in
+            guard let self else { return }
+            self.streamingContent += token
+            onToken(token)
+        }
+
         // 5. grace timer：60s 内仍没等到 reply 才 fail
         //    期间 send err / 网络抖动 / reconnect 都不立即 fail，给 hub buffer replay 机会
         replyTimer = Timer.scheduledTimer(withTimeInterval: replyGracePeriod, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.wsClient.unregisterReplyHandler(chatId: chatId)
+            self.wsClient.unregisterStreamHandler()
             self.failNow("CC 60 秒内没回（可能 CC 思考超时 / hub 中断 / reply 真的丢了）",
                          onError: onError)
         }
