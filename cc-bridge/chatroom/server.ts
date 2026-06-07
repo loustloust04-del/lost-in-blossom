@@ -418,6 +418,14 @@ app.get("/chatroom/sessions", (c) => {
   return c.json({ sessions })
 })
 
+// 删除聊天室（及其消息）
+app.delete("/chatroom/:id", (c) => {
+  const id = c.req.param("id")
+  db.query("DELETE FROM chatroom_messages WHERE session_id = ?").run(id)
+  db.query("DELETE FROM chatroom_sessions WHERE id = ?").run(id)
+  return c.json({ status: "deleted" })
+})
+
 // SSE 流式订阅
 app.get("/chatroom/stream/:id", (c) => {
   const sessionId = c.req.param("id")

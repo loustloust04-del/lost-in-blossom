@@ -121,6 +121,15 @@ final class ChatroomService {
         await MainActor.run { self.sessions = resp.sessions }
     }
 
+    // 删除聊天室
+    func deleteSession(id: String) async throws {
+        let url = URL(string: "\(baseURL)/chatroom/\(id)")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        let _ = try await URLSession.shared.data(for: req)
+        await MainActor.run { sessions.removeAll { $0.id == id } }
+    }
+
     // SSE 流式订阅
     func subscribeStream(sessionId: String) {
         guard let url = URL(string: "\(baseURL)/chatroom/stream/\(sessionId)") else { return }

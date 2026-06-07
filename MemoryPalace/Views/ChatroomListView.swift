@@ -5,6 +5,7 @@ struct ChatroomListView: View {
 
     @State private var showCreate = false
     @State private var activeSession: ChatroomSession? = nil
+    @State private var sessionToDelete: ChatroomSession? = nil
 
     init() {}
 
@@ -48,6 +49,13 @@ struct ChatroomListView: View {
                         ForEach(service.sessions) { session in
                             ChatroomSessionRow(session: session)
                                 .onTapGesture { activeSession = session }
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        sessionToDelete = session
+                                    } label: {
+                                        Label("删除", systemImage: "trash")
+                                    }
+                                }
                         }
                     }
                     .padding(.bottom, 80)
@@ -55,6 +63,22 @@ struct ChatroomListView: View {
             }
         }
         .task { try? await service.fetchSessions() }
+        .confirmationDialog("删除群聊", isPresented: Binding(
+            get: { sessionToDelete != nil },
+            set: { if !$0 { sessionToDelete = nil } }
+        ), titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let s = sessionToDelete {
+                    Task { try? await service.deleteSession(id: s.id) }
+                }
+                sessionToDelete = nil
+            }
+            Button("取消", role: .cancel) { sessionToDelete = nil }
+        } message: {
+            if let s = sessionToDelete {
+                Text("确定删除「\(s.topic)」？此操作不可撤销。")
+            }
+        }
         .sheet(isPresented: $showCreate) {
             CreateChatroomView { newSession in
                 activeSession = newSession
