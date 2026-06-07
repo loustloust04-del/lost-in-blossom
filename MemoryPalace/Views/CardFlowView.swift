@@ -114,17 +114,25 @@ struct CardFlowView: View {
     /// 之前 scrollTo(lastId, anchor: .bottom) 只让 lastId 底对齐可视底，但 lastId 下方
     /// 还有 spacing 22 + 哨兵 1 + padding 16 + sticker canvas ≈ 几十到几百 pt，导致
     /// 滚不到真正的底（log 显示 offY=3116 size=3876 差 200 pt）
-    private func scrollToLastMessage(proxy: ScrollViewProxy) {
+    /// force=false（默认）：只在用户已经在底部时才滚，避免流式时弹跳
+    /// force=true：强制滚底（切换对话、消息完成、用户点回底按钮）
+    private func scrollToLastMessage(proxy: ScrollViewProxy, force: Bool = false) {
+        guard force || isAtBottom else { return }
         guard let lastId = viewModel.currentPath.last?.id else { return }
-        // step1: 先滚 lastId（触发 LazyVStack 加载长 bubble）
-        proxy.scrollTo(lastId, anchor: .bottom)
-        // step2: 动画滚到哨兵 = content 真正的底
+        // 统一禁动画：避免 scrollTo 与 WebView 高度变化同帧竞争导致白屏
+        var tx = Transaction()
+        tx.disablesAnimations = true
+        withTransaction(tx) {
+            proxy.scrollTo(lastId, anchor: .bottom)
+        }
+        // 延迟滚到哨兵（content 真正的底），同样禁动画
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            withAnimation(.easeOut(duration: 0.25)) {
+            var tx2 = Transaction()
+            tx2.disablesAnimations = true
+            withTransaction(tx2) {
                 proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
             }
         }
-        // step3: 等 MarkdownUI 渲染稳定后再滚一次
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
         }
@@ -237,7 +245,7 @@ struct CardFlowView: View {
                             stickerVM.currentPathCount = viewModel.currentPath.count
                             stickerVM.migrateStickerPositions(context: modelContext)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                scrollToLastMessage(proxy: proxy)
+                                scrollToLastMessage(proxy: proxy, force: true)
                             }
                         }
                     }
@@ -261,7 +269,7 @@ struct CardFlowView: View {
                     .onChange(of: viewModel.streamingText) { oldText, newText in
                         if newText.isEmpty && !oldText.isEmpty {
                             lastStreamingScrollTime = .distantPast
-                            scrollToLastMessage(proxy: proxy)
+                            scrollToLastMessage(proxy: proxy, force: true)
                             return
                         }
                         guard !newText.isEmpty else { return }
@@ -297,7 +305,7 @@ struct CardFlowView: View {
                                         Spacer()
                                         ScrollToBottomButton(
                                             isVisible: true,
-                                            action: { scrollToLastMessage(proxy: proxy) }
+                                            action: { scrollToLastMessage(proxy: proxy, force: true) }
                                         )
                                         .padding(.trailing, 16)
                                     }
