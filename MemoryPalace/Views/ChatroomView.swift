@@ -50,14 +50,14 @@ struct ChatroomView: View {
             Spacer()
 
             Button {
-                Task {
-                    try? await service.endSession(sessionId: session.id)
-                    dismiss()
-                }
+                dismiss()
+                Task { try? await service.endSession(sessionId: session.id) }
             } label: {
                 Text("结束")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Theme.danger)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
