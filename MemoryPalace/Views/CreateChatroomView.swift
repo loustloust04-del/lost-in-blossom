@@ -10,11 +10,11 @@ struct CreateChatroomView: View {
 
     @State private var topic = ""
     @State private var aiAName = "Caelum"
-    @State private var aiAModel = ""
+    @State private var aiAModel = "anthropic/claude-sonnet-4"
     @State private var aiASystem = ""
     @State private var aiAPresetId: String? = nil
     @State private var aiBName = "DeepSeek"
-    @State private var aiBModel = ""
+    @State private var aiBModel = "deepseek/deepseek-chat"
     @State private var aiBSystem = ""
     @State private var aiBPresetId: String? = nil
     @State private var isCreating = false
@@ -77,15 +77,17 @@ struct CreateChatroomView: View {
         .background(Theme.sidebarBg)
         .task {
             await service.fetchModels()
-            if aiAModel.isEmpty {
-                // AI A (Caelum) → prefer Anthropic/Claude; fallback to first
-                aiAModel = service.availableModels.first(where: { $0.id.contains("claude") || $0.id.contains("anthropic") })?.id
-                    ?? service.availableModels.first?.id ?? ""
-            }
-            if aiBModel.isEmpty {
-                // AI B (DeepSeek) → prefer DeepSeek; fallback to first
-                aiBModel = service.availableModels.first(where: { $0.id.contains("deepseek") })?.id
-                    ?? service.availableModels.first?.id ?? ""
+            // 如果当前选择不在 Gateway 返回的列表里，切换到首选匹配
+            let models = service.availableModels
+            if !models.isEmpty {
+                if models.first(where: { $0.id == aiAModel }) == nil {
+                    aiAModel = models.first(where: { $0.id.contains("claude") || $0.id.contains("anthropic") })?.id
+                        ?? models.first?.id ?? aiAModel
+                }
+                if models.first(where: { $0.id == aiBModel }) == nil {
+                    aiBModel = models.first(where: { $0.id.contains("deepseek") })?.id
+                        ?? models.first?.id ?? aiBModel
+                }
             }
         }
     }
