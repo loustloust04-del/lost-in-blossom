@@ -1144,16 +1144,8 @@ final class ConversationViewModel {
                 .replacingOccurrences(of: "{{date}}", with: df.string(from: Date()))
                 .replacingOccurrences(of: "{{time}}", with: tf.string(from: Date()))
             // 如果替换后有空行（健康数据为空时），清理多余换行
-            while expanded.contains("
-
-
-") {
-                expanded = expanded.replacingOccurrences(of: "
-
-
-", with: "
-
-")
+            while expanded.contains("\n\n\n") {
+                expanded = expanded.replacingOccurrences(of: "\n\n\n", with: "\n\n")
             }
             finalPrompt = expanded
         }
