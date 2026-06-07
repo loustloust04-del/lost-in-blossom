@@ -46,6 +46,10 @@ struct CardFlowView: View {
         let isThinkingNow = isNodeStreaming && viewModel.isThinking
         let streamingThinkingForNode = isNodeStreaming ? viewModel.streamingThinkingText : ""
         let thinkingSummaryForNode = isNodeStreaming ? viewModel.thinkingSummary : ""
+        // CC Bridge provider 检测：用于 CCThinkingView 显示条件，防止切换 provider 后 thinking 残留
+        let selectedModelId = UserDefaults.standard.string(forKey: "selectedChatModel") ?? ""
+        let currentProviderModel = providerManager?.model(byId: selectedModelId) ?? providerManager?.availableModels.first
+        let isCCBridge = currentProviderModel.flatMap { providerManager?.provider(for: $0) }?.type == .ccBridge
         BubbleView(
             node: node,
             hasBranches: info != nil,
@@ -57,6 +61,7 @@ struct CardFlowView: View {
             isHighlighted: isNodeHighlighted,
             isSearchMatch: isNodeSearchMatch,
             isLastAssistant: node.role == "assistant" && node.id == viewModel.currentPath.last?.id,
+            isCCBridgeProvider: isCCBridge,
             onToggleFavorite: { viewModel.toggleFavorite(node) },
             onTogglePin: { viewModel.togglePin(node) },
             onSoftDelete: { viewModel.softDelete(node) },
@@ -1253,6 +1258,8 @@ struct BubbleView: View {
     var isSearchMatch: Bool = false
     /// 当前对话路径的最后一条 assistant 消息。CC 思考链（latestThinking）只挂在这条气泡上。
     var isLastAssistant: Bool = false
+    /// 当前选中的 provider 是否为 CC Bridge——只有此条件为 true 时才展示 CCThinkingView。
+    var isCCBridgeProvider: Bool = false
     let onToggleFavorite: () -> Void
     let onTogglePin: () -> Void
     let onSoftDelete: () -> Void
@@ -1319,7 +1326,9 @@ struct BubbleView: View {
                 let cleaned = thinkingResult?.content ?? rawCleaned
                 // CC 思考链：content 已嵌入 [thinking]…[/thinking] 时由下方 ThinkingBlockView 渲染；
                 // 只有 streaming 中 content 尚未嵌入时才用 CCThinkingView（isLastAssistant 限定）。
-                if !isUser, isLastAssistant, CCBridgeWebSocketClient.shared.isConnected,
+                // isCCBridgeProvider 防止切换 provider 后 latestThinking 残留导致重复显示。
+                if !isUser, isLastAssistant, isCCBridgeProvider,
+                   CCBridgeWebSocketClient.shared.isConnected,
                    let ccThinking = CCBridgeWebSocketClient.shared.latestThinking,
                    (thinkingResult?.thinking ?? "").isEmpty {
                     CCThinkingView(block: ccThinking)
