@@ -34,6 +34,10 @@ final class HealthService {
     private init() {
         injectionEnabled = defaults.object(forKey: Keys.injectionEnabled) as? Bool ?? true
         authRequested = defaults.bool(forKey: Keys.authRequested)
+        // 启动时自动加载今日健康数据（如果之前已授权过）
+        if authRequested && isAvailable {
+            Task { await refreshToday() }
+        }
     }
 
     var isAvailable: Bool {
