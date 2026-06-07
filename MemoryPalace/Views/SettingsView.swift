@@ -58,6 +58,7 @@ struct SettingsView: View {
                 Section {
                     settingsButton(icon: "sidebar.right", title: "右栏", color: Theme.textSecondary, tab: .rightPanel)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
+                    settingsButton(icon: "heart.text.square", title: "健康", color: Theme.branchIndicator, tab: .health)
                     settingsButton(icon: "star.circle", title: "贴纸", color: Theme.textSecondary, tab: .sticker)
                     settingsButton(icon: "bell.fill", title: "通知", color: Theme.branchIndicator, tab: .notifications)
                 }
