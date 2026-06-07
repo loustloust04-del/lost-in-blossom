@@ -1130,7 +1130,35 @@ final class ConversationViewModel {
             projectInstructions: projectInstructions
         )
 
-        return (systemPrompt: result.systemPrompt, messages: result.messages, sampling: preset.sampling)
+        // 宏替换：{{health}} {{date}} {{time}}
+        var finalPrompt = result.systemPrompt
+        if let prompt = finalPrompt {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "zh_CN")
+            df.dateFormat = "yyyy年M月d日 EEEE"
+            let tf = DateFormatter()
+            tf.locale = Locale(identifier: "zh_CN")
+            tf.dateFormat = "HH:mm"
+            var expanded = prompt
+                .replacingOccurrences(of: "{{health}}", with: HealthService.shared.injectedSummary)
+                .replacingOccurrences(of: "{{date}}", with: df.string(from: Date()))
+                .replacingOccurrences(of: "{{time}}", with: tf.string(from: Date()))
+            // 如果替换后有空行（健康数据为空时），清理多余换行
+            while expanded.contains("
+
+
+") {
+                expanded = expanded.replacingOccurrences(of: "
+
+
+", with: "
+
+")
+            }
+            finalPrompt = expanded
+        }
+
+        return (systemPrompt: finalPrompt, messages: result.messages, sampling: preset.sampling)
     }
 
     /// ccBridge 路径：把 PromptAssembler 的输出后处理成只发 raw user 文字，
