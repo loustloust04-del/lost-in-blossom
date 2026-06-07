@@ -49,8 +49,12 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.bunny.lostinblossom
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios
         PRODUCT_NAME: "Lost in Blossom"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: GQN42B462A
+        CODE_SIGN_IDENTITY: "Apple Development"
+        PROVISIONING_PROFILE_SPECIFIER: "MP iOS Dev - Bunny"
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES

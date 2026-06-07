@@ -84,11 +84,7 @@ jobs:
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS \
             -destination 'generic/platform=iOS' \
-            -archivePath build/LiB.xcarchive \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=${{ secrets.TEAM_ID }} \
-            CODE_SIGN_IDENTITY="Apple Development" \
-            PROVISIONING_PROFILE_SPECIFIER="MP iOS Dev - Bunny"
+            -archivePath build/LiB.xcarchive
 
       - name: Export .ipa
         run: |
