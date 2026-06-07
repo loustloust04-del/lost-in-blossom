@@ -33,6 +33,7 @@ fileprivate enum SidebarTab: Hashable {
 
 struct SidebarView: View {
     @Binding var searchText: String
+    @State private var searchDebounceTask: Task<Void, Never>?
     @Binding var showFavoritesOnly: Bool
     @Binding var showTrash: Bool
     @Binding var showImporter: Bool
@@ -815,8 +816,14 @@ struct SidebarView: View {
             showAllChats = false
         }
         .onChange(of: searchText) { _, newValue in
-            if newValue.isEmpty { clearSearch() }
-            refreshList()
+            if newValue.isEmpty { clearSearch(); refreshList(); return }
+            // debounce 300ms：每次按键重置计时器，停止输入后才真正搜索
+            searchDebounceTask?.cancel()
+            searchDebounceTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                refreshList()
+            }
         }
         .onChange(of: selectedTagId) { _, _ in refreshList() }
         .onChange(of: memoryFilter) { _, _ in showAllChats = false; refreshList() }
