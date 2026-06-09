@@ -14,6 +14,9 @@ packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
     from: "0.9.19"
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: "1.13.0"
 
 settings:
   base:
@@ -36,6 +39,7 @@ targets:
       - package: MarkdownUI
       - package: VariableBlur
       - package: ZIPFoundation
+      - package: SwiftTerm
     entitlements:
       path: MemoryPalace/MemoryPalaceIOS.entitlements
       properties:
