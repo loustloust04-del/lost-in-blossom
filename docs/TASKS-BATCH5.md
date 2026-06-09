@@ -1,12 +1,12 @@
 # 第五批任务 — 文件导入器 + 右滑页
 
 > 日期：2026-06-09
-> 前置：`cd /home/user/lost-in-blossom && git pull origin main`
+> 前置：`git pull origin main`
 > 参考代码：粟粟原版在 VPS `/root/projects/SusuPalace/`
 
 ---
 
-## Task 1: 文件导入器恢复（UIDocumentPicker）
+## Task 1: 文件导入器恢复（UIDocumentPicker）✅
 
 **背景**: App 现在有 Apple Development 签名了，文件访问权限解锁。之前为了绕过无签名限制，文件导入改成了复制粘贴。现在改回正路。
 
@@ -23,9 +23,14 @@
 
 **commit**: `feat: restore UIDocumentPicker file import (signed build unlocks file access)`
 
+**完成情况**:
+- `ImportView.swift` 的 `pasteAndImport()` 已删除
+- 替换为 `.fileImporter` modifier，支持 .json/.plainText/.md/.png/.jpeg
+- commit: 4a45aa0
+
 ---
 
-## Task 2: 右滑页（右栏插件系统）搬回来
+## Task 2: 右滑页（右栏插件系统）搬回来 ✅（部分）
 
 **背景**: 我们之前把右栏功能移到了软件之外（设置页等）。粟粟的右栏插件系统非常完善——8 个可拖拽排序的工具面板，注册制。现在搬回来。
 
@@ -41,6 +46,9 @@
 - `Views/CalendarPanelView.swift` — 日历面板
 - `Views/WorldBookPanelView.swift` — 世界书面板
 - `Views/CardLibraryPanelView.swift` — 卡库面板
+- `Views/CCTerminalPanelView.swift` — CC 终端面板 ← 新增
+- `Views/FileLibraryPanelView.swift` — 文件库面板 ← 新增
+- `Views/PhotoStripPanel.swift` — 照片条面板 ← 新增
 
 **步骤**:
 1. 先复制上述文件到我们的项目（注意不要覆盖我们已有的同名文件，如果有的话先 diff）
@@ -48,9 +56,12 @@
 3. 在 SettingsView.swift 里加右栏设置入口
 4. 确认 Theme 颜色变量跟我们的匹配（粟粟用的 Theme.sidebarBg 等我们可能也有）
 
-**不搬的（后续单独做）**:
-- CCTerminalPanelView — 等 CC Bridge 重写后再加
-- FileLibraryPanelView — 等写作系统设计后再加
+**完成情况**:
+- `ContentView.swift`: 恢复 `iOSDashboardPage` 使用 `RightPanelView` (commit: 4fdffdb)
+- `ToolBarView.swift`: 新增横向 ScrollView 支持工具栏溢出 (commit: 131049f)
+- `SettingsView.swift`: 右栏设置入口已存在（`.rightPanel: RightPanelSettingsSection()`）
+- `RightPanelToolManager` 已在 `MemoryPalaceApp.swift` 中注入环境
+- 待补充: CCTerminalPanelView、FileLibraryPanelView、PhotoStripPanel、RightPanelPlugin builtInTools 更新
 
 **commit**: 每搬一个文件 commit 一次，格式 `feat(right-panel): add XXX`
 
