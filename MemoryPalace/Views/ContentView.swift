@@ -702,11 +702,12 @@ struct ContentView: View {
         viewModel.collectAllBranches().count
     }
 
-    /// 右滑 page 2: Caelum's Console（控制台）
-    /// 粟粟原 RightPanelView 暂时移出 page 2，后续整合进设置或单独入口
+    /// 右滑 page 2: 右栏插件系统
     private var iOSDashboardPage: some View {
-        ConsoleView()
+        RightPanelView(selectedToolId: $selectedToolId, viewModel: viewModel, stickerVM: stickerVM)
+            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Theme.sidebarBg.ignoresSafeArea())
     }
 
     /// 右滑 page 3: The Archive（记忆馆）
