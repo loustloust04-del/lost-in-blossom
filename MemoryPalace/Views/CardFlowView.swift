@@ -75,11 +75,6 @@ struct CardFlowView: View {
                 return presetScripts + profileScripts
             }()
         )
-        .onTapGesture(count: 2) {
-            let raw = ContentCleaner.clean(node.content, cacheKey: node.id)
-            let result = ContentCleaner.extractThinking(from: raw)
-            textSelectItem = TextSelectItem(id: node.id, text: result.content, thinkingText: result.thinking)
-        }
     }
 
     private func makeRegenerateAction(for node: MessageNode) -> (() -> Void)? {
