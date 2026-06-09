@@ -1512,21 +1512,36 @@ struct BubbleView: View {
                         }
                         .padding(.vertical, 4)
                     } else if !displayText.isEmpty {
-                        // 混合架构：用 WebView 渲染消息内容（支持富文本 + Markdown + 代码高亮）
-                        MessageContentWebView(
-                            content: displayText,
-                            themeColors: [
-                                "text-color": Theme.textPrimary.toHex(),
-                                "text-muted": Theme.textMuted.toHex(),
-                                "code-bg": Theme.mainBg.toHex(),
-                                "link-color": Theme.accent.toHex(),
-                                "spoiler-bg": Theme.textMuted.toHex(),
-                                "font-size": "\(13.5 * (fontScale > 0 ? fontScale : 1.0))px",
-                                "line-height": "\(1.5 * lineSpacingScale)"
-                            ],
-                            dynamicHeight: $messageWebViewHeight
-                        )
-                        .frame(height: messageWebViewHeight)
+                        let needsWebView = displayText.contains("{color:")
+                        if needsWebView {
+                            // 富文本消息：WebView 渲染（保留 {color:} 支持）
+                            MessageContentWebView(
+                                content: displayText,
+                                themeColors: [
+                                    "text-color": Theme.textPrimary.toHex(),
+                                    "text-muted": Theme.textMuted.toHex(),
+                                    "code-bg": Theme.mainBg.toHex(),
+                                    "link-color": Theme.accent.toHex(),
+                                    "spoiler-bg": Theme.textMuted.toHex(),
+                                    "font-size": "\(13.5 * (fontScale > 0 ? fontScale : 1.0))px",
+                                    "line-height": "\(1.5 * lineSpacingScale)"
+                                ],
+                                dynamicHeight: $messageWebViewHeight
+                            )
+                            .frame(height: messageWebViewHeight)
+                        } else {
+                            // 普通消息：MarkdownUI 渲染（纯 SwiftUI，零白屏）
+                            Markdown(displayText)
+                                .markdownTheme(
+                                    .memoryPalace(
+                                        fontName: selectedFont,
+                                        scale: CGFloat(fontScale > 0 ? fontScale : 1.0),
+                                        lineSpacingScale: CGFloat(lineSpacingScale),
+                                        paragraphSpacingScale: CGFloat(paragraphSpacingScale)
+                                    )
+                                )
+                                .textSelection(.enabled)
+                        }
                     }
                 }
 
