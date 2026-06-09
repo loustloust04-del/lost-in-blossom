@@ -53,6 +53,10 @@ struct RightPanelView: View {
             StickerLibraryView(viewModel: viewModel, stickerVM: stickerVM)
         case "prompt":
             PersonaSettingsTab(useSheetNavigation: true)
+        case "ccTerminal":
+            CCTerminalPanelView(viewModel: viewModel)
+        case "fileLibrary":
+            FileLibraryPanelView()
         default:
             Text("未知工具")
                 .foregroundColor(Theme.textMuted)
