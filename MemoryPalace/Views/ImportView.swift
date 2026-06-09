@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import UniformTypeIdentifiers
 
 struct ImportView: View {
     @Environment(\.modelContext) private var modelContext
@@ -12,6 +13,7 @@ struct ImportView: View {
     @State private var selectedProvider: String = "chatgpt"
     @State private var mergeMode: Bool = false
     @State private var downloadError: String?
+    @State private var showFilePicker = false
 
     private var isImporting: Bool {
         importer?.isImporting == true || claudeImporter?.isImporting == true
@@ -214,6 +216,18 @@ struct ImportView: View {
             }
         }
         .interactiveDismissDisabled(isImporting)
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.json, .plainText, UTType(filenameExtension: "md") ?? .plainText, .png, .jpeg],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first { startImport(url: url) }
+            case .failure(let error):
+                downloadError = "文件选择失败：\(error.localizedDescription)"
+            }
+        }
     }
 
     @ViewBuilder
@@ -343,14 +357,14 @@ struct ImportView: View {
 
         Section {
 
-            Button("从 Files 粘贴导入") {
-                pasteAndImport()
+            Button("选择文件导入") {
+                showFilePicker = true
             }
             .font(.system(size: 14))
             .buttonStyle(.bordered)
             .disabled(isImporting)
 
-            Text("Files App → 长按文件 → 拷贝 → 回到这里点此按钮")
+            Text("支持 conversations.json、.txt、.md、图片")
                 .font(.caption2)
                 .foregroundColor(Theme.textMuted)
         }
@@ -528,34 +542,6 @@ struct ImportView: View {
         )
     }
 
-
-    private func pasteAndImport() {
-        guard !isImporting else { return }
-        let pb = UIPasteboard.general
-        let jsonTypes = ["public.json", "public.plain-text", "public.utf8-plain-text", "public.text"]
-        var data: Data?
-        for type in jsonTypes {
-            if let d = pb.data(forPasteboardType: type) { data = d; break }
-        }
-        if data == nil, let str = pb.string { data = str.data(using: .utf8) }
-
-        guard let jsonData = data else {
-            downloadError = "剪贴板里没有 JSON 数据。在 Files 中长按文件 → 拷贝。"
-            return
-        }
-        guard (try? JSONSerialization.jsonObject(with: jsonData)) != nil else {
-            downloadError = "剪贴板内容不是有效 JSON。"
-            return
-        }
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard_import.json")
-        try? FileManager.default.removeItem(at: tempURL)
-        do {
-            try jsonData.write(to: tempURL)
-            startImport(url: tempURL)
-        } catch {
-            downloadError = "写入临时文件失败：\(error.localizedDescription)"
-        }
-    }
 
     private func startImport(url: URL) {
         let isSecurityScoped = url.startAccessingSecurityScopedResource()
