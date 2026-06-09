@@ -18,6 +18,8 @@ struct ToolBarView: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
             ForEach(pinnedTools) { tool in
                 let isSelected = tool.id == selectedToolId
                 Button {
@@ -70,6 +72,8 @@ struct ToolBarView: View {
                     }
                 }
             }
+                } // inner tools HStack
+            } // horizontal ScrollView
 
             // 抽屉按钮
             Button {
@@ -80,8 +84,8 @@ struct ToolBarView: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: isIOSStyle ? 14 : 11, weight: .medium))
                     .foregroundColor(showDrawer ? Theme.branchIndicator : Theme.textMuted)
-                    .padding(.horizontal, 8)
-                    .frame(height: isIOSStyle ? 36 : 28)
+                    .frame(width: isIOSStyle ? 44 : 32, height: isIOSStyle ? 36 : 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
