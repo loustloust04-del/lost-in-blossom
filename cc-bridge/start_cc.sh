@@ -17,5 +17,5 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   tmux attach -t "$SESSION"
 else
   echo "启动 CC（session: $SESSION, cwd: $CC_CWD）"
-  tmux new-session -s "$SESSION" -c "$CC_CWD" "claude --mcp-config '$SCRIPT_DIR/.mcp.json'"
+  tmux new-session -s "$SESSION" -c "$CC_CWD" "claude --continue --dangerously-skip-permissions --mcp-config '$SCRIPT_DIR/.mcp.json'"
 fi
