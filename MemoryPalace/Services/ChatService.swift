@@ -1073,7 +1073,7 @@ final class CCBridgeProvider: BaseChatProvider {
         // 7. 发送 send 帧；send err 不立即 fail，让 grace timer 等 reply
         //    （网络抖动/reconnect 是常态，CC 那边大概率仍能收到我们发的消息且会回复）
         var payload: [String: Any] = [
-            "type":       "send",
+            "type":       "chat",
             "chat_id":    chatId,
             "message_id": messageId,
             "content":    lastUser.content,
