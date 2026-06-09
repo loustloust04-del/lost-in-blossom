@@ -108,5 +108,7 @@ final class RightPanelToolManager {
         RightPanelTool(id: "cardLibrary", name: "卡库",    icon: "person.crop.rectangle.stack",    order: 3),
         RightPanelTool(id: "sticker",     name: "贴纸",    icon: "star.circle",                    order: 4),
         RightPanelTool(id: "prompt",      name: "Prompt", icon: "text.bubble",  isEnabled: false, order: 5),
+        RightPanelTool(id: "ccTerminal",  name: "CC 终端", icon: "terminal",                        order: 6),
+        RightPanelTool(id: "fileLibrary", name: "文件库",  icon: "folder.fill",                     order: 7),
     ]
 }
