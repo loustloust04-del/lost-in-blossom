@@ -615,6 +615,9 @@ extension Notification.Name {
     /// Add to Chat 面板请求打开设置页。
     /// 由 AddToChatSheet 发，ContentView 订阅。
     static let requestShowSettings = Notification.Name("LIBRequestShowSettings")
+
+    /// 文件库内容变化（CC 工具写文件后）→ FileLibraryPanelView 实时刷新。
+    static let fileLibraryDidChange = Notification.Name("LIBFileLibraryDidChange")
 }
 
 // MARK: - Profile Editor Sheet
