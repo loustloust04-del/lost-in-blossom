@@ -58,7 +58,6 @@ function connectHub(): Promise<WebSocket> {
     ws.on("open", () => {
       connectingPromise = null
       reconnectDelay = 1_000  // 成功后重置退避
-      // 不要 console.error — CC 的 MCP host 可能据此判定 unhealthy
       startPing()
       resolve(ws)
     })
@@ -86,12 +85,23 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [{
     name: "reply",
-    description: "Reply to a Memory Palace channel message. Use this when responding to <channel source=\"memorypalace\"> input.",
+    description: "Send a message to a Memory Palace conversation. Normally used to respond to <channel source=\"memorypalace\"> input (pass its chat_id + message_id). You can ALSO use it proactively at any time to message a conversation without a preceding <channel> — just pass that conversation's chat_id (omit message_id). The message appears as a new message from you.",
     inputSchema: {
       type: "object",
       properties: {
-        chat_id: { type: "string", description: "The chat_id from the <channel> tag" },
-        content: { type: "string", description: "Your reply text" },
+        chat_id: {
+          type: "string",
+          description: "The chat_id from the <channel> tag",
+        },
+        message_id: {
+          type: "string",
+          description: "The message_id from the <channel> tag. Pass it back verbatim so the reply is matched to the exact message (prevents stale replies being mis-routed).",
+        },
+        content: {
+          type: "string",
+          description: "Your reply text",
+        },
+        // TODO: Phase 4 — file_path for sending files/images back to user
       },
       required: ["chat_id", "content"],
     },
@@ -102,7 +112,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name !== "reply") {
     throw new Error(`unknown tool: ${req.params.name}`)
   }
-  const args = req.params.arguments as { chat_id: string; content: string }
+  const args = req.params.arguments as { chat_id: string; message_id?: string; content: string }
   // 如果 hub 这一刻断了，等一次重连尝试（最多 retry 几次再放弃）
   let lastErr: Error | undefined
   for (let i = 0; i < 3; i++) {
@@ -111,6 +121,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       ws.send(JSON.stringify({
         type: "reply",
         chat_id: args.chat_id,
+        message_id: args.message_id,  // 可选，回带用于精确匹配
         content: args.content,
       }))
       return { content: [{ type: "text", text: "ok" }] }
