@@ -4,6 +4,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process"
 import { mkdtempSync, unlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { sendPush } from "./apns.ts"
 
 const PORT = Number(process.env.MP_CC_HUB_PORT) || 7890
 const TMUX_SESSION = process.env.MP_CC_TMUX_SESSION ?? "mp-cc"
@@ -113,6 +114,9 @@ const resizeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
 // Maps each App WebSocket to the chat_id it currently has open (null = backgrounded).
 // Used to decide: if no client is watching a chat, push an APNs notification.
 const focusByClient = new Map<WebSocket, string | null>()
+
+// Maps each App WebSocket to its APNs device token (registered via register_device).
+const deviceTokenByClient = new Map<WebSocket, string>()
 
 function createTerminalAttachment(sessionName: string): TerminalAttachment {
   const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
@@ -351,11 +355,21 @@ export function startHub(): WebSocketServer {
         else if (msg.type === "blur") {
           focusByClient.set(ws, null)
         }
+
+        // ── APNs device token registration ────────────────────────────────────
+        else if (msg.type === "register_device") {
+          const token = typeof msg.device_token === "string" ? msg.device_token : ""
+          if (token) {
+            deviceTokenByClient.set(ws, token)
+            console.log(`[hub] register_device token=...${token.slice(-8)}`)
+          }
+        }
       })
 
       ws.on("close", (code) => {
         appClients.delete(ws)
         focusByClient.delete(ws)
+        deviceTokenByClient.delete(ws)
         console.log(`[hub] App disconnected (total ${appClients.size}) code=${code}`)
         // Clean up terminal attachments for this client
         for (const [sessionName, att] of terminalAttachments) {
@@ -406,7 +420,16 @@ export function startHub(): WebSocketServer {
           const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
           if (!isFocused) {
-            // TODO: Phase 3.2 — sendPush(deviceToken, title, body) when not focused
+            // Push to all registered devices that aren't focused on this chat
+            for (const [appWs, token] of deviceTokenByClient) {
+              if (!token) continue
+              const focused = focusByClient.get(appWs)
+              if (focused === msg.chat_id) continue  // this client IS watching
+              const preview = String(msg.content).slice(0, 100)
+              sendPush(token, "MemoryPalace", preview, msg.chat_id).then(result => {
+                if (!result.ok) console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
+              })
+            }
           }
         }
       })
