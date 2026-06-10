@@ -1295,7 +1295,7 @@ struct BubbleView: View {
     @State private var thinkingShowFull = false  // "Show more" 控制
     @State private var showArtifactCanvas = false
     @State private var detectedArtifact: ArtifactContent? = nil
-    @State private var messageWebViewHeight: CGFloat = 0
+    @State private var messageWebViewHeight: CGFloat = 44
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
@@ -1523,7 +1523,7 @@ struct BubbleView: View {
                                 ],
                                 dynamicHeight: $messageWebViewHeight
                             )
-                            .frame(height: messageWebViewHeight)
+                            .frame(height: max(44, min(messageWebViewHeight, UIScreen.main.bounds.height * 3)))
                         } else {
                             // 普通消息：MarkdownUI 渲染（纯 SwiftUI，零白屏）
                             Markdown(displayText)
