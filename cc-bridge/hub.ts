@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws"
 import { execFileSync, spawn } from "node:child_process"
 import type { ChildProcessWithoutNullStreams } from "node:child_process"
-import { mkdtempSync, unlinkSync } from "node:fs"
+import { mkdtempSync, unlinkSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { sendPush } from "./apns.ts"
@@ -118,6 +118,54 @@ const focusByClient = new Map<WebSocket, string | null>()
 // Maps each App WebSocket to its APNs device token (registered via register_device).
 const deviceTokenByClient = new Map<WebSocket, string>()
 
+// ── Offline message durability (Phase 4.1) ────────────────────────────────────
+
+interface OfflineMessage {
+  content: string
+  message_id?: string
+  reply_id: string
+  timestamp: string
+}
+
+const OFFLINE_DIR = join(process.cwd(), "cc-bridge", "offline")
+const OFFLINE_MAX = 50
+
+function offlinePath(chatId: string): string {
+  return join(OFFLINE_DIR, `${chatId}.json`)
+}
+
+function loadOffline(chatId: string): OfflineMessage[] {
+  try {
+    const path = offlinePath(chatId)
+    if (!existsSync(path)) return []
+    return JSON.parse(readFileSync(path, "utf-8")) as OfflineMessage[]
+  } catch { return [] }
+}
+
+function saveOffline(chatId: string, messages: OfflineMessage[]): void {
+  try {
+    mkdirSync(OFFLINE_DIR, { recursive: true })
+    writeFileSync(offlinePath(chatId), JSON.stringify(messages, null, 2), "utf-8")
+  } catch (err: any) {
+    console.warn(`[hub] saveOffline failed chat_id=${chatId}: ${err?.message}`)
+  }
+}
+
+function appendOffline(chatId: string, msg: OfflineMessage): void {
+  const messages = loadOffline(chatId)
+  messages.push(msg)
+  // Keep at most OFFLINE_MAX most-recent messages
+  if (messages.length > OFFLINE_MAX) messages.splice(0, messages.length - OFFLINE_MAX)
+  saveOffline(chatId, messages)
+}
+
+function clearOffline(chatId: string): void {
+  try {
+    const path = offlinePath(chatId)
+    if (existsSync(path)) unlinkSync(path)
+  } catch { /* ignore */ }
+}
+
 function createTerminalAttachment(sessionName: string): TerminalAttachment {
   const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
   const fifoPath = join(fifoDir, "pane.pipe")
@@ -202,6 +250,34 @@ export function startHub(): WebSocketServer {
           }))
         } catch { /* dead socket, will get cleaned up on close */ }
       }
+
+      // Replay offline messages persisted while no clients were connected
+      try {
+        if (existsSync(OFFLINE_DIR)) {
+          const files = readdirSync(OFFLINE_DIR).filter(f => f.endsWith(".json"))
+          for (const file of files) {
+            const chatId = file.replace(/\.json$/, "")
+            const messages = loadOffline(chatId)
+            let delivered = 0
+            for (const m of messages) {
+              try {
+                ws.send(JSON.stringify({
+                  type: "reply",
+                  chat_id: chatId,
+                  message_id: m.message_id,
+                  content: m.content,
+                  reply_id: m.reply_id,
+                }))
+                delivered++
+              } catch { break }
+            }
+            if (delivered > 0) {
+              clearOffline(chatId)
+              console.log(`[hub] offline replay: ${delivered} messages for chat_id=${chatId.slice(0, 8)}`)
+            }
+          }
+        }
+      } catch (err: any) { /* offline dir absent or read failed, skip */ }
 
       ws.on("message", (raw) => {
         let msg: any
@@ -416,6 +492,16 @@ export function startHub(): WebSocketServer {
               try { app.send(payload); count++ } catch { /* dead, wait for close */ }
             }
           }
+          // If no online App clients, persist for later delivery
+          if (count === 0) {
+            appendOffline(msg.chat_id, {
+              content: msg.content,
+              message_id: msg.message_id,
+              reply_id,
+              timestamp: new Date().toISOString(),
+            })
+            console.log(`[hub] reply offline-queued chat_id=${String(msg.chat_id).slice(0, 8)}`)
+          }
           // Focus check: if no client is watching this chat → push notification needed
           const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
@@ -447,6 +533,8 @@ export function startHub(): WebSocketServer {
   console.log(`[hub] listening on ws://${HUB_HOST}:${PORT}  /ws = App  /mcp = MCP`)
   return wss
 }
+
+// TODO: Phase 4.2 — image/file transfer (deferred until writing system + file library ready)
 
 // Auto-start only when this file is the entry point (bun run hub.ts)
 if (import.meta.main) {
