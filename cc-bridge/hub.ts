@@ -611,6 +611,20 @@ export function startHub(): WebSocketServer {
               is_image: fileField.isImage,
             }
           }
+          // If CC included thinking, broadcast cc_thinking first (App consumes it before reply)
+          if (typeof msg.thinking === "string" && msg.thinking) {
+            const thinkingPayload = JSON.stringify({
+              type: "cc_thinking",
+              thinking: msg.thinking,
+              session_id: TMUX_SESSION,
+              chat_id: msg.chat_id,
+            })
+            for (const app of appClients) {
+              if (app.readyState === WebSocket.OPEN) {
+                try { app.send(thinkingPayload) } catch { /* dead */ }
+              }
+            }
+          }
           const payload = JSON.stringify(replyObj)
           // Buffer for reconnect replay
           pruneReplyBuffer()

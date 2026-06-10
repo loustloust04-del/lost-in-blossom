@@ -105,6 +105,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           type: "string",
           description: "Absolute path of a file to send to the user alongside the reply (image or any file, max 10 MB).",
         },
+        thinking: {
+          type: "string",
+          description: "If you have internal reasoning or a thinking process for this reply, include it here. This will be displayed as a collapsible thinking block in the app.",
+        },
       },
       required: ["chat_id", "content"],
     },
@@ -115,7 +119,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name !== "reply") {
     throw new Error(`unknown tool: ${req.params.name}`)
   }
-  const args = req.params.arguments as { chat_id: string; message_id?: string; content: string; file_path?: string }
+  const args = req.params.arguments as { chat_id: string; message_id?: string; content: string; file_path?: string; thinking?: string }
   // 如果 hub 这一刻断了，等一次重连尝试（最多 retry 几次再放弃）
   let lastErr: Error | undefined
   for (let i = 0; i < 3; i++) {
@@ -128,6 +132,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         content: args.content,
       }
       if (args.file_path) payload.file_path = args.file_path
+      if (args.thinking) payload.thinking = args.thinking
       ws.send(JSON.stringify(payload))
       return { content: [{ type: "text", text: "ok" }] }
     } catch (err) {
