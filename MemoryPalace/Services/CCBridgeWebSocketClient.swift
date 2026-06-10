@@ -75,6 +75,15 @@ final class CCBridgeWebSocketClient: NSObject {
     @ObservationIgnored private var seenReplyIds: [String: Date] = [:]
     private let replyDedupTTL: TimeInterval = 300
 
+    // MARK: - Terminal streaming (Phase 2)
+
+    private struct TerminalHandlers {
+        let onInit: (Data) -> Void
+        let onChunk: (Data) -> Void
+        let onError: (String) -> Void
+    }
+    @ObservationIgnored private var terminalHandlers: [String: TerminalHandlers] = [:]
+
     // MARK: - Public API
 
     /// 开始连接。重复 connect 同一个 URL（含 token）且已连接时是 no-op。
@@ -216,6 +225,62 @@ final class CCBridgeWebSocketClient: NSObject {
         }
     }
 
+    // MARK: - Terminal streaming public API (Phase 2)
+
+    /// Attach to a tmux session's terminal stream. Callbacks fire on main queue.
+    func attachTerminal(
+        session: String,
+        cols: Int,
+        rows: Int,
+        onInit: @escaping (Data) -> Void,
+        onChunk: @escaping (Data) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        handlersQueue.async {
+            self.terminalHandlers[session] = TerminalHandlers(onInit: onInit, onChunk: onChunk, onError: onError)
+        }
+        let payload: [String: Any] = [
+            "type": "terminal_attach",
+            "session_name": session,
+            "cols": cols,
+            "rows": rows,
+        ]
+        send(payload) { [weak self] err in
+            guard let self, let err else { return }
+            DispatchQueue.main.async { onError(err.localizedDescription) }
+            self.handlersQueue.async { self.terminalHandlers.removeValue(forKey: session) }
+        }
+    }
+
+    /// Detach from a session's terminal stream.
+    func detachTerminal(session: String) {
+        handlersQueue.async { self.terminalHandlers.removeValue(forKey: session) }
+        send(["type": "terminal_detach", "session_name": session]) { _ in }
+    }
+
+    /// Send raw input bytes (keystrokes, escape sequences) to the session.
+    func sendTerminalInput(session: String, bytes: Data) {
+        guard !bytes.isEmpty,
+              let text = String(data: bytes, encoding: .utf8) else { return }
+        send(["type": "terminal_input", "session_name": session, "data": text]) { _ in }
+    }
+
+    /// Notify hub that the terminal view resized.
+    func sendTerminalResize(session: String, cols: Int, rows: Int) {
+        let payload: [String: Any] = [
+            "type": "terminal_resize",
+            "session_name": session,
+            "cols": cols,
+            "rows": rows,
+        ]
+        send(payload) { _ in }
+    }
+
+    /// Request a fresh screen snapshot (re-sends terminal_attach to trigger terminal_init).
+    func refreshTerminal(session: String) {
+        send(["type": "terminal_attach", "session_name": session]) { _ in }
+    }
+
     // MARK: - Internal
 
     private func startTask() {
@@ -346,6 +411,24 @@ final class CCBridgeWebSocketClient: NSObject {
                 self.listHandlers.removeAll()
                 for h in hs {
                     DispatchQueue.main.async { h(.success(sessions)) }
+                }
+            }
+        case "terminal_init":
+            if let sessionName = obj["session_name"] as? String,
+               let snapshot = obj["snapshot"] as? String {
+                let data = snapshot.data(using: .utf8) ?? Data()
+                handlersQueue.async { [weak self] in
+                    guard let h = self?.terminalHandlers[sessionName] else { return }
+                    DispatchQueue.main.async { h.onInit(data) }
+                }
+            }
+        case "terminal_chunk":
+            if let sessionName = obj["session_name"] as? String,
+               let b64 = obj["bytes"] as? String,
+               let data = Data(base64Encoded: b64) {
+                handlersQueue.async { [weak self] in
+                    guard let h = self?.terminalHandlers[sessionName] else { return }
+                    DispatchQueue.main.async { h.onChunk(data) }
                 }
             }
         default:
