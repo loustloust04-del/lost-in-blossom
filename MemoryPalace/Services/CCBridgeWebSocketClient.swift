@@ -84,6 +84,11 @@ final class CCBridgeWebSocketClient: NSObject {
     }
     @ObservationIgnored private var terminalHandlers: [String: TerminalHandlers] = [:]
 
+    // MARK: - File exchange (Phase 4.2)
+
+    /// Called when a reply arrives with a file attachment (CC→user). Fires on main queue.
+    @ObservationIgnored private var replyAttachmentHandlers: [String: (PendingChatAttachment) -> Void] = [:]
+
     // MARK: - Public API
 
     /// 开始连接。重复 connect 同一个 URL（含 token）且已连接时是 no-op。
@@ -225,6 +230,55 @@ final class CCBridgeWebSocketClient: NSObject {
         }
     }
 
+    // MARK: - File exchange public API (Phase 4.2)
+
+    /// Send a chat message optionally carrying image/file attachments.
+    /// Images → `images` array; other files → `files` array, each base64-encoded.
+    func sendChat(
+        chatId: String,
+        messageId: String,
+        content: String,
+        attachments: [PendingChatAttachment] = [],
+        completion: @escaping (Error?) -> Void
+    ) {
+        var images: [[String: String]] = []
+        var files: [[String: String]] = []
+
+        for att in attachments {
+            if att.isImage, let data = att.imageData {
+                images.append([
+                    "b64": data.base64EncodedString(),
+                    "mime": att.mimeType ?? "image/jpeg",
+                ])
+            } else if let data = att.fileData ?? att.imageData {
+                files.append([
+                    "b64": data.base64EncodedString(),
+                    "name": att.name,
+                    "mime": att.mimeType ?? "application/octet-stream",
+                ])
+            }
+        }
+
+        var payload: [String: Any] = [
+            "type": "chat",
+            "chat_id": chatId,
+            "message_id": messageId,
+            "content": content,
+        ]
+        if !images.isEmpty { payload["images"] = images }
+        if !files.isEmpty  { payload["files"]  = files  }
+        send(payload, completion: completion)
+    }
+
+    /// Register a handler for file attachments arriving in CC replies (fires on main queue).
+    func registerReplyAttachmentHandler(chatId: String, handler: @escaping (PendingChatAttachment) -> Void) {
+        handlersQueue.async { self.replyAttachmentHandlers[chatId] = handler }
+    }
+
+    func unregisterReplyAttachmentHandler(chatId: String) {
+        handlersQueue.async { self.replyAttachmentHandlers.removeValue(forKey: chatId) }
+    }
+
     // MARK: - Terminal streaming public API (Phase 2)
 
     /// Attach to a tmux session's terminal stream. Callbacks fire on main queue.
@@ -328,6 +382,22 @@ final class CCBridgeWebSocketClient: NSObject {
                let content = obj["content"] as? String {
                 // reply_id dedup（hub 在 reconnect 时会 replay 最近 60s reply）
                 let replyId = obj["reply_id"] as? String
+                // Parse optional file attachment (CC→user, Phase 4.2)
+                let incomingFile: PendingChatAttachment? = {
+                    guard let fileObj = obj["file"] as? [String: Any],
+                          let b64  = fileObj["data"]     as? String,
+                          let mime = fileObj["mime"]     as? String,
+                          let name = fileObj["name"]     as? String,
+                          let data = Data(base64Encoded: b64) else { return nil }
+                    let isImg = (fileObj["is_image"] as? Bool) ?? mime.hasPrefix("image/")
+                    if isImg {
+                        return try? PendingChatAttachment.image(
+                            name: name, typeDescription: mime, mimeType: mime, data: data)
+                    }
+                    return PendingChatAttachment.text(
+                        name: name, typeDescription: mime, extractedText: "",
+                        byteCount: data.count, fileData: data, fileMime: mime)
+                }()
                 handlersQueue.async { [weak self] in
                     guard let self else { return }
                     if let replyId {
@@ -340,8 +410,12 @@ final class CCBridgeWebSocketClient: NSObject {
                         let cutoff = Date().addingTimeInterval(-self.replyDedupTTL)
                         self.seenReplyIds = self.seenReplyIds.filter { $0.value >= cutoff }
                     }
-                    guard let handler = self.replyHandlers[chatId] else { return }
-                    DispatchQueue.main.async { handler(content) }
+                    if let handler = self.replyHandlers[chatId] {
+                        DispatchQueue.main.async { handler(content) }
+                    }
+                    if let att = incomingFile, let attHandler = self.replyAttachmentHandlers[chatId] {
+                        DispatchQueue.main.async { attHandler(att) }
+                    }
                 }
             }
         case "ack":
