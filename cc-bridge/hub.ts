@@ -1,5 +1,9 @@
 import { WebSocketServer, WebSocket } from "ws"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
+import type { ChildProcessWithoutNullStreams } from "node:child_process"
+import { mkdtempSync, unlinkSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 const PORT = Number(process.env.MP_CC_HUB_PORT) || 7890
 const TMUX_SESSION = process.env.MP_CC_TMUX_SESSION ?? "mp-cc"
@@ -93,6 +97,53 @@ interface BufferedReply {
 }
 const REPLY_BUFFER_TTL_MS = 60_000
 const recentReplies: BufferedReply[] = []
+
+// ── Terminal attachment (Phase 2) ─────────────────────────────────────────────
+export interface TerminalAttachment {
+  sessionName: string
+  fifoPath: string
+  catProc: ChildProcessWithoutNullStreams
+  mpClients: Set<WebSocket>
+}
+
+const terminalAttachments = new Map<string, TerminalAttachment>()
+const resizeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
+
+function createTerminalAttachment(sessionName: string): TerminalAttachment {
+  const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
+  const fifoPath = join(fifoDir, "pane.pipe")
+  execFileSync("mkfifo", [fifoPath])
+  execFileSync("tmux", ["pipe-pane", "-t", sessionName, "-o", `cat > ${fifoPath}`])
+  const catProc = spawn("cat", [fifoPath])
+  const att: TerminalAttachment = { sessionName, fifoPath, catProc, mpClients: new Set() }
+  catProc.stdout.on("data", (chunk: Buffer) => {
+    const payload = JSON.stringify({
+      type: "terminal_chunk",
+      session_name: sessionName,
+      bytes: chunk.toString("base64"),
+    })
+    for (const c of att.mpClients) {
+      if (c.readyState === c.OPEN) {
+        try { c.send(payload) } catch {}
+      }
+    }
+  })
+  catProc.on("exit", () => {
+    console.log(`[hub] terminal cat exited for ${sessionName}`)
+    closeTerminalAttachment(sessionName)
+  })
+  terminalAttachments.set(sessionName, att)
+  return att
+}
+
+function closeTerminalAttachment(sessionName: string): void {
+  const att = terminalAttachments.get(sessionName)
+  if (!att) return
+  try { execFileSync("tmux", ["pipe-pane", "-t", sessionName]) } catch {}
+  try { att.catProc.kill() } catch {}
+  try { unlinkSync(att.fifoPath) } catch {}
+  terminalAttachments.delete(sessionName)
+}
 
 function pruneReplyBuffer(): void {
   const cutoff = Date.now() - REPLY_BUFFER_TTL_MS
@@ -210,13 +261,97 @@ export function startHub(): WebSocketServer {
           ws.send(JSON.stringify({ type: "list_sessions_result", sessions }))
         }
 
-        // TODO: Phase 3 — focus_session (focusByClient for push notification decisions)
-        // TODO: Phase 2 — terminal_attach / terminal_resize / terminal_input
+        // ── Terminal attach ───────────────────────────────────────────────────
+        else if (msg.type === "terminal_attach") {
+          const sessionName = typeof msg.session_name === "string" ? msg.session_name : TMUX_SESSION
+          let att = terminalAttachments.get(sessionName)
+          if (!att) {
+            try {
+              att = createTerminalAttachment(sessionName)
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: "error", reason: `terminal_attach: ${err?.message ?? "unknown"}` }))
+              return
+            }
+          }
+          att.mpClients.add(ws)
+          // Send current screen snapshot to the newly attached client
+          try {
+            const snapshot = execFileSync("tmux", ["capture-pane", "-p", "-e", "-t", sessionName], { encoding: "utf-8" })
+            ws.send(JSON.stringify({ type: "terminal_init", session_name: sessionName, snapshot }))
+          } catch { /* no snapshot if session gone */ }
+          console.log(`[hub] terminal_attach session=${sessionName} clients=${att.mpClients.size}`)
+        }
+
+        // ── Terminal detach ───────────────────────────────────────────────────
+        else if (msg.type === "terminal_detach") {
+          for (const [sessionName, att] of terminalAttachments) {
+            if (att.mpClients.has(ws)) {
+              att.mpClients.delete(ws)
+              console.log(`[hub] terminal_detach session=${sessionName} clients=${att.mpClients.size}`)
+              if (att.mpClients.size === 0) {
+                closeTerminalAttachment(sessionName)
+              }
+            }
+          }
+        }
+
+        // ── Terminal input ────────────────────────────────────────────────────
+        else if (msg.type === "terminal_input") {
+          const sessionName = typeof msg.session_name === "string" ? msg.session_name : TMUX_SESSION
+          if (typeof msg.data === "string" && msg.data.length > 0) {
+            try {
+              execFileSync("tmux", ["send-keys", "-t", sessionName, "-l", msg.data])
+            } catch (err: any) {
+              ws.send(JSON.stringify({ type: "error", reason: `terminal_input: ${err?.message ?? "unknown"}` }))
+            }
+          }
+        }
+
+        // ── Terminal resize ───────────────────────────────────────────────────
+        else if (msg.type === "terminal_resize") {
+          const sessionName = typeof msg.session_name === "string" ? msg.session_name : TMUX_SESSION
+          const cols = typeof msg.cols === "number" ? msg.cols : 0
+          const rows = typeof msg.rows === "number" ? msg.rows : 0
+          if (cols > 0 && rows > 0) {
+            const existing = resizeDebounce.get(sessionName)
+            if (existing) clearTimeout(existing)
+            const t = setTimeout(() => {
+              resizeDebounce.delete(sessionName)
+              try {
+                execFileSync("tmux", ["resize-window", "-t", sessionName, "-x", String(cols), "-y", String(rows)])
+                try {
+                  const snapshot = execFileSync("tmux", ["capture-pane", "-p", "-e", "-t", sessionName], { encoding: "utf-8" })
+                  const att = terminalAttachments.get(sessionName)
+                  if (att) {
+                    const payload = JSON.stringify({ type: "terminal_init", session_name: sessionName, snapshot })
+                    for (const c of att.mpClients) {
+                      if (c.readyState === c.OPEN) try { c.send(payload) } catch {}
+                    }
+                  }
+                } catch {}
+              } catch (err: any) {
+                console.warn(`[hub] resize failed: ${err?.message}`)
+              }
+            }, 200)
+            resizeDebounce.set(sessionName, t)
+          }
+        }
+
+        // TODO: Phase 3 — focus / blur (focusByClient for push notification decisions)
       })
 
       ws.on("close", (code) => {
         appClients.delete(ws)
         console.log(`[hub] App disconnected (total ${appClients.size}) code=${code}`)
+        // Clean up terminal attachments for this client
+        for (const [sessionName, att] of terminalAttachments) {
+          if (att.mpClients.has(ws)) {
+            att.mpClients.delete(ws)
+            if (att.mpClients.size === 0) {
+              closeTerminalAttachment(sessionName)
+            }
+          }
+        }
       })
 
     } else if (pathname === "/mcp") {
