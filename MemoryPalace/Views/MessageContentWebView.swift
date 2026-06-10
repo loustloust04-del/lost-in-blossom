@@ -24,6 +24,7 @@ struct MessageContentWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
         webView.navigationDelegate = context.coordinator
+        context.coordinator.webView = webView
 
         // 加载本地 HTML 模板
         if let htmlURL = Bundle.main.url(forResource: "message-renderer", withExtension: "html") {
@@ -50,6 +51,7 @@ struct MessageContentWebView: UIViewRepresentable {
         // 去重：避免 dynamicHeight 变化触发 updateUIView → 重新渲染 → 代码块折叠状态被重置
         private var lastRenderedContent: String = ""
         private var lastRenderedTheme: [String: String] = [:]
+        weak var webView: WKWebView?
 
         init(_ parent: MessageContentWebView) { self.parent = parent }
 
@@ -61,7 +63,13 @@ struct MessageContentWebView: UIViewRepresentable {
                 if let number = message.body as? NSNumber {
                     let height = CGFloat(number.doubleValue)
                     if height > 0 {
-                        DispatchQueue.main.async { self.parent.dynamicHeight = height }
+                        let maxH = UIScreen.main.bounds.height * 3
+                        let needsScroll = height > maxH
+                        let clamped = needsScroll ? maxH : height
+                        DispatchQueue.main.async {
+                            self.parent.dynamicHeight = clamped
+                            self.webView?.scrollView.isScrollEnabled = needsScroll
+                        }
                     }
                 }
             case "linkClicked":
