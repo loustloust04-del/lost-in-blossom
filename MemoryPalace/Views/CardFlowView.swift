@@ -1296,6 +1296,7 @@ struct BubbleView: View {
     @State private var showArtifactCanvas = false
     @State private var detectedArtifact: ArtifactContent? = nil
     @State private var messageWebViewHeight: CGFloat = 44
+    @State private var isSelectingText = false
     @State private var isEditing = false
     @State private var editText = ""
     @State private var highlightOpacity: Double = 0
@@ -1590,6 +1591,36 @@ struct BubbleView: View {
                     .stroke(Theme.branchIndicator.opacity(isSearchMatch ? 0.6 : 0), lineWidth: 1.5)
                     .allowsHitTesting(false)
             )
+            .overlay {
+                if isSelectingText {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text("选取文本")
+                                .font(.caption)
+                                .foregroundColor(Theme.textMuted)
+                            Spacer()
+                            Button("完成") { isSelectingText = false }
+                                .font(.caption.bold())
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+
+                        SelectableTextOverlay(
+                            text: ContentCleaner.clean(node.content, cacheKey: node.id),
+                            font: .systemFont(ofSize: 13.5 * CGFloat(fontScale > 0 ? fontScale : 1.0)),
+                            textColor: UIColor(Theme.textPrimary),
+                            isActive: $isSelectingText
+                        )
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(UIColor.systemBackground).opacity(0.97))
+                            .shadow(radius: 4)
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    .animation(.easeOut(duration: 0.2), value: isSelectingText)
+                }
+            }
             .onChange(of: isHighlighted) { _, highlighted in
                 if highlighted {
                     withAnimation(.easeIn(duration: 0.3)) { highlightOpacity = 1 }
@@ -1631,6 +1662,9 @@ struct BubbleView: View {
                     UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
                 }) {
                     Label("复制文本", systemImage: "doc.on.doc")
+                }
+                Button(action: { isSelectingText = true }) {
+                    Label("选取文本", systemImage: "text.cursor")
                 }
                 Divider()
                 Button(role: .destructive, action: onSoftDelete) {
