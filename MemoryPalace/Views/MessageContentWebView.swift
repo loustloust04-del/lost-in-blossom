@@ -86,6 +86,18 @@ struct MessageContentWebView: UIViewRepresentable {
             renderContent(in: webView)
         }
 
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            DispatchQueue.main.async {
+                if self.parent.dynamicHeight < 44 { self.parent.dynamicHeight = 44 }
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            DispatchQueue.main.async {
+                if self.parent.dynamicHeight < 44 { self.parent.dynamicHeight = 44 }
+            }
+        }
+
         func renderContent(in webView: WKWebView) {
             let contentChanged = pendingContent != lastRenderedContent
             let themeChanged = pendingTheme != lastRenderedTheme
