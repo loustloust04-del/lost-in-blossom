@@ -239,6 +239,47 @@ function saveInboundFiles(chatId: string, files: any[]): string[] {
   return paths
 }
 
+// ── Outbound file staging — CC→user (Phase 4.2) ──────────────────────────────
+
+const OUTBOUND_DIR = join(process.cwd(), "outbound")
+
+interface StagedFile {
+  name: string
+  mime: string
+  data_base64: string
+  isImage: boolean
+}
+
+function stageOutboundFile(chatId: string, srcPath: string): StagedFile | null {
+  try {
+    if (!existsSync(srcPath)) {
+      console.warn(`[hub] outbound file not found: ${srcPath}`)
+      return null
+    }
+    const size = statSync(srcPath).size
+    if (size === 0 || size > MAX_FILE_BYTES) {
+      console.warn(`[hub] outbound file size out of range (${size}): ${srcPath}`)
+      return null
+    }
+    // Stage a copy in outbound dir for audit / replay safety
+    const dir = join(OUTBOUND_DIR, chatId.slice(0, 16))
+    try { mkdirSync(dir, { recursive: true }) } catch {}
+    const name = basename(srcPath)
+    const dest = join(dir, `${Date.now()}_${name}`)
+    copyFileSync(srcPath, dest)
+    const mime = extToMime(extname(srcPath))
+    return {
+      name,
+      mime,
+      data_base64: readFileSync(dest).toString("base64"),
+      isImage: isImageMime(mime),
+    }
+  } catch (e: any) {
+    console.warn(`[hub] stageOutboundFile fail: ${e.message}`)
+    return null
+  }
+}
+
 function createTerminalAttachment(sessionName: string): TerminalAttachment {
   const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
   const fifoPath = join(fifoDir, "pane.pipe")
@@ -550,13 +591,27 @@ export function startHub(): WebSocketServer {
 
         if (msg.type === "reply" && typeof msg.chat_id === "string" && typeof msg.content === "string") {
           const reply_id = crypto.randomUUID()
-          const payload = JSON.stringify({
+          // Attach outbound file if CC provided a file_path
+          let fileField: StagedFile | undefined
+          if (typeof msg.file_path === "string" && msg.file_path) {
+            fileField = stageOutboundFile(String(msg.chat_id), msg.file_path) ?? undefined
+          }
+          const replyObj: Record<string, unknown> = {
             type: "reply",
             chat_id: msg.chat_id,
             message_id: msg.message_id,  // echo back for precise matching on App side
             content: msg.content,
             reply_id,
-          })
+          }
+          if (fileField) {
+            replyObj.file = {
+              name: fileField.name,
+              mime: fileField.mime,
+              data: fileField.data_base64,
+              is_image: fileField.isImage,
+            }
+          }
+          const payload = JSON.stringify(replyObj)
           // Buffer for reconnect replay
           pruneReplyBuffer()
           recentReplies.push({
