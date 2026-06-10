@@ -1507,7 +1507,7 @@ struct BubbleView: View {
                         }
                         .padding(.vertical, 4)
                     } else if !displayText.isEmpty {
-                        let needsWebView = displayText.contains("{color:")
+                        let needsWebView = displayText.contains("{color:") || displayText.contains("||")
                         if needsWebView {
                             // 富文本消息：WebView 渲染（保留 {color:} 支持）
                             MessageContentWebView(
