@@ -243,7 +243,11 @@ function updateTheme(vars) {
 // ── 高度通知 ──
 // 渲染完成后把内容高度通知 Swift 侧，用于动态调整 WKWebView 的 frame。
 function notifyHeight() {
-    var h = document.getElementById('content').scrollHeight;
+    var el = document.getElementById('content');
+    if (!el) return;
+    var h = el.scrollHeight;
+    if (h <= 0) h = 44;
+    if (h > 10000) h = 10000;
     window.webkit.messageHandlers.heightChanged.postMessage(h);
 }
 
