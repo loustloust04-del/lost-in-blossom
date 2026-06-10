@@ -89,6 +89,42 @@ final class CCBridgeWebSocketClient: NSObject {
     /// Called when a reply arrives with a file attachment (CC→user). Fires on main queue.
     @ObservationIgnored private var replyAttachmentHandlers: [String: (PendingChatAttachment) -> Void] = [:]
 
+    // MARK: - Push notifications
+
+    @ObservationIgnored private var pushToken: String?
+
+    static let pushPreviewKey = "ccPushPreview"
+    private var pushPreview: String { UserDefaults.standard.string(forKey: Self.pushPreviewKey) ?? "full" }
+
+    func sendPushToken(_ token: String) {
+        pushToken = token
+        send(["type": "register_device", "device_token": token, "env": "sandbox", "preview": pushPreview]) { _ in }
+    }
+
+    func updatePushPreview(_ mode: String) {
+        UserDefaults.standard.set(mode, forKey: Self.pushPreviewKey)
+        if let t = pushToken {
+            send(["type": "register_device", "device_token": t, "env": "sandbox", "preview": mode]) { _ in }
+        }
+    }
+
+    func sendCCConfig() {
+        let d = UserDefaults.standard
+        var payload: [String: Any] = [
+            "type": "set_cc_config",
+            "pushName": (d.string(forKey: "assistantName") ?? "助手"),
+            "userName": (d.string(forKey: "userName") ?? "你"),
+            "nudgeEnabled": (d.object(forKey: "ccNudgeEnabled") as? Bool) ?? true,
+        ]
+        if let v = d.object(forKey: "ccNudgeIdleMin") as? Int, v > 0 { payload["idleMinMin"] = v }
+        if let v = d.object(forKey: "ccNudgeIdleMax") as? Int, v > 0 { payload["idleMaxMin"] = v }
+        if let v = d.object(forKey: "ccNudgeQuietStartMin") as? Int { payload["quietStartMin"] = v }
+        if let v = d.object(forKey: "ccNudgeQuietEndMin") as? Int { payload["quietEndMin"] = v }
+        if let v = d.object(forKey: "ccNudgeCooldown") as? Int, v >= 0 { payload["cooldownMin"] = v }
+        if let t = d.string(forKey: "ccNudgeTemplate"), !t.isEmpty { payload["nudgeTemplate"] = t }
+        send(payload) { _ in }
+    }
+
     // MARK: - Public API
 
     /// 开始连接。重复 connect 同一个 URL（含 token）且已连接时是 no-op。

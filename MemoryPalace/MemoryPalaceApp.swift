@@ -335,6 +335,9 @@ final class PresetManager {
 
 @main
 struct MemoryPalaceApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+    #endif
     @State private var themeManager = ThemeManager.shared
     @State private var profileManager: ProfileManager
     @State private var providerManager = ProviderManager()
