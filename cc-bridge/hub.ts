@@ -109,6 +109,11 @@ export interface TerminalAttachment {
 const terminalAttachments = new Map<string, TerminalAttachment>()
 const resizeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
 
+// ── Focus tracking (Phase 3) ──────────────────────────────────────────────────
+// Maps each App WebSocket to the chat_id it currently has open (null = backgrounded).
+// Used to decide: if no client is watching a chat, push an APNs notification.
+const focusByClient = new Map<WebSocket, string | null>()
+
 function createTerminalAttachment(sessionName: string): TerminalAttachment {
   const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
   const fifoPath = join(fifoDir, "pane.pipe")
@@ -337,11 +342,20 @@ export function startHub(): WebSocketServer {
           }
         }
 
-        // TODO: Phase 3 — focus / blur (focusByClient for push notification decisions)
+        // ── Focus / blur ──────────────────────────────────────────────────────
+        else if (msg.type === "focus") {
+          const chatId = typeof msg.chat_id === "string" ? msg.chat_id : null
+          focusByClient.set(ws, chatId)
+        }
+
+        else if (msg.type === "blur") {
+          focusByClient.set(ws, null)
+        }
       })
 
       ws.on("close", (code) => {
         appClients.delete(ws)
+        focusByClient.delete(ws)
         console.log(`[hub] App disconnected (total ${appClients.size}) code=${code}`)
         // Clean up terminal attachments for this client
         for (const [sessionName, att] of terminalAttachments) {
@@ -388,7 +402,12 @@ export function startHub(): WebSocketServer {
               try { app.send(payload); count++ } catch { /* dead, wait for close */ }
             }
           }
-          console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)}`)
+          // Focus check: if no client is watching this chat → push notification needed
+          const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
+          console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
+          if (!isFocused) {
+            // TODO: Phase 3.2 — sendPush(deviceToken, title, body) when not focused
+          }
         }
       })
 
