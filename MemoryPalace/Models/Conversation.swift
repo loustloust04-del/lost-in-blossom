@@ -42,6 +42,9 @@ final class Conversation {
     /// 所属项目 ID（nil = 不属于任何项目）
     var projectId: String?
 
+    /// CC Bridge session 绑定（nil = 用默认 mp-cc 会话）
+    var ccBridgeSessionName: String? = nil
+
     init(id: String, title: String, createTime: Date, updateTime: Date, currentNodeId: String, provider: String = "chatgpt", profileId: String = "") {
         self.id = id
         self.title = title
