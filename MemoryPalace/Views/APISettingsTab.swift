@@ -414,11 +414,90 @@ struct APISettingsTab: View {
         }
     }
 
-    /// CC Bridge 专用状态面板（替换 API Key 输入框）。
-    @State private var ccHubURLDraft: String = UserDefaults.standard.string(forKey: "ccBridgeHubURL") ?? ""
+    // MARK: - CC Bridge UI state
 
+    @State private var ccBridgeURLDraft = ""
+    @State private var ccBridgeURLSaved = false
+    @State private var ccBridgeURLBackupDraft = ""
+    @State private var ccBridgeURLBackupSaved = false
+
+    /// CC Bridge 专用状态面板（替换 API Key 输入框）。
+    @ViewBuilder
     private func ccBridgeStatusContent(provider: APIProvider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Hub URL（主）
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hub URL")
+                    .font(.system(size: Theme.SettingsFont.label))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    TextField("ws://192.168.1.5:7890/ws", text: $ccBridgeURLDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: Theme.SettingsFont.secondary))
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    Button(ccBridgeURLSaved ? "已保存" : "保存") {
+                        providerManager?.setCCBridgeBaseURL(ccBridgeURLDraft)
+                        reconnectCCBridge()
+                        ccBridgeURLSaved = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { ccBridgeURLSaved = false }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(ccBridgeURLDraft.isEmpty)
+                }
+            }
+            .padding(.bottom, 6)
+
+            // Hub URL（备用）
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hub URL (备用)")
+                    .font(.system(size: Theme.SettingsFont.label))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    TextField("ws://xxx.ts.net:7890/ws（选填）", text: $ccBridgeURLBackupDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: Theme.SettingsFont.secondary))
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    Button(ccBridgeURLBackupSaved ? "已保存" : "保存") {
+                        providerManager?.setCCBridgeBaseURLBackup(ccBridgeURLBackupDraft)
+                        reconnectCCBridge()
+                        ccBridgeURLBackupSaved = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { ccBridgeURLBackupSaved = false }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Text("主 URL 连不上时自动 fallback 到备用 URL。典型用法：主填 LAN IP（家里快），备填 Tailscale 域名（出门用）。两个都用同一个 Hub Token。")
+                    .font(.system(size: Theme.SettingsFont.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.bottom, 6)
+
+            // Hub Token
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hub Token")
+                    .font(.system(size: Theme.SettingsFont.label))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    SecureField("LAN 模式必填，loopback 留空", text: Binding(
+                        get: { apiKeys["cc-bridge"] ?? "" },
+                        set: { apiKeys["cc-bridge"] = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: Theme.SettingsFont.secondary))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    Button("保存") {
+                        providerManager?.setApiKey(apiKeys["cc-bridge"] ?? "", for: "cc-bridge")
+                        reconnectCCBridge()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(.bottom, 6)
+
+            // 连接状态行
             HStack(spacing: 8) {
                 Circle()
                     .fill(CCBridgeWebSocketClient.shared.isConnected ? Color.green : Color.gray)
@@ -426,29 +505,42 @@ struct APISettingsTab: View {
                 Text(CCBridgeWebSocketClient.shared.isConnected ? "已连接" : "未连接")
                     .font(.system(size: Theme.SettingsFont.secondary))
                     .foregroundStyle(.secondary)
+                if let err = CCBridgeWebSocketClient.shared.lastError,
+                   !CCBridgeWebSocketClient.shared.isConnected {
+                    Text(err)
+                        .font(.system(size: Theme.SettingsFont.caption))
+                        .foregroundStyle(.red.opacity(0.7))
+                        .lineLimit(1)
+                }
                 Spacer()
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Hub URL")
-                    .font(.system(size: Theme.SettingsFont.caption))
-                    .foregroundStyle(.secondary)
-                TextField("ws://172.245.88.103:8890/cc", text: $ccHubURLDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: Theme.SettingsFont.secondary))
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .onSubmit {
-                        UserDefaults.standard.set(ccHubURLDraft, forKey: "ccBridgeHubURL")
-                    }
-            }
-
-            Text("填入 Hub URL 后回车保存，连接由 CC 面板内的操作自动触发。")
+            Text("CC Bridge 用本地 WebSocket 连接，不需要 API Key。需要先在终端跑 `bash cc-bridge/start_hub.sh` 和 `bash cc-bridge/start_cc.sh`。")
                 .font(.system(size: Theme.SettingsFont.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Button("重新连接") {
+                reconnectCCBridge()
+            }
+            .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
+        .onAppear {
+            ccBridgeURLDraft = providerManager?.ccBridgeBaseURL ?? APIProvider.ccBridge.baseURL
+            ccBridgeURLBackupDraft = providerManager?.ccBridgeBaseURLBackup ?? ""
+            apiKeys["cc-bridge"] = providerManager?.apiKey(for: "cc-bridge") ?? ""
+        }
+    }
+
+    private func reconnectCCBridge() {
+        CCBridgeWebSocketClient.shared.disconnect()
+        let primary = providerManager?.ccBridgeBaseURL ?? APIProvider.ccBridge.baseURL
+        let backup  = providerManager?.ccBridgeBaseURLBackup ?? ""
+        let urls: [URL] = [primary, backup].filter { !$0.isEmpty }.compactMap(URL.init(string:))
+        guard !urls.isEmpty else { return }
+        let t = providerManager?.apiKey(for: "cc-bridge")
+        CCBridgeWebSocketClient.shared.connect(urls: urls, token: (t?.isEmpty == false) ? t : nil)
     }
 
     @ViewBuilder

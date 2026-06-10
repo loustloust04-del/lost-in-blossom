@@ -551,6 +551,37 @@ final class ProviderManager {
         }
     }
 
+    // MARK: - ccBridge LAN URL override
+
+    var ccBridgeBaseURL: String {
+        let override = UserDefaults.standard.string(forKey: "ccBridgeBaseURLOverride") ?? ""
+        if !override.isEmpty { return override }
+        return APIProvider.ccBridge.baseURL
+    }
+
+    func setCCBridgeBaseURL(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == APIProvider.ccBridge.baseURL {
+            UserDefaults.standard.removeObject(forKey: "ccBridgeBaseURLOverride")
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: "ccBridgeBaseURLOverride")
+        }
+        reload()
+    }
+
+    var ccBridgeBaseURLBackup: String {
+        UserDefaults.standard.string(forKey: "ccBridgeBaseURLBackup") ?? ""
+    }
+
+    func setCCBridgeBaseURLBackup(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "ccBridgeBaseURLBackup")
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: "ccBridgeBaseURLBackup")
+        }
+    }
+
     // MARK: - Budget (保险闸)
 
     /// 更新 provider 的某个字段（per-provider 持久化 for custom；内存更新 for built-in）。
