@@ -101,7 +101,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           type: "string",
           description: "Your reply text",
         },
-        // TODO: Phase 4 — file_path for sending files/images back to user
+        file_path: {
+          type: "string",
+          description: "Absolute path of a file to send to the user alongside the reply (image or any file, max 10 MB).",
+        },
       },
       required: ["chat_id", "content"],
     },
@@ -112,18 +115,20 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name !== "reply") {
     throw new Error(`unknown tool: ${req.params.name}`)
   }
-  const args = req.params.arguments as { chat_id: string; message_id?: string; content: string }
+  const args = req.params.arguments as { chat_id: string; message_id?: string; content: string; file_path?: string }
   // 如果 hub 这一刻断了，等一次重连尝试（最多 retry 几次再放弃）
   let lastErr: Error | undefined
   for (let i = 0; i < 3; i++) {
     try {
       const ws = await connectHub()
-      ws.send(JSON.stringify({
+      const payload: Record<string, unknown> = {
         type: "reply",
         chat_id: args.chat_id,
         message_id: args.message_id,  // 可选，回带用于精确匹配
         content: args.content,
-      }))
+      }
+      if (args.file_path) payload.file_path = args.file_path
+      ws.send(JSON.stringify(payload))
       return { content: [{ type: "text", text: "ok" }] }
     } catch (err) {
       lastErr = err as Error
