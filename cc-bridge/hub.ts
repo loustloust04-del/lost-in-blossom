@@ -1,9 +1,9 @@
 import { WebSocketServer, WebSocket } from "ws"
 import { execFileSync, spawn } from "node:child_process"
 import type { ChildProcessWithoutNullStreams } from "node:child_process"
-import { mkdtempSync, unlinkSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs"
+import { mkdtempSync, unlinkSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { join, basename, extname } from "node:path"
 import { sendPush } from "./apns.ts"
 
 const PORT = Number(process.env.MP_CC_HUB_PORT) || 7890
@@ -26,12 +26,16 @@ export interface ChatMessage {
   session_name?: string  // route to specific tmux session; defaults to TMUX_SESSION
 }
 
-export function buildChannelTag(msg: ChatMessage, ts: string): string {
+export function buildChannelTag(msg: ChatMessage, ts: string, attachments: string[] = []): string {
   let safe = msg.content.replace(/\n/g, " ")
   // 防御：超长 content 让 tmux send-keys -l 失败。截断到安全长度。
   if (safe.length > 4000) safe = safe.slice(0, 4000) + " …[截断]"
+  if (attachments.length > 0) {
+    safe += ` [附件 ${attachments.length} 个，已存到本机，用 Read 工具查看/处理：${attachments.join(" ; ")}]`
+  }
   const user = msg.user ?? "user"
-  return `<channel source="memorypalace" chat_id="${msg.chat_id}" message_id="${msg.message_id}" user="${user}" ts="${ts}">${safe}</channel>`
+  const attrsExtra = attachments.length > 0 ? ` attachments="${attachments.join(";")}"` : ""
+  return `<channel source="memorypalace" chat_id="${msg.chat_id}" message_id="${msg.message_id}" user="${user}" ts="${ts}"${attrsExtra}>${safe}</channel>`
 }
 
 // ── tmux helpers ──────────────────────────────────────────────────────────────
@@ -164,6 +168,75 @@ function clearOffline(chatId: string): void {
     const path = offlinePath(chatId)
     if (existsSync(path)) unlinkSync(path)
   } catch { /* ignore */ }
+}
+
+// ── Inbound file handling — user→CC (Phase 4.2) ───────────────────────────────
+
+const INBOUND_DIR = join(process.cwd(), "inbound")
+const MAX_FILE_BYTES = 10 * 1024 * 1024  // 10 MB
+
+function mimeToExt(mime?: string): string {
+  switch (mime) {
+    case "image/png":  return "png"
+    case "image/gif":  return "gif"
+    case "image/webp": return "webp"
+    case "image/heic": return "heic"
+    default:           return "jpg"
+  }
+}
+
+function extToMime(ext: string): string {
+  switch (ext.toLowerCase().replace(/^\./, "")) {
+    case "jpg": case "jpeg": return "image/jpeg"
+    case "png":  return "image/png"
+    case "gif":  return "image/gif"
+    case "webp": return "image/webp"
+    case "heic": return "image/heic"
+    case "pdf":  return "application/pdf"
+    case "txt": case "md": case "log": case "csv": return "text/plain"
+    case "json": return "application/json"
+    case "zip":  return "application/zip"
+    case "html": case "htm": return "text/html"
+    default:     return "application/octet-stream"
+  }
+}
+
+function isImageMime(mime: string): boolean {
+  return mime.startsWith("image/")
+}
+
+function saveInboundImages(chatId: string, images: any[]): string[] {
+  const dir = join(INBOUND_DIR, chatId.slice(0, 16))
+  const paths: string[] = []
+  try { mkdirSync(dir, { recursive: true }) } catch {}
+  let i = 0
+  for (const img of images) {
+    if (typeof img?.b64 !== "string") continue
+    const buf = Buffer.from(img.b64, "base64")
+    if (buf.length === 0 || buf.length > MAX_FILE_BYTES) continue
+    const p = join(dir, `${Date.now()}_${i}.${mimeToExt(img.mime)}`)
+    try { writeFileSync(p, buf); paths.push(p); i++ }
+    catch (e: any) { console.warn(`[hub] saveInboundImage fail: ${e.message}`) }
+  }
+  return paths
+}
+
+function saveInboundFiles(chatId: string, files: any[]): string[] {
+  const dir = join(INBOUND_DIR, chatId.slice(0, 16))
+  const paths: string[] = []
+  try { mkdirSync(dir, { recursive: true }) } catch {}
+  let i = 0
+  for (const f of files) {
+    if (typeof f?.b64 !== "string") continue
+    const buf = Buffer.from(f.b64, "base64")
+    if (buf.length === 0 || buf.length > MAX_FILE_BYTES) continue
+    const rawName = typeof f.name === "string" && f.name ? f.name : `file_${i}`
+    const safeName = rawName.replace(/[/\\'"]/g, "_")
+    const p = join(dir, `${Date.now()}_${i}_${safeName}`)
+    try { writeFileSync(p, buf); paths.push(p); i++ }
+    catch (e: any) { console.warn(`[hub] saveInboundFile fail: ${e.message}`) }
+  }
+  return paths
 }
 
 function createTerminalAttachment(sessionName: string): TerminalAttachment {
@@ -301,9 +374,17 @@ export function startHub(): WebSocketServer {
           }
           try {
             const ts = new Date().toISOString()
-            const tag = buildChannelTag(msg as ChatMessage, ts)
+            // Save any attached images/files to disk; inject paths into channel tag
+            const attachments: string[] = []
+            if (Array.isArray(msg.images) && msg.images.length > 0) {
+              attachments.push(...saveInboundImages(String(msg.chat_id), msg.images))
+            }
+            if (Array.isArray(msg.files) && msg.files.length > 0) {
+              attachments.push(...saveInboundFiles(String(msg.chat_id), msg.files))
+            }
+            const tag = buildChannelTag(msg as ChatMessage, ts, attachments)
             tmux.send(tag, targetSession)
-            console.log(`[hub] chat → tmux:${targetSession} chat_id=${String(msg.chat_id ?? "").slice(0, 8)} "${String(msg.content ?? "").slice(0, 60)}"`)
+            console.log(`[hub] chat → tmux:${targetSession} chat_id=${String(msg.chat_id ?? "").slice(0, 8)} attachments=${attachments.length} "${String(msg.content ?? "").slice(0, 60)}"`)
             ws.send(JSON.stringify({ type: "ack", message_id: msg.message_id }))
           } catch (err: any) {
             ws.send(JSON.stringify({
