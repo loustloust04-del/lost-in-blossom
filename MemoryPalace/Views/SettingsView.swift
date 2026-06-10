@@ -31,6 +31,9 @@ struct SettingsView: View {
         case health = "健康"
         case debug = "开发调试"
         case hapticTest = "震动测试"
+        case ccSettings = "Claude Code"
+        case terminal = "终端"
+        case fileLibrary = "文件库"
     }
 
     private var manager: ThemeManager {
@@ -67,6 +70,11 @@ struct SettingsView: View {
                     settingsButton(icon: "circle.lefthalf.filled", title: "主题", color: Theme.branchIndicator, tab: .theme)
                 }
                 Section {
+                    settingsButton(icon: "terminal", title: "Claude Code", color: Theme.branchIndicator, tab: .ccSettings)
+                    settingsButton(icon: "keyboard", title: "终端", color: Theme.textSecondary, tab: .terminal)
+                    settingsButton(icon: "folder", title: "文件库", color: Theme.textSecondary, tab: .fileLibrary)
+                }
+                Section {
                     settingsButton(icon: "ladybug", title: "开发调试", color: Theme.textSecondary, tab: .debug)
                     settingsButton(icon: "waveform", title: "震动测试", color: Theme.textSecondary, tab: .hapticTest)
                 }
@@ -95,6 +103,9 @@ struct SettingsView: View {
                 case .notifications: IOSNotificationPage()
                 case .debug: IOSDebugPage()
                 case .hapticTest: HapticTestView()
+                case .ccSettings: CCSettingsView()
+                case .terminal: TerminalSettingsTab()
+                case .fileLibrary: FileLibrarySettingsTab()
                 }
             }
             .toolbar {
@@ -204,6 +215,12 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     case .hapticTest:
                         HapticTestView()
+                    case .ccSettings:
+                        CCSettingsView()
+                    case .terminal:
+                        TerminalSettingsTab()
+                    case .fileLibrary:
+                        FileLibrarySettingsTab()
                     }
                 }
                 .padding(20)
