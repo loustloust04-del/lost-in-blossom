@@ -1524,7 +1524,7 @@ struct BubbleView: View {
                                 ],
                                 dynamicHeight: $messageWebViewHeight
                             )
-                            .frame(height: max(44, min(messageWebViewHeight, UIScreen.main.bounds.height * 3)))
+                            .frame(height: max(44, min(messageWebViewHeight, UIScreen.main.bounds.height * 1.5)))
                         } else {
                             // 普通消息：MarkdownUI 渲染（纯 SwiftUI，零白屏）
                             Markdown(displayText)

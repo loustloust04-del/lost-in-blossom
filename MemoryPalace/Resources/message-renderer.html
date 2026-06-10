@@ -247,7 +247,7 @@ function notifyHeight() {
     if (!el) return;
     var h = el.scrollHeight;
     if (h <= 0) h = 44;
-    if (h > 10000) h = 10000;
+    if (h > 5000) h = 5000;
     window.webkit.messageHandlers.heightChanged.postMessage(h);
 }
 

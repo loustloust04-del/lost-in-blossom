@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>侧边栏图标 v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,sans-serif;background:#EDE5D8;-webkit-font-smoothing:antialiased;padding-bottom:60px}
+  .section-title{
+    text-align:center;padding:16px;font-size:10px;font-weight:600;
+    letter-spacing:3px;text-transform:uppercase;color:#8E8B82;background:#E0D6C6;
+  }
+  .mock{padding:20px 20px 0;background:#EDE5D8}
+  .header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .header-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;color:#1A1A18}
+  .header-icons{display:flex;gap:14px;align-items:center}
+  .hi{color:#6C6A62;opacity:0.55}
+
+  .groups{display:flex;flex-direction:column;gap:1px}
+  .gi{
+    display:flex;align-items:center;gap:10px;
+    padding:12px 14px;border-radius:10px;
+    font-size:15px;font-weight:500;color:#1A1A18;
+  }
+  .gi:first-child{background:rgba(0,0,0,0.04)}
+  .gi .ar{margin-left:auto;color:#B0AAA0;font-size:14px}
+  .gicon{width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+  .divider{height:0.5px;background:#DDD6CA;margin:10px 8px}
+  .chat-row{padding:10px 14px;display:flex;justify-content:space-between;font-size:15px;font-weight:500;color:#1A1A18}
+  .chat-row .meta{font-size:12px;color:#8E8B82;font-weight:400}
+
+  .icon-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}
+  .icon-card{background:#F5F0E8;border-radius:12px;padding:20px;text-align:center}
+  .icon-card svg{margin-bottom:8px}
+  .icon-name{font-size:12px;font-weight:600;color:#1A1A18}
+  .icon-desc{font-size:10px;color:#8E8B82;margin-top:3px}
+</style>
+</head>
+<body>
+
+<div class="section-title">侧边栏头部 · 完整mock</div>
+
+<div class="mock">
+  <div class="header-top">
+    <div class="header-title">Lost in Blossom</div>
+    <div class="header-icons">
+      <!-- Search -->
+      <div class="hi">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7.5" cy="7.5" r="5.5"/><line x1="11.5" y1="11.5" x2="16" y2="16"/></svg>
+      </div>
+      <!-- Settings: slider style -->
+      <div class="hi">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <line x1="2" y1="5" x2="16" y2="5"/><circle cx="6" cy="5" r="2" fill="#EDE5D8" stroke="currentColor"/>
+          <line x1="2" y1="13" x2="16" y2="13"/><circle cx="12" cy="13" r="2" fill="#EDE5D8" stroke="currentColor"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="groups">
+    <div class="gi">
+      <div class="gicon">
+        <!-- Chats: two overlapping speech bubbles with text lines -->
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <!-- back bubble -->
+          <path d="M7,16 L7,9 Q7,7 9,7 L18,7 Q20,7 20,9 L20,14 Q20,16 18,16 L13,16 L10,19 Z" opacity="0.35"/>
+          <!-- front bubble -->
+          <path d="M2,12 L2,5 Q2,3 4,3 L13,3 Q15,3 15,5 L15,10 Q15,12 13,12 L7,12 L4,15 Z"/>
+          <!-- text lines in front bubble -->
+          <line x1="5" y1="6" x2="12" y2="6" stroke-width="1" opacity="0.5"/>
+          <line x1="5" y1="9" x2="10" y2="9" stroke-width="1" opacity="0.35"/>
+        </svg>
+      </div>
+      Chats <span class="ar">›</span>
+    </div>
+
+    <div class="gi">
+      <div class="gicon">
+        <!-- Projects: folder with tab -->
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3,8 L3,17 Q3,18 4,18 L18,18 Q19,18 19,17 L19,8"/>
+          <path d="M3,8 L3,6 Q3,5 4,5 L8,5 L10,7 L19,7 L19,8"/>
+          <!-- shelf line -->
+          <line x1="6" y1="12" x2="16" y2="12" stroke-width="0.8" opacity="0.3"/>
+        </svg>
+      </div>
+      Projects <span class="ar">›</span>
+    </div>
+
+    <div class="gi">
+      <div class="gicon">
+        <!-- Almond: almond/seed shape -->
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.3" stroke-linecap="round">
+          <path d="M11,3 Q17,8 17,13 Q17,19 11,19 Q5,19 5,13 Q5,8 11,3 Z"/>
+          <!-- center line -->
+          <line x1="11" y1="6" x2="11" y2="16" stroke-width="0.8" opacity="0.3"/>
+        </svg>
+      </div>
+      Almond <span class="ar">›</span>
+    </div>
+
+    <div class="gi">
+      <div class="gicon">
+        <!-- Amber: gem/crystal shape -->
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11,2 18,7 18,15 11,20 4,15 4,7"/>
+          <!-- facet line -->
+          <line x1="4" y1="7" x2="18" y2="7" stroke-width="0.8" opacity="0.3"/>
+          <line x1="11" y1="2" x2="11" y2="7" stroke-width="0.8" opacity="0.3"/>
+        </svg>
+      </div>
+      Amber <span class="ar">›</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="chat-row">主人主人🥺 <span class="meta">Jun 5 · 8</span></div>
+  <div class="chat-row" style="opacity:0.6">新对话 <span class="meta">Jun 4 · 4</span></div>
+  <div class="chat-row" style="opacity:0.4">主人呀……！ <span class="meta">Jun 4 · 8</span></div>
+</div>
+
+<!-- Detail view -->
+<div class="section-title" style="margin-top:20px">四个图标 · 放大细节</div>
+
+<div class="icon-grid">
+  <div class="icon-card">
+    <svg width="36" height="36" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7,16 L7,9 Q7,7 9,7 L18,7 Q20,7 20,9 L20,14 Q20,16 18,16 L13,16 L10,19 Z" opacity="0.35"/>
+      <path d="M2,12 L2,5 Q2,3 4,3 L13,3 Q15,3 15,5 L15,10 Q15,12 13,12 L7,12 L4,15 Z"/>
+      <line x1="5" y1="6" x2="12" y2="6" stroke-width="1" opacity="0.5"/>
+      <line x1="5" y1="9" x2="10" y2="9" stroke-width="1" opacity="0.35"/>
+    </svg>
+    <div class="icon-name">Chats</div>
+    <div class="icon-desc">双气泡 · 文字行</div>
+  </div>
+  <div class="icon-card">
+    <svg width="36" height="36" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,8 L3,17 Q3,18 4,18 L18,18 Q19,18 19,17 L19,8"/>
+      <path d="M3,8 L3,6 Q3,5 4,5 L8,5 L10,7 L19,7 L19,8"/>
+      <line x1="6" y1="12" x2="16" y2="12" stroke-width="0.8" opacity="0.3"/>
+    </svg>
+    <div class="icon-name">Projects</div>
+    <div class="icon-desc">文件夹 · 翻盖 · 分层线</div>
+  </div>
+  <div class="icon-card">
+    <svg width="36" height="36" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.2" stroke-linecap="round">
+      <path d="M11,3 Q17,8 17,13 Q17,19 11,19 Q5,19 5,13 Q5,8 11,3 Z"/>
+      <line x1="11" y1="6" x2="11" y2="16" stroke-width="0.8" opacity="0.3"/>
+    </svg>
+    <div class="icon-name">Almond</div>
+    <div class="icon-desc">杏仁 · 水滴形 · 中线</div>
+  </div>
+  <div class="icon-card">
+    <svg width="36" height="36" viewBox="0 0 22 22" fill="none" stroke="#3D3D38" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11,2 18,7 18,15 11,20 4,15 4,7"/>
+      <line x1="4" y1="7" x2="18" y2="7" stroke-width="0.8" opacity="0.3"/>
+      <line x1="11" y1="2" x2="11" y2="7" stroke-width="0.8" opacity="0.3"/>
+    </svg>
+    <div class="icon-name">Amber</div>
+    <div class="icon-desc">琥珀 · 六边形 · 切面线</div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:16px;font-size:11px;color:#8E8B82">颜色全部统一 #3D3D38 · 看看对不对</div>
+
+</body>
+</html>

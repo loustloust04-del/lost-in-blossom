@@ -63,7 +63,7 @@ struct MessageContentWebView: UIViewRepresentable {
                 if let number = message.body as? NSNumber {
                     let height = CGFloat(number.doubleValue)
                     if height > 0 {
-                        let maxH = UIScreen.main.bounds.height * 3
+                        let maxH = UIScreen.main.bounds.height * 1.5
                         let needsScroll = height > maxH
                         let clamped = needsScroll ? maxH : height
                         DispatchQueue.main.async {

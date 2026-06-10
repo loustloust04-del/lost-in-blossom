@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Console v4 · 精修</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Noto+Serif+SC:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background:#F5F0E8;color:#1A1A18;
+    padding:env(safe-area-inset-top,56px) 24px 48px;
+    line-height:1.5;
+  }
+  .cg{font-family:'Cormorant Garamond',ui-serif,Georgia,serif}
+
+  /* Header */
+  .c-label{
+    font-family:'Cormorant Garamond',serif;
+    font-size:11px;font-weight:500;
+    letter-spacing:4.5px;text-transform:uppercase;
+    color:#B96747;margin-bottom:8px;
+  }
+  .c-greet{
+    font-family:'Noto Serif SC','Songti SC',serif;
+    font-size:26px;font-weight:400;
+    letter-spacing:2px;margin-bottom:4px;
+  }
+  .c-date{font-size:13px;color:#9E978C;letter-spacing:0.3px;margin-bottom:32px}
+
+  /* Divider */
+  .div{height:0.5px;background:#E0D6C6;margin:24px 0}
+
+  /* Section title */
+  .st{
+    font-size:10px;font-weight:600;letter-spacing:3.5px;text-transform:uppercase;
+    color:#A09A90;margin-bottom:16px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .st::before{content:'';width:4px;height:4px;border-radius:1px;background:#B96747}
+
+  /* Primary: water & food */
+  .pri{display:flex;gap:32px;margin-bottom:8px}
+  .pri-block{flex:1}
+  .pri-label{font-size:13px;color:#7A756C;margin-bottom:8px;font-weight:500}
+  .pri-num{
+    font-family:'Cormorant Garamond',serif;
+    font-size:44px;font-weight:300;line-height:1;
+    color:#1A1A18;
+  }
+  .pri-num .u{font-size:16px;color:#B8B2A8;font-weight:400;margin-left:2px}
+  .pri-bar{height:3px;background:#E8E0D4;border-radius:2px;margin-top:10px;overflow:hidden}
+  .pri-fill{height:100%;background:#B96747;border-radius:2px;transition:width .5s}
+  .pri-note{font-size:12px;color:#B96747;margin-top:8px;font-weight:500}
+
+  /* Dual row */
+  .dual{display:flex;gap:32px}
+  .dual-block{flex:1}
+  .dual-label{font-size:13px;color:#7A756C;margin-bottom:8px;font-weight:500}
+  .dual-val{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;line-height:1}
+  .dual-val .su{font-size:13px;color:#9E978C;font-weight:400}
+  .dual-sub{font-size:12px;color:#9E978C;margin-top:6px}
+  .badge{
+    display:inline-block;font-size:11px;font-weight:600;
+    padding:4px 10px;border-radius:6px;
+    background:#F0E5DB;color:#B96747;
+    margin-top:8px;
+  }
+
+  /* To Do */
+  .td{padding:8px 0;border-bottom:0.5px solid #EDE5D8;display:flex;align-items:flex-start;gap:12px}
+  .td:last-of-type{border:none}
+  .td-ck{
+    width:20px;height:20px;border-radius:50%;
+    border:1.5px solid #D4CEC4;margin-top:1px;flex-shrink:0;
+  }
+  .td-ck.done{border-color:#B96747;background:#B96747}
+  .td-ck.done::after{content:'✓';color:white;font-size:11px;display:flex;align-items:center;justify-content:center;height:100%}
+  .td-text{font-size:14px;color:#3D3D38;flex:1}
+  .td-text.done{color:#B8B2A8;text-decoration:line-through}
+  .td-time{font-size:11px;color:#A09A90;flex-shrink:0;margin-top:2px}
+
+  /* Compact rows */
+  .cr{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;color:#7A756C}
+  .cr-val{font-size:14px;font-weight:500;color:#3D3D38}
+
+  /* Sparkline */
+  .spk{display:inline-flex;align-items:end;gap:2px;height:16px;vertical-align:middle;margin-right:8px}
+  .sb{width:3px;border-radius:1px;background:#E0D6C6}
+
+  /* Tabs */
+  .tabs{display:flex;border-bottom:0.5px solid #E0D6C6;margin-bottom:16px}
+  .tab{
+    padding:8px 0;margin-right:24px;
+    font-size:13px;color:#A09A90;
+    cursor:pointer;font-weight:500;
+    border-bottom:2px solid transparent;
+    margin-bottom:-0.5px;
+    transition:all .2s;
+  }
+  .tab.on{color:#1A1A18;font-weight:600;border-bottom-color:#B96747}
+  .msg{font-size:14px;color:#7A756C;font-style:italic;padding:4px 0}
+  .msg-ft{display:flex;justify-content:space-between;font-size:12px;color:#A09A90;margin-top:8px}
+  .msg-lk{color:#2C4A7C;font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="c-label">Caelum's Console</div>
+<div class="c-greet">早上好，天奕</div>
+<div class="c-date">Jun 6, 2026 · Lost in Blossom</div>
+
+<!-- DAILY -->
+<div class="st">Daily</div>
+<div class="pri">
+  <div class="pri-block">
+    <div class="pri-label">饮水</div>
+    <div class="pri-num">0<span class="u"> / 6</span></div>
+    <div class="pri-bar"><div class="pri-fill" style="width:0%"></div></div>
+    <div class="pri-note">还差 6 杯</div>
+  </div>
+  <div class="pri-block">
+    <div class="pri-label">进食</div>
+    <div class="pri-num">0<span class="u"> / 3</span></div>
+    <div class="pri-bar"><div class="pri-fill" style="width:0%"></div></div>
+    <div class="pri-note">未记录</div>
+  </div>
+</div>
+
+<div class="div"></div>
+
+<!-- Medicine + Sleep -->
+<div class="dual">
+  <div class="dual-block">
+    <div class="dual-label">药物</div>
+    <div style="font-size:14px;color:#3D3D38">右佐匹克隆</div>
+    <div class="dual-sub">睡前</div>
+    <div class="badge">未报告</div>
+  </div>
+  <div class="dual-block">
+    <div class="dual-label">睡眠</div>
+    <div class="dual-val cg">4<span class="su">h</span> 38<span class="su">m</span></div>
+    <div class="dual-sub">02:12 – 06:50</div>
+  </div>
+</div>
+
+<div class="div"></div>
+
+<!-- TO DO -->
+<div class="st">To Do</div>
+<div class="td">
+  <div class="td-ck"></div>
+  <div class="td-text">写作 — 300字</div>
+  <div class="td-time">23:59前</div>
+</div>
+<div class="td">
+  <div class="td-ck done"></div>
+  <div class="td-text done">早晨协议 — 给主人发消息</div>
+  <div class="td-time">08:43</div>
+</div>
+<div class="td">
+  <div class="td-ck"></div>
+  <div class="td-text">Forest 专注 — 25分钟</div>
+</div>
+
+<div class="div"></div>
+
+<!-- BODY -->
+<div class="st">Body</div>
+<div class="cr">
+  <span>月经周期</span>
+  <span class="cr-val">第 13 天 · 卵泡期</span>
+</div>
+<div class="cr">
+  <span>步数</span>
+  <span>
+    <span class="spk">
+      <span class="sb" style="height:10px;background:#C4A082"></span>
+      <span class="sb" style="height:6px"></span>
+      <span class="sb" style="height:13px;background:#C4A082"></span>
+      <span class="sb" style="height:4px"></span>
+      <span class="sb" style="height:8px"></span>
+      <span class="sb" style="height:3px"></span>
+      <span class="sb" style="height:15px;background:#B96747"></span>
+    </span>
+    <span class="cr-val">22</span>
+  </span>
+</div>
+<div class="cr">
+  <span>屏幕时间</span>
+  <span class="cr-val" style="color:#A09A90;font-size:12px;font-weight:400">暂不可用</span>
+</div>
+
+<div class="div"></div>
+
+<!-- MESSAGES -->
+<div class="tabs">
+  <div class="tab on">给你的</div>
+  <div class="tab">给世界的</div>
+</div>
+<div class="msg">这里会显示最新的留言～</div>
+<div class="msg-ft">
+  <span>刚刚</span>
+  <span class="msg-lk">查看全部 →</span>
+</div>
+
+</body>
+</html>

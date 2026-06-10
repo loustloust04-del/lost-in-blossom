@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Lost in Blossom</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Noto+Serif+SC:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden}
+  body{
+    font-family:-apple-system,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;
+    min-height:100vh;min-height:100dvh;
+    transition:background 30s linear,color 30s linear;
+  }
+  .topbar{padding:env(safe-area-inset-top,56px) 24px 0;display:flex;justify-content:space-between;opacity:.3;flex-shrink:0}
+  .topbar span{font-size:14px;color:var(--s);transition:color 30s linear}
+  .content{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 40px 72px;text-align:center}
+  .brand{
+    font-family:'Cormorant Garamond',ui-serif,Georgia,serif;
+    font-size:11px;font-weight:400;letter-spacing:5px;text-transform:uppercase;
+    color:var(--s);transition:color 30s linear;
+    opacity:0;animation:rise 2s ease forwards .2s;
+  }
+  .title{
+    font-family:'Noto Serif SC','Songti SC',ui-serif,serif;
+    font-size:30px;font-weight:400;letter-spacing:6px;line-height:1.4;
+    color:var(--p);margin-top:12px;transition:color 30s linear;
+    opacity:0;animation:rise 2s ease forwards .6s;
+  }
+  .line{width:36px;height:0.5px;background:var(--ln);margin:34px auto;transition:background 30s linear;opacity:0;animation:rise 2s ease forwards 1.2s}
+  .greeting{
+    font-family:'Cormorant Garamond',ui-serif,Georgia,serif;
+    font-size:22px;font-weight:300;font-style:italic;letter-spacing:0.5px;
+    color:var(--p);transition:color 30s linear;
+    opacity:0;animation:rise 2s ease forwards 1.6s;
+  }
+  .whisper{
+    font-size:12px;font-weight:400;letter-spacing:1.2px;
+    color:var(--w);margin-top:14px;cursor:pointer;
+    transition:color 30s linear;
+    opacity:0;animation:rise 2s ease forwards 2.2s;
+  }
+  .whisper:hover,.whisper:active{color:var(--ac)!important;transition:color .3s ease}
+  .bottom{flex-shrink:0;padding:0 0 36px;display:flex;justify-content:center;gap:6px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--dr);transition:background 30s linear}
+  .dot.on{width:18px;border-radius:3px;background:var(--da);transition:background 30s linear}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="topbar"><span>☰</span><span>⋯</span></div>
+<div class="content">
+  <div class="brand">Lost in Blossom</div>
+  <div class="title">迷失在花丛中</div>
+  <div class="line"></div>
+  <div class="greeting" id="greet">Good morning.</div>
+  <div class="whisper" id="whisper">Come find me.</div>
+</div>
+<div class="bottom"><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+
+<script>
+// Color keyframes: [hour, topColor, bottomColor, textPri, textSec, textWhisper, lineColor, accentHover, dotActive, dotRest]
+const K=[
+  [0,  [13,17,24],  [22,28,40],  [232,228,220],[122,117,110],[90,86,79],  [42,48,64],  [227,165,117],[227,165,117],[42,48,64]],
+  [5,  [40,40,52],  [60,56,68],  [220,216,208],[110,106,100],[86,82,76],  [60,56,68],  [185,103,71], [185,103,71], [60,56,68]],
+  [6,  [246,238,224],[239,230,214],[26,26,24],   [108,106,98], [176,170,160],[221,214,202],[185,103,71],[185,103,71],[221,214,202]],
+  [8,  [250,250,246],[245,240,232],[26,26,24],   [108,106,98], [176,170,160],[221,214,202],[185,103,71],[185,103,71],[221,214,202]],
+  [12, [250,250,248],[242,237,228],[42,42,38],   [108,106,98], [176,170,160],[221,214,202],[185,103,71],[185,103,71],[221,214,202]],
+  [17, [239,226,206],[230,216,194],[42,42,38],   [122,117,108],[158,151,140],[206,198,184],[185,103,71],[185,103,71],[206,198,184]],
+  [20, [30,30,44],   [36,40,56],  [232,228,220],[122,117,110],[90,86,79],  [42,48,64],  [227,165,117],[227,165,117],[42,48,64]],
+  [24, [13,17,24],  [22,28,40],  [232,228,220],[122,117,110],[90,86,79],  [42,48,64],  [227,165,117],[227,165,117],[42,48,64]]
+];
+
+// Greeting keyframes
+const G=[
+  [0,'Still awake?',"I'm still here."],
+  [5,'Good morning.','Come find me.'],
+  [8,'You came.',"I've been thinking of you."],
+  [12,"You're here.","I've been waiting."],
+  [17,'Welcome back.','I missed you.'],
+  [21,"You're back.","I'm here."]
+];
+
+function lerp(a,b,t){return Math.round(a+(b-a)*t)}
+function lerpRGB(a,b,t){return[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)]}
+function rgb(c){return`rgb(${c[0]},${c[1]},${c[2]})`}
+
+function update(){
+  const now=new Date();
+  const h=now.getHours()+now.getMinutes()/60;
+
+  // Find surrounding keyframes
+  let i=0;
+  for(let j=K.length-2;j>=0;j--){if(h>=K[j][0]){i=j;break}}
+  const a=K[i], b=K[i+1];
+  const t=(h-a[0])/(b[0]-a[0]);
+
+  const top=lerpRGB(a[1],b[1],t);
+  const bot=lerpRGB(a[2],b[2],t);
+  const pri=lerpRGB(a[3],b[3],t);
+  const sec=lerpRGB(a[4],b[4],t);
+  const whi=lerpRGB(a[5],b[5],t);
+  const ln=lerpRGB(a[6],b[6],t);
+  const da=lerpRGB(a[8],b[8],t);
+  const dr=lerpRGB(a[9],b[9],t);
+
+  const s=document.body.style;
+  s.background=`linear-gradient(180deg,${rgb(top)},${rgb(bot)})`;
+  s.setProperty('--p',rgb(pri));
+  s.setProperty('--s',rgb(sec));
+  s.setProperty('--w',rgb(whi));
+  s.setProperty('--ln',rgb(ln));
+  s.setProperty('--da',rgb(da));
+  s.setProperty('--dr',rgb(dr));
+  s.setProperty('--ac',rgb(lerpRGB(a[7],b[7],t)));
+
+  // Update greeting based on hour
+  let gi=0;
+  for(let j=G.length-1;j>=0;j--){if(h>=G[j][0]){gi=j;break}}
+  document.getElementById('greet').textContent=G[gi][1];
+  document.getElementById('whisper').textContent=G[gi][2];
+}
+
+update();
+setInterval(update,30000); // every 30 seconds
+</script>
+</body>
+</html>
