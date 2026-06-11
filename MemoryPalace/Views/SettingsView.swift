@@ -52,31 +52,43 @@ struct SettingsView: View {
             List {
                 Section {
                     settingsButton(icon: "gearshape", title: "通用", color: Theme.textSecondary, tab: .general)
-                    settingsButton(icon: "archivebox", title: "数据与备份", color: Theme.textSecondary, tab: .data)
-                    settingsButton(icon: "network", title: "API", color: Theme.textSecondary, tab: .api)
-                    settingsButton(icon: "wrench.and.screwdriver", title: "🔧 MCP 工具", color: Theme.textSecondary, tab: .mcp)
-                    settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
-                    settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
                 }
                 Section {
-                    settingsButton(icon: "sidebar.right", title: "右栏", color: Theme.textSecondary, tab: .rightPanel)
+                    settingsButton(icon: "network", title: "API", color: Theme.textSecondary, tab: .api)
+                    settingsButton(icon: "wrench.and.screwdriver", title: "MCP 工具", color: Theme.textSecondary, tab: .mcp)
+                    settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
+                    settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
-                    settingsButton(icon: "heart.text.square", title: "健康", color: Theme.branchIndicator, tab: .health)
-                    settingsButton(icon: "star.circle", title: "贴纸", color: Theme.textSecondary, tab: .sticker)
-                    settingsButton(icon: "bell.fill", title: "通知", color: Theme.branchIndicator, tab: .notifications)
+                } header: {
+                    settingsSectionHeader("对话与模型")
                 }
                 Section {
                     settingsButton(icon: "paintbrush", title: "外观", color: Theme.textSecondary, tab: .appearance)
                     settingsButton(icon: "circle.lefthalf.filled", title: "主题", color: Theme.branchIndicator, tab: .theme)
+                    settingsButton(icon: "star.circle", title: "贴纸", color: Theme.textSecondary, tab: .sticker)
+                    settingsButton(icon: "sidebar.right", title: "右栏", color: Theme.textSecondary, tab: .rightPanel)
+                } header: {
+                    settingsSectionHeader("外观")
                 }
                 Section {
                     settingsButton(icon: "terminal", title: "Claude Code", color: Theme.branchIndicator, tab: .ccSettings)
                     settingsButton(icon: "keyboard", title: "终端", color: Theme.textSecondary, tab: .terminal)
                     settingsButton(icon: "folder", title: "文件库", color: Theme.textSecondary, tab: .fileLibrary)
+                } header: {
+                    settingsSectionHeader("Claude Code")
+                }
+                Section {
+                    settingsButton(icon: "archivebox", title: "数据与备份", color: Theme.textSecondary, tab: .data)
+                    settingsButton(icon: "bell.fill", title: "通知", color: Theme.branchIndicator, tab: .notifications)
+                    settingsButton(icon: "heart.text.square", title: "健康", color: Theme.branchIndicator, tab: .health)
+                } header: {
+                    settingsSectionHeader("数据")
                 }
                 Section {
                     settingsButton(icon: "ladybug", title: "开发调试", color: Theme.textSecondary, tab: .debug)
                     settingsButton(icon: "waveform", title: "震动测试", color: Theme.textSecondary, tab: .hapticTest)
+                } header: {
+                    settingsSectionHeader("开发")
                 }
             }
             .listStyle(.insetGrouped)
@@ -121,6 +133,13 @@ struct SettingsView: View {
     }
 
     // MARK: - Settings Row Helper (iOS)
+
+    private func settingsSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(Theme.textMuted)
+            .textCase(nil)
+    }
 
     private func settingsButton(icon: String, title: String, color: Color, tab: SettingsTab) -> some View {
         Button {
