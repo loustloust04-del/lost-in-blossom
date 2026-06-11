@@ -139,14 +139,16 @@ final class CharacterCardManager {
             let conversation = Conversation(
                 id: convId, title: greeting.title,
                 createTime: now, updateTime: now,
-                currentNodeId: nodeId, provider: "sillytavern"
+                currentNodeId: nodeId, provider: "sillytavern",
+                profileId: profile.id
             )
             conversation.nodeCount = 1
             let node = MessageNode(
                 id: nodeId, role: "assistant",
                 content: Self.normalizeNewlines(greeting.content),
                 contentType: "text", createTime: now,
-                parentId: nil, childrenIds: [], conversationId: convId
+                parentId: nil, childrenIds: [], conversationId: convId,
+                profileId: profile.id
             )
             context.insert(conversation)
             context.insert(node)
