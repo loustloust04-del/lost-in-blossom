@@ -59,17 +59,27 @@ final class ConversationImporter {
             var skippedConversations = 0
             let ignoredConversations = 0
             var processedConversations = 0
+            var crossProfileConflicts = 0
 
             for batchStart in stride(from: 0, to: rawConversations.count, by: batchSize) {
                 let batchEnd = min(batchStart + batchSize, rawConversations.count)
                 let batch = rawConversations[batchStart..<batchEnd]
+                let batchPayloads = batch.map { makePayload(from: $0) }
+                let conflictedIds = (try? crossProfileConflictedConversationIds(
+                    payloads: batchPayloads.filter { !existingConversationIds.contains($0.id) },
+                    currentProfileId: scopedProfileId, in: context
+                )) ?? Set<String>()
 
-                for raw in batch {
+                for incoming in batchPayloads {
                     processedConversations += 1
-                    let incoming = makePayload(from: raw)
 
                     if existingConversationIds.contains(incoming.id) {
                         skippedConversations += 1
+                        continue
+                    }
+
+                    if conflictedIds.contains(incoming.id) {
+                        crossProfileConflicts += 1
                         continue
                     }
 
@@ -132,8 +142,8 @@ final class ConversationImporter {
                 skipped: skippedConversations,
                 ignored: ignoredConversations,
                 completionText: addedConversations > 0
-                    ? "导入完成！新增 \(addedConversations) 条，保持本地 \(skippedConversations) 条"
-                    : "导入完成！这次没有新增，对话已全部保持本地"
+                    ? "导入完成！新增 \(addedConversations) 条，保持本地 \(skippedConversations) 条" + crossProfileConflictSuffix(crossProfileConflicts)
+                    : "导入完成！这次没有新增，对话已全部保持本地" + crossProfileConflictSuffix(crossProfileConflicts)
             )
         } catch {
             await failImport(error)
@@ -181,15 +191,20 @@ final class ConversationImporter {
             let ignoredConversations = 0
             var processedConversations = 0
             var affectedNodes = 0
+            var crossProfileConflicts = 0
 
             let batchSize = 200
             for batchStart in stride(from: 0, to: rawConversations.count, by: batchSize) {
                 let batchEnd = min(batchStart + batchSize, rawConversations.count)
                 let batch = rawConversations[batchStart..<batchEnd]
+                let batchPayloads = batch.map { makePayload(from: $0) }
+                let conflictedIds = (try? crossProfileConflictedConversationIds(
+                    payloads: batchPayloads.filter { !localConversationsById.keys.contains($0.id) },
+                    currentProfileId: scopedProfileId, in: context
+                )) ?? Set<String>()
 
-                for raw in batch {
+                for incoming in batchPayloads {
                     processedConversations += 1
-                    let incoming = makePayload(from: raw)
 
                     if let existingConversation = localConversationsById[incoming.id] {
                         let existingNodes = try fetchConversationNodes(conversationId: incoming.id, profileId: self.profileId, in: context)
@@ -240,6 +255,10 @@ final class ConversationImporter {
                             skippedConversations += 1
                         }
                     } else {
+                        if conflictedIds.contains(incoming.id) {
+                            crossProfileConflicts += 1
+                            continue
+                        }
                         let conversation = Conversation(
                             id: incoming.id,
                             title: incoming.title,
@@ -299,7 +318,7 @@ final class ConversationImporter {
                 updated: updatedConversations,
                 skipped: skippedConversations,
                 ignored: ignoredConversations,
-                completionText: "叠加完成！新增 \(addedConversations) 条，更新 \(updatedConversations) 条，保持本地 \(skippedConversations) 条"
+                completionText: "叠加完成！新增 \(addedConversations) 条，更新 \(updatedConversations) 条，保持本地 \(skippedConversations) 条" + crossProfileConflictSuffix(crossProfileConflicts)
             )
         } catch {
             await failImport(error)

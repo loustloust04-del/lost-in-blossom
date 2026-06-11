@@ -252,6 +252,78 @@ func deleteConversationArtifacts(
     }
 }
 
+// MARK: - P0-1 跨楼层冲突防护
+
+private let crossProfileQueryBatchSize = 500
+
+func findCrossProfileConversationConflicts(
+    candidateIds: [String],
+    currentProfileId: String,
+    in context: ModelContext
+) throws -> Set<String> {
+    var conflicts = Set<String>()
+    guard !candidateIds.isEmpty else { return conflicts }
+    for start in stride(from: 0, to: candidateIds.count, by: crossProfileQueryBatchSize) {
+        let chunk = Array(candidateIds[start..<min(start + crossProfileQueryBatchSize, candidateIds.count)])
+        let pid = currentProfileId
+        let descriptor = FetchDescriptor<Conversation>(
+            predicate: #Predicate<Conversation> { chunk.contains($0.id) && $0.profileId != pid }
+        )
+        for hit in try context.fetch(descriptor) {
+            conflicts.insert(hit.id)
+        }
+    }
+    return conflicts
+}
+
+func findCrossProfileNodeConflicts(
+    candidateIds: [String],
+    currentProfileId: String,
+    in context: ModelContext
+) throws -> Set<String> {
+    var conflicts = Set<String>()
+    guard !candidateIds.isEmpty else { return conflicts }
+    for start in stride(from: 0, to: candidateIds.count, by: crossProfileQueryBatchSize) {
+        let chunk = Array(candidateIds[start..<min(start + crossProfileQueryBatchSize, candidateIds.count)])
+        let pid = currentProfileId
+        let descriptor = FetchDescriptor<MessageNode>(
+            predicate: #Predicate<MessageNode> { chunk.contains($0.id) && $0.profileId != pid }
+        )
+        for hit in try context.fetch(descriptor) {
+            conflicts.insert(hit.id)
+        }
+    }
+    return conflicts
+}
+
+func crossProfileConflictedConversationIds(
+    payloads: [ImportedConversationPayload],
+    currentProfileId: String,
+    in context: ModelContext
+) throws -> Set<String> {
+    guard !payloads.isEmpty else { return [] }
+    var conflicted = try findCrossProfileConversationConflicts(
+        candidateIds: payloads.map(\.id),
+        currentProfileId: currentProfileId,
+        in: context
+    )
+    let nodeConflicts = try findCrossProfileNodeConflicts(
+        candidateIds: payloads.flatMap { $0.nodes.map(\.id) },
+        currentProfileId: currentProfileId,
+        in: context
+    )
+    if !nodeConflicts.isEmpty {
+        for payload in payloads where payload.nodes.contains(where: { nodeConflicts.contains($0.id) }) {
+            conflicted.insert(payload.id)
+        }
+    }
+    return conflicted
+}
+
+func crossProfileConflictSuffix(_ count: Int) -> String {
+    count > 0 ? "；⚠️ \(count) 条对话已存在于其他楼层，已跳过" : ""
+}
+
 func restoreConversationChange(
     _ change: ImportConversationChange,
     in context: ModelContext

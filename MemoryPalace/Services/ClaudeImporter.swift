@@ -71,20 +71,30 @@ final class ClaudeImporter {
             var skippedConversations = 0
             var ignoredConversations = 0
             var processedConversations = 0
+            var crossProfileConflicts = 0
 
             for batchStart in stride(from: 0, to: rawConversations.count, by: batchSize) {
                 let batchEnd = min(batchStart + batchSize, rawConversations.count)
                 let batch = rawConversations[batchStart..<batchEnd]
-
+                var batchPayloads: [ImportedConversationPayload] = []
                 for raw in batch {
                     processedConversations += 1
-                    guard let incoming = makePayload(from: raw) else {
-                        ignoredConversations += 1
+                    if let p = makePayload(from: raw) { batchPayloads.append(p) }
+                    else { ignoredConversations += 1 }
+                }
+                let conflictedIds = (try? crossProfileConflictedConversationIds(
+                    payloads: batchPayloads.filter { !existingConversationIds.contains($0.id) },
+                    currentProfileId: scopedProfileId, in: context
+                )) ?? Set<String>()
+
+                for incoming in batchPayloads {
+                    if existingConversationIds.contains(incoming.id) {
+                        skippedConversations += 1
                         continue
                     }
 
-                    if existingConversationIds.contains(incoming.id) {
-                        skippedConversations += 1
+                    if conflictedIds.contains(incoming.id) {
+                        crossProfileConflicts += 1
                         continue
                     }
 
@@ -153,14 +163,14 @@ final class ClaudeImporter {
                         updated: 0,
                         skipped: skippedConversations,
                         ignored: ignoredConversations
-                    )
+                    ) + crossProfileConflictSuffix(crossProfileConflicts)
                     : finishText(
                         prefix: "导入完成！",
                         added: 0,
                         updated: 0,
                         skipped: skippedConversations,
                         ignored: ignoredConversations
-                    )
+                    ) + crossProfileConflictSuffix(crossProfileConflicts)
             )
         } catch {
             await failImport(error)
@@ -219,19 +229,24 @@ final class ClaudeImporter {
             var ignoredConversations = 0
             var processedConversations = 0
             var affectedNodes = 0
+            var crossProfileConflicts = 0
 
             let batchSize = 200
             for batchStart in stride(from: 0, to: rawConversations.count, by: batchSize) {
                 let batchEnd = min(batchStart + batchSize, rawConversations.count)
                 let batch = rawConversations[batchStart..<batchEnd]
-
+                var batchPayloads: [ImportedConversationPayload] = []
                 for raw in batch {
                     processedConversations += 1
-                    guard let incoming = makePayload(from: raw) else {
-                        ignoredConversations += 1
-                        continue
-                    }
+                    if let p = makePayload(from: raw) { batchPayloads.append(p) }
+                    else { ignoredConversations += 1 }
+                }
+                let conflictedIds = (try? crossProfileConflictedConversationIds(
+                    payloads: batchPayloads.filter { !localConversationsById.keys.contains($0.id) },
+                    currentProfileId: scopedProfileId, in: context
+                )) ?? Set<String>()
 
+                for incoming in batchPayloads {
                     if let existingConversation = localConversationsById[incoming.id] {
                         let existingNodes = try fetchConversationNodes(conversationId: incoming.id, profileId: self.profileId, in: context)
                         if shouldMergeConversation(
@@ -281,6 +296,10 @@ final class ClaudeImporter {
                             skippedConversations += 1
                         }
                     } else {
+                        if conflictedIds.contains(incoming.id) {
+                            crossProfileConflicts += 1
+                            continue
+                        }
                         let conversation = Conversation(
                             id: incoming.id,
                             title: incoming.title,
@@ -346,7 +365,7 @@ final class ClaudeImporter {
                     updated: updatedConversations,
                     skipped: skippedConversations,
                     ignored: ignoredConversations
-                )
+                ) + crossProfileConflictSuffix(crossProfileConflicts)
             )
         } catch {
             await failImport(error)
