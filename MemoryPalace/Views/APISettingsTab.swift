@@ -79,66 +79,6 @@ struct APISettingsTab: View {
         iOSBody
     }
 
-    // MARK: - macOS Body
-
-    private var macOSBody: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if providerManager != nil {
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionLabel("API 提供商")
-                    providerPickerContent
-                }
-
-                if let pm = providerManager, !pm.savedAPIProviders.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        sectionLabel("当前使用的 API")
-                        activeAPIPickerContent
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        sectionLabel("已保存的 API")
-                        savedAPIListContent
-                    }
-                }
-
-                if showsCustomFields {
-                    customFieldsContent
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionLabel(selectedProvider?.type == .ccBridge ? "连接状态" : "API Key")
-                    apiKeyContent
-                }
-
-                if selectedProvider?.type != .ccBridge {
-                    connectionStatusRow
-                }
-
-                Divider().opacity(0.15)
-
-                modelListContent
-
-                Divider().opacity(0.15)
-
-                budgetContent
-
-                Divider().opacity(0.15)
-
-                cloudSyncContent
-            }
-        }
-        .onAppear {
-            loadAPIKeys()
-            prefillCustomFieldsIfNeeded()
-        }
-        .onChange(of: apiSelectedProviderId) { _, _ in
-            handleProviderChanged()
-        }
-        .onChange(of: apiKeyCloudSync) { _, newValue in
-            handleCloudSyncToggled(newValue)
-        }
-    }
-
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
             .font(.system(size: Theme.SettingsFont.label, weight: .medium))

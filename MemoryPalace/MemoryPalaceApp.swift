@@ -743,11 +743,6 @@ struct ProfileEditorSheet: View {
         editorNavigation
     }
 
-    private var macOSBody: some View {
-        editorNavigation
-            .frame(width: 460, height: 620)
-    }
-
     private var editorNavigation: some View {
         NavigationStack {
             List {
