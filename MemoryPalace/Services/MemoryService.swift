@@ -380,3 +380,38 @@ struct MemoryExtractor {
         }
     }
 }
+
+// MARK: - View 层便捷操作（View 已持有托管对象时免按 id 重查；解耦方向四）
+
+extension SwiftDataMemoryStore {
+    /// 钉住/取消钉住。touchUpdatedAt：记忆面板要刷新时间戳，设置页保持原值。
+    func togglePin(_ memory: Memory, touchUpdatedAt: Bool, context: ModelContext) {
+        memory.isUserExplicit.toggle()
+        if memory.isUserExplicit { memory.decayWeight = 1.0 }
+        if touchUpdatedAt { memory.updatedAt = Date() }
+        try? context.save()
+    }
+
+    /// 按对象删除
+    func delete(_ memory: Memory, context: ModelContext) {
+        context.delete(memory)
+        try? context.save()
+    }
+
+    /// 用户手动新增（钉住语义：isUserExplicit + decayWeight 1.0）
+    @discardableResult
+    func addUserPinned(content: String, category: String, keywords: [String],
+                       profileId: String, context: ModelContext) -> Memory {
+        let memory = Memory(
+            content: content,
+            category: category,
+            keywords: keywords,
+            profileId: profileId,
+            isUserExplicit: true
+        )
+        memory.decayWeight = 1.0
+        context.insert(memory)
+        try? context.save()
+        return memory
+    }
+}

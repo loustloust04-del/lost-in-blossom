@@ -310,9 +310,7 @@ struct MemorySettingsTab: View {
             if editingNoteId != memory.id {
                 HStack(spacing: 12) {
                     Button(memory.isUserExplicit ? "取消钉住" : "钉住") {
-                        memory.isUserExplicit.toggle()
-                        if memory.isUserExplicit { memory.decayWeight = 1.0 }
-                        try? modelContext.save()
+                        SwiftDataMemoryStore().togglePin(memory, touchUpdatedAt: false, context: modelContext)
                         refreshMemories()
                     }
                     .font(.system(size: Theme.SettingsFont.secondary)).foregroundColor(Theme.textMuted).buttonStyle(.plain)
@@ -324,8 +322,7 @@ struct MemorySettingsTab: View {
                     .font(.system(size: Theme.SettingsFont.secondary)).foregroundColor(Theme.textMuted).buttonStyle(.plain)
 
                     Button("删除") {
-                        modelContext.delete(memory)
-                        try? modelContext.save()
+                        SwiftDataMemoryStore().delete(memory, context: modelContext)
                         refreshMemories()
                     }
                     .font(.system(size: Theme.SettingsFont.secondary)).foregroundColor(Theme.danger).buttonStyle(.plain)
@@ -639,9 +636,7 @@ struct IOSMemoryPage: View {
             if editingNoteId != memory.id {
                 HStack(spacing: 12) {
                     Button(memory.isUserExplicit ? "取消钉住" : "钉住") {
-                        memory.isUserExplicit.toggle()
-                        if memory.isUserExplicit { memory.decayWeight = 1.0 }
-                        try? modelContext.save()
+                        SwiftDataMemoryStore().togglePin(memory, touchUpdatedAt: false, context: modelContext)
                         refreshMemories()
                     }
                     .font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted).buttonStyle(.plain)
@@ -653,8 +648,7 @@ struct IOSMemoryPage: View {
                     .font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted).buttonStyle(.plain)
 
                     Button("删除") {
-                        modelContext.delete(memory)
-                        try? modelContext.save()
+                        SwiftDataMemoryStore().delete(memory, context: modelContext)
                         refreshMemories()
                     }
                     .font(.system(size: Theme.F.secondary)).foregroundColor(Theme.danger).buttonStyle(.plain)

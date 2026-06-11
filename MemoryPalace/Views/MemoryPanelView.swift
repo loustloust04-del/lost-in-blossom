@@ -392,18 +392,12 @@ struct MemoryPanelView: View {
     }
 
     private func togglePin(_ memory: Memory) {
-        memory.isUserExplicit.toggle()
-        if memory.isUserExplicit {
-            memory.decayWeight = 1.0
-        }
-        memory.updatedAt = Date()
-        try? modelContext.save()
+        store.togglePin(memory, touchUpdatedAt: true, context: modelContext)
         refreshMemories()
     }
 
     private func deleteMemory(_ memory: Memory) {
-        modelContext.delete(memory)
-        try? modelContext.save()
+        store.delete(memory, context: modelContext)
         refreshMemories()
     }
 
@@ -411,16 +405,13 @@ struct MemoryPanelView: View {
         let text = newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         let profileId = profileManager?.currentProfile.id ?? ""
-        let memory = Memory(
+        store.addUserPinned(
             content: text,
             category: newMemoryCategory,
             keywords: text.components(separatedBy: .whitespaces).filter { $0.count > 1 },
             profileId: profileId,
-            isUserExplicit: true
+            context: modelContext
         )
-        memory.decayWeight = 1.0
-        modelContext.insert(memory)
-        try? modelContext.save()
 
         newMemoryText = ""
         withAnimation { showAddInput = false }
