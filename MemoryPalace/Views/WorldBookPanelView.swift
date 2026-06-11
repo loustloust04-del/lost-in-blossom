@@ -741,8 +741,7 @@ struct WorldBookPanelView: View {
 
     private func loadWorldBooks() {
         let profileId = profileManager?.currentProfile.id ?? ""
-        let descriptor = FetchDescriptor<WorldBook>(predicate: #Predicate { $0.profileId == profileId })
-        worldBooks = (try? modelContext.fetch(descriptor)) ?? []
+        worldBooks = WorldBookStore.fetchBooks(profileId: profileId, context: modelContext)
     }
 
     private func toggleEntry(bookId: UUID, entryIndex: Int, enabled: Bool) {
@@ -751,7 +750,7 @@ struct WorldBookPanelView: View {
         guard entryIndex < entries.count else { return }
         entries[entryIndex].isEnabled = enabled
         worldBooks[bookIndex].entries = entries
-        try? modelContext.save()
+        WorldBookStore.persist(context: modelContext)
     }
 
     private func saveEntry(_ entry: WorldBookEntry) {
@@ -780,7 +779,7 @@ struct WorldBookPanelView: View {
         }
 
         worldBooks[bookIndex].entries = entries
-        try? modelContext.save()
+        WorldBookStore.persist(context: modelContext)
     }
 
     private enum BookScope { case floor, conversation }
@@ -792,14 +791,9 @@ struct WorldBookPanelView: View {
             worldBooks[idx].scopeConversationId = nil
         case .conversation:
             let pid = profileManager?.currentProfile.id ?? ""
-            let convDescriptor = FetchDescriptor<Conversation>(
-                predicate: #Predicate<Conversation> { $0.profileId == pid },
-                sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)]
-            )
-            let currentConvId = (try? modelContext.fetch(convDescriptor))?.first?.id
-            worldBooks[idx].scopeConversationId = currentConvId
+            worldBooks[idx].scopeConversationId = WorldBookStore.latestConversationId(profileId: pid, context: modelContext)
         }
-        try? modelContext.save()
+        WorldBookStore.persist(context: modelContext)
     }
 
     private func createNewBook() {
@@ -813,33 +807,24 @@ struct WorldBookPanelView: View {
         case 2: // 当前对话
             let profileId = profileManager?.currentProfile.id ?? ""
             let worldBook = WorldBook(name: name, profileId: profileId, entries: [])
-            // 找到当前选中的对话 ID
-            let pid = profileManager?.currentProfile.id ?? ""
-            let convDescriptor = FetchDescriptor<Conversation>(
-                predicate: #Predicate<Conversation> { $0.profileId == pid },
-                sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)]
-            )
-            let currentConvId = (try? modelContext.fetch(convDescriptor))?.first?.id
-            worldBook.scopeConversationId = currentConvId
-            modelContext.insert(worldBook)
+            worldBook.scopeConversationId = WorldBookStore.latestConversationId(profileId: profileId, context: modelContext)
+            WorldBookStore.insert(worldBook, context: modelContext)
 
             if var profile = profileManager?.currentProfile {
                 profile.linkedWorldBookIDs.append(worldBook.id.uuidString)
                 profileManager?.updateProfile(profile)
             }
-            try? modelContext.save()
             loadWorldBooks()
 
         default: // 0 = 楼层
             let profileId = profileManager?.currentProfile.id ?? ""
             let worldBook = WorldBook(name: name, profileId: profileId, entries: [])
-            modelContext.insert(worldBook)
+            WorldBookStore.insert(worldBook, context: modelContext)
 
             if var profile = profileManager?.currentProfile {
                 profile.linkedWorldBookIDs.append(worldBook.id.uuidString)
                 profileManager?.updateProfile(profile)
             }
-            try? modelContext.save()
             loadWorldBooks()
         }
     }
@@ -852,7 +837,7 @@ struct WorldBookPanelView: View {
         entries.remove(at: entryIndex)
         worldBooks[bookIndex].entries = entries
         expandedEntryIds.remove(entryId)
-        try? modelContext.save()
+        WorldBookStore.persist(context: modelContext)
     }
 
     private func renameBook() {
@@ -863,7 +848,7 @@ struct WorldBookPanelView: View {
             return
         }
         worldBooks[idx].name = renameText.trimmingCharacters(in: .whitespaces)
-        try? modelContext.save()
+        WorldBookStore.persist(context: modelContext)
         renamingBook = nil
     }
 
@@ -873,7 +858,7 @@ struct WorldBookPanelView: View {
             deletingBook = nil
             return
         }
-        modelContext.delete(worldBooks[idx])
+        WorldBookStore.delete(worldBooks[idx], context: modelContext)
         worldBooks.remove(at: idx)
 
         // 从 profile 移除绑定
@@ -882,7 +867,6 @@ struct WorldBookPanelView: View {
             profileManager?.updateProfile(profile)
         }
 
-        try? modelContext.save()
         deletingBook = nil
     }
 
@@ -921,7 +905,7 @@ struct WorldBookPanelView: View {
                 }
                 let profileId = profileManager?.currentProfile.id ?? ""
                 let worldBook = WorldBook(name: name, profileId: profileId, entries: entries)
-                modelContext.insert(worldBook)
+                WorldBookStore.insert(worldBook, context: modelContext)
 
                 // 绑定到当前楼层
                 if var profile = profileManager?.currentProfile {
@@ -929,7 +913,6 @@ struct WorldBookPanelView: View {
                     profileManager?.updateProfile(profile)
                 }
 
-                try? modelContext.save()
                 loadWorldBooks()
             } catch {
                 wbImportError = error.localizedDescription
