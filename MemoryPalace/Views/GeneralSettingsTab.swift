@@ -12,6 +12,7 @@ struct GeneralSettingsTab: View {
     @AppStorage("assistantName") private var assistantName = "助手"
     @State private var editingUserName = ""
     @State private var editingAssistantName = ""
+    @State private var wbPendingDelete: WorldBook? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -116,7 +117,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
 
                             Button {
-                                unbindWorldBook(book)
+                                wbPendingDelete = book
                             } label: {
                                 Image(systemName: "xmark")
                                     .font(.system(size: Theme.SettingsFont.secondary, weight: .medium))
@@ -137,15 +138,34 @@ struct GeneralSettingsTab: View {
                 .font(.system(size: Theme.SettingsFont.caption))
                 .foregroundColor(Theme.textMuted.opacity(0.6))
         }
+        .confirmationDialog("删除世界书",
+            isPresented: Binding(
+                get: { wbPendingDelete != nil },
+                set: { if !$0 { wbPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let book = wbPendingDelete { deleteWorldBook(book) }
+                wbPendingDelete = nil
+            }
+            Button("取消", role: .cancel) { wbPendingDelete = nil }
+        } message: {
+            if let book = wbPendingDelete {
+                Text("确定要删除「\(book.name)」吗？包含 \(book.entries.count) 个条目，不可恢复。")
+            }
+        }
     }
 
-    private func unbindWorldBook(_ book: WorldBook) {
+    private func deleteWorldBook(_ book: WorldBook) {
         modelContext.delete(book)
         if var profile = profileManager?.currentProfile {
             profile.linkedWorldBookIDs.removeAll { $0 == book.id.uuidString }
             profileManager?.updateProfile(profile)
         }
-        try? modelContext.save()
+        do { try modelContext.save() } catch {
+            print("[worldbook] 删除保存失败: \(error)")
+        }
     }
 }
 
@@ -226,6 +246,7 @@ struct IOSGeneralPage: View {
 private struct IOSGeneralWorldBookBindingSection: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+    @State private var wbPendingDelete: WorldBook? = nil
 
     var body: some View {
         let profileId = profileManager?.currentProfile.id ?? ""
@@ -261,7 +282,7 @@ private struct IOSGeneralWorldBookBindingSection: View {
                     Spacer()
 
                     Button {
-                        unbindWorldBook(book)
+                        wbPendingDelete = book
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: Theme.F.secondary, weight: .medium))
@@ -277,14 +298,33 @@ private struct IOSGeneralWorldBookBindingSection: View {
         Text("在右栏「世界书」tab 里可以新建、导入、编辑世界书")
             .font(.system(size: Theme.F.caption))
             .foregroundColor(Theme.textMuted.opacity(0.6))
+            .confirmationDialog("删除世界书",
+                isPresented: Binding(
+                    get: { wbPendingDelete != nil },
+                    set: { if !$0 { wbPendingDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("删除", role: .destructive) {
+                    if let book = wbPendingDelete { deleteWorldBook(book) }
+                    wbPendingDelete = nil
+                }
+                Button("取消", role: .cancel) { wbPendingDelete = nil }
+            } message: {
+                if let book = wbPendingDelete {
+                    Text("确定要删除「\(book.name)」吗？包含 \(book.entries.count) 个条目，不可恢复。")
+                }
+            }
     }
 
-    private func unbindWorldBook(_ book: WorldBook) {
+    private func deleteWorldBook(_ book: WorldBook) {
         modelContext.delete(book)
         if var profile = profileManager?.currentProfile {
             profile.linkedWorldBookIDs.removeAll { $0 == book.id.uuidString }
             profileManager?.updateProfile(profile)
         }
-        try? modelContext.save()
+        do { try modelContext.save() } catch {
+            print("[worldbook] 删除保存失败: \(error)")
+        }
     }
 }
