@@ -520,7 +520,7 @@ struct SidebarView: View {
                                                                 contentPreview: conversation.title,
                                                                 profileId: profileId
                                                             )
-                                                            modelContext.insert(item)
+                                                            ConversationListStore.insertFavorite(item, context: modelContext)
                                                         }) {
                                                             Label("\(tag.emoji) \(tag.name)", systemImage: "tag")
                                                         }
@@ -1247,15 +1247,7 @@ struct SidebarView: View {
         HapticService.shared.deleteAction()
         guard let tag = tags.first(where: { $0.id == id }) else { return }
         let pid = profileManager?.currentProfile.id ?? ""
-        // 删除该 tag 的所有 FavoriteItem（仅当前楼层）
-        let descriptor = FetchDescriptor<FavoriteItem>(
-            predicate: #Predicate<FavoriteItem> { item in item.tagId == id && item.profileId == pid }
-        )
-        if let items = try? modelContext.fetch(descriptor) {
-            for item in items { modelContext.delete(item) }
-        }
-        modelContext.delete(tag)
-        try? modelContext.save()
+        ConversationListStore.deleteTag(tag, profileId: pid, context: modelContext)
         // 如果当前选中的就是被删的，回落
         if selectedTagId == id {
             selectedTagId = nil
@@ -1265,69 +1257,22 @@ struct SidebarView: View {
 
     private func navigateToNode(_ node: MessageNode) {
         // Find the conversation for this node
-        let convId = node.conversationId
         let pid = profileManager?.currentProfile.id ?? ""
-        let descriptor = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { conv in
-                conv.id == convId && conv.profileId == pid
-            }
-        )
-        guard let conversation = try? modelContext.fetch(descriptor).first else { return }
+        guard let conversation = ConversationListStore.conversation(id: node.conversationId, profileId: pid, context: modelContext) else { return }
 
         // Set pending scroll BEFORE loadConversation — it fires after tree loads
         viewModel.pendingScrollNodeId = node.id
         viewModel.loadConversation(conversation, context: modelContext)
     }
 
-    /// Fetch all Conversation titles in one query, return as [id: title] map
-    private func fetchConversationTitleMap() -> [String: String] {
-        let pid = profileManager?.currentProfile.id ?? ""
-        let desc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.profileId == pid }
-        )
-        guard let allConvs = try? modelContext.fetch(desc) else { return [:] }
-        var map: [String: String] = [:]
-        map.reserveCapacity(allConvs.count)
-        for conv in allConvs { map[conv.id] = conv.title }
-        return map
-    }
-
     private func fetchFavoritedNodes() {
         let pid = profileManager?.currentProfile.id ?? ""
-        let descriptor = FetchDescriptor<MessageNode>(
-            predicate: #Predicate<MessageNode> { node in
-                node.profileId == pid && node.isFavorite == true && node.isDeleted == false
-            },
-            sortBy: [SortDescriptor(\MessageNode.createTime, order: .reverse)]
-        )
-        guard let nodes = try? modelContext.fetch(descriptor) else {
-            favoritedNodes = []
-            return
-        }
-
-        let titleMap = fetchConversationTitleMap()
-        favoritedNodes = nodes.map { node in
-            (node: node, convTitle: titleMap[node.conversationId] ?? "未知对话")
-        }
+        favoritedNodes = ConversationListStore.favoritedNodes(profileId: pid, context: modelContext)
     }
 
     private func fetchDeletedNodes() {
         let pid = profileManager?.currentProfile.id ?? ""
-        let descriptor = FetchDescriptor<MessageNode>(
-            predicate: #Predicate<MessageNode> { node in
-                node.profileId == pid && node.isDeleted == true
-            },
-            sortBy: [SortDescriptor(\MessageNode.deletedAt, order: .reverse)]
-        )
-        guard let nodes = try? modelContext.fetch(descriptor) else {
-            deletedNodes = []
-            return
-        }
-
-        let titleMap = fetchConversationTitleMap()
-        deletedNodes = nodes.map { node in
-            (node: node, convTitle: titleMap[node.conversationId] ?? "未知对话")
-        }
+        deletedNodes = ConversationListStore.deletedNodes(profileId: pid, context: modelContext)
     }
 
     private func conversationSortDescriptors() -> [SortDescriptor<Conversation>] {
@@ -1497,18 +1442,9 @@ struct SidebarView: View {
         case .all, .trash:
             return nil
         case .favorites:
-            let desc = FetchDescriptor<Conversation>(
-                predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false && $0.isFavorite == true }
-            )
-            let convs = (try? modelContext.fetch(desc)) ?? []
-            return Set(convs.map(\.id))
+            return ConversationListStore.favoriteConversationIds(profileId: pid, context: modelContext)
         case .tag(let id):
-            let tid = id
-            let desc = FetchDescriptor<FavoriteItem>(
-                predicate: #Predicate<FavoriteItem> { $0.profileId == pid && $0.tagId == tid }
-            )
-            let items = (try? modelContext.fetch(desc)) ?? []
-            return Set(items.map(\.conversationId))
+            return ConversationListStore.taggedConversationIds(tagId: id, profileId: pid, context: modelContext)
         }
     }
 
@@ -1549,12 +1485,8 @@ struct SidebarView: View {
     }
 
     private func navigateToNodeById(_ nodeId: String, conversationId: String) {
-        let cid = conversationId
         let pid = profileManager?.currentProfile.id ?? ""
-        let convDesc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == pid }
-        )
-        guard let conversation = try? modelContext.fetch(convDesc).first else { return }
+        guard let conversation = ConversationListStore.conversation(id: conversationId, profileId: pid, context: modelContext) else { return }
         // B20 part 2: 走 ViewModel 统一入口（去抖 + 主线/分支判断 + page 切换通知 + toast）
         viewModel.navigateToSearchResult(nodeId: nodeId, conversation: conversation, context: modelContext)
     }
@@ -1587,12 +1519,8 @@ struct SidebarView: View {
             }
         } else {
             // 没有 nearestMessageId，至少跳到对话
-            let cid = result.conversationId
             let pid = profileManager?.currentProfile.id ?? ""
-            let convDesc = FetchDescriptor<Conversation>(
-                predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == pid }
-            )
-            if let conv = try? modelContext.fetch(convDesc).first {
+            if let conv = ConversationListStore.conversation(id: result.conversationId, profileId: pid, context: modelContext) {
                 viewModel.loadConversation(conv, context: modelContext)
             }
         }
@@ -1926,12 +1854,8 @@ struct SidebarView: View {
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
         .onTapGesture {
-            let cid = group.convId
             let pid = profileManager?.currentProfile.id ?? ""
-            let convDesc = FetchDescriptor<Conversation>(
-                predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == pid }
-            )
-            if let conv = try? modelContext.fetch(convDesc).first {
+            if let conv = ConversationListStore.conversation(id: group.convId, profileId: pid, context: modelContext) {
                 viewModel.loadConversation(conv, context: modelContext)
             }
         }
@@ -1971,12 +1895,8 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .onTapGesture {
-            let cid = g.convId
             let pid = profileManager?.currentProfile.id ?? ""
-            let convDesc = FetchDescriptor<Conversation>(
-                predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == pid }
-            )
-            if let conv = try? modelContext.fetch(convDesc).first {
+            if let conv = ConversationListStore.conversation(id: g.convId, profileId: pid, context: modelContext) {
                 viewModel.loadConversation(conv, context: modelContext)
             }
         }
@@ -2068,7 +1988,7 @@ struct NewTagSheet: View {
                 Button("创建") {
                     guard !name.isEmpty else { return }
                     let tag = ConversationTag(name: name, emoji: emoji, order: tags.count, profileId: profileId)
-                    modelContext.insert(tag)
+                    ConversationListStore.insertTag(tag, context: modelContext)
                     dismiss()
                 }
                 .disabled(name.isEmpty)
@@ -2790,7 +2710,7 @@ struct TagReorderDropDelegate: DropDelegate {
         for (i, tag) in sorted.enumerated() {
             tag.order = i
         }
-        try? modelContext.save()
+        ConversationListStore.persist(context: modelContext)
     }
 }
 
