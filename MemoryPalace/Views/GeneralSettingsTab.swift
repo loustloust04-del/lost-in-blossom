@@ -75,6 +75,8 @@ struct GeneralSettingsTab: View {
         }
     }
 
+    @State private var wbPendingDelete: WorldBook? = nil
+
     // MARK: - 世界书绑定管理
 
     private var worldBookBindingSection: some View {
@@ -131,6 +133,23 @@ struct GeneralSettingsTab: View {
                         .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.mainBg.opacity(0.6)))
                     }
+                }
+            }
+            .confirmationDialog("删除世界书",
+                isPresented: Binding(
+                    get: { wbPendingDelete != nil },
+                    set: { if !$0 { wbPendingDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("删除", role: .destructive) {
+                    if let book = wbPendingDelete { deleteWorldBook(book) }
+                    wbPendingDelete = nil
+                }
+                Button("取消", role: .cancel) { wbPendingDelete = nil }
+            } message: {
+                if let book = wbPendingDelete {
+                    Text("确定要删除「\(book.name)」吗？包含 \(book.entries.count) 个条目，不可恢复。")
                 }
             }
 
@@ -292,6 +311,23 @@ private struct IOSGeneralWorldBookBindingSection: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+        }
+        .confirmationDialog("删除世界书",
+            isPresented: Binding(
+                get: { wbPendingDelete != nil },
+                set: { if !$0 { wbPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let book = wbPendingDelete { deleteWorldBook(book) }
+                wbPendingDelete = nil
+            }
+            Button("取消", role: .cancel) { wbPendingDelete = nil }
+        } message: {
+            if let book = wbPendingDelete {
+                Text("确定要删除「\(book.name)」吗？包含 \(book.entries.count) 个条目，不可恢复。")
             }
         }
 
