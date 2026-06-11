@@ -24,6 +24,7 @@ struct AddToChatSheet: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     /// 控制 staggered 入场动画
     @State private var appeared = false
+    @State private var showFilePicker = false
 
     private func compressImage(_ uiImage: UIImage, maxDimension: CGFloat = 1024) -> Data? {
         var img = uiImage
@@ -87,51 +88,14 @@ struct AddToChatSheet: View {
 
                 rowDivider
 
-                // ── 行 1：粘贴文件（从 Files App 复制后粘贴）──────────────
+                // ── 行 1：选择文件 ──────────────────────────────────
                 Button {
-                    let pb = UIPasteboard.general
-                    let types = pb.types
-                    let utiExtMap: [String: String] = [
-                        "com.adobe.pdf": "pdf",
-                        "public.json": "json",
-                        "public.plain-text": "txt",
-                        "public.utf8-plain-text": "txt",
-                        "public.text": "txt",
-                        "public.html": "html",
-                        "public.xml": "xml",
-                        "public.comma-separated-values-text": "csv",
-                        "public.png": "png",
-                        "public.jpeg": "jpg",
-                        "com.compuserve.gif": "gif",
-                        "public.webp": "webp",
-                        "public.heic": "heic",
-                    ]
-                    var resolvedExt = ""
-                    var resolvedType = ""
-                    for t in types {
-                        if let ext = utiExtMap[t] { resolvedExt = ext; resolvedType = t; break }
-                        let parts = t.split(separator: ".")
-                        if let last = parts.last {
-                            let s = String(last)
-                            if ["pdf","json","txt","html","csv","png","jpg","jpeg","gif","webp"].contains(s) {
-                                resolvedExt = s; resolvedType = t; break
-                            }
-                        }
-                    }
-                    if resolvedType.isEmpty, let ft = types.first { resolvedType = ft }
-                    if let data = pb.data(forPasteboardType: resolvedType) {
-                        let name: String
-                        if let url = pb.url { name = url.lastPathComponent }
-                        else { name = resolvedExt.isEmpty ? "pasted-file" : "pasted-file.\(resolvedExt)" }
-                        if data.count <= 10_485_760 { pendingFileData = data; pendingFileName = name }
-                    }
-                    dismiss()
+                    showFilePicker = true
                 } label: {
                     addToChatRow(
-                        icon: "doc.on.clipboard",
+                        icon: "doc",
                         iconColor: Color.red.opacity(0.8),
-                        title: "粘贴文件",
-                        trailing: AnyView(Text("在 Files 中复制文件后点此").font(.caption2).foregroundStyle(.secondary))
+                        title: "选择文件"
                     )
                 }
                 .buttonStyle(.plain)
@@ -223,6 +187,25 @@ struct AddToChatSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+            .fileImporter(
+                isPresented: $showFilePicker,
+                allowedContentTypes: [.pdf, .json, .plainText, .html, .commaSeparatedText, .png, .jpeg, .gif, .webP, .heic, .xml],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    guard url.startAccessingSecurityScopedResource() else { return }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    if let data = try? Data(contentsOf: url), data.count <= 10_485_760 {
+                        pendingFileData = data
+                        pendingFileName = url.lastPathComponent
+                    }
+                case .failure:
+                    break
+                }
+                dismiss()
+            }
         .presentationBackground(Theme.sidebarBg)
         .onAppear {
             withAnimation(.easeOut(duration: 0.1)) {
@@ -242,6 +225,7 @@ struct AddToChatSheet: View {
                 }
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
+
                 .presentationBackground(Theme.sidebarBg)
             }
         }
