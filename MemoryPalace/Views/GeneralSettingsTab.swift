@@ -86,6 +86,7 @@ private struct IOSGeneralWorldBookBindingSection: View {
         let wbDescriptor = FetchDescriptor<WorldBook>(predicate: #Predicate { $0.profileId == profileId })
         let floorBooks = (try? modelContext.fetch(wbDescriptor)) ?? []
 
+        Group {
         if floorBooks.isEmpty {
             Text("当前楼层没有绑定的世界书")
                 .font(.system(size: Theme.F.body))
@@ -126,6 +127,7 @@ private struct IOSGeneralWorldBookBindingSection: View {
                 }
             }
         }
+        } // Group
         .confirmationDialog("删除世界书",
             isPresented: Binding(
                 get: { wbPendingDelete != nil },
