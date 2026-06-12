@@ -78,6 +78,19 @@ jobs:
           echo "$MOBILEPROVISION_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/mp-bunny.mobileprovision
           echo "✅ Provisioning profile installed"
 
+      - name: Inspect provisioning profile entitlements
+        run: |
+          PROFILE=~/Library/MobileDevice/Provisioning\ Profiles/mp-bunny.mobileprovision
+          echo "=== Profile UUID / Name ==="
+          security cms -D -i "$PROFILE" 2>/dev/null | plutil -extract Name xml1 -o - - | cat
+          echo "=== Entitlements ==="
+          security cms -D -i "$PROFILE" 2>/dev/null | plutil -extract Entitlements xml1 -o - - | cat
+          echo "=== aps-environment check ==="
+          security cms -D -i "$PROFILE" 2>/dev/null | plutil -extract Entitlements.aps-environment xml1 -o - - 2>/dev/null \
+            && echo "✅ aps-environment FOUND" \
+            || echo "❌ aps-environment MISSING — profile has no Push capability"
+
+
       - name: Archive (signed)
         run: |
           xcodebuild archive \
@@ -85,6 +98,17 @@ jobs:
             -scheme MemoryPalaceIOS \
             -destination 'generic/platform=iOS' \
             -archivePath build/LiB.xcarchive
+
+      - name: Inspect app entitlements (post-archive)
+        run: |
+          APP=$(find build/LiB.xcarchive/Products/Applications -name "*.app" | head -1)
+          echo "=== App entitlements ==="
+          codesign -d --entitlements - "$APP" 2>&1 | cat
+          echo "=== aps-environment check ==="
+          codesign -d --entitlements - "$APP" 2>&1 | grep -i "aps-environment" \
+            && echo "✅ aps-environment present in signed app" \
+            || echo "❌ aps-environment NOT in signed app"
+
 
       - name: Export .ipa
         run: |

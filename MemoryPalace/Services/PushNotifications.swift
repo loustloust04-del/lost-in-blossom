@@ -8,10 +8,16 @@ import UserNotifications
 final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        CCBridgeWebSocketClient.shared.sendAppState("push_delegate_init")
         UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            guard granted else { return }
-            DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if granted {
+                CCBridgeWebSocketClient.shared.sendAppState("push_auth_granted")
+                DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+            } else {
+                let reason = error?.localizedDescription ?? "denied"
+                CCBridgeWebSocketClient.shared.sendAppState("push_auth_denied:\(reason)")
+            }
         }
         return true
     }
