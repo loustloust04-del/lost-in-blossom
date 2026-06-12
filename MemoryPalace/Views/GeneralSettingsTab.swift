@@ -62,7 +62,7 @@ struct IOSGeneralPage: View {
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
 
-            Section("其他楼层的世界书（含孤儿）") {
+            Section("全部世界书（可删除）") {
                 OrphanWorldBookCleanupSection()
             }
             .listRowBackground(Theme.mainBg)
@@ -182,7 +182,7 @@ private struct OrphanWorldBookCleanupSection: View {
     var body: some View {
         Group {
             if orphans.isEmpty {
-                Text("没有其他楼层的世界书")
+                Text("数据库里没有世界书")
                     .font(.system(size: Theme.F.body))
                     .foregroundColor(Theme.textMuted)
             } else {
@@ -239,9 +239,6 @@ private struct OrphanWorldBookCleanupSection: View {
 
     private func loadOrphans() {
         let allDescriptor = FetchDescriptor<WorldBook>()
-        let allBooks = (try? modelContext.fetch(allDescriptor)) ?? []
-        let currentProfileId = profileManager?.currentProfile.id ?? ""
-        // Show all world books NOT belonging to current floor — these are the ones you can't see in the panel
-        orphans = allBooks.filter { $0.profileId != currentProfileId }
+        orphans = (try? modelContext.fetch(allDescriptor)) ?? []
     }
 }
