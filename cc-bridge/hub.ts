@@ -124,6 +124,29 @@ const focusByClient = new Map<WebSocket, string | null>()
 const backgroundedClients = new Set<WebSocket>()
 const deviceTokenByClient = new Map<WebSocket, string>()
 
+// Persistent device tokens (token → last-seen ms). iOS suspends the WebSocket on
+// background — exactly when push is needed — so token lifetime must NOT be tied
+// to the connection. Survives WS close and hub restart.
+const DEVICE_TOKENS_PATH = join(process.cwd(), "cc-bridge", "device-tokens.json")
+
+function loadDeviceTokens(): [string, number][] {
+  try {
+    if (!existsSync(DEVICE_TOKENS_PATH)) return []
+    return Object.entries(JSON.parse(readFileSync(DEVICE_TOKENS_PATH, "utf-8")) as Record<string, number>)
+  } catch { return [] }
+}
+
+function saveDeviceTokens(): void {
+  try {
+    writeFileSync(DEVICE_TOKENS_PATH, JSON.stringify(Object.fromEntries(knownDeviceTokens), null, 2), "utf-8")
+  } catch (err: any) {
+    console.warn(`[hub] saveDeviceTokens failed: ${err?.message}`)
+  }
+}
+
+const knownDeviceTokens = new Map<string, number>(loadDeviceTokens())
+if (knownDeviceTokens.size > 0) console.log(`[hub] loaded ${knownDeviceTokens.size} persisted device token(s)`)
+
 // ── Offline message durability (Phase 4.1) ────────────────────────────────────
 
 interface OfflineMessage {
@@ -572,7 +595,9 @@ export function startHub(): WebSocketServer {
           const token = typeof msg.device_token === "string" ? msg.device_token : ""
           if (token) {
             deviceTokenByClient.set(ws, token)
-            console.log(`[hub] register_device token=...${token.slice(-8)}`)
+            knownDeviceTokens.set(token, Date.now())
+            saveDeviceTokens()
+            console.log(`[hub] register_device token=...${token.slice(-8)} (persisted)`)
           }
         }
       })
@@ -671,14 +696,31 @@ export function startHub(): WebSocketServer {
           // Focus check: if no client is watching this chat → push notification needed
           const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
-          // Push to devices that are backgrounded or not focused on this chat
-          for (const [appWs, token] of deviceTokenByClient) {
-            if (!token) continue
-            const focused = focusByClient.get(appWs)
-            if (focused === msg.chat_id && !backgroundedClients.has(appWs)) continue
+          // Push to all known devices. Tokens outlive the WebSocket (iOS kills the
+          // socket on background — exactly when push is needed), so iterate the
+          // persistent set; skip only devices with a live, foregrounded connection
+          // currently focused on this chat.
+          for (const token of knownDeviceTokens.keys()) {
+            let liveAndFocused = false
+            for (const [appWs, t] of deviceTokenByClient) {
+              if (t !== token) continue
+              if (focusByClient.get(appWs) === msg.chat_id && !backgroundedClients.has(appWs)) {
+                liveAndFocused = true
+                break
+              }
+            }
+            if (liveAndFocused) continue
             const preview = String(msg.content).slice(0, 100)
             sendPush(token, "MemoryPalace", preview, msg.chat_id).then(result => {
-              if (!result.ok) console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
+              if (!result.ok) {
+                console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
+                // Prune tokens APNs reports as dead so we don't retry them forever.
+                if (result.status === 410 || result.error === "Unregistered" || result.error === "BadDeviceToken") {
+                  knownDeviceTokens.delete(token)
+                  saveDeviceTokens()
+                  console.log(`[hub] pruned dead device token ...${token.slice(-8)}`)
+                }
+              }
               else console.log(`[hub] push sent to ...${token.slice(-8)}`)
             })
           }

@@ -392,7 +392,17 @@ extension ConversationViewModel {
     private func extractMemoriesIfNeeded(profileId: String, conversationId: String, model: ProviderModel, providerManager: ProviderManager, context: ModelContext) {
         guard !profileId.isEmpty else { return }
 
-        let recentMessages = Array(buildAPIMessages().suffix(memoryExtractWindow))
+        // SC-B2：recentMessages 带节点 id，供 quote 锚定回溯到具体消息
+        let recentMessages: [(id: String, role: String, content: String)] = Array(
+            currentPath
+                .filter { $0.role == "user" || $0.role == "assistant" }
+                .suffix(memoryExtractWindow)
+        ).compactMap { node in
+            guard !node.content.isEmpty else { return nil }
+            let content = node.role == "assistant" ? ContentCleaner.extractThinking(from: node.content).content : node.content
+            guard !content.isEmpty else { return nil }
+            return (id: node.id, role: node.role, content: content)
+        }
         guard !recentMessages.isEmpty else { return }
 
         let existingMemories = memoryStore.listHotAndWarm(profileId: profileId, context: context)
@@ -448,24 +458,25 @@ extension ConversationViewModel {
                 guard !actions.isEmpty else { return }
 
                 await MainActor.run {
+                    #if DEBUG
                     for action in actions {
-                        #if DEBUG
                         switch action {
-                        case .add(let content, let category, _):
+                        case .add(let content, let category, _, _):
                             print("🧠 记忆: ✅ ADD [\(category)] \(content.prefix(60))...")
-                        case .update(let id, let content, _):
+                        case .update(let id, let content, _, _):
                             print("🧠 记忆: ✏️ UPDATE \(id.uuidString.prefix(8)) → \(content.prefix(60))...")
                         case .delete(let id):
                             print("🧠 记忆: 🗑️ DELETE \(id.uuidString.prefix(8))")
                         }
-                        #endif
                     }
+                    #endif
                     try? MemoryExtractor.executeActions(
                         actions,
                         store: self?.memoryStore ?? SwiftDataMemoryStore(),
                         profileId: profileId,
                         extractedBy: extractModel.name,
                         sourceConversationId: conversationId,
+                        recentMessages: recentMessages,
                         context: context
                     )
                 }

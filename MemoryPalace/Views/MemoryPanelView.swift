@@ -246,7 +246,9 @@ struct MemoryPanelView: View {
             memory: mem,
             effectiveWeight: effectiveWeight(mem),
             onPin: { togglePin(mem) },
-            onDelete: { deleteMemory(mem) }
+            onDelete: { deleteMemory(mem) },
+            onRevive: mem.supersededAt != nil ? { reviveMemory(mem) } : nil,
+            onJumpToSource: mem.sourceConversationId != nil ? { jumpToSource(mem) } : nil
         )
         .id(idStr)
         .background(
@@ -401,6 +403,25 @@ struct MemoryPanelView: View {
         refreshMemories()
     }
 
+    private func reviveMemory(_ memory: Memory) {
+        memory.supersededAt = nil
+        memory.updatedAt = Date()
+        try? modelContext.save()
+        refreshMemories()
+    }
+
+    /// 出处跳转（SC-B2 v1）：跳到源对话，不定位消息（消息级定位等 B23 修好一起做）
+    private func jumpToSource(_ memory: Memory) {
+        guard let cid = memory.sourceConversationId else { return }
+        let pid = profileManager?.currentProfile.id ?? ""
+        let convDesc = FetchDescriptor<Conversation>(
+            predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == pid }
+        )
+        if let conv = try? modelContext.fetch(convDesc).first {
+            viewModel.loadConversation(conv, context: modelContext)
+        }
+    }
+
     private func addMemory() {
         let text = newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -431,6 +452,8 @@ struct MemoryCardView: View {
     var isFlashing: Bool = false
     var onPin: () -> Void
     var onDelete: () -> Void
+    var onRevive: (() -> Void)? = nil          // 已失效记忆的复活（SC-B2）
+    var onJumpToSource: (() -> Void)? = nil    // 出处跳转源对话（SC-B2）
 
     @State private var isHovering = false
     @State private var breathPhase: Double = 0
@@ -441,9 +464,10 @@ struct MemoryCardView: View {
         "goal": "目标", "context": "情境"
     ]
 
-    // Opacity: 0.25 (dead) to 1.0 (fresh)
+    // Opacity: 0.25 (dead) to 1.0 (fresh)；已失效统一灰显
     private var baseOpacity: Double {
-        memory.isUserExplicit ? 1.0 : (0.25 + 0.75 * effectiveWeight)
+        if memory.supersededAt != nil { return 0.45 }
+        return memory.isUserExplicit ? 1.0 : (0.25 + 0.75 * effectiveWeight)
     }
 
     // Breath: stronger memories breathe faster and more visibly
@@ -483,6 +507,22 @@ struct MemoryCardView: View {
                     .foregroundColor(Theme.textPrimary)
                     .lineLimit(isIOSStyle ? 4 : 3)
 
+                // 出处行（SC-B2）：有 quote 显示，可点跳源对话（v1 跳对话不定位消息）
+                if let quote = memory.sourceQuote {
+                    Button { onJumpToSource?() } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "quote.opening")
+                                .font(.system(size: 7))
+                            Text(quote)
+                                .font(.system(size: Theme.F.caption))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(onJumpToSource == nil)
+                }
+
                 // Meta row
                 HStack(spacing: 6) {
                     // Category tag
@@ -506,6 +546,16 @@ struct MemoryCardView: View {
 
                     Spacer()
 
+                    // 已失效标记（SC-B2）
+                    if memory.supersededAt != nil {
+                        Text("已失效")
+                            .font(.system(size: Theme.F.badge))
+                            .foregroundColor(Theme.textMuted)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().stroke(Theme.textMuted.opacity(0.5), lineWidth: 0.5))
+                    }
+
                     // Pin icon
                     if memory.isUserExplicit {
                         Image(systemName: "pin.fill")
@@ -515,6 +565,9 @@ struct MemoryCardView: View {
 
                     Menu {
                         Button(memory.isUserExplicit ? "取消钉住" : "钉住", action: onPin)
+                        if memory.supersededAt != nil, let onRevive {
+                            Button("复活", action: onRevive)
+                        }
                         Button("删除", role: .destructive, action: onDelete)
                     } label: {
                         Image(systemName: "ellipsis")

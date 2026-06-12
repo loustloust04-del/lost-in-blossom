@@ -146,4 +146,6 @@ final class ConversationViewModel {
     var budgetBlockedMessage: String? = nil
     /// Pre-send 的估算额度，发送完没 usage 时兜底扣费
     var pendingEstimatedCost: Double = 0
+    /// 上一轮主对话的 token 用量（含 cache 命中数），S1 检查器显示用
+    var lastTurnUsage: TokenUsage? = nil
 }
