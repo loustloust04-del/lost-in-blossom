@@ -124,7 +124,7 @@ jobs:
         with:
           name: LostInBlossom-Signed
           path: LostInBlossom.ipa
-          retention-days: 1
+          retention-days: 7
 
       - name: Deploy to VPS
         if: success()
