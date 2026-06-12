@@ -43,6 +43,7 @@ targets:
     entitlements:
       path: MemoryPalace/MemoryPalaceIOS.entitlements
       properties:
+        aps-environment: development
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
     info:
