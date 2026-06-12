@@ -96,6 +96,14 @@ final class CCBridgeWebSocketClient: NSObject {
     static let pushPreviewKey = "ccPushPreview"
     private var pushPreview: String { UserDefaults.standard.string(forKey: Self.pushPreviewKey) ?? "full" }
 
+    /// Re-send cached push token after WebSocket reconnects
+    func resendPushTokenIfNeeded() {
+        if let token = UserDefaults.standard.string(forKey: "apns_device_token"), !token.isEmpty {
+            sendPushToken(token)
+            sendAppState("push_registered_resend")
+        }
+    }
+
     func sendAppState(_ state: String) {
         send(["type": "app_state", "state": state]) { _ in }
     }
@@ -588,6 +596,7 @@ extension CCBridgeWebSocketClient: URLSessionWebSocketDelegate {
             // 只认当前 self.task 的回调，避免被替换掉的老 task 污染状态
             guard webSocketTask === self.task else { return }
             self.isConnected = true
+            self.resendPushTokenIfNeeded()
             self.lastError = nil
             self.reconnectDelay = 1  // 连接成功后重置退避计数
             self.currentIndex = 0    // 下次断重连优先回主 URL

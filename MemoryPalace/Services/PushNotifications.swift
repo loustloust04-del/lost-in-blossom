@@ -26,6 +26,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         print("[Push] ✅ device token: \(hex.prefix(16))...")
+        UserDefaults.standard.set(hex, forKey: "apns_device_token")
         CCBridgeWebSocketClient.shared.sendPushToken(hex)
         CCBridgeWebSocketClient.shared.sendAppState("push_registered")
     }
