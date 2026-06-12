@@ -56,6 +56,15 @@ struct IOSGeneralPage: View {
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
 
+            Section("推送状态") {
+                let token = UserDefaults.standard.string(forKey: "apns_device_token") ?? "未获取"
+                Text(token == "未获取" ? "❌ Device Token: 未获取" : "✅ Token: ...\(token.suffix(8))")
+                    .font(.system(size: Theme.F.secondary))
+                    .foregroundColor(token == "未获取" ? .red : .green)
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+
             Section("世界书") {
                 IOSGeneralWorldBookBindingSection()
             }
