@@ -651,13 +651,15 @@ export function startHub(): WebSocketServer {
           })
           // Broadcast to all connected App clients
           let count = 0
+          let activeCount = 0
           for (const app of appClients) {
             if (app.readyState === WebSocket.OPEN) {
               try { app.send(payload); count++ } catch { /* dead, wait for close */ }
+              if (!backgroundedClients.has(app)) activeCount++
             }
           }
-          // If no online App clients, persist for later delivery
-          if (count === 0) {
+          // If no ACTIVE (foreground) App clients, persist for later delivery
+          if (activeCount === 0) {
             appendOffline(msg.chat_id, {
               content: msg.content,
               message_id: msg.message_id,
