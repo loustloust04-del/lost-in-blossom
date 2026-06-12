@@ -5,7 +5,7 @@ import Foundation
 /// Stub: CacheDiagLog — upstream diagnostic logger, not critical
 final class CacheDiagLog {
     static let shared = CacheDiagLog()
-    func append(_ msg: String) {
+    func log(_ msg: String) {
         #if DEBUG
         print("[MemoryDiag] \(msg)")
         #endif
