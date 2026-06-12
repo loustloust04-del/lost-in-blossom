@@ -3,8 +3,9 @@ import Foundation
 // MARK: - Compatibility stubs for SC-B2 dependencies not yet ported
 
 /// Stub: CacheDiagLog — upstream diagnostic logger, not critical
-enum CacheDiagLog {
-    static func append(_ msg: String) {
+final class CacheDiagLog {
+    static let shared = CacheDiagLog()
+    func append(_ msg: String) {
         #if DEBUG
         print("[MemoryDiag] \(msg)")
         #endif
