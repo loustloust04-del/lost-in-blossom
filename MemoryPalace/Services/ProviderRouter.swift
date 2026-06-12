@@ -1,0 +1,206 @@
+import Foundation
+
+// MARK: - Provider Router
+
+@Observable
+final class ProviderRouter {
+    private var openAIProvider = OpenAICompatibleProvider()
+    private var anthropicProvider = AnthropicProvider()
+    private var ccBridgeProvider = CCBridgeProvider()
+
+    var isStreaming: Bool {
+        openAIProvider.isStreaming || anthropicProvider.isStreaming || ccBridgeProvider.isStreaming
+    }
+
+    var streamingContent: String {
+        if openAIProvider.isStreaming || !openAIProvider.streamingContent.isEmpty {
+            return openAIProvider.streamingContent
+        }
+        if anthropicProvider.isStreaming || !anthropicProvider.streamingContent.isEmpty {
+            return anthropicProvider.streamingContent
+        }
+        return ccBridgeProvider.streamingContent
+    }
+
+    var error: String? {
+        openAIProvider.error ?? anthropicProvider.error ?? ccBridgeProvider.error
+    }
+
+    func sendStreaming(
+        model: ProviderModel,
+        messages: [(role: String, content: String)],
+        systemPrompt: String?,
+        providerManager: ProviderManager,
+        samplingParams: SamplingParams? = nil,
+        additionalHeaders: [String: String] = [:],
+        onSegments: (([MessageSegment]) -> Void)? = nil,
+        onThinkingToken: ((String) -> Void)? = nil,
+        onToken: @escaping (String) -> Void,
+        onComplete: @escaping (String, TokenUsage?) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        guard let provider = providerManager.provider(for: model) else {
+            onError("找不到提供商: \(model.providerId)")
+            return
+        }
+
+        // ccBridge 不要求 apiKey（WebSocket 本地连接，没有云端鉴权）
+        let apiKey: String
+        if provider.type == .ccBridge {
+            apiKey = ""
+        } else {
+            guard let key = providerManager.apiKey(for: provider.id) else {
+                onError("未设置 \(provider.name) 的 API Key")
+                return
+            }
+            apiKey = key
+        }
+
+        let chatProvider: BaseChatProvider
+        switch provider.type {
+        case .openaiCompatible:
+            openAIProvider.onSegmentsCallback = onSegments
+            openAIProvider.onThinkingToken = onThinkingToken
+            chatProvider = openAIProvider
+        case .anthropic:
+            // MCP 服务器注入：provider 为 anthropic 且 mcpEnabled 不为 false 时
+            let mcpEnabled = samplingParams?.mcpEnabled ?? true
+            anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
+            anthropicProvider.onSegmentsCallback = onSegments
+            chatProvider = anthropicProvider
+        case .ccBridge:
+            ccBridgeProvider.onSegmentsCallback = onSegments
+            chatProvider = ccBridgeProvider
+        }
+
+        let mergedHeaders = provider.extraHeaders.merging(additionalHeaders) { _, new in new }
+        let effectiveMessages = modelSupportsVision(model: model, provider: provider)
+            ? messages
+            : filterImageBlocks(from: messages)
+        chatProvider.sendStreaming(
+            messages: effectiveMessages,
+            model: model.modelId,
+            systemPrompt: systemPrompt,
+            apiKey: apiKey,
+            baseURL: provider.baseURL,
+            extraHeaders: mergedHeaders,
+            samplingParams: samplingParams,
+            onToken: onToken,
+            onComplete: onComplete,
+            onError: onError
+        )
+    }
+
+    private func modelSupportsVision(model: ProviderModel, provider: APIProvider) -> Bool {
+        switch provider.type {
+        case .anthropic, .ccBridge:
+            return true
+        case .openaiCompatible:
+            let mid = model.modelId.lowercased()
+            if mid.contains("deepseek") { return false }
+            if mid.contains("gpt-3.5") { return false }
+            return true
+        }
+    }
+
+    private func filterImageBlocks(from messages: [(role: String, content: String)]) -> [(role: String, content: String)] {
+        return messages.map { msg in
+            guard msg.role == "user",
+                  msg.content.hasPrefix("[{"),
+                  let data = msg.content.data(using: .utf8),
+                  let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+                return msg
+            }
+            var filtered: [[String: Any]] = []
+            for block in blocks {
+                if (block["type"] as? String) == "image" {
+                    filtered.append(["type": "text", "text": "[图片]"])
+                } else {
+                    filtered.append(block)
+                }
+            }
+            if filtered.count == 1,
+               filtered[0]["type"] as? String == "text",
+               let text = filtered[0]["text"] as? String {
+                return (role: msg.role, content: text)
+            }
+            guard let json = try? JSONSerialization.data(withJSONObject: filtered),
+                  let str = String(data: json, encoding: .utf8) else {
+                return msg
+            }
+            return (role: msg.role, content: str)
+        }
+    }
+
+    /// 非流式调用 — 用于 memory agent 等后台任务
+    func sendNonStreaming(
+        model: ProviderModel,
+        messages: [(role: String, content: String)],
+        systemPrompt: String?,
+        providerManager: ProviderManager
+    ) async throws -> (String, TokenUsage?) {
+        guard let provider = providerManager.provider(for: model) else {
+            throw NSError(domain: "ProviderRouter", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "找不到提供商: \(model.providerId)"])
+        }
+
+        // ccBridge 不要求 apiKey（WebSocket 本地连接，没有云端鉴权）
+        let apiKey: String
+        if provider.type == .ccBridge {
+            apiKey = ""
+        } else {
+            guard let key = providerManager.apiKey(for: provider.id) else {
+                throw NSError(domain: "ProviderRouter", code: -2,
+                              userInfo: [NSLocalizedDescriptionKey: "未设置 \(provider.name) 的 API Key"])
+            }
+            apiKey = key
+        }
+
+        let chatProvider: BaseChatProvider
+        switch provider.type {
+        case .openaiCompatible:
+            chatProvider = OpenAICompatibleProvider() // 独立实例，避免干扰流式
+        case .anthropic:
+            chatProvider = AnthropicProvider()
+        case .ccBridge:
+            chatProvider = CCBridgeProvider() // 独立实例（内部用 shared WS singleton）
+        }
+
+        return try await chatProvider.sendNonStreaming(
+            messages: messages,
+            model: model.modelId,
+            systemPrompt: systemPrompt,
+            apiKey: apiKey,
+            baseURL: provider.baseURL,
+            extraHeaders: provider.extraHeaders
+        )
+    }
+
+    /// 思考完成后，用当前 provider 异步生成一句话总结（不阻塞正文流式）
+    /// - Returns: 总结文本，失败时返回 nil
+    func summarizeThinking(
+        thinkingText: String,
+        model: ProviderModel,
+        providerManager: ProviderManager
+    ) async -> String? {
+        guard !thinkingText.isEmpty else { return nil }
+        let truncated = String(thinkingText.prefix(1500))
+        let prompt = "请用一句话（不超过20字）概括以下AI的思考过程：\n\n\(truncated)"
+        let messages: [(role: String, content: String)] = [(role: "user", content: prompt)]
+        guard let result = try? await sendNonStreaming(
+            model: model,
+            messages: messages,
+            systemPrompt: nil,
+            providerManager: providerManager
+        ) else { return nil }
+        let summary = result.0.trimmingCharacters(in: .whitespacesAndNewlines)
+        return summary.isEmpty ? nil : summary
+    }
+
+    func cancel() {
+        openAIProvider.cancel()
+        anthropicProvider.cancel()
+        CCBridgeWebSocketClient.shared.unregisterStreamHandler()
+        ccBridgeProvider.cancel()
+    }
+}

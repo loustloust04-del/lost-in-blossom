@@ -1555,187 +1555,39 @@ struct SidebarView: View {
 
     private func fetchPage(offset: Int) {
         isLoadingMore = true
-
+        let pid = profileManager?.currentProfile.id ?? ""
         let interval = searchFilter.dateRange.dateInterval
-        let defaultSort = [SortDescriptor(\Conversation.updateTime, order: .reverse)]
-        // 有关键词 / 有时间筛选 / 改过排序 → 都用用户选的 sortOrder
         let usingFilters = !searchText.isEmpty || searchFilter.dateRange != .all || searchFilter.sortOrder != .recent
-        let sortBy = usingFilters ? conversationSortDescriptors() : defaultSort
+        let sortBy = usingFilters ? conversationSortDescriptors() : [SortDescriptor(\Conversation.updateTime, order: .reverse)]
 
-        // Trash mode
-        if showTrash {
-            var descriptor = FetchDescriptor<Conversation>(sortBy: sortBy)
-            descriptor.predicate = trashPredicate(search: searchText, interval: interval)
-
-            if let count = try? modelContext.fetchCount(descriptor) {
-                totalCount = count
-            }
-
-            descriptor.fetchOffset = offset
-            descriptor.fetchLimit = pageSize
-
-            if let results = try? modelContext.fetch(descriptor) {
-                if offset == 0 {
-                    conversations = results
-                } else {
-                    conversations.append(contentsOf: results)
-                }
-            }
-
-            isLoadingMore = false
-            return
+        let sourceFilter: String?
+        switch memoryFilter {
+        case .chats:  sourceFilter = nil
+        case .almond: sourceFilter = "claude"
+        case .amber:  sourceFilter = "chatgpt"
         }
 
-        // If a tag is selected, fetch only non-deleted conversations then filter by tag membership
-        if let tagId = selectedTagId {
-            let tid = tagId
-            let pid = profileManager?.currentProfile.id ?? ""
-            let favDescriptor = FetchDescriptor<FavoriteItem>(
-                predicate: #Predicate<FavoriteItem> { item in
-                    item.profileId == pid && item.tagId == tid
-                }
-            )
-            if let items = try? modelContext.fetch(favDescriptor) {
-                let convIds = Set(items.map(\.conversationId))
-                // Fetch only non-deleted conversations (not all 1700+)
-                var convDescriptor = FetchDescriptor<Conversation>(sortBy: sortBy)
-                convDescriptor.predicate = normalPredicate(search: searchText, interval: interval, favoritesOnly: false)
-                if let allConvs = try? modelContext.fetch(convDescriptor) {
-                    let filtered = allConvs.filter { convIds.contains($0.id) }
-                    totalCount = filtered.count
-                    conversations = Array(filtered.prefix(pageSize))
-                }
-            }
-            isLoadingMore = false
-            return
-        }
+        let page = ConversationListStore.fetchPage(
+            offset: offset,
+            pageSize: pageSize,
+            profileId: pid,
+            showTrash: showTrash,
+            selectedTagId: selectedTagId,
+            sourceFilter: sourceFilter,
+            searchText: searchText,
+            sortDescriptors: sortBy,
+            favoritesOnly: showFavoritesOnly,
+            dateInterval: interval,
+            context: modelContext
+        )
 
-        var descriptor = FetchDescriptor<Conversation>(sortBy: sortBy)
-        descriptor.predicate = normalPredicate(search: searchText, interval: interval, favoritesOnly: showFavoritesOnly)
-
-        if memoryFilter == .chats {
-            // Chats：分页加载
-            if let count = try? modelContext.fetchCount(descriptor) {
-                totalCount = count
-            }
-            descriptor.fetchOffset = offset
-            descriptor.fetchLimit = pageSize
-            if let results = try? modelContext.fetch(descriptor) {
-                if offset == 0 {
-                    conversations = results
-                } else {
-                    conversations.append(contentsOf: results)
-                }
-            }
+        totalCount = page.totalCount
+        if offset == 0 {
+            conversations = page.conversations
         } else {
-            // Amber / Almond：全量加载 + 前端 source 过滤
-            // 124 条 chatgpt 对话不会有性能问题，分页会导致 source 过滤后数量不准
-            if let results = try? modelContext.fetch(descriptor) {
-                let sourceKey = memoryFilter == .amber ? "chatgpt" : "claude"
-                let filtered = results.filter { $0.source == sourceKey }
-                conversations = Array(filtered.sorted { ($0.updateTime ?? .distantPast) > ($1.updateTime ?? .distantPast) })
-                totalCount = filtered.count
-            }
+            conversations.append(contentsOf: page.conversations)
         }
-
         isLoadingMore = false
-    }
-
-    /// 构造非 trash 会话的 predicate（关键词 × 时间范围 × favoritesOnly 组合）
-    /// 所有分支都加 `$0.profileId == pid` —— 路线 B 单 container 下必须按 profileId 隔离。
-    private func normalPredicate(search: String, interval: (start: Date, end: Date)?, favoritesOnly: Bool) -> Predicate<Conversation> {
-        let hasKeyword = !search.isEmpty
-        let kw = search
-        let pid = profileManager?.currentProfile.id ?? ""
-        if let interval = interval {
-            let s = interval.start
-            let e = interval.end
-            if favoritesOnly && hasKeyword {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true &&
-                    conv.title.localizedStandardContains(kw) &&
-                    conv.createTime >= s && conv.createTime <= e
-                }
-            } else if favoritesOnly {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true &&
-                    conv.createTime >= s && conv.createTime <= e
-                }
-            } else if hasKeyword {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false &&
-                    conv.title.localizedStandardContains(kw) &&
-                    conv.createTime >= s && conv.createTime <= e
-                }
-            } else {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false &&
-                    conv.createTime >= s && conv.createTime <= e
-                }
-            }
-        } else {
-            if favoritesOnly && hasKeyword {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true &&
-                    conv.title.localizedStandardContains(kw)
-                }
-            } else if favoritesOnly {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true
-                }
-            } else if hasKeyword {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == false && conv.title.localizedStandardContains(kw)
-                }
-            } else {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid && conv.isDeleted == false
-                }
-            }
-        }
-    }
-
-    /// 构造 trash（已删除）会话的 predicate（关键词 × 时间范围）
-    private func trashPredicate(search: String, interval: (start: Date, end: Date)?) -> Predicate<Conversation> {
-        let hasKeyword = !search.isEmpty
-        let kw = search
-        let pid = profileManager?.currentProfile.id ?? ""
-        if let interval = interval {
-            let s = interval.start
-            let e = interval.end
-            if hasKeyword {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == true &&
-                    conv.title.localizedStandardContains(kw) &&
-                    conv.createTime >= s && conv.createTime <= e
-                }
-            } else {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == true &&
-                    conv.createTime >= s && conv.createTime <= e
-                }
-            }
-        } else {
-            if hasKeyword {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid &&
-                    conv.isDeleted == true && conv.title.localizedStandardContains(kw)
-                }
-            } else {
-                return #Predicate<Conversation> { conv in
-                    conv.profileId == pid && conv.isDeleted == true
-                }
-            }
-        }
     }
 
     // MARK: - Footer Result Count

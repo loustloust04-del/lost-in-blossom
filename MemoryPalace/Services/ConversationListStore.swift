@@ -111,4 +111,183 @@ enum ConversationListStore {
     static func persist(context: ModelContext) {
         try? context.save()
     }
+
+    // MARK: - Paginated conversation list (fetchPage)
+
+    struct ConversationPage {
+        var conversations: [Conversation]
+        var totalCount: Int
+    }
+
+    /// 会话列表分页查询，覆盖 trash / tag / chats / source-filtered 四条路径。
+    /// sourceFilter: nil = chats（分页）；"claude"/"chatgpt" = 全量 source 过滤（Almond/Amber）
+    static func fetchPage(
+        offset: Int,
+        pageSize: Int,
+        profileId: String,
+        showTrash: Bool,
+        selectedTagId: String?,
+        sourceFilter: String?,
+        searchText: String,
+        sortDescriptors: [SortDescriptor<Conversation>],
+        favoritesOnly: Bool,
+        dateInterval: (start: Date, end: Date)?,
+        context: ModelContext
+    ) -> ConversationPage {
+
+        // ── Trash path ────────────────────────────────────────────────────
+        if showTrash {
+            var descriptor = FetchDescriptor<Conversation>(sortBy: sortDescriptors)
+            descriptor.predicate = trashPredicate(profileId: profileId, search: searchText, interval: dateInterval)
+            let total = (try? context.fetchCount(descriptor)) ?? 0
+            descriptor.fetchOffset = offset
+            descriptor.fetchLimit = pageSize
+            let results = (try? context.fetch(descriptor)) ?? []
+            return ConversationPage(conversations: results, totalCount: total)
+        }
+
+        // ── Tag path ──────────────────────────────────────────────────────
+        if let tagId = selectedTagId {
+            let tid = tagId
+            let pid = profileId
+            let favDescriptor = FetchDescriptor<FavoriteItem>(
+                predicate: #Predicate<FavoriteItem> { item in item.profileId == pid && item.tagId == tid }
+            )
+            if let items = try? context.fetch(favDescriptor) {
+                let convIds = Set(items.map(\.conversationId))
+                var convDescriptor = FetchDescriptor<Conversation>(sortBy: sortDescriptors)
+                convDescriptor.predicate = normalPredicate(profileId: profileId, search: searchText, interval: dateInterval, favoritesOnly: false)
+                if let allConvs = try? context.fetch(convDescriptor) {
+                    let filtered = allConvs.filter { convIds.contains($0.id) }
+                    return ConversationPage(conversations: Array(filtered.prefix(pageSize)), totalCount: filtered.count)
+                }
+            }
+            return ConversationPage(conversations: [], totalCount: 0)
+        }
+
+        var descriptor = FetchDescriptor<Conversation>(sortBy: sortDescriptors)
+        descriptor.predicate = normalPredicate(profileId: profileId, search: searchText, interval: dateInterval, favoritesOnly: favoritesOnly)
+
+        // ── Source-filtered path (Almond/Amber): full load ────────────────
+        if let src = sourceFilter {
+            if let results = try? context.fetch(descriptor) {
+                let filtered = results.filter { $0.source == src }
+                let sorted = filtered.sorted { ($0.updateTime ?? .distantPast) > ($1.updateTime ?? .distantPast) }
+                return ConversationPage(conversations: Array(sorted), totalCount: filtered.count)
+            }
+            return ConversationPage(conversations: [], totalCount: 0)
+        }
+
+        // ── Chats path: paginated ─────────────────────────────────────────
+        let total = (try? context.fetchCount(descriptor)) ?? 0
+        descriptor.fetchOffset = offset
+        descriptor.fetchLimit = pageSize
+        let results = (try? context.fetch(descriptor)) ?? []
+        return ConversationPage(conversations: results, totalCount: total)
+    }
+
+    // MARK: - Predicate builders (private)
+
+    private static func normalPredicate(
+        profileId: String,
+        search: String,
+        interval: (start: Date, end: Date)?,
+        favoritesOnly: Bool
+    ) -> Predicate<Conversation> {
+        let hasKeyword = !search.isEmpty
+        let kw = search
+        let pid = profileId
+        if let interval = interval {
+            let s = interval.start
+            let e = interval.end
+            if favoritesOnly && hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && conv.isFavorite == true &&
+                    conv.title.localizedStandardContains(kw) &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            } else if favoritesOnly {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && conv.isFavorite == true &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            } else if hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false &&
+                    conv.title.localizedStandardContains(kw) &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            } else {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            }
+        } else {
+            if favoritesOnly && hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && conv.isFavorite == true &&
+                    conv.title.localizedStandardContains(kw)
+                }
+            } else if favoritesOnly {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && conv.isFavorite == true
+                }
+            } else if hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && conv.title.localizedStandardContains(kw)
+                }
+            } else {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid && conv.isDeleted == false
+                }
+            }
+        }
+    }
+
+    private static func trashPredicate(
+        profileId: String,
+        search: String,
+        interval: (start: Date, end: Date)?
+    ) -> Predicate<Conversation> {
+        let hasKeyword = !search.isEmpty
+        let kw = search
+        let pid = profileId
+        if let interval = interval {
+            let s = interval.start
+            let e = interval.end
+            if hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == true &&
+                    conv.title.localizedStandardContains(kw) &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            } else {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == true &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            }
+        } else {
+            if hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == true && conv.title.localizedStandardContains(kw)
+                }
+            } else {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid && conv.isDeleted == true
+                }
+            }
+        }
+    }
 }
