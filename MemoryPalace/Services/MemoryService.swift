@@ -438,6 +438,26 @@ struct MemoryInjector {
     }
 
     /// 打分：decayWeight × log(1 + accessCount)
+    static func rrfFuse(_ lists: [[ScoredMemory]]) -> [Memory] {
+        var scores: [UUID: Double] = [:]
+        var lookup: [UUID: Memory] = [:]
+        var firstSeen: [UUID: Int] = [:]
+        var counter = 0
+        for list in lists {
+            for (rank, s) in list.enumerated() {
+                scores[s.memory.id, default: 0] += 1.0 / Double(60 + rank + 1)
+                if lookup[s.memory.id] == nil {
+                    lookup[s.memory.id] = s.memory
+                    firstSeen[s.memory.id] = counter
+                    counter += 1
+                }
+            }
+        }
+        return scores.sorted { a, b in
+            a.value != b.value ? a.value > b.value : (firstSeen[a.key] ?? 0) < (firstSeen[b.key] ?? 0)
+        }.compactMap { lookup[$0.key] }
+    }
+
     fileprivate static func isPersistent(_ m: Memory) -> Bool {
         m.isUserExplicit || m.category == "relationship" || m.category == "preference"
     }

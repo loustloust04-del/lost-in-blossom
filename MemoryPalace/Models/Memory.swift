@@ -29,7 +29,8 @@ final class Memory {
     // SC-B2 出处锚 + 软失效
     var sourceQuote: String?         // 10-40 字逐字引用（机械校验过的出处证据）
     var sourceNodeId: String?        // 引用所在消息 node id（跳转锚）
-    var supersededAt: Date?          // 软失效：nil=活着，有值=出排名不出库（可复活）
+    var supersededAt: Date?
+    var embeddingRevision: Int?          // 软失效：nil=活着，有值=出排名不出库（可复活）
 
     var profileId: String            // 楼层隔离
     var createdAt: Date = Date()
