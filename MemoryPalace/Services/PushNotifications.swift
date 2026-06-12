@@ -19,12 +19,13 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        print("[Push] ✅ device token: \(hex.prefix(16))...")
         CCBridgeWebSocketClient.shared.sendPushToken(hex)
     }
 
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        // 注册失败（模拟器/无网络等）——静默，下次启动重试。
+        print("[Push] ❌ registration failed: \(error.localizedDescription)")
     }
 
     /// 前台到达也弹横幅。
