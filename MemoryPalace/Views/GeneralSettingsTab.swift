@@ -61,6 +61,12 @@ struct IOSGeneralPage: View {
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
+
+            Section("孤儿世界书") {
+                OrphanWorldBookCleanupSection()
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
@@ -161,5 +167,80 @@ private struct IOSGeneralWorldBookBindingSection: View {
         do { try modelContext.save() } catch {
             print("[worldbook] 删除保存失败: \(error)")
         }
+    }
+}
+
+
+// MARK: - 孤儿世界书清理
+
+private struct OrphanWorldBookCleanupSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+    @State private var orphans: [WorldBook] = []
+    @State private var deletingOrphan: WorldBook? = nil
+
+    var body: some View {
+        Group {
+            if orphans.isEmpty {
+                Text("没有孤儿世界书")
+                    .font(.system(size: Theme.F.body))
+                    .foregroundColor(Theme.textMuted)
+            } else {
+                ForEach(orphans, id: \.id) { book in
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: Theme.F.secondary))
+                            .foregroundColor(.orange)
+                        Text(book.name)
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textPrimary)
+                        Text("\(book.entries.count) 条")
+                            .font(.system(size: Theme.F.secondary))
+                            .foregroundColor(Theme.textMuted)
+                        Text("profileId: \(book.profileId.prefix(8))...")
+                            .font(.system(size: Theme.F.caption))
+                            .foregroundColor(Theme.textMuted)
+                        Spacer()
+                        Button {
+                            deletingOrphan = book
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: Theme.F.secondary))
+                                .foregroundColor(.red.opacity(0.8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .confirmationDialog("删除孤儿世界书",
+            isPresented: Binding(
+                get: { deletingOrphan != nil },
+                set: { if !$0 { deletingOrphan = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let book = deletingOrphan {
+                    modelContext.delete(book)
+                    try? modelContext.save()
+                    orphans.removeAll { $0.id == book.id }
+                }
+                deletingOrphan = nil
+            }
+            Button("取消", role: .cancel) { deletingOrphan = nil }
+        } message: {
+            if let book = deletingOrphan {
+                Text("确定要删除「\(book.name)」吗？这本世界书没有绑定任何楼层。")
+            }
+        }
+        .onAppear { loadOrphans() }
+    }
+
+    private func loadOrphans() {
+        let allDescriptor = FetchDescriptor<WorldBook>()
+        let allBooks = (try? modelContext.fetch(allDescriptor)) ?? []
+        let knownProfileIds = Set((profileManager?.profiles ?? []).map { $0.id })
+        orphans = allBooks.filter { !knownProfileIds.contains($0.profileId) }
     }
 }
