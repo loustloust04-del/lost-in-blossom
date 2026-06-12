@@ -337,6 +337,7 @@ final class PresetManager {
 struct MemoryPalaceApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+    @Environment(\.scenePhase) private var scenePhase
     #endif
     @State private var themeManager = ThemeManager.shared
     @State private var profileManager: ProfileManager
@@ -448,6 +449,16 @@ struct MemoryPalaceApp: App {
                 .environment(rightPanelNavigator)
                 .modelContainer(profileManager.container)
                 .id(profileManager.currentProfile.id)
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .background:
+                        CCBridgeWebSocketClient.shared.sendAppState("background")
+                    case .active:
+                        CCBridgeWebSocketClient.shared.sendAppState("foreground")
+                    default:
+                        break
+                    }
+                }
                 .onOpenURL { url in
                     let accessed = url.startAccessingSecurityScopedResource()
                     defer { if accessed { url.stopAccessingSecurityScopedResource() } }

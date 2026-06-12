@@ -96,6 +96,10 @@ final class CCBridgeWebSocketClient: NSObject {
     static let pushPreviewKey = "ccPushPreview"
     private var pushPreview: String { UserDefaults.standard.string(forKey: Self.pushPreviewKey) ?? "full" }
 
+    func sendAppState(_ state: String) {
+        send(["type": "app_state", "state": state]) { _ in }
+    }
+
     func sendPushToken(_ token: String) {
         pushToken = token
         send(["type": "register_device", "device_token": token, "env": "sandbox", "preview": pushPreview]) { _ in }

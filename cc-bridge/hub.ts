@@ -120,6 +120,8 @@ const resizeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
 const focusByClient = new Map<WebSocket, string | null>()
 
 // Maps each App WebSocket to its APNs device token (registered via register_device).
+// Track which clients are backgrounded (should receive push instead of WS).
+const backgroundedClients = new Set<WebSocket>()
 const deviceTokenByClient = new Map<WebSocket, string>()
 
 // ── Offline message durability (Phase 4.1) ────────────────────────────────────
@@ -555,6 +557,17 @@ export function startHub(): WebSocketServer {
         }
 
         // ── APNs device token registration ────────────────────────────────────
+        else if (msg.type === "app_state") {
+          const state = typeof msg.state === "string" ? msg.state : ""
+          if (state === "background") {
+            backgroundedClients.add(ws)
+            console.log(`[hub] app_state=background`)
+          } else if (state === "foreground") {
+            backgroundedClients.delete(ws)
+            console.log(`[hub] app_state=foreground`)
+          }
+        }
+
         else if (msg.type === "register_device") {
           const token = typeof msg.device_token === "string" ? msg.device_token : ""
           if (token) {
@@ -566,6 +579,7 @@ export function startHub(): WebSocketServer {
 
       ws.on("close", (code) => {
         appClients.delete(ws)
+      backgroundedClients.delete(ws)
         focusByClient.delete(ws)
         deviceTokenByClient.delete(ws)
         console.log(`[hub] App disconnected (total ${appClients.size}) code=${code}`)
@@ -655,17 +669,16 @@ export function startHub(): WebSocketServer {
           // Focus check: if no client is watching this chat → push notification needed
           const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
-          if (!isFocused) {
-            // Push to all registered devices that aren't focused on this chat
-            for (const [appWs, token] of deviceTokenByClient) {
-              if (!token) continue
-              const focused = focusByClient.get(appWs)
-              if (focused === msg.chat_id) continue  // this client IS watching
-              const preview = String(msg.content).slice(0, 100)
-              sendPush(token, "MemoryPalace", preview, msg.chat_id).then(result => {
-                if (!result.ok) console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
-              })
-            }
+          // Push to devices that are backgrounded or not focused on this chat
+          for (const [appWs, token] of deviceTokenByClient) {
+            if (!token) continue
+            const focused = focusByClient.get(appWs)
+            if (focused === msg.chat_id && !backgroundedClients.has(appWs)) continue
+            const preview = String(msg.content).slice(0, 100)
+            sendPush(token, "MemoryPalace", preview, msg.chat_id).then(result => {
+              if (!result.ok) console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
+              else console.log(`[hub] push sent to ...${token.slice(-8)}`)
+            })
           }
         }
       })
