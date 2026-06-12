@@ -384,6 +384,17 @@ struct WorldBookPanelView: View {
                     .background(Circle().fill(Theme.branchIndicator.opacity(0.12)))
             }
             .buttonStyle(.plain)
+
+            Button {
+                deletingGlobalBook = book
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Theme.textMuted)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(Theme.accent.opacity(0.2)))
+            }
+            .buttonStyle(.plain)
         }
         .contextMenu {
             Button { renameText = book.name; renamingGlobalBook = book } label: {
