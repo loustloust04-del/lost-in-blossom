@@ -95,7 +95,8 @@ struct AddToChatSheet: View {
                     addToChatRow(
                         icon: "doc",
                         iconColor: Color.red.opacity(0.8),
-                        title: "选择文件"
+                        title: "选择文件",
+                        trailing: nil
                     )
                 }
                 .buttonStyle(.plain)
