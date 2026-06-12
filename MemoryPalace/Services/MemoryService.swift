@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import SwiftData
 
 // MARK: - Memory Store Protocol
@@ -437,7 +438,23 @@ struct MemoryInjector {
     }
 
     /// 打分：decayWeight × log(1 + accessCount)
-    private static func score(_ memory: Memory) -> Double {
+    fileprivate static func isPersistent(_ m: Memory) -> Bool {
+        m.isUserExplicit || m.category == "relationship" || m.category == "preference"
+    }
+
+    fileprivate static func contentKeys(_ content: String) -> [String] {
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = content
+        var words: [String] = []
+        tokenizer.enumerateTokens(in: content.startIndex..<content.endIndex) { range, _ in
+            let w = String(content[range])
+            if w.count >= 2 { words.append(w) }
+            return true
+        }
+        return words
+    }
+
+    fileprivate static func score(_ memory: Memory) -> Double {
         DecayEngine.effectiveWeight(memory) * log(1.0 + Double(memory.accessCount))
     }
 }
