@@ -21,11 +21,13 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         print("[Push] ✅ device token: \(hex.prefix(16))...")
         CCBridgeWebSocketClient.shared.sendPushToken(hex)
+        CCBridgeWebSocketClient.shared.sendAppState("push_registered")
     }
 
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[Push] ❌ registration failed: \(error.localizedDescription)")
+        CCBridgeWebSocketClient.shared.sendAppState("push_failed:\(error.localizedDescription)")
     }
 
     /// 前台到达也弹横幅。
