@@ -91,6 +91,19 @@ jobs:
             || echo "❌ aps-environment MISSING — profile has no Push capability"
 
 
+      - name: Inspect provisioning profile entitlements
+        run: |
+          PROFILE=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
+          echo "Profile: $PROFILE"
+          security cms -D -i "$PROFILE" > /tmp/profile.plist
+          echo "=== Entitlements ==="
+          /usr/libexec/PlistBuddy -c "Print :Entitlements" /tmp/profile.plist || true
+          if grep -q "aps-environment" /tmp/profile.plist; then
+            echo "✅ aps-environment FOUND"
+          else
+            echo "❌ aps-environment MISSING — profile lacks Push capability"
+          fi
+
       - name: Archive (signed)
         run: |
           xcodebuild archive \
@@ -109,6 +122,17 @@ jobs:
             && echo "✅ aps-environment present in signed app" \
             || echo "❌ aps-environment NOT in signed app"
 
+
+      - name: Inspect app entitlements (post-archive)
+        run: |
+          APP=$(find build/LiB.xcarchive/Products/Applications -name "*.app" | head -1)
+          echo "App: $APP"
+          codesign -d --entitlements - "$APP" 2>/dev/null | head -30 || true
+          if codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "aps-environment"; then
+            echo "✅ App has aps-environment entitlement"
+          else
+            echo "❌ App MISSING aps-environment entitlement"
+          fi
 
       - name: Export .ipa
         run: |
