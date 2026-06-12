@@ -8,15 +8,18 @@ import UserNotifications
 final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        CCBridgeWebSocketClient.shared.sendAppState("push_delegate_init")
+        UserDefaults.standard.set("1_delegate_init", forKey: "push_debug")
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
-                CCBridgeWebSocketClient.shared.sendAppState("push_auth_granted")
-                DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+                UserDefaults.standard.set("2_auth_granted", forKey: "push_debug")
+                DispatchQueue.main.async {
+                    UserDefaults.standard.set("3_calling_register", forKey: "push_debug")
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
             } else {
                 let reason = error?.localizedDescription ?? "denied"
-                CCBridgeWebSocketClient.shared.sendAppState("push_auth_denied:\(reason)")
+                UserDefaults.standard.set("2_auth_denied:\(reason)", forKey: "push_debug")
             }
         }
         return true
@@ -27,6 +30,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         print("[Push] ✅ device token: \(hex.prefix(16))...")
         UserDefaults.standard.set(hex, forKey: "apns_device_token")
+        UserDefaults.standard.set("4_SUCCESS", forKey: "push_debug")
         CCBridgeWebSocketClient.shared.sendPushToken(hex)
         CCBridgeWebSocketClient.shared.sendAppState("push_registered")
     }
@@ -34,7 +38,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[Push] ❌ registration failed: \(error.localizedDescription)")
-        CCBridgeWebSocketClient.shared.sendAppState("push_failed:\(error.localizedDescription)")
+        UserDefaults.standard.set("4_FAILED:\(error.localizedDescription)", forKey: "push_debug")
     }
 
     /// 前台到达也弹横幅。

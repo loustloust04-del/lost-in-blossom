@@ -56,9 +56,13 @@ struct IOSGeneralPage: View {
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
 
-            Section("推送状态") {
+            Section("推送调试") {
                 let token = UserDefaults.standard.string(forKey: "apns_device_token") ?? "未获取"
-                Text(token == "未获取" ? "❌ Device Token: 未获取" : "✅ Token: ...\(token.suffix(8))")
+                let debug = UserDefaults.standard.string(forKey: "push_debug") ?? "未启动"
+                Text("链路: \(debug)")
+                    .font(.system(size: Theme.F.secondary))
+                    .foregroundColor(Theme.textPrimary)
+                Text(token == "未获取" ? "❌ Token: 未获取" : "✅ Token: ...\(token.suffix(8))")
                     .font(.system(size: Theme.F.secondary))
                     .foregroundColor(token == "未获取" ? .red : .green)
             }
