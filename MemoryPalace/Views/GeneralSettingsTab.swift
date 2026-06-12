@@ -62,7 +62,7 @@ struct IOSGeneralPage: View {
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
 
-            Section("孤儿世界书") {
+            Section("其他楼层的世界书（含孤儿）") {
                 OrphanWorldBookCleanupSection()
             }
             .listRowBackground(Theme.mainBg)
@@ -182,7 +182,7 @@ private struct OrphanWorldBookCleanupSection: View {
     var body: some View {
         Group {
             if orphans.isEmpty {
-                Text("没有孤儿世界书")
+                Text("没有其他楼层的世界书")
                     .font(.system(size: Theme.F.body))
                     .foregroundColor(Theme.textMuted)
             } else {
@@ -231,7 +231,7 @@ private struct OrphanWorldBookCleanupSection: View {
             Button("取消", role: .cancel) { deletingOrphan = nil }
         } message: {
             if let book = deletingOrphan {
-                Text("确定要删除「\(book.name)」吗？这本世界书没有绑定任何楼层。")
+                Text("确定要删除「\(book.name)」吗？")
             }
         }
         .onAppear { loadOrphans() }
@@ -240,7 +240,8 @@ private struct OrphanWorldBookCleanupSection: View {
     private func loadOrphans() {
         let allDescriptor = FetchDescriptor<WorldBook>()
         let allBooks = (try? modelContext.fetch(allDescriptor)) ?? []
-        let knownProfileIds = Set((profileManager?.profiles ?? []).map { $0.id })
-        orphans = allBooks.filter { !knownProfileIds.contains($0.profileId) }
+        let currentProfileId = profileManager?.currentProfile.id ?? ""
+        // Show all world books NOT belonging to current floor — these are the ones you can't see in the panel
+        orphans = allBooks.filter { $0.profileId != currentProfileId }
     }
 }
