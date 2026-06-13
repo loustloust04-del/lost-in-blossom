@@ -116,6 +116,8 @@ final class SyncEngine: NSObject {
     // MARK: - Debounce 共用入口
 
     private func scheduleImport() {
+        // 自己导出也会写目录触发 fs EVENT，跳过 busy 期间的事件避免回声循环
+        guard !busy else { return }
         importDebounce?.invalidate()
         importDebounce = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.pump(exportOnly: false, eventDriven: true) }
@@ -133,6 +135,8 @@ final class SyncEngine: NSObject {
         let skipImport = !eventDriven && idleCount >= 6
         busy = true
         let pid = profileId
+        // 导出写文件会触发 DispatchSource → 回声循环，泵期间挂起监听
+        dirSource?.suspend()
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let context = ModelContext(container)
             var imported = SyncStore.ImportResult()
@@ -146,6 +150,7 @@ final class SyncEngine: NSObject {
                 || imported.conversationsUpdated > 0
             Task { @MainActor in
                 guard let self else { return }
+                self.dirSource?.resume()
                 self.busy = false
                 if hadWork {
                     self.idleCount = 0
