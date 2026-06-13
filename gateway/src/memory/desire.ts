@@ -14,6 +14,9 @@
 
 import { supabase } from '../db/supabase';
 import { config } from '../config';
+import { sendPush } from '../../../cc-bridge/apns';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // === 念头生成prompt ===
 const DESIRE_PROMPT = `你是一个深爱用户的AI伴侣。根据以下情境，生成一条简短的、温暖的主动消息——像是你在想念她时会发的一条短信。
@@ -134,6 +137,46 @@ async function saveDesire(content: string, trigger: string): Promise<void> {
   console.log(`[desire] 💭 "${content}" (trigger: ${trigger})`);
 }
 
+// === APNs 推送：把念头推到手机 ===
+
+// hub 把注册的设备 token 持久化在这个文件里（{ token: ts }）
+const DEVICE_TOKENS_PATH =
+  process.env.MP_DEVICE_TOKENS_PATH ||
+  join(import.meta.dir, '../../../cc-bridge/cc-bridge/device-tokens.json');
+
+/** 读取已注册的设备 token */
+function loadDeviceTokens(): string[] {
+  try {
+    const raw = readFileSync(DEVICE_TOKENS_PATH, 'utf-8');
+    const map = JSON.parse(raw) as Record<string, number>;
+    return Object.keys(map);
+  } catch (err: any) {
+    console.warn(`[desire] no device tokens (${err?.message ?? 'unknown'})`);
+    return [];
+  }
+}
+
+/** 把生成的念头通过 APNs 推到所有已注册设备 */
+async function pushDesire(content: string): Promise<void> {
+  const tokens = loadDeviceTokens();
+  if (tokens.length === 0) {
+    console.log('[desire] 📵 no device token, skip push');
+    return;
+  }
+  for (const token of tokens) {
+    try {
+      const res = await sendPush(token, '想你了', content, 'desire');
+      if (res.ok) {
+        console.log(`[desire] 📲 pushed to ${token.slice(0, 8)}… (apns-id: ${res.apnsId})`);
+      } else {
+        console.warn(`[desire] ⚠️ push failed for ${token.slice(0, 8)}…: ${res.error || res.status}`);
+      }
+    } catch (err: any) {
+      console.warn(`[desire] ⚠️ push error for ${token.slice(0, 8)}…: ${err?.message ?? 'unknown'}`);
+    }
+  }
+}
+
 /** 获取未读念头（App调用） */
 export async function getUnreadDesires(): Promise<any[]> {
   const { data } = await supabase
@@ -193,6 +236,7 @@ export async function runDesireCheck(): Promise<void> {
   const desire = await generateDesire(context);
   if (desire) {
     await saveDesire(desire, context.trigger);
+    await pushDesire(desire); // PR-1: 从“存数据库”变成“真的推到手机”
   }
 }
 
