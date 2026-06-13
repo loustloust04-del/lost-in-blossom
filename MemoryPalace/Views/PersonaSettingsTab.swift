@@ -837,9 +837,7 @@ struct PersonaSettingsTab: View {
         VStack(alignment: .leading, spacing: 8) {
             let store = SwiftDataMemoryStore()
             let memories = store.listHot(profileId: profile.id, context: modelContext)
-            let profileId = profile.id
-            let wbDescriptor = FetchDescriptor<WorldBook>(predicate: #Predicate { $0.profileId == profileId })
-            let worldBooks = (try? modelContext.fetch(wbDescriptor)) ?? []
+            let worldBooks = WorldBookStore.fetchBooks(profileId: profile.id, context: modelContext)
             let result = PromptAssembler.assemble(
                 preset: preset, profile: profile, memories: memories, chatHistory: [],
                 worldBooks: worldBooks
@@ -916,9 +914,7 @@ struct PersonaSettingsTab: View {
         VStack(alignment: .leading, spacing: 8) {
             let store = SwiftDataMemoryStore()
             let memories = store.listHot(profileId: profile.id, context: modelContext)
-            let profileId2 = profile.id
-            let wbDescriptor2 = FetchDescriptor<WorldBook>(predicate: #Predicate { $0.profileId == profileId2 })
-            let worldBooks2 = (try? modelContext.fetch(wbDescriptor2)) ?? []
+            let worldBooks2 = WorldBookStore.fetchBooks(profileId: profile.id, context: modelContext)
             let assembled = PromptAssembler.assemble(
                 preset: preset, profile: profile, memories: memories, chatHistory: [],
                 worldBooks: worldBooks2
