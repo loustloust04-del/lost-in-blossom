@@ -168,7 +168,12 @@ final class AnthropicProvider: BaseChatProvider {
         if let u = obj["usage"] as? [String: Any],
            let it = u["input_tokens"] as? Int,
            let ot = u["output_tokens"] as? Int {
-            usage = TokenUsage(inputTokens: it, outputTokens: ot)
+            usage = TokenUsage(
+                inputTokens: it,
+                outputTokens: ot,
+                cacheReadInputTokens: u["cache_read_input_tokens"] as? Int ?? 0,
+                cacheCreationInputTokens: u["cache_creation_input_tokens"] as? Int ?? 0
+            )
         }
 
         return (text, usage)
@@ -204,12 +209,23 @@ final class AnthropicProvider: BaseChatProvider {
 
         switch type {
         case "message_start":
-            // { "type": "message_start", "message": { "usage": { "input_tokens": N } } }
+            // { "type": "message_start", "message": { "usage": { "input_tokens": N,
+            //   "cache_read_input_tokens": N, "cache_creation_input_tokens": N } } }
             if let msg = obj["message"] as? [String: Any],
-               let u = msg["usage"] as? [String: Any],
-               let it = u["input_tokens"] as? Int {
-                accumulatedInputTokens = it
-                gotUsage = true
+               let u = msg["usage"] as? [String: Any] {
+                if let it = u["input_tokens"] as? Int {
+                    accumulatedInputTokens = it
+                    gotUsage = true
+                }
+                // prompt caching：缓存读/写 token。缓存开启后 input_tokens 只是未缓存余量。
+                if let cr = u["cache_read_input_tokens"] as? Int {
+                    accumulatedCacheReadTokens = cr
+                    gotUsage = true
+                }
+                if let cc = u["cache_creation_input_tokens"] as? Int {
+                    accumulatedCacheCreationTokens = cc
+                    gotUsage = true
+                }
             }
 
         case "content_block_start":

@@ -4,6 +4,11 @@ import Foundation
 struct TokenUsage: Equatable {
     let inputTokens: Int
     let outputTokens: Int
+    /// 缓存命中读取的 token（计价 ~0.1× 输入价）。注意：缓存开启后 inputTokens 只是未缓存余量，
+    /// 总输入 = inputTokens + cacheReadInputTokens + cacheCreationInputTokens。
+    var cacheReadInputTokens: Int = 0
+    /// 写入缓存的 token（计价 ~1.25× 输入价）。
+    var cacheCreationInputTokens: Int = 0
 }
 
 /// 预算保险闸的门控结果。
@@ -45,10 +50,15 @@ enum BudgetCalculator {
         modelId: String,
         usage: TokenUsage
     ) -> Double {
-        applyRatios(
+        // 缓存读按 0.1× 计、缓存写按 1.25× 计、未缓存输入全价。
+        // 否则命中缓存的轮次会被当成全价输入超额扣费。
+        let effectiveInput = Double(usage.inputTokens)
+            + Double(usage.cacheReadInputTokens) * 0.1
+            + Double(usage.cacheCreationInputTokens) * 1.25
+        return applyRatios(
             provider: provider,
             modelId: modelId,
-            inputTokens: Double(usage.inputTokens),
+            inputTokens: effectiveInput,
             outputTokens: Double(usage.outputTokens)
         )
     }

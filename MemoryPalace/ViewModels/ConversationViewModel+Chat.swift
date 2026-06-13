@@ -921,6 +921,9 @@ extension ConversationViewModel {
         guard let provider = providerManager.provider(for: model) else { return }
         let cost: Double
         if let usage {
+            #if DEBUG
+            print("💾 usage: input=\(usage.inputTokens) output=\(usage.outputTokens) cacheRead=\(usage.cacheReadInputTokens) cacheCreate=\(usage.cacheCreationInputTokens)")
+            #endif
             cost = BudgetCalculator.actualCost(provider: provider, modelId: model.modelId, usage: usage)
         } else if pendingEstimatedCost > 0 {
             // 没 usage（流中断 / 某些 API 不回 usage）→ 按 pre-send 估算扣

@@ -24,10 +24,17 @@ class BaseChatProvider: NSObject {
     /// 流式过程中累积的 token 用量。usage 信息常在 stream 末尾或分事件到来。
     var accumulatedInputTokens: Int = 0
     var accumulatedOutputTokens: Int = 0
+    var accumulatedCacheReadTokens: Int = 0
+    var accumulatedCacheCreationTokens: Int = 0
     var gotUsage = false
 
     var finalUsage: TokenUsage? {
-        gotUsage ? TokenUsage(inputTokens: accumulatedInputTokens, outputTokens: accumulatedOutputTokens) : nil
+        gotUsage ? TokenUsage(
+            inputTokens: accumulatedInputTokens,
+            outputTokens: accumulatedOutputTokens,
+            cacheReadInputTokens: accumulatedCacheReadTokens,
+            cacheCreationInputTokens: accumulatedCacheCreationTokens
+        ) : nil
     }
 
     func sendStreaming(
@@ -66,6 +73,8 @@ class BaseChatProvider: NSObject {
         self.receivedDone = false
         self.accumulatedInputTokens = 0
         self.accumulatedOutputTokens = 0
+        self.accumulatedCacheReadTokens = 0
+        self.accumulatedCacheCreationTokens = 0
         self.gotUsage = false
     }
 
