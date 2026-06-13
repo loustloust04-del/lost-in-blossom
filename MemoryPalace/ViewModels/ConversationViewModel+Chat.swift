@@ -1149,7 +1149,15 @@ extension ConversationViewModel {
         guard UIApplication.shared.applicationState != .active else { return }
         let content = UNMutableNotificationContent()
         content.title = "Lost in Blossom"
-        content.body = String(text.prefix(120))
+        // 推送正文剥掉思考链再截断（fullText 含 <Thinking>/<thinking>）
+        var clean = text
+        clean = clean.replacingOccurrences(
+            of: "<[Tt]hinking>[\\s\\S]*?</[Tt]hinking>",
+            with: "",
+            options: .regularExpression
+        )
+        clean = clean.trimmingCharacters(in: .whitespacesAndNewlines)
+        content.body = String(clean.prefix(120))
         content.sound = .default
         content.userInfo = ["chat_id": conversationId]
         let request = UNNotificationRequest(
