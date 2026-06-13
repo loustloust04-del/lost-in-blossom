@@ -292,6 +292,18 @@ extension ConversationViewModel {
         isThinking = false
         thinkingSummary = ""
 
+        // Register fallback for additional CC replies that arrive after the single-shot
+        // sendStreaming handler has been consumed (hub offline-replay burst, proactive CC messages).
+        // Appends follow-up content to the same assistant node so multiple CC turns in one
+        // conversation don't get silently dropped.
+        let convId = conversation.id
+        let capturedContext = context
+        CCBridgeWebSocketClient.shared.unhandledReplyHandler = { [weak assistantNode] incomingChatId, followUpContent in
+            guard incomingChatId == convId, let node = assistantNode else { return }
+            node.content = node.content.isEmpty ? followUpContent : node.content + "\n\n---\n\n" + followUpContent
+            try? capturedContext.save()
+        }
+
         // 4. Assemble prompt using PromptAssembler
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)

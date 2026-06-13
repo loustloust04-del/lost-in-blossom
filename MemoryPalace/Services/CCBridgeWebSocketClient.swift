@@ -74,6 +74,10 @@ final class CCBridgeWebSocketClient: NSObject {
     /// client 端去重避免同一条投递两次）。5 分钟 TTL 足够长。
     @ObservationIgnored private var seenReplyIds: [String: Date] = [:]
     private let replyDedupTTL: TimeInterval = 300
+    /// Fires on main queue when a reply arrives but no active sendStreaming handler is registered
+    /// for its chatId. Captures from ConversationViewModel to handle hub offline-replay bursts and
+    /// proactive CC messages after the single-shot handler has already been consumed.
+    var unhandledReplyHandler: ((String, String) -> Void)?  // (chatId, content)
 
     // MARK: - Terminal streaming (Phase 2)
 
@@ -458,8 +462,14 @@ final class CCBridgeWebSocketClient: NSObject {
                         let cutoff = Date().addingTimeInterval(-self.replyDedupTTL)
                         self.seenReplyIds = self.seenReplyIds.filter { $0.value >= cutoff }
                     }
-                    if let handler = self.replyHandlers[chatId] {
+                    if let handler = self.replyHandlers.removeValue(forKey: chatId) {
+                        // Handler removed atomically on handlersQueue — prevents double-fire race
+                        // when hub replay sends multiple replies in rapid succession.
                         DispatchQueue.main.async { handler(content) }
+                    } else if let fallback = self.unhandledReplyHandler {
+                        // No active sendStreaming handler — route to persistent fallback
+                        // (handles hub offline-replay bursts and proactive CC messages).
+                        DispatchQueue.main.async { fallback(chatId, content) }
                     }
                     if let att = incomingFile, let attHandler = self.replyAttachmentHandlers[chatId] {
                         DispatchQueue.main.async { attHandler(att) }

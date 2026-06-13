@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "cc-bridge": {
-      "command": "bun",
+      "command": "REPLACE_WITH_BUN_PATH",
       "args": ["run", "REPLACE_WITH_ABSOLUTE_PATH/cc-bridge/mcp-server.ts"]
     },
     "imprint-memory": {

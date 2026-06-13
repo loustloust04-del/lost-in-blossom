@@ -55,7 +55,6 @@ final class CCBridgeProvider: BaseChatProvider {
             guard let self else { return }
             self.replyTimer?.invalidate()
             self.replyTimer = nil
-            self.wsClient.unregisterReplyHandler(chatId: chatId)
             self.wsClient.unregisterStreamHandler()
             self.isStreaming = false
             // 将本轮 pending thinking 嵌入 content，使历史消息也能展示思考链
