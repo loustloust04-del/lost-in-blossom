@@ -143,14 +143,7 @@ struct StickerKeyboardPanel: View {
         .sheet(isPresented: $showDrawingBoard) {
             if let pid = profileManager?.currentProfile.id {
                 DrawingBoardSheet { pngData in
-                    let assetId = UUID()
-                    if let paths = try? StickerFileManager.saveStickerImage(pngData, id: assetId, profileId: pid) {
-                        let asset = StickerAsset(name: "画画", imagePath: paths.imagePath, thumbnailPath: paths.thumbnailPath, profileId: pid)
-                        asset.id = assetId
-                        modelContext.insert(asset)
-                        stickerVM.stickerAssets.insert(asset, at: 0)
-                        try? modelContext.save()
-                    }
+                    stickerVM.addDrawingAsset(pngData: pngData, name: "画画", profileId: pid, context: modelContext)
                 }
             }
         }
