@@ -3,6 +3,7 @@ import { auth } from './middleware/auth';
 import { forwardDeepSeek } from './providers/deepseek';
 import { forwardOpenRouter } from './providers/openrouter';
 import { forwardAnthropicNative } from './providers/anthropic-native';
+import { runToolLoop } from './tools/loop';
 import { forwardTreeChat, forwardTreeApi } from './providers/treegpt';
 import { enhanceMessages } from './prompt/builder';
 import { saveMessage, compressForStorage } from './memory/store';
@@ -119,6 +120,9 @@ app.post('/v1/chat/completions', auth, async (c) => {
     upstream = await forwardTreeChat(forwardBody);
   } else if (actualModel.startsWith("tree-api/")) {
     upstream = await forwardTreeApi(forwardBody);
+  } else if (process.env.ENABLE_BUILTIN_TOOLS === "1" && actualModel.includes("claude") && config.anthropicKey) {
+    // Task F: gateway 内置工具（exec + recall）+ MCP fall-through 的流式 tool loop（opt-in）
+    upstream = await runToolLoop(forwardBody, sessionId);
   } else if (actualModel.includes("claude") && config.anthropicKey) {
     // Claude 走 Anthropic 原生 /v1/messages，保留 cache_control 断点。
     // 未配 ANTHROPIC_API_KEY 时回退 OpenRouter，保证部署非破坏性。
