@@ -40,6 +40,7 @@ final class Conversation {
     var memoryEnabled: Bool = true
     /// Stub: upstream sync dependency
     var selectedModelId: String = ""
+    var pinnedAt: Date? = nil
 
     /// 所属项目 ID（nil = 不属于任何项目）
     var projectId: String?
