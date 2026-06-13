@@ -312,6 +312,20 @@ async function runRound(sessionId: string) {
 const app = new Hono()
 app.use("/*", cors())
 
+// S2: 鉴权——所有 /chatroom 路由要求 Bearer token（与 gateway 同口径）。
+// 支持 Authorization: Bearer <token> 或 ?token=<token>（SSE/EventSource 无法设 header）。
+const CHATROOM_TOKEN = process.env.CHATROOM_TOKEN || process.env.GATEWAY_TOKEN || ""
+app.use("/chatroom/*", async (c, next) => {
+  if (!CHATROOM_TOKEN) return c.json({ error: "server token not configured" }, 503)
+  const h = c.req.header("Authorization") || ""
+  const bearer = h.startsWith("Bearer ") ? h.slice(7) : ""
+  const q = c.req.query("token") || ""
+  if (bearer !== CHATROOM_TOKEN && q !== CHATROOM_TOKEN) {
+    return c.json({ error: "unauthorized" }, 401)
+  }
+  await next()
+})
+
 // 创建聊天室 + 第一轮
 app.post("/chatroom/start", async (c) => {
   const body = await c.req.json()
@@ -464,4 +478,4 @@ app.get("/chatroom/stream/:id", (c) => {
 
 // ── Start ───────────────────────────────────────────────────
 console.log(`[chatroom] orchestrator listening on port ${PORT}`)
-export default { port: PORT, fetch: app.fetch }
+export default { port: PORT, hostname: "127.0.0.1", fetch: app.fetch }
