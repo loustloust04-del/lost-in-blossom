@@ -119,7 +119,50 @@ final class StickerViewModel {
         placedStickers = (try? context.fetch(desc)) ?? []
     }
 
+    /// 当前楼层贴纸素材数（设置页统计用，fetchCount 不拉全量）
+    func assetCount(profileId: String, context: ModelContext) -> Int {
+        let pid = profileId
+        let desc = FetchDescriptor<StickerAsset>(
+            predicate: #Predicate<StickerAsset> { a in a.profileId == pid }
+        )
+        return (try? context.fetchCount(desc)) ?? 0
+    }
+
+    /// 当前楼层已放置贴纸数（设置页统计用）
+    func placedCount(profileId: String, context: ModelContext) -> Int {
+        let pid = profileId
+        let desc = FetchDescriptor<PlacedSticker>(
+            predicate: #Predicate<PlacedSticker> { s in s.profileId == pid }
+        )
+        return (try? context.fetchCount(desc)) ?? 0
+    }
+
+    /// 托管对象就地修改（手势拖拽/缩放/旋转、便签内容等）后的统一落盘出口
+    func persist(context: ModelContext) {
+        try? context.save()
+    }
+
     // MARK: - Import
+
+    /// 画板 PNG → 贴纸库（StickerToolbar / StickerKeyboardPanel / StickerLibraryView 共用）
+    func addDrawingAsset(pngData: Data, name: String, profileId: String, context: ModelContext) {
+        let assetId = UUID()
+        do {
+            let paths = try StickerFileManager.saveStickerImage(pngData, id: assetId, profileId: profileId)
+            let asset = StickerAsset(
+                name: name,
+                imagePath: paths.imagePath,
+                thumbnailPath: paths.thumbnailPath,
+                profileId: profileId
+            )
+            asset.id = assetId
+            context.insert(asset)
+            stickerAssets.insert(asset, at: 0)
+            try? context.save()
+        } catch {
+            print("画画保存失败: \(error.localizedDescription)")
+        }
+    }
 
     /// 导入图片 → 抠图 → 默认描边 → 保存到贴纸库
     func importImages(urls: [URL], name: String? = nil, profileId: String, context: ModelContext) async {
