@@ -11,7 +11,6 @@ const TMUX_SESSION = process.env.MP_CC_TMUX_SESSION ?? "mp-cc"
 const HUB_HOST = process.env.MP_CC_HUB_HOST ?? "127.0.0.1"
 const HUB_TOKEN = process.env.MP_CC_HUB_TOKEN
 
-<<<<<<< HEAD
 export function isLoopback(addr: string | undefined): boolean {
   if (!addr) return false
   return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
@@ -20,10 +19,6 @@ export function isLoopback(addr: string | undefined): boolean {
 // App→Hub message (type "chat" preferred; "send" accepted for backward compat)
 export interface ChatMessage {
   type: "chat" | "send"
-=======
-export interface MPMessage {
-  type: "send"
->>>>>>> 2b8c45a (fix(cc-bridge): enforce token auth on all hub connections including loopback)
   chat_id: string
   message_id: string
   content: string
@@ -235,8 +230,14 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/")
 }
 
+// S4: 消毒 chatId，避免 ../ 路径穿越逃出 inbound/outbound 目录
+function safeChatSeg(chatId: string): string {
+  const seg = (chatId || "").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 16)
+  return seg.length > 0 ? seg : "default"
+}
+
 function saveInboundImages(chatId: string, images: any[]): string[] {
-  const dir = join(INBOUND_DIR, chatId.slice(0, 16))
+  const dir = join(INBOUND_DIR, safeChatSeg(chatId))
   const paths: string[] = []
   try { mkdirSync(dir, { recursive: true }) } catch {}
   let i = 0
@@ -252,7 +253,7 @@ function saveInboundImages(chatId: string, images: any[]): string[] {
 }
 
 function saveInboundFiles(chatId: string, files: any[]): string[] {
-  const dir = join(INBOUND_DIR, chatId.slice(0, 16))
+  const dir = join(INBOUND_DIR, safeChatSeg(chatId))
   const paths: string[] = []
   try { mkdirSync(dir, { recursive: true }) } catch {}
   let i = 0
@@ -292,7 +293,7 @@ function stageOutboundFile(chatId: string, srcPath: string): StagedFile | null {
       return null
     }
     // Stage a copy in outbound dir for audit / replay safety
-    const dir = join(OUTBOUND_DIR, chatId.slice(0, 16))
+    const dir = join(OUTBOUND_DIR, safeChatSeg(chatId))
     try { mkdirSync(dir, { recursive: true }) } catch {}
     const name = basename(srcPath)
     const dest = join(dir, `${Date.now()}_${name}`)
@@ -358,31 +359,14 @@ export function startHub(): WebSocketServer {
     console.error("[hub] MP_CC_HUB_TOKEN env required (use start_hub.sh)")
     process.exit(1)
   }
-<<<<<<< HEAD
-
-=======
   if (HUB_HOST !== "127.0.0.1" && HUB_HOST !== "::1" && HUB_HOST !== "localhost") {
     console.warn(`[hub] WARNING: binding non-loopback host ${HUB_HOST} — hub is reachable from the network; make sure this is intended`)
   }
->>>>>>> 2b8c45a (fix(cc-bridge): enforce token auth on all hub connections including loopback)
   const wss = new WebSocketServer({ host: HUB_HOST, port: PORT })
 
   wss.on("connection", (ws, req) => {
     const reqUrl = new URL(req.url ?? "", "http://localhost")
     const pathname = reqUrl.pathname
-<<<<<<< HEAD
-    const remote = req.socket.remoteAddress
-
-    // Auth: non-loopback connections must supply correct token
-    if (!isLoopback(remote)) {
-      const provided = reqUrl.searchParams.get("token")
-      if (provided !== HUB_TOKEN) {
-        console.warn(`[hub] auth failed from ${remote} (path=${pathname})`)
-        ws.close(1008, "auth")
-        return
-      }
-=======
-
     // 鉴权：所有连接（含 loopback）必须带正确 query token。
     // 部署上 hub 绑 127.0.0.1、由反向代理转发外部流量，此时外部连接的
     // remoteAddress 也是 loopback——若 loopback 免鉴权，token 形同虚设。
@@ -392,7 +376,6 @@ export function startHub(): WebSocketServer {
       console.warn(`[hub] auth failed from ${remote} (path=${pathname})`)
       ws.close(1008, "auth")
       return
->>>>>>> 2b8c45a (fix(cc-bridge): enforce token auth on all hub connections including loopback)
     }
 
     if (pathname === "/ws") {
