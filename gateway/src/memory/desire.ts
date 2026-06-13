@@ -269,16 +269,21 @@ export async function onAppOpenEvent(appName: string): Promise<void> {
   console.log(`[nightguard] 🌙 "${msg}" (app: ${appName}, awake-hint: ${health.awake})`);
 }
 
-/** 获取未读念头（App调用） */
-export async function getUnreadDesires(): Promise<any[]> {
-  const { data } = await supabase
+/** 获取未读念头（App调用）。传 sinceMs 只返回该时间之后的新念头。 */
+export async function getUnreadDesires(sinceMs?: number): Promise<any[]> {
+  let q = supabase
     .from('messages')
     .select('content, created_at')
     .eq('session_id', 'desire')
     .eq('role', 'assistant')
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(20);
 
+  if (sinceMs && !Number.isNaN(sinceMs)) {
+    q = q.gt('created_at', new Date(sinceMs).toISOString());
+  }
+
+  const { data } = await q;
   return data || [];
 }
 

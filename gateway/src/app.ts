@@ -98,6 +98,14 @@ app.post('/api/events', async (c) => {
   return c.json({ ok: res.ok, ...(res.error ? { error: res.error } : {}) });
 });
 
+// ============ 未读念头（App 端拉取，支持 ?since=ms 增量）（PR-6）============
+app.get('/api/desires/unread', auth, async (c) => {
+  const sinceRaw = c.req.query('since');
+  const since = sinceRaw ? Number(sinceRaw) : undefined;
+  const desires = await getUnreadDesires(since && !Number.isNaN(since) ? since : undefined);
+  return c.json({ desires });
+});
+
 // ============ 主聊天端点 ============
 app.post('/v1/chat/completions', auth, async (c) => {
   const body = await c.req.json();
