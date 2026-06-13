@@ -286,7 +286,7 @@ struct StickerCanvasGestureOverlay: UIViewRepresentable {
 
                     vm.dragStarted = false
                     vm.lastRotationDelta = 0
-                    try? parent.modelContext.save()
+                    vm.persist(context: parent.modelContext)
                     isDragging = false
                     deselectIfIdle()
                 }
@@ -317,7 +317,7 @@ struct StickerCanvasGestureOverlay: UIViewRepresentable {
             case .ended, .cancelled:
                 vm.pinchStarted = false
                 isPinching = false
-                try? parent.modelContext.save()
+                vm.persist(context: parent.modelContext)
                 gesture.scale = 1.0
                 deselectIfIdle()
             default: break
@@ -347,7 +347,7 @@ struct StickerCanvasGestureOverlay: UIViewRepresentable {
             case .ended, .cancelled:
                 vm.pinchStarted = false
                 isRotating = false
-                try? parent.modelContext.save()
+                vm.persist(context: parent.modelContext)
                 gesture.rotation = 0
                 deselectIfIdle()
             default: break
