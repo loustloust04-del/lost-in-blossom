@@ -96,23 +96,8 @@ struct StickerToolbar: View {
     }
 
     private func saveDrawing(pngData: Data, profileId: String) {
-        let assetId = UUID()
         let name = "画画 \(Date().formatted(.dateTime.hour().minute()))"
-        do {
-            let paths = try StickerFileManager.saveStickerImage(pngData, id: assetId, profileId: profileId)
-            let asset = StickerAsset(
-                name: name,
-                imagePath: paths.imagePath,
-                thumbnailPath: paths.thumbnailPath,
-                profileId: profileId
-            )
-            asset.id = assetId
-            modelContext.insert(asset)
-            stickerVM.stickerAssets.insert(asset, at: 0)
-            try? modelContext.save()
-        } catch {
-            print("画画保存失败: \(error.localizedDescription)")
-        }
+        stickerVM.addDrawingAsset(pngData: pngData, name: name, profileId: profileId, context: modelContext)
     }
 
     private func toolButton(_ icon: String, label: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
