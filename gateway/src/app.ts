@@ -11,6 +11,7 @@ import { extractMemoriesIfNeeded } from './memory/extractor';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
+import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
 const app = new Hono();
 
@@ -104,6 +105,49 @@ app.get('/api/desires/unread', auth, async (c) => {
   const since = sinceRaw ? Number(sinceRaw) : undefined;
   const desires = await getUnreadDesires(since && !Number.isNaN(since) ? since : undefined);
   return c.json({ desires });
+});
+
+// ============ 记忆系统 API（供 App 拉取/对齐，全部需 Bearer token）============
+app.get('/api/memories', auth, async (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 200);
+  const offset = Math.max(Number(c.req.query('offset')) || 0, 0);
+  const category = c.req.query('category') || undefined;
+  const { items, total } = await listMemories({ limit, offset, category });
+  return c.json({ memories: items, total, limit, offset });
+});
+
+// 做梦日记（日/周/月摘要），?period=daily|weekly|monthly 可筛选
+app.get('/api/memories/dreams', auth, async (c) => {
+  const period = c.req.query('period') || undefined;
+  const { items } = await listDreams(period);
+  return c.json({ dreams: items });
+});
+
+// 欲望系统生成的念头（碎碎念）
+app.get('/api/memories/desires', auth, async (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 200);
+  const offset = Math.max(Number(c.req.query('offset')) || 0, 0);
+  const { items } = await listDesires(limit, offset);
+  return c.json({ desires: items });
+});
+
+// App 端手动写入的记忆 → 去重合并到 Supabase
+app.post('/api/memories/sync', auth, async (c) => {
+  let body: any = {};
+  try { body = await c.req.json(); } catch {}
+  const incoming = Array.isArray(body) ? body : (Array.isArray(body?.memories) ? body.memories : []);
+  if (!incoming.length) return c.json({ added: 0, skipped: 0, addedIds: [] });
+  const res = await syncMemories(incoming);
+  return c.json(res);
+});
+
+// 网关有但 App 没有的记忆（?since=ms 增量），供对齐
+app.get('/api/memories/diff', auth, async (c) => {
+  const sinceRaw = c.req.query('since');
+  const since = sinceRaw ? Number(sinceRaw) : undefined;
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 200, 1), 500);
+  const { items } = await diffMemories(since && !Number.isNaN(since) ? since : undefined, limit);
+  return c.json({ memories: items });
 });
 
 // ============ 主聊天端点 ============

@@ -2,6 +2,7 @@
 // 工具定义排在 prompt 前缀最前面，必须字节级稳定（任何改动都会打破 prompt cache 前缀）。
 import { exec as execShell } from 'node:child_process';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
+import { saveMemory } from '../memory/store';
 
 export const BUILTIN_TOOLS = [
   {
@@ -23,6 +24,19 @@ export const BUILTIN_TOOLS = [
         exact: { type: 'boolean', description: 'verbatim full-text search instead of semantic' },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'remember',
+    description: 'Store one piece of information into long-term memory right now. Use this the moment something worth keeping comes up in conversation (a preference, fact, relationship detail, goal, or context) — do not wait for passive end-of-conversation extraction. The entry is embedded and persisted; it will surface again via recall.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: '要记住的信息，一句完整、可独立理解的话' },
+        category: { type: 'string', enum: ['preference', 'fact', 'relationship', 'goal', 'context'], description: '分类：偏好 / 事实 / 关系 / 目标 / 上下文' },
+        tier: { type: 'number', description: '重要程度 1-4：1核心 2重要 3普通 4碎片（默认 3）' },
+      },
+      required: ['content'],
     },
   },
 ] as const;
@@ -62,10 +76,29 @@ async function runRecall(input: any): Promise<string> {
   }
 }
 
+const VALID_CATEGORIES = ['preference', 'fact', 'relationship', 'goal', 'context'];
+
+// AI 在对话中主动写入：source='ai_explicit'，与被动提取(auto)、手动同步(manual)区分。
+async function runRemember(input: any): Promise<string> {
+  const content = String(input?.content || '').trim();
+  if (!content) return '(remember: content 为空，没存)';
+  const category = VALID_CATEGORIES.includes(input?.category) ? input.category : undefined;
+  let tier = Number(input?.tier);
+  if (!Number.isFinite(tier) || tier < 1 || tier > 4) tier = 3;
+  try {
+    const id = await saveMemory({ content, category, tier: Math.round(tier), source: 'ai_explicit' });
+    if (!id) return 'remember 失败：写入未返回 id（检查 Supabase 配置）';
+    return `已记住（tier ${Math.round(tier)}${category ? '/' + category : ''}）：${content}`;
+  } catch (e: any) {
+    return 'remember 失败: ' + (e?.message || String(e));
+  }
+}
+
 /// 进程内执行内置工具；返回 null 表示"不是内置工具"，由 loop fall through 到 MCP。
 export async function callBuiltinTool(name: string, input: any): Promise<string | null> {
   if (name === 'exec') return runExec(String(input?.command || ''));
   if (name === 'recall') return runRecall(input);
+  if (name === 'remember') return runRemember(input);
   return null;
 }
 
