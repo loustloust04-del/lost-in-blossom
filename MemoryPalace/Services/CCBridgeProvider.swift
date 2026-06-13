@@ -109,6 +109,11 @@ final class CCBridgeProvider: BaseChatProvider {
         if let ccSession, !ccSession.isEmpty {
             payload["session_name"] = ccSession
         }
+        // CC↔API 上下文共享（正向）：附带本对话 API 侧已压缩的摘要，CC 接话时能看到历史。
+        if let ctx = ContextSummarizer.load(conversationId: chatId)?.summary,
+           !ctx.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            payload["context"] = ctx
+        }
         wsClient.send(payload) { err in
             if let err {
                 // 不 unregister、不 failNow——把判定权交给 grace timer。
