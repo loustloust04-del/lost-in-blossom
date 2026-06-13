@@ -137,3 +137,25 @@ CardFlowView 输入栏
 4. **分支树语义**：连续多条 assistant 节点会让 `BranchMapSheet`、regenerate 遇到非预期形态；regenerate 只重生成最后一个发言者节点；分支标签（`CardFlowView.swift:1937`）按 senderName 标注。
 5. **流式并发与崩溃恢复**：串行流式中途杀 App 留空占位节点；复用现有空节点清理逻辑，确认不误删带 senderId 的节点。
 6. **多用户共享不做**（见 2.4），避免账号体系、realtime 冲突、数据主权倒置三座大山。
+
+---
+
+## 附：PR-5 记忆/世界书/摘要打通验证（2026-06-13）
+
+群聊 V2 走本地 SwiftData 落库，三套基建天然继承，逐项确认：
+
+1. **记忆提取（MemoryService）**：提取管线读的是 `MessageNode`（role/content/conversationId/
+   profileId），不依赖 `senderName`。群聊节点和单聊节点同构，提取自动覆盖；`senderName`
+   只是额外可选字段，不影响既有 fetch/提取逻辑。✅
+2. **世界书**：世界书按 `conversation.linkedWorldBookIDs` / 全局条目绑定与扫描，与对话是否
+   群聊无关；群聊对话同样命中。✅
+3. **ContextSummarizer**：`messagesToSummarize` / `buildSummaryRequest` 只接受
+   `[(role: String, content: String)]`，**完全不感知 senderId/senderName**——多个发言者
+   不会引发任何错误或越界，压缩照常工作。✅
+   - 可选增强（非必需）：调用方在为群聊构造摘要输入时，可把 assistant 消息正文前缀
+     `[senderName]: `（与镜像 prompt 同款），让摘要更好区分多发言者。属体验优化，
+     不做也不会出错。
+
+结论：PR-5 的"打通"在方案 B 下是**结构性免费**的——消息进了 SwiftData，基建即继承。
+唯一留作后续的是上面的可选摘要增强，以及 PR-4 里 bubble 底色按 colorHex 着色 +
+输入栏"轮到谁"提示的完整 UI 接线（需要把 participant 列表 plumb 进消息行/输入栏）。
