@@ -457,6 +457,8 @@ struct MemoryPalaceApp: App {
                         CCBridgeWebSocketClient.shared.sendAppState("foreground")
                         // PR-6: App 回前台时检查未读念头并用本地通知展示
                         Task { await DesireInboxService.shared.checkUnread() }
+                        // PR-4: 启动/回前台对齐本地与网关记忆（仅在后端记忆开关开启时，每进程一次）
+                        Task { await MemorySync.shared.alignOnLaunch(container: profileManager.container, profileId: profileManager.currentProfile.id) }
                     default:
                         break
                     }
