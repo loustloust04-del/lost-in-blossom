@@ -87,14 +87,22 @@
 9. **流程风险:VPS main 与 GitHub main 分叉**。解耦三连 commit(885d95d/3af3949/9c8b18e)和 push 调试 commit 只在 VPS,渲染混合方案两边各自演化(47e2d56 vs 5c25c91)且 GitHub 侧是旧版。本分支已把两边合上(冲突取 VPS 新版),后续记得 VPS 及时 push。
 10. **MemoryCompat.swift / SC-B2 stubs**:8d74ffb/6e301d5 加的兼容 stub(CacheDiagLog 单例等)是为编译过渡,确认功能落地后应清理。
 
-## 三、执行状态
+## 三、执行状态(全部完成)
 
-- [ ] CardFlowView → ConversationListStore
-- [ ] ContentView → ConversationListStore
-- [ ] GeneralSettingsTab → WorldBookStore
-- [ ] PersonaSettingsTab → WorldBookStore
-- [ ] StickerViewModel 增 addDrawingAsset/persist/counts + 六个贴纸 View 接入
-- [ ] ProjectsView → ProjectStore(新)
-- [ ] ConsoleView → DailyContextStore(新)
-- [ ] CCSessionPickerSheet → ConversationListStore
-- [ ] MemoryPanelView 残留清理
+- [x] CardFlowView → ConversationListStore(bda408e)
+- [x] ContentView → ConversationListStore(edffbbf)
+- [x] GeneralSettingsTab → WorldBookStore(653ede8)
+- [x] PersonaSettingsTab → WorldBookStore(b3c73d0)
+- [x] StickerViewModel 增 addDrawingAsset/persist/counts(37653bc)+ 六个贴纸 View 接入(2ad05c3 / b2fd830 / 134d605 / c2f0449 / c817397 / 438db31)
+- [x] ProjectsView → ProjectStore(新)(ab04653)
+- [x] ConsoleView → DailyContextStore(新)(f0b4a9b)
+- [x] CCSessionPickerSheet → ConversationListStore(b38f804)
+- [x] MemoryPanelView 残留清理(2c9194e)
+
+终态校验:`grep -rn "modelContext\.(insert|delete|save|fetch)" MemoryPalace/Views/` → 0 命中。
+
+实现备注:
+- counts 做成了 `StickerViewModel` 的 **static** 方法——StickerSettingsTab 拿不到 vm 实例(vm 由 ContentView 持有逐层传参,设置页不在传递链上),而统计本来就不碰实例状态。
+- GeneralSettingsTab.deleteWorldBook 原来的 `do/catch + print` 错误日志被 `WorldBookStore.delete`(`try? save`)吞掉了,行为等价、日志少一条,介意的话给 Store 加 throws 版本。
+- CardFlowView.toggleTag 的对话标题查询从「仅按 id」收紧为「id + profileId」(走已有 Store 方法);FavoriteItem 本来就写当前楼层 profileId,语义一致。
+- ConsoleView.ensureTodayContext 从「@Query 数组内存查找」改为「Store 内谓词查询」,行为等价。
