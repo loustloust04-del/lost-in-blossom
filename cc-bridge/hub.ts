@@ -387,6 +387,24 @@ export function startHub(): WebSocketServer {
       res.writeHead(result.ok ? 200 : 500, { "Content-Type": "application/json" })
       res.end(JSON.stringify(result)); return
     }
+    if (u.pathname === "/cc/settings" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ injectSummary: (process.env.CC_INJECT_SUMMARY ?? "1") !== "0" }))
+      return
+    }
+    if (u.pathname === "/cc/settings" && req.method === "POST") {
+      let body = ""
+      req.on("data", (c: Buffer) => { body += c.toString() })
+      req.on("end", () => {
+        try {
+          const s = JSON.parse(body)
+          if (typeof s.injectSummary === "boolean") process.env.CC_INJECT_SUMMARY = s.injectSummary ? "1" : "0"
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ ok: true, injectSummary: process.env.CC_INJECT_SUMMARY !== "0" }))
+        } catch { res.writeHead(400); res.end("bad json") }
+      })
+      return
+    }
     res.writeHead(404); res.end("not found")
   })
   const wss = new WebSocketServer({ server: httpServer })
@@ -423,7 +441,8 @@ export function startHub(): WebSocketServer {
             content: r.content,
             reply_id: r.reply_id,
           }))
-        } catch { /* dead socket, will get cleaned up on close */ }
+        }
+ catch { /* dead socket, will get cleaned up on close */ }
       }
 
       // Replay offline messages persisted while no clients were connected
