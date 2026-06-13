@@ -150,6 +150,33 @@ CREATE TABLE IF NOT EXISTS dream_log (
 
 
 ------------------------------
+-- iOS Shortcuts 上报的事件（PR-3）
+------------------------------
+CREATE TABLE IF NOT EXISTS dream_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,              -- e.g. app_open / health
+  value TEXT NOT NULL,             -- e.g. 小红书 / heart_rate
+  ts BIGINT NOT NULL,              -- 客户端 epoch 毫秒
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dream_events_type_ts ON dream_events(type, ts DESC);
+
+------------------------------
+-- 碎碎念 / AI 内心独白（PR-5）
+------------------------------
+CREATE TABLE IF NOT EXISTS murmurs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  thinking TEXT,                   -- 思考链
+  content TEXT NOT NULL,           -- 正文（给自己的碎碎念）
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_murmurs_time ON murmurs(created_at DESC);
+
+
+------------------------------
 -- 向量搜索函数（给 retriever.ts 调用）
 ------------------------------
 CREATE OR REPLACE FUNCTION match_memories(
