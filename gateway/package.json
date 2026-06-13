@@ -1,0 +1,14 @@
+{
+  "name": "lib-gateway",
+  "version": "0.1.0",
+  "description": "Lost in Blossom — Gateway",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
+    "hono": "^4.7.0"
+  }
+}

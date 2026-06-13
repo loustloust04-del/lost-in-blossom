@@ -1,0 +1,14 @@
+export const config = {
+  port: parseInt(Bun.env.GATEWAY_PORT || '4567'),
+  gatewayToken: Bun.env.GATEWAY_TOKEN || '',
+  deepseekKey: Bun.env.DEEPSEEK_API_KEY || '',
+  openrouterKey: Bun.env.OPENROUTER_API_KEY || '',
+  anthropicKey: Bun.env.ANTHROPIC_API_KEY || '',
+  supabaseUrl: Bun.env.SUPABASE_URL || '',
+  supabaseKey: Bun.env.SUPABASE_KEY || '',
+  embeddingKey: Bun.env.EMBEDDING_API_KEY || '',
+  treeChatKey: Bun.env.TREE_CHAT_KEY || '',
+  treeApiKey: Bun.env.TREE_API_KEY || '',
+  embeddingModel: Bun.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+  embeddingBase: Bun.env.EMBEDDING_BASE_URL || 'https://api.openai.com/v1',
+};

@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+bun.lockb
+.env.save
+
+.git.disabled/
+data/
+.env.save
