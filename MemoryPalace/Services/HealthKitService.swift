@@ -47,6 +47,12 @@ final class HealthKitService {
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
             types.insert(sleep)
         }
+        if let heart = HKQuantityType.quantityType(forIdentifier: .heartRate) {
+            types.insert(heart)
+        }
+        if let spo2 = HKQuantityType.quantityType(forIdentifier: .oxygenSaturation) {
+            types.insert(spo2)
+        }
         if let flow = HKObjectType.categoryType(forIdentifier: .menstrualFlow) {
             types.insert(flow)
         }
@@ -221,3 +227,26 @@ final class HealthKitService {
         }
     }
 }
+
+
+    // MARK: - Heart Rate (Watch placeholder)
+
+    /// 读取最近一次心率。有 Apple Watch 时自动有数据，没有则返回 nil。
+    func fetchHeartRate() async -> Int? {
+        guard let heartType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return nil }
+        let predicate = HKQuery.predicateForSamples(withStart: Calendar.current.date(byAdding: .hour, value: -1, to: Date()), end: Date())
+        let descriptor = HKSampleQueryDescriptor(predicates: [.quantitySample(type: heartType, predicate: predicate)], sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)], limit: 1)
+        guard let result = try? await descriptor.result(for: store).first else { return nil }
+        return Int(result.quantity.doubleValue(for: HKUnit(from: "count/min")))
+    }
+
+    // MARK: - Blood Oxygen (Watch placeholder)
+
+    /// 读取最近一次血氧。有 Apple Watch 时自动有数据，没有则返回 nil。
+    func fetchBloodOxygen() async -> Double? {
+        guard let spo2Type = HKQuantityType.quantityType(forIdentifier: .oxygenSaturation) else { return nil }
+        let predicate = HKQuery.predicateForSamples(withStart: Calendar.current.date(byAdding: .hour, value: -2, to: Date()), end: Date())
+        let descriptor = HKSampleQueryDescriptor(predicates: [.quantitySample(type: spo2Type, predicate: predicate)], sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)], limit: 1)
+        guard let result = try? await descriptor.result(for: store).first else { return nil }
+        return result.quantity.doubleValue(for: HKUnit.percent()) * 100
+    }
