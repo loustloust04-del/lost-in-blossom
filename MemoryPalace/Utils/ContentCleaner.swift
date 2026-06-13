@@ -102,10 +102,10 @@ enum ContentCleaner {
         let thinking: String?  // Extracted thinking text (nil if none)
     }
 
-    /// Extract [thinking]...[/thinking] blocks from Claude responses
+    /// Extract [thinking]...[/thinking] or <thinking>...</thinking> blocks from Claude responses
     static func extractThinking(from text: String) -> ThinkingResult {
-        // Match [thinking]...[/thinking] (case insensitive, multiline)
-        let pattern = "\\[thinking\\]([\\s\\S]*?)\\[/thinking\\]"
+        // Match [thinking]…[/thinking] 和 <Thinking>…</Thinking>（大小写不敏感，跨行）
+        let pattern = "(?:\\[thinking\\]|<thinking>)([\\s\\S]*?)(?:\\[/thinking\\]|</thinking>)"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return ThinkingResult(content: text, thinking: nil)
         }
