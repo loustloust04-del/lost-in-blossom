@@ -10,6 +10,7 @@ import { saveMessage, compressForStorage } from './memory/store';
 import { extractMemoriesIfNeeded } from './memory/extractor';
 import { config } from './config';
 import { getUnreadDesires } from './memory/desire';
+import { recordEvent, verifyEventToken } from './memory/events';
 
 const app = new Hono();
 
@@ -64,6 +65,30 @@ app.get('/v1/models', auth, (c) => c.json({
 app.get('/v1/desires', auth, async (c) => {
   const desires = await getUnreadDesires();
   return c.json({ desires });
+});
+
+// ============ iOS Shortcuts 事件上报（PR-3）============
+app.post('/api/events', async (c) => {
+  // token：Authorization: Bearer xxx 或 ?key=xxx（Shortcuts 友好）
+  const h = c.req.header('Authorization');
+  const headerTok = h?.startsWith('Bearer ') ? h.slice(7) : '';
+  const tok = headerTok || c.req.query('key') || '';
+  if (!verifyEventToken(tok)) {
+    return c.json({ ok: false, error: 'forbidden' }, 403);
+  }
+
+  // 兼容 JSON body 与 query 两种上报方式
+  let body: any = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const type = body.type ?? c.req.query('type');
+  const value = body.value ?? c.req.query('value');
+  if (!type || !value) {
+    return c.json({ ok: false, error: 'type and value required' }, 400);
+  }
+  const ts = typeof body.ts === 'number' ? body.ts : Date.now();
+
+  const res = await recordEvent({ type, value, ts, metadata: body.metadata ?? null });
+  return c.json({ ok: res.ok, ...(res.error ? { error: res.error } : {}) });
 });
 
 // ============ 主聊天端点 ============
