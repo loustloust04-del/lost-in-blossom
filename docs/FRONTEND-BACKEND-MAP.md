@@ -82,7 +82,7 @@
   也不会触发提取/dream/desire。
 
 ### (B) App → Gateway `/v1/chat/completions`（记忆增强聊天） 🟡 半通
-- 路径：用户把某个 provider 配成 `blossom.amberrib.com/v1` + token `bunny-lib-2026`。
+- 路径：用户把某个 provider 配成 `blossom.amberrib.com/v1` + token `<redacted — rotate & store in .env only>`。
 - gateway 端 `enhanceMessages` 注入记忆、转发上游、存消息、异步提取。
 - 状态：**代码通，但是否启用取决于 App 配置**。`ChatroomService` 默认用了
   `blossom.amberrib.com` 取模型列表，但**主聊天是否路由到 gateway 需用户手动配 provider**。
@@ -148,7 +148,7 @@
 |------|------|------|
 | (D) CC Bridge | 反代绕过鉴权 → spawn_cc RCE | 🔴 P0 |
 | (C) Chatroom | 零鉴权 + IDOR + 全网卡监听 | 🔴 P0 |
-| (B)(D) Token | `bunny-lib-2026` 弱口令 + 文档明文 | 🔴 P0 |
+| (B)(D) Token | `<redacted — rotate & store in .env only>` 弱口令 + 文档明文 | 🔴 P0 |
 | (D) 文件落盘 | chatId 路径穿越 | 🟠 P1 |
 | (E) Supabase | 无 RLS / 无 user 隔离 | 🟠 P1 |
 

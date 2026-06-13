@@ -166,8 +166,8 @@ write/delete 操作校验归属；考虑给 `/chatroom/start` 加速率限制。
 
 ### S3. Gateway Token 弱口令且明文外泄 🔴 P0
 
-- `GATEWAY_TOKEN=bunny-lib-2026` —— 可猜测的弱口令，且**明文写在
-  `docs/GATEWAY-HANDOFF-COMPLETE.md` 第三节**（"Gateway Token | bunny-lib-2026"）。
+- `GATEWAY_TOKEN=<redacted — rotate & store in .env only>` —— 可猜测的弱口令，且**明文写在
+  `docs/GATEWAY-HANDOFF-COMPLETE.md` 第三节**（"Gateway Token | <redacted — rotate & store in .env only>"）。
   该文档若进过任何 git 仓库或被分享，token 即泄露。
 - `MP_APNS_*`、APNs `.p8` 路径、Team/Key ID 全部硬编码在 `apns.ts` 默认值里。
 - `auth.ts` 用 `!==` 明文比较 token —— 理论上有时序侧信道（影响小，但可顺手用

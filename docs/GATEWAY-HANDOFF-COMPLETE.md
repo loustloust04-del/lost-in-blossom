@@ -38,7 +38,7 @@ Gateway 跑在 VPS 上，做四件事：
 | VPS IP | 172.245.88.103 |
 | 域名 | blossom.amberrib.com（Let's Encrypt SSL，DNS Only 模式） |
 | Gateway 端口 | 4567 |
-| Gateway Token | bunny-lib-2026 |
+| Gateway Token | <redacted — rotate & store in .env only> |
 | systemd 服务 | lib-gateway |
 | 代码路径 | /root/projects/BunnyPalace/gateway/ |
 | nginx 配置 | /etc/nginx/sites-enabled/blossom |
@@ -64,7 +64,7 @@ cd /root/projects/BunnyPalace/gateway && bun src/index.ts  # 前台运行调试
 
 ```env
 GATEWAY_PORT=4567
-GATEWAY_TOKEN=bunny-lib-2026
+GATEWAY_TOKEN=<redacted — rotate & store in .env only>
 DEEPSEEK_API_KEY=<REDACTED>
 OPENROUTER_API_KEY=<REDACTED>
 SUPABASE_URL=https://ezeldljtafhvpswgfxjx.supabase.co
