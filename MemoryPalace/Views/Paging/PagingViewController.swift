@@ -419,7 +419,11 @@ extension PagingViewController: UIGestureRecognizerDelegate {
     /// (which require(toFail:) edgePan) isn't blocked for touches outside that zone.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === edgePanGesture else { return true }
-        return gestureRecognizer.location(in: view).x < 60
+        guard gestureRecognizer.location(in: view).x < 60 else { return false }
+        // Only intercept horizontal right-swipe, let long-press and vertical scroll through
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        let velocity = pan.velocity(in: view)
+        return velocity.x > 0 && abs(velocity.x) > abs(velocity.y)
     }
 }
 
