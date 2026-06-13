@@ -280,6 +280,7 @@ struct ContentView: View {
                     PagingContainerView(
                         chatPage: AnyView(injectPagingEnv(iOSChatPage)),
                         dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
+                        consolePage: AnyView(injectPagingEnv(iOSConsolePage)),
                         archivePage: AnyView(injectPagingEnv(iOSArchivePage)),
                         currentPage: $iOSPage,
                         disableScroll: stickerVM.isEditingStickers,
@@ -722,7 +723,13 @@ struct ContentView: View {
             .background(Theme.sidebarBg.ignoresSafeArea())
     }
 
-    /// 右滑 page 3: The Archive（记忆馆）
+    /// 右滑 page 3: Console
+    private var iOSConsolePage: some View {
+        ConsoleView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 右滑 page 4: The Archive（记忆馆）
     private var iOSArchivePage: some View {
         ArchivePageView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

@@ -19,6 +19,7 @@ import SwiftUI
 struct PagingContainerView: UIViewControllerRepresentable {
     let chatPage: AnyView
     let dashPage: AnyView
+    let consolePage: AnyView
     let archivePage: AnyView
     @Binding var currentPage: Int
     let disableScroll: Bool
@@ -55,6 +56,7 @@ struct PagingContainerView: UIViewControllerRepresentable {
             pages: [
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage)),
+                AnyView(injectChatManagers(consolePage)),
                 AnyView(injectChatManagers(archivePage))
             ],
             initialPage: initialPage
@@ -79,6 +81,7 @@ struct PagingContainerView: UIViewControllerRepresentable {
             vc.updatePages([
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage)),
+                AnyView(injectChatManagers(consolePage)),
                 AnyView(injectChatManagers(archivePage))
             ])
         } else {
