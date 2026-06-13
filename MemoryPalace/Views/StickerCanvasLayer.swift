@@ -56,7 +56,7 @@ struct StickerCanvasLayer: View {
                     onDelete: {
                         stickerVM.removePlacedSticker(sticker, context: modelContext)
                     },
-                    onSave: { try? modelContext.save() },
+                    onSave: { stickerVM.persist(context: modelContext) },
                     onUndoPush: { stickerVM.pushUndo(for: sticker) }
                 )
                 .zIndex(999)
@@ -103,7 +103,7 @@ struct StickerCanvasLayer: View {
                 ) { newText, newStyle in
                     sticker.noteContent = newText
                     sticker.noteStyle = newStyle.rawValue
-                    try? modelContext.save()
+                    stickerVM.persist(context: modelContext)
                     stickerVM.editingNoteStickerId = nil
                 }
             }
