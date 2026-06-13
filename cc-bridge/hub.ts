@@ -1,4 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws"
+import { createServer } from "node:http"
+import { getStatus, forge, startAutoForge } from "./session-manager.ts"
 import { execFileSync, spawn } from "node:child_process"
 import type { ChildProcessWithoutNullStreams } from "node:child_process"
 import { mkdtempSync, unlinkSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync, statSync } from "node:fs"
@@ -369,7 +371,26 @@ export function startHub(): WebSocketServer {
   if (HUB_HOST !== "127.0.0.1" && HUB_HOST !== "::1" && HUB_HOST !== "localhost") {
     console.warn(`[hub] WARNING: binding non-loopback host ${HUB_HOST} — hub is reachable from the network; make sure this is intended`)
   }
-  const wss = new WebSocketServer({ host: HUB_HOST, port: PORT })
+  // CC Session 续命：HTTP 端点 /cc/status (GET) + /cc/forge (POST)，与 WS 同端口共存。
+  const httpServer = createServer(async (req, res) => {
+    const u = new URL(req.url ?? "", "http://localhost")
+    const token = (req.headers["authorization"]?.replace("Bearer ", "")) || u.searchParams.get("token")
+    if (token !== HUB_TOKEN) { res.writeHead(401); res.end("unauthorized"); return }
+    const sess = u.searchParams.get("session") || TMUX_SESSION
+    if (u.pathname === "/cc/status" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify(getStatus(sess))); return
+    }
+    if (u.pathname === "/cc/forge" && req.method === "POST") {
+      const result = await forge(sess)
+      res.writeHead(result.ok ? 200 : 500, { "Content-Type": "application/json" })
+      res.end(JSON.stringify(result)); return
+    }
+    res.writeHead(404); res.end("not found")
+  })
+  const wss = new WebSocketServer({ server: httpServer })
+  httpServer.listen(PORT, HUB_HOST)
+  startAutoForge(TMUX_SESSION)
 
   wss.on("connection", (ws, req) => {
     const reqUrl = new URL(req.url ?? "", "http://localhost")
