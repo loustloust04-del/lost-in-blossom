@@ -48,11 +48,7 @@ struct ConsoleView: View {
     // MARK: - Ensure today context
 
     private func ensureTodayContext() {
-        let today = Calendar.current.startOfDay(for: Date())
-        let existing = allContexts.first { Calendar.current.isDate($0.date, inSameDayAs: today) }
-        guard existing == nil else { return }
-        let ctx = DailyContext(date: today)
-        modelContext.insert(ctx)
+        DailyContextStore.ensureToday(context: modelContext)
     }
 
     // MARK: - Header
