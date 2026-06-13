@@ -404,9 +404,7 @@ struct MemoryPanelView: View {
     }
 
     private func reviveMemory(_ memory: Memory) {
-        memory.supersededAt = nil
-        memory.updatedAt = Date()
-        try? modelContext.save()
+        store.revive(memory, context: modelContext)
         refreshMemories()
     }
 
@@ -414,10 +412,7 @@ struct MemoryPanelView: View {
     private func jumpToSource(_ memory: Memory) {
         guard let cid = memory.sourceConversationId else { return }
         let pid = profileManager?.currentProfile.id ?? ""
-        let convDesc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { conv in conv.id == cid && conv.profileId == pid }
-        )
-        if let conv = try? modelContext.fetch(convDesc).first {
+        if let conv = ConversationListStore.conversation(id: cid, profileId: pid, context: modelContext) {
             viewModel.loadConversation(conv, context: modelContext)
         }
     }

@@ -719,6 +719,13 @@ extension SwiftDataMemoryStore {
         try? context.save()
     }
 
+    /// 复活已 supersede 的记忆（清 supersededAt + 刷新时间戳）
+    func revive(_ memory: Memory, context: ModelContext) {
+        memory.supersededAt = nil
+        memory.updatedAt = Date()
+        try? context.save()
+    }
+
     /// 用户手动新增（钉住语义：isUserExplicit + decayWeight 1.0）
     @discardableResult
     func addUserPinned(content: String, category: String, keywords: [String],
