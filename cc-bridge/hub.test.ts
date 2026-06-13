@@ -7,10 +7,14 @@ setTmuxRunner({ send: () => {} })
 
 let hubProcess: ReturnType<typeof Bun.spawn> | undefined
 
+// hub 对所有连接（含 loopback）强制 token 鉴权
+const TEST_TOKEN = "test-token-hub"
+const wsURL = (path: string) => `ws://127.0.0.1:7890${path}?token=${TEST_TOKEN}`
+
 beforeAll(async () => {
   hubProcess = Bun.spawn(["bun", "run", "hub.ts"], {
     cwd: import.meta.dir,
-    env: { ...process.env, MP_CC_TMUX_DRY_RUN: "1" },
+    env: { ...process.env, MP_CC_TMUX_DRY_RUN: "1", MP_CC_HUB_TOKEN: TEST_TOKEN },
   })
   await new Promise(r => setTimeout(r, 300))  // wait for hub startup
 })
@@ -20,7 +24,7 @@ afterAll(() => {
 })
 
 test("hub accepts MP WebSocket connection on /cc", async () => {
-  const ws = new WebSocket("ws://127.0.0.1:7890/cc")
+  const ws = new WebSocket(wsURL("/cc"))
   await new Promise<void>((resolve, reject) => {
     ws.on("open", resolve)
     ws.on("error", reject)
@@ -30,8 +34,18 @@ test("hub accepts MP WebSocket connection on /cc", async () => {
   ws.close()
 })
 
-test("hub acks send messages", async () => {
+test("hub rejects connection without token", async () => {
   const ws = new WebSocket("ws://127.0.0.1:7890/cc")
+  const closeCode = await new Promise<number>((resolve, reject) => {
+    ws.on("close", (code) => resolve(code))
+    ws.on("error", () => { /* close 事件随后到达 */ })
+    setTimeout(() => reject(new Error("close timeout")), 2000)
+  })
+  expect(closeCode).toBe(1008)
+})
+
+test("hub acks send messages", async () => {
+  const ws = new WebSocket(wsURL("/cc"))
   await new Promise<void>((resolve, reject) => {
     ws.on("open", resolve)
     ws.on("error", reject)

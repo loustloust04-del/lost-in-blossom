@@ -8,7 +8,20 @@ import {
 import { WebSocket } from "ws"
 
 const HUB_URL = process.env.MP_CC_HUB_URL ?? "ws://127.0.0.1:7890/mcp"
+// hub 对所有连接（含 loopback）强制 token 鉴权，连接 URL 必须带 token
+const HUB_TOKEN = process.env.MP_CC_HUB_TOKEN ?? ""
 const PING_INTERVAL_MS = 15_000
+
+function hubURLWithToken(): string {
+  if (!HUB_TOKEN) return HUB_URL
+  try {
+    const u = new URL(HUB_URL)
+    u.searchParams.set("token", HUB_TOKEN)
+    return u.toString()
+  } catch {
+    return HUB_URL
+  }
+}
 
 let hubWS: WebSocket | null = null
 let connectingPromise: Promise<WebSocket> | null = null
@@ -53,7 +66,7 @@ function connectHub(): Promise<WebSocket> {
   if (connectingPromise) return connectingPromise
 
   connectingPromise = new Promise((resolve, reject) => {
-    const ws = new WebSocket(HUB_URL)
+    const ws = new WebSocket(hubURLWithToken())
     hubWS = ws
     ws.on("open", () => {
       connectingPromise = null

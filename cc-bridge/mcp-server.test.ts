@@ -3,10 +3,13 @@ import { WebSocket } from "ws"
 
 let hubProc: ReturnType<typeof Bun.spawn> | undefined
 
+// hub 对所有连接（含 loopback）强制 token 鉴权
+const TEST_TOKEN = "test-token-mcp"
+
 beforeAll(async () => {
   hubProc = Bun.spawn(["bun", "run", "hub.ts"], {
     cwd: import.meta.dir,
-    env: { ...process.env, MP_CC_TMUX_DRY_RUN: "1" },
+    env: { ...process.env, MP_CC_TMUX_DRY_RUN: "1", MP_CC_HUB_TOKEN: TEST_TOKEN },
   })
   await new Promise(r => setTimeout(r, 400))
 })
@@ -15,7 +18,7 @@ afterAll(() => hubProc?.kill())
 
 test("MCP reply broadcasts to MP clients with matching chat_id and content", async () => {
   // 1. Open MP-side WS first
-  const mp = new WebSocket("ws://127.0.0.1:7890/cc")
+  const mp = new WebSocket(`ws://127.0.0.1:7890/cc?token=${TEST_TOKEN}`)
   await new Promise<void>((resolve, reject) => {
     mp.on("open", resolve)
     mp.on("error", reject)
@@ -30,7 +33,7 @@ test("MCP reply broadcasts to MP clients with matching chat_id and content", asy
   })
 
   // 2. Connect MCP-side WS, send reply
-  const mcp = new WebSocket("ws://127.0.0.1:7890/mcp")
+  const mcp = new WebSocket(`ws://127.0.0.1:7890/mcp?token=${TEST_TOKEN}`)
   await new Promise<void>((resolve, reject) => {
     mcp.on("open", resolve)
     mcp.on("error", reject)
