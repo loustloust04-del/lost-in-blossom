@@ -101,6 +101,25 @@ extension ConversationViewModel {
         }
         if usesDate { volatileParts.append("当前日期：\(df.string(from: Date()))") }
         if usesTime { volatileParts.append("当前时间：\(tf.string(from: Date()))") }
+
+        // 时间感：距离上次对话多久了
+        if let lastNode = currentPath.last(where: { $0.role == "user" && !$0.content.isEmpty }),
+           let lastDate = lastNode.createdAt {
+            let gap = Date().timeIntervalSince(lastDate)
+            let minutes = Int(gap / 60)
+            if minutes > 2 {
+                let timeAgo: String
+                if minutes < 60 {
+                    timeAgo = "\(minutes)分钟前"
+                } else if minutes < 1440 {
+                    timeAgo = "\(minutes / 60)小时\(minutes % 60 > 0 ? "\(minutes % 60)分钟" : "")前"
+                } else {
+                    timeAgo = "\(minutes / 1440)天前"
+                }
+                volatileParts.append("用户上一条消息发送于\(timeAgo)")
+            }
+        }
+
         let volatileLayer = volatileParts.joined(separator: "\n")
 
         let layers = SystemPromptLayers(stableCore: stableCore, semiStable: semiStable, volatile: volatileLayer)
