@@ -202,10 +202,7 @@ struct ContentView: View {
             if ProbeStickerSeed.shouldAutoSelectProbeConv {
                 PROBE("[PROBE 贴纸 ContentView.onAppear] auto-select probe conv")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    let descriptor = FetchDescriptor<Conversation>(
-                        predicate: #Predicate { $0.id == "probe-sticker-conv-1" }
-                    )
-                    if let conv = try? modelContext.fetch(descriptor).first {
+                    if let conv = ConversationListStore.conversation(id: "probe-sticker-conv-1", context: modelContext) {
                         viewModel.selectedConversation = conv
                         PROBE("[PROBE 贴纸 ContentView.onAppear] selected conv id=\(conv.id)")
                         // 等 5s 让 LazyVStack 渲染出 contentHeight，再进编辑模式
@@ -378,9 +375,12 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .notificationNavigationRequested)) { notification in
             guard let convId = notification.userInfo?["conversationId"] as? String else { return }
-            // 已实时处理，清掉 pending 兜底（避免之后 onAppear 重复消费导致 spurious 跳转）
             _ = LocalNotificationService.shared.consumePendingConversationId()
-            navigateToNotificationConversation(convId)
+            if let conv = ConversationListStore.conversation(id: convId, context: modelContext) {
+                viewModel.selectedConversation = conv
+                withAnimation { iOSPage = 0 }
+                withAnimation(sidebarAnimation) { isSidebarOpen = false }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardVisible = true
@@ -750,11 +750,7 @@ struct ContentView: View {
     private func autoCreateFirstConversationIfNeeded() {
         let pid = profileManager?.currentProfile.id ?? ""
         guard !pid.isEmpty else { return }
-        var desc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false }
-        )
-        desc.fetchLimit = 1
-        guard let count = try? modelContext.fetchCount(desc), count == 0 else { return }
+        guard !ConversationListStore.hasActiveConversations(profileId: pid, context: modelContext) else { return }
         let conv = viewModel.createNewConversation(title: "新对话", profileId: pid, context: modelContext)
         viewModel.loadConversation(conv, context: modelContext)
     }

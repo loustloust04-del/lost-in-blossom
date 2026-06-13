@@ -1829,7 +1829,7 @@ struct FolderPickerSheet: View {
                         ForEach(tags) { tag in
                             Button(action: {
                                 let item = FavoriteItem(nodeId: node.id, conversationId: node.conversationId, tagId: tag.id, contentPreview: String(node.content.prefix(100)), profileId: profileId)
-                                modelContext.insert(item)
+                                ConversationListStore.insertFavorite(item, context: modelContext)
                                 dismiss()
                             }) {
                                 HStack {
@@ -1865,7 +1865,7 @@ struct FolderPickerSheet: View {
                 Button("创建") {
                     guard !newTagName.isEmpty else { return }
                     let tag = ConversationTag(name: newTagName, order: tags.count, profileId: profileId)
-                    modelContext.insert(tag)
+                    ConversationListStore.insertTag(tag, context: modelContext)
                     newTagName = ""
                 }
                 .disabled(newTagName.isEmpty)
@@ -2066,27 +2066,19 @@ struct TagPickerPopover: View {
         if isOn {
             // 删除该 tag 的 FavoriteItem
             for item in favoriteItems where item.tagId == tag.id {
-                modelContext.delete(item)
+                ConversationListStore.deleteFavorite(item, context: modelContext)
             }
         } else {
             // 插入新 FavoriteItem（对话级 tag，nodeId = nil）
-            let preview: String = {
-                // 尝试从对话标题取 preview；此处只有 conversationId，查一下
-                let convDescriptor = FetchDescriptor<Conversation>(
-                    predicate: #Predicate<Conversation> { $0.id == conversationId }
-                )
-                if let conv = try? modelContext.fetch(convDescriptor).first {
-                    return conv.title
-                }
-                return ""
-            }()
+            // preview 取对话标题；此处只有 conversationId，查一下
+            let preview = ConversationListStore.conversation(id: conversationId, profileId: profileId, context: modelContext)?.title ?? ""
             let item = FavoriteItem(
                 conversationId: conversationId,
                 tagId: tag.id,
                 contentPreview: preview,
                 profileId: profileId
             )
-            modelContext.insert(item)
+            ConversationListStore.insertFavorite(item, context: modelContext)
         }
     }
 }

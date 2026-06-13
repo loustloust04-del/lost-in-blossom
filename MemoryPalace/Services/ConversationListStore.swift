@@ -17,6 +17,25 @@ enum ConversationListStore {
         return try? context.fetch(descriptor).first
     }
 
+    /// 跨楼层按 id 查单个对话（推送跳转/PROBE 用——通知里只有 convId 没有楼层）
+    static func conversation(id: String, context: ModelContext) -> Conversation? {
+        let cid = id
+        let descriptor = FetchDescriptor<Conversation>(
+            predicate: #Predicate<Conversation> { $0.id == cid }
+        )
+        return try? context.fetch(descriptor).first
+    }
+
+    /// 楼层内是否存在未删除的对话（首启自动建对话的判断）
+    static func hasActiveConversations(profileId: String, context: ModelContext) -> Bool {
+        let pid = profileId
+        var desc = FetchDescriptor<Conversation>(
+            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false }
+        )
+        desc.fetchLimit = 1
+        return ((try? context.fetchCount(desc)) ?? 0) > 0
+    }
+
     /// 楼层内全部对话的 [id: title] 映射（一次查询，避免 N 次单查）
     static func titleMap(profileId: String, context: ModelContext) -> [String: String] {
         let pid = profileId
@@ -105,6 +124,11 @@ enum ConversationListStore {
     /// 把对话挂到 tag（只 insert，autosave 落盘）
     static func insertFavorite(_ item: FavoriteItem, context: ModelContext) {
         context.insert(item)
+    }
+
+    /// 取消挂 tag（只 delete，autosave 落盘，与 insertFavorite 对称）
+    static func deleteFavorite(_ item: FavoriteItem, context: ModelContext) {
+        context.delete(item)
     }
 
     /// 托管对象就地修改（tag 排序等）后的统一落盘出口
