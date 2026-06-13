@@ -12,6 +12,17 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     var onSegmentsCallback: (([MessageSegment]) -> Void)?
     /// 实时发送每个 reasoning_content chunk（逐字显示思考链用）
     var onThinkingToken: ((String) -> Void)?
+
+    // MARK: - PR-3 客户端 function calling 循环（bridge 工具）
+    var bridgeTools: [MCPToolDescriptor] = []
+    private var toolRound = 0
+    private var finishReason: String?
+    private var pendingToolCalls: [Int: [String: Any]] = [:]   // index → {id,name,arguments(累积)}
+    private var loopBody: [String: Any] = [:]
+    private var loopURL: URL?
+    private var loopApiKey = ""
+    private var loopHeaders: [String: String] = [:]
+    private var accumulatedToolSegments: [MessageSegment] = []
     override func sendStreaming(
         messages: [(role: String, content: String)],
         model: String,
@@ -89,9 +100,70 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         for (key, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: key)
         }
+        // PR-3: bridge 工具（OpenAI function 格式）。工具定义写死保证缓存稳定。
+        if !bridgeTools.isEmpty {
+            body["tools"] = ToolCallLoop.openAITools(bridgeTools)
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
+        // PR-3: 存循环上下文
+        loopBody = body
+        loopURL = url
+        loopApiKey = apiKey
+        loopHeaders = extraHeaders
+        toolRound = 0
+        finishReason = nil
+        pendingToolCalls = [:]
+        accumulatedToolSegments = []
         startRequest(request)
+    }
+
+    /// PR-3: 用当前 loopBody（已追加 assistant tool_calls + tool 结果消息）重发一轮。
+    private func fireOpenAIRound() {
+        buffer = ""
+        receivedDone = false
+        streamingThinking = ""
+        isInGatewayThinking = false
+        finishReason = nil
+        pendingToolCalls = [:]
+        guard let url = loopURL else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(loopApiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (key, value) in loopHeaders { request.setValue(value, forHTTPHeaderField: key) }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: loopBody)
+        isStreaming = true
+        startRequest(request)
+    }
+
+    /// PR-3: 执行本轮工具调用并发起下一轮。
+    private func runOpenAIToolRound(_ calls: [ToolCallLoop.ToolCall]) {
+        var assistantToolCalls: [[String: Any]] = []
+        for c in calls {
+            assistantToolCalls.append(["id": c.id, "type": "function",
+                                       "function": ["name": c.name, "arguments": c.argumentsJSON]])
+            accumulatedToolSegments.append(.toolUse(id: c.id, name: c.name,
+                                                    inputJSON: c.argumentsJSON, integrationName: nil, iconName: nil))
+        }
+        let assistantText = streamingContent
+        toolRound += 1
+        Task { [weak self] in
+            guard let self else { return }
+            let outcomes = await ToolCallLoop.execute(calls, bridgeTools: self.bridgeTools)
+            await MainActor.run {
+                var msgs = (self.loopBody["messages"] as? [[String: Any]]) ?? []
+                var assistantMsg: [String: Any] = ["role": "assistant", "tool_calls": assistantToolCalls]
+                if !assistantText.isEmpty { assistantMsg["content"] = assistantText }
+                msgs.append(assistantMsg)
+                for o in outcomes {
+                    msgs.append(["role": "tool", "tool_call_id": o.id, "content": o.text])
+                    self.accumulatedToolSegments.append(.toolResult(toolUseId: o.id, text: o.text, isError: o.isError, integrationName: nil))
+                }
+                self.loopBody["messages"] = msgs
+                self.fireOpenAIRound()
+            }
+        }
     }
 
     override func sendNonStreaming(
@@ -172,15 +244,28 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 let payload = String(line.dropFirst(6))
                 if payload == "[DONE]" {
                     receivedDone = true
+                    // PR-3: function calling 多轮 —— 本轮要求调工具则客户端执行后再发一轮
+                    let calls = pendingToolCalls.sorted { $0.key < $1.key }.compactMap { (_, v) -> ToolCallLoop.ToolCall? in
+                        let name = v["name"] as? String ?? ""
+                        guard !name.isEmpty, bridgeTools.contains(where: { $0.name == name }) else { return nil }
+                        return ToolCallLoop.ToolCall(id: v["id"] as? String ?? "",
+                                                     name: name,
+                                                     argumentsJSON: (v["arguments"] as? String).flatMap { $0.isEmpty ? "{}" : $0 } ?? "{}")
+                    }
+                    if finishReason == "tool_calls", !calls.isEmpty, toolRound < ToolCallLoop.maxRounds {
+                        runOpenAIToolRound(calls)
+                        return
+                    }
                     DispatchQueue.main.async { [self] in
                         isStreaming = false
-                        // DeepSeek reasoning：将思考链用标记包裹后拼入 content
                         var finalContent = streamingContent
                         if !streamingThinking.isEmpty {
                             finalContent = "[thinking]\(streamingThinking)[/thinking]\n\(streamingContent)"
                         }
-                        // 6d: 回复完成 success 通知震
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        if !accumulatedToolSegments.isEmpty {
+                            onSegmentsCallback?(accumulatedToolSegments + [.text(streamingContent)])
+                        }
                         onComplete?(finalContent, finalUsage)
                     }
                     return
@@ -216,6 +301,23 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 }
             }
             return
+        }
+
+        if let fr = choices.first?["finish_reason"] as? String, !fr.isEmpty { finishReason = fr }
+        // PR-3: 累积 tool_calls（流式按 index 分片，id/name 首片到达，arguments 增量拼接）
+        if let toolCalls = delta["tool_calls"] as? [[String: Any]] {
+            for tc in toolCalls {
+                let idx = tc["index"] as? Int ?? 0
+                var entry = pendingToolCalls[idx] ?? ["id": "", "name": "", "arguments": ""]
+                if let id = tc["id"] as? String, !id.isEmpty { entry["id"] = id }
+                if let fn = tc["function"] as? [String: Any] {
+                    if let name = fn["name"] as? String, !name.isEmpty { entry["name"] = name }
+                    if let args = fn["arguments"] as? String {
+                        entry["arguments"] = ((entry["arguments"] as? String) ?? "") + args
+                    }
+                }
+                pendingToolCalls[idx] = entry
+            }
         }
 
         // DeepSeek reasoning model：思考链字段

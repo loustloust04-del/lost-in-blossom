@@ -62,6 +62,9 @@ final class ProviderRouter {
         case .openaiCompatible:
             openAIProvider.onSegmentsCallback = onSegments
             openAIProvider.onThinkingToken = onThinkingToken
+            // PR-3: REST bridge 客户端工具（function calling）
+            openAIProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
+            if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = openAIProvider
         case .anthropic:
             // MCP 服务器注入：provider 为 anthropic 且 mcpEnabled 不为 false 时
