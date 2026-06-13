@@ -1304,15 +1304,24 @@ struct BubbleView: View {
 
     var isUser: Bool { node.role == "user" }
 
+    /// 群聊 V2：按发言者 id 稳定取色（确定性哈希，跨启动不变）。
+    static func speakerColor(_ id: String?) -> Color {
+        let palette: [Color] = [.blue, .orange, .green, .purple]
+        guard let id, !id.isEmpty else { return Theme.textMuted }
+        let h = id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        return palette[h % palette.count]
+    }
+
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
             // Role label + time（两个都隐藏时整行不 render，避免空 HStack 占位）
             if !hideRoleName || !hideTimestamp {
                 HStack(spacing: 4) {
                     if !hideRoleName {
-                        Text(isUser ? userName : assistantName)
+                        // 群聊 V2：名字标签优先用发言者名；颜色按发言者区分（单聊 senderName=nil 不变）
+                        Text(isUser ? userName : (node.senderName ?? assistantName))
                             .font(.caption2.weight(.medium))
-                            .foregroundColor(Theme.textMuted)
+                            .foregroundColor(node.senderName != nil ? Self.speakerColor(node.senderId) : Theme.textMuted)
                     }
                     if !hideTimestamp, let time = node.createTime {
                         Text(time.formatted(.dateTime.month().day().hour().minute()))
