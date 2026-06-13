@@ -16,10 +16,60 @@ struct MemorySettingsTab: View {
     @AppStorage("memoryExtractModelId") private var memoryExtractModelId = ""
     @AppStorage("customMemoryExtractionPrompt") private var customMemoryPrompt = ""
     @State private var isEditingPrompt = false
+    @AppStorage("useBackendMemory") private var useBackendMemory = false
+    @State private var aligning = false
+    @State private var alignStatus: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             let profileId = profileManager?.currentProfile.id ?? ""
+
+            // PR-5: 后端记忆系统开关 + 手动对齐
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $useBackendMemory) {
+                    Text("启用后端记忆系统")
+                        .font(.system(size: Theme.SettingsFont.label, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                }
+                .tint(Theme.accent)
+
+                Text("开启后：记忆注入、自动提取、做梦/衰减都走网关；本地记忆继续提取但只存不注入（离线备用）。关闭则完全使用本地记忆。")
+                    .font(.system(size: Theme.SettingsFont.caption))
+                    .foregroundColor(Theme.textMuted)
+
+                HStack(spacing: 10) {
+                    Button {
+                        guard !aligning else { return }
+                        aligning = true
+                        alignStatus = nil
+                        let container = modelContext.container
+                        let pid = profileId
+                        Task {
+                            let r = await MemorySync.shared.align(container: container, profileId: pid)
+                            await MainActor.run {
+                                aligning = false
+                                alignStatus = "已对齐：上行 \(r.pushed) · 下行 \(r.pulled)"
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            if aligning { ProgressView().controlSize(.small) }
+                            Text(aligning ? "对齐中…" : "立即对齐")
+                                .font(.system(size: Theme.SettingsFont.caption, weight: .medium))
+                        }
+                    }
+                    .disabled(aligning)
+
+                    if let st = alignStatus {
+                        Text(st)
+                            .font(.system(size: Theme.SettingsFont.caption))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    Spacer()
+                }
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.textPrimary.opacity(0.04)))
 
             // 说明卡片
             VStack(alignment: .leading, spacing: 8) {

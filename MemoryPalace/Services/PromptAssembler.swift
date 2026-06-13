@@ -300,6 +300,9 @@ struct PromptAssembler {
             return applyMacros(formatted, profile: profile)
 
         case PromptSlot.memoryInjectionId:
+            // PR-5: 启用后端记忆系统时，记忆注入改由网关 retriever+gatekeeper 在服务端完成；
+            // App 端本地记忆只存不注入（离线 / 开关关闭时仍走本地注入）。
+            if UserDefaults.standard.bool(forKey: "useBackendMemory") { return nil }
             let injection = MemoryInjector.buildInjection(memories: memories)
             return injection.isEmpty ? nil : "[关于用户]\n\(injection)"
 
