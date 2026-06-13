@@ -1,8 +1,39 @@
 import Foundation
 
+// MARK: - System Prompt Layers (prompt caching)
+
+/// 分层 system prompt，用于 Anthropic prompt caching 断点。
+/// 按"几乎不变 → 低频变 → 每轮变"排序，断点打在层 1/层 2 末尾。
+struct SystemPromptLayers {
+    var stableCore: String = ""   // 层1：preset 插槽 persona + 项目指令（会话期间字节不变）
+    var semiStable: String = ""   // 层2：记忆 + 世界书命中 + 上下文摘要（每隔几轮才变）
+    var volatile: String = ""     // 层3：{{date}}/{{time}}/{{health}} 展开（每轮变，不打断点）
+
+    var isEmpty: Bool { stableCore.isEmpty && semiStable.isEmpty && volatile.isEmpty }
+
+    /// 拼成单字符串，供非 Anthropic provider / 预算估算用。
+    var combined: String {
+        [stableCore, semiStable, volatile].filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+}
+
 // MARK: - Prompt Assembler
 
 struct PromptAssembler {
+
+    /// 层 2（半稳定）的 tag：记忆 / 世界书 / 上下文摘要。其余（preset 插槽 + 项目指令）归层 1。
+    static let semiStableTags: Set<String> = [PromptSlot.memoryInjectionId, "wb", "contextSummary"]
+
+    /// 把带 tag 的 systemParts 拆成稳定核心 / 半稳定两层（层内保持原有顺序）。
+    static func splitLayers(_ parts: [(tag: String, content: String)]) -> (stable: String, semi: String) {
+        var stable: [String] = []
+        var semi: [String] = []
+        for p in parts where !p.content.isEmpty {
+            if semiStableTags.contains(p.tag) { semi.append(p.content) }
+            else { stable.append(p.content) }
+        }
+        return (stable.joined(separator: "\n\n"), semi.joined(separator: "\n\n"))
+    }
 
     /// 组装最终发给 API 的 system prompt + messages
     ///
@@ -22,7 +53,7 @@ struct PromptAssembler {
         globalEntries: [WorldBookEntry] = [],
         contextSummary: String? = nil,
         projectInstructions: String? = nil
-    ) -> (systemPrompt: String?, messages: [(role: String, content: String)]) {
+    ) -> (systemPrompt: String?, systemParts: [(tag: String, content: String)], messages: [(role: String, content: String)]) {
 
         let contextDepth = preset.sampling.contextDepth
         // 调用方（buildAPIMessages anchored）已做压缩游标锚定窗口，这里不再二次 suffix 截断
@@ -171,7 +202,7 @@ struct PromptAssembler {
             messages.insert((role: injection.role, content: injection.content), at: insertIndex)
         }
 
-        return (systemPrompt: systemPrompt, messages: messages)
+        return (systemPrompt: systemPrompt, systemParts: systemParts, messages: messages)
     }
 
     /// 生成完整 prompt 预览（raw view 用）

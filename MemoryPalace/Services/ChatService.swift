@@ -41,6 +41,7 @@ class BaseChatProvider: NSObject {
         messages: [(role: String, content: String)],
         model: String,
         systemPrompt: String?,
+        systemLayers: SystemPromptLayers? = nil,
         apiKey: String,
         baseURL: String,
         extraHeaders: [String: String],

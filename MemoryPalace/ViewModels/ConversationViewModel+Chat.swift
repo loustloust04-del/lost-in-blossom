@@ -12,7 +12,7 @@ extension ConversationViewModel {
         excludingNodeId: String? = nil,
         context: ModelContext,
         globalEntries: [WorldBookEntry] = []
-    ) -> (systemPrompt: String?, messages: [(role: String, content: String)], sampling: SamplingParams) {
+    ) -> (systemPrompt: String?, systemLayers: SystemPromptLayers?, messages: [(role: String, content: String)], sampling: SamplingParams) {
         // memoryEnabled=false 的对话不注入记忆
         let shouldInjectMemory = selectedConversation?.memoryEnabled ?? true
         let memories: [Memory] = shouldInjectMemory ? memoryStore.listHot(profileId: profile.id, context: context) : []
@@ -55,34 +55,62 @@ extension ConversationViewModel {
             projectInstructions: projectInstructions
         )
 
-        // 宏替换：{{health}} {{date}} {{time}}
-        var finalPrompt = result.systemPrompt
-        if let prompt = finalPrompt {
-            let df = DateFormatter()
-            df.locale = Locale(identifier: "zh_CN")
-            df.dateFormat = "yyyy年M月d日 EEEE"
-            let tf = DateFormatter()
-            tf.locale = Locale(identifier: "zh_CN")
-            tf.dateFormat = "HH:mm"
-            var expanded = prompt
-                .replacingOccurrences(of: "{{health}}", with: HealthService.shared.injectedSummary)
-                .replacingOccurrences(of: "{{date}}", with: df.string(from: Date()))
-                .replacingOccurrences(of: "{{time}}", with: tf.string(from: Date()))
-            // 如果替换后有空行（健康数据为空时），清理多余换行
-            while expanded.contains("\n\n\n") {
-                expanded = expanded.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        // ── 分层 + 宏移出缓存前缀 ──
+        // {{date}}/{{time}}/{{health}} 只允许出现在 volatile 层；从层 1/层 2 剥离，
+        // 否则 {{time}} 精确到分钟会让整个 system 前缀每分钟失效（头号缓存杀手）。
+        let (stable0, semi0) = PromptAssembler.splitLayers(result.systemParts)
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "zh_CN")
+        df.dateFormat = "yyyy年M月d日 EEEE"
+        let tf = DateFormatter()
+        tf.locale = Locale(identifier: "zh_CN")
+        tf.dateFormat = "HH:mm"
+
+        func stripVolatileMacros(_ s: String) -> String {
+            var x = s
+                .replacingOccurrences(of: "{{health}}", with: "")
+                .replacingOccurrences(of: "{{date}}", with: "")
+                .replacingOccurrences(of: "{{time}}", with: "")
+            while x.contains("\n\n\n") {
+                x = x.replacingOccurrences(of: "\n\n\n", with: "\n\n")
             }
-            finalPrompt = expanded
+            return x.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        return (systemPrompt: finalPrompt, messages: result.messages, sampling: preset.sampling)
+        // 只在 preset 真的用了该宏时才注入 volatile（不给没用宏的 preset 平白塞日期/时间）。
+        let macroProbe = stable0 + semi0
+        let usesHealth = macroProbe.contains("{{health}}")
+        let usesDate = macroProbe.contains("{{date}}")
+        let usesTime = macroProbe.contains("{{time}}")
+
+        let stableCore = stripVolatileMacros(stable0)
+        let semiStable = stripVolatileMacros(semi0)
+
+        var volatileParts: [String] = []
+        if usesHealth {
+            let h = HealthService.shared.injectedSummary
+            if !h.isEmpty { volatileParts.append(h) }
+        }
+        if usesDate { volatileParts.append("当前日期：\(df.string(from: Date()))") }
+        if usesTime { volatileParts.append("当前时间：\(tf.string(from: Date()))") }
+        let volatileLayer = volatileParts.joined(separator: "\n")
+
+        let layers = SystemPromptLayers(stableCore: stableCore, semiStable: semiStable, volatile: volatileLayer)
+        let combined = layers.combined
+        return (
+            systemPrompt: combined.isEmpty ? nil : combined,
+            systemLayers: layers.isEmpty ? nil : layers,
+            messages: result.messages,
+            sampling: preset.sampling
+        )
     }
 
     /// ccBridge 路径：把 PromptAssembler 的输出后处理成只发 raw user 文字，
     /// 同时构造 router 的 additionalHeaders（chat_id/message_id/user）。
     /// 其他 provider 类型走原路（直接返回 assembled + 空 headers）。
     private func prepareRouterPayload(
-        assembled: (systemPrompt: String?, messages: [(role: String, content: String)], sampling: SamplingParams),
+        assembled: (systemPrompt: String?, systemLayers: SystemPromptLayers?, messages: [(role: String, content: String)], sampling: SamplingParams),
         model: ProviderModel,
         conversation: Conversation,
         profile: Profile,
@@ -91,12 +119,13 @@ extension ConversationViewModel {
     ) -> (
         messages: [(role: String, content: String)],
         systemPrompt: String?,
+        systemLayers: SystemPromptLayers?,
         sampling: SamplingParams,
         additionalHeaders: [String: String]
     ) {
         guard let provider = providerManager.provider(for: model),
               provider.type == .ccBridge else {
-            return (assembled.messages, assembled.systemPrompt, assembled.sampling, [:])
+            return (assembled.messages, assembled.systemPrompt, assembled.systemLayers, assembled.sampling, [:])
         }
         // ccBridge：只取最后一条 user 的 raw 文字，丢掉 system prompt 和历史
         let lastUser = assembled.messages.last(where: { $0.role == "user" })?.content ?? ""
@@ -109,6 +138,7 @@ extension ConversationViewModel {
         return (
             messages: [(role: "user", content: lastUser)],
             systemPrompt: nil,
+            systemLayers: nil,
             sampling: assembled.sampling,
             additionalHeaders: headers
         )
@@ -322,6 +352,7 @@ extension ConversationViewModel {
             model: model,
             messages: payload.messages,
             systemPrompt: payload.systemPrompt,
+                systemLayers: payload.systemLayers,
             providerManager: providerManager,
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,
@@ -675,6 +706,7 @@ extension ConversationViewModel {
             model: model,
             messages: payload.messages,
             systemPrompt: payload.systemPrompt,
+                systemLayers: payload.systemLayers,
             providerManager: providerManager,
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,
@@ -814,6 +846,7 @@ extension ConversationViewModel {
             model: model,
             messages: payload.messages,
             systemPrompt: payload.systemPrompt,
+                systemLayers: payload.systemLayers,
             providerManager: providerManager,
             samplingParams: payload.sampling,
             additionalHeaders: payload.additionalHeaders,

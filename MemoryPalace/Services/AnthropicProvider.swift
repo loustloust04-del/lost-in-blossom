@@ -32,6 +32,7 @@ final class AnthropicProvider: BaseChatProvider {
         messages: [(role: String, content: String)],
         model: String,
         systemPrompt: String?,
+        systemLayers: SystemPromptLayers? = nil,
         apiKey: String,
         baseURL: String,
         extraHeaders: [String: String],
@@ -58,6 +59,21 @@ final class AnthropicProvider: BaseChatProvider {
             }
         }
 
+        // prompt caching 断点 3：分层缓存启用时（systemLayers != nil），在最新一轮（最后一条
+        // 消息）的最后一个 content block 上打断点，历史随对话增长增量命中。上一轮的断点位置
+        // 仍是有效缓存读取点，所以只为新增轮次付全价。
+        if systemLayers != nil, !apiMessages.isEmpty {
+            let lastIdx = apiMessages.count - 1
+            var last = apiMessages[lastIdx]
+            if let str = last["content"] as? String {
+                last["content"] = [["type": "text", "text": str, "cache_control": ["type": "ephemeral"]]]
+            } else if var blocks = last["content"] as? [[String: Any]], !blocks.isEmpty {
+                blocks[blocks.count - 1]["cache_control"] = ["type": "ephemeral"]
+                last["content"] = blocks
+            }
+            apiMessages[lastIdx] = last
+        }
+
         let maxTok = samplingParams?.maxTokens ?? 4096
         var body: [String: Any] = [
             "model": model,
@@ -65,9 +81,16 @@ final class AnthropicProvider: BaseChatProvider {
             "max_tokens": maxTok,
             "stream": true,
         ]
-        if let sys = systemPrompt, !sys.isEmpty {
+        // prompt caching 断点 1/2：分层 system → text block 数组，层 1（稳定核心）+ 层 2
+        // （半稳定）末尾各打一个断点；层 3（volatile）不打断点，怎么变都不影响前两层缓存。
+        if let layers = systemLayers, !layers.isEmpty {
+            body["system"] = Self.buildSystemBlocks(layers)
+        } else if let sys = systemPrompt, !sys.isEmpty {
             body["system"] = sys
         }
+        // metadata.user_id：让同一用户请求粘在同一后端节点，避免缓存写在 A 节点读在 B 节点永远 miss
+        // （走中转/gateway 时必需；原生 API 无害）。
+        body["metadata"] = ["user_id": Self.stablePromptUserId]
         if let p = samplingParams {
             if p.temperature != 1.0 { body["temperature"] = p.temperature }
             if p.topP != 1.0 { body["top_p"] = p.topP }
@@ -356,5 +379,31 @@ final class AnthropicProvider: BaseChatProvider {
                 integrationName: nil
             ))
         }
+    }
+
+    // MARK: - Prompt caching helpers
+
+    /// 分层 system → Anthropic content block 数组，层 1/层 2 末尾各打一个 ephemeral 断点。
+    static func buildSystemBlocks(_ layers: SystemPromptLayers) -> [[String: Any]] {
+        var blocks: [[String: Any]] = []
+        if !layers.stableCore.isEmpty {
+            blocks.append(["type": "text", "text": layers.stableCore, "cache_control": ["type": "ephemeral"]])
+        }
+        if !layers.semiStable.isEmpty {
+            blocks.append(["type": "text", "text": layers.semiStable, "cache_control": ["type": "ephemeral"]])
+        }
+        if !layers.volatile.isEmpty {
+            blocks.append(["type": "text", "text": layers.volatile])
+        }
+        return blocks
+    }
+
+    /// 稳定的 per-install user id，供 metadata.user_id 路由粘性用。
+    static var stablePromptUserId: String {
+        let key = "mpStablePromptUserId"
+        if let v = UserDefaults.standard.string(forKey: key), !v.isEmpty { return v }
+        let v = UUID().uuidString
+        UserDefaults.standard.set(v, forKey: key)
+        return v
     }
 }
