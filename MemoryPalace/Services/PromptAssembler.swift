@@ -25,6 +25,10 @@ struct PromptAssembler {
     ) -> (systemPrompt: String?, messages: [(role: String, content: String)]) {
 
         let contextDepth = preset.sampling.contextDepth
+        // 调用方（buildAPIMessages anchored）已做压缩游标锚定窗口，这里不再二次 suffix 截断
+        // （二次截断会重新引入滑动窗口，毁掉缓存前缀）。完整窗口直接进 messages。
+        let messageHistory = chatHistory
+        // 世界书扫描 / marker 解析仍只看最近 contextDepth 条，行为不变。
         let trimmedHistory = chatHistory.count > contextDepth
             ? Array(chatHistory.suffix(contextDepth))
             : chatHistory
@@ -158,8 +162,8 @@ struct PromptAssembler {
 
         let systemPrompt = systemParts.isEmpty ? nil : systemParts.map(\.content).joined(separator: "\n\n")
 
-        // 组装 messages：pre-history + chat history + injections at depth
-        var messages = preHistoryMessages + trimmedHistory
+        // 组装 messages：pre-history + chat history(完整锚定窗口) + injections at depth
+        var messages = preHistoryMessages + messageHistory
 
         // 插入 injection_depth > 0 的内容
         for injection in postHistoryInjections.sorted(by: { $0.depth > $1.depth }) {

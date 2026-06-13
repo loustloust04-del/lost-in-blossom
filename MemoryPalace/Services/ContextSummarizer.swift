@@ -32,6 +32,27 @@ struct ContextSummarizer {
         UserDefaults.standard.removeObject(forKey: storageKey(conversationId))
     }
 
+    // MARK: - 压缩游标（prompt caching 窗口锚点）
+
+    /// 压缩分块大小：游标每次至少推进这么多。
+    /// 让消息历史前缀在 chunk 轮内字节稳定，Anthropic prompt cache 才能命中
+    /// （suffix 滑动窗口每轮都变，是头号缓存杀手）。
+    static let compressionChunk = 20
+
+    /// 窗口锚点 = 已折叠进摘要的旧消息条数。buildAPIMessages 从这里开始取窗口，
+    /// 只在压缩游标推进时跳变（每 chunk 轮一次），其余时间历史前缀纹丝不动。
+    static func windowStart(conversationId: String) -> Int {
+        load(conversationId: conversationId)?.coveredCount ?? 0
+    }
+
+    /// 目标游标：把"超出 contextDepth 的旧消息数"向下取整到 chunk 边界。
+    /// total 增长时游标按 chunk 跳进，而非每轮 +1 —— 这是缓存稳定的关键。
+    static func desiredCursor(totalCount: Int, contextDepth: Int) -> Int {
+        let overflow = totalCount - contextDepth
+        guard overflow > 0 else { return 0 }
+        return (overflow / compressionChunk) * compressionChunk
+    }
+
     // MARK: - 判断是否需要总结
 
     /// 返回需要总结的旧消息。如果不需要总结返回 nil。
@@ -41,15 +62,16 @@ struct ContextSummarizer {
         conversationId: String
     ) -> (oldMessages: [(role: String, content: String)], existingSummary: ContextSummary?)? {
         let totalCount = allMessages.count
-        guard totalCount > contextDepth else { return nil }
+        // 游标按 chunk 跳进，不是 totalCount - contextDepth 每轮挪。
+        let cursor = desiredCursor(totalCount: totalCount, contextDepth: contextDepth)
+        guard cursor > 0 else { return nil }
 
-        let oldCount = totalCount - contextDepth
-        let oldMessages = Array(allMessages.prefix(oldCount))
+        let oldMessages = Array(allMessages.prefix(cursor))
 
         let existing = load(conversationId: conversationId)
 
-        // 已有摘要且覆盖的消息数没变 → 不需要更新
-        if let existing, existing.coveredCount == oldCount {
+        // 已有摘要且游标没推进 → 不需要更新（窗口前缀本轮保持稳定）
+        if let existing, existing.coveredCount == cursor {
             return nil
         }
 

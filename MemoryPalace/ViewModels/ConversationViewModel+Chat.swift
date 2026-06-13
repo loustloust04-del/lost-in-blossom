@@ -19,7 +19,7 @@ extension ConversationViewModel {
         let ids = memories.map(\.id)
         if !ids.isEmpty { try? memoryStore.recordAccess(ids: ids, context: context) }
 
-        let chatHistory = buildAPIMessages(excluding: excludingNodeId, maxMessages: preset.sampling.contextDepth)
+        let chatHistory = buildAPIMessages(excluding: excludingNodeId, anchored: true)
 
         // 查询当前楼层的世界书（过滤 conversation scope）
         let profileId = profile.id
@@ -146,7 +146,7 @@ extension ConversationViewModel {
     }
 
     /// Build API message history from currentPath, excluding a specific node, limited to recent messages
-    private func buildAPIMessages(excluding excludeId: String? = nil, maxMessages: Int = 40) -> [(role: String, content: String)] {
+    private func buildAPIMessages(excluding excludeId: String? = nil, maxMessages: Int = 40, anchored: Bool = false) -> [(role: String, content: String)] {
         let relevant = currentPath.compactMap { node -> (role: String, content: String)? in
             guard node.role == "user" || node.role == "assistant" else { return nil }
             if node.id == excludeId { return nil }
@@ -162,7 +162,24 @@ extension ConversationViewModel {
             guard !content.isEmpty else { return nil }
             return (role: node.role, content: content)
         }
-        // Only keep the most recent messages
+
+        // 锚定窗口（chat 发送路径）：从压缩游标取窗口，而不是 suffix。
+        // 游标只在压缩推进时按 chunk 跳变，其余时间历史前缀字节不变 →
+        // Anthropic prompt cache 命中，缓存读只收 0.1× 输入价。
+        // suffix(maxMessages) 是缓存杀手：每来一条新消息最旧一条滑出，前缀每轮都变。
+        if anchored {
+            let convId = selectedConversation?.id ?? ""
+            let cursor = min(ContextSummarizer.windowStart(conversationId: convId), relevant.count)
+            var window = Array(relevant.suffix(from: cursor))
+            // hard cap：压缩故障导致游标卡死时，防止窗口无限增长烧 token。
+            let hardCap = 120
+            if window.count > hardCap {
+                window = Array(window.suffix(hardCap))
+            }
+            return window
+        }
+
+        // 非锚定路径（如摘要传 maxMessages: Int.max 要全量）：保留旧的 suffix 行为。
         if relevant.count > maxMessages {
             return Array(relevant.suffix(maxMessages))
         }
