@@ -22,7 +22,7 @@ struct SystemPromptLayers {
 struct PromptAssembler {
 
     /// 层 2（半稳定）的 tag：记忆 / 世界书 / 上下文摘要。其余（preset 插槽 + 项目指令）归层 1。
-    static let semiStableTags: Set<String> = [PromptSlot.memoryInjectionId, "wb", "contextSummary"]
+    static let semiStableTags: Set<String> = [PromptSlot.memoryInjectionId, "wb", "contextSummary", "crossWindow"]
 
     /// 把带 tag 的 systemParts 拆成稳定核心 / 半稳定两层（层内保持原有顺序）。
     static func splitLayers(_ parts: [(tag: String, content: String)]) -> (stable: String, semi: String) {
@@ -52,6 +52,7 @@ struct PromptAssembler {
         worldBooks: [WorldBook] = [],
         globalEntries: [WorldBookEntry] = [],
         contextSummary: String? = nil,
+        crossWindowSummaries: String? = nil,
         projectInstructions: String? = nil
     ) -> (systemPrompt: String?, systemParts: [(tag: String, content: String)], messages: [(role: String, content: String)]) {
 
@@ -184,6 +185,11 @@ struct PromptAssembler {
         // 上下文摘要注入（记忆之后、对话历史之前）
         if let summary = contextSummary, !summary.isEmpty {
             systemParts.append((tag: "contextSummary", content: "[对话历史摘要]\n\(summary)"))
+        }
+
+        // Task H 跨窗口记忆：新对话首轮注入最近 15 个对话的摘要（semiStable 层）
+        if let cw = crossWindowSummaries, !cw.isEmpty {
+            systemParts.append((tag: "crossWindow", content: cw))
         }
 
         // 项目指令注入

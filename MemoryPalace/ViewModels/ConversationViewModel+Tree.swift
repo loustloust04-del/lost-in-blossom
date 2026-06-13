@@ -147,6 +147,11 @@ extension ConversationViewModel {
         print(String(format: "[PERF] loadConversation consolidate=%.0fms", (tConsolidate - loadT0) * 1000))
         #endif
 
+        // Task H：切换对话时记录上一个对话的轻量摘要（标题 + 最后一条 user 片段）
+        if let prev = selectedConversation, prev.id != conversation.id {
+            let lastUser = currentPath.last(where: { $0.role == "user" })?.content ?? ""
+            CrossWindowMemory.record(conversationId: prev.id, title: prev.title, fragment: lastUser)
+        }
         selectedConversation = conversation
         // CC Bridge：随对话加载（重新）注册兜底 handler，让 CC 主动/连发的消息
         // 在没有 in-flight 请求时也能落进对话树（不依赖先 sendMessage 一次）。

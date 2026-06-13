@@ -44,6 +44,12 @@ extension ConversationViewModel {
             }
         }
 
+        // Task H：跨窗口记忆——仅新对话首轮注入最近 15 个对话的摘要
+        let isFirstTurn = !chatHistory.contains { $0.role == "assistant" }
+        let crossWindow = isFirstTurn
+            ? CrossWindowMemory.injectionText(excluding: selectedConversation?.id)
+            : nil
+
         let result = PromptAssembler.assemble(
             preset: preset,
             profile: profile,
@@ -52,6 +58,7 @@ extension ConversationViewModel {
             worldBooks: worldBooks,
             globalEntries: globalEntries,
             contextSummary: contextSummary,
+            crossWindowSummaries: crossWindow,
             projectInstructions: projectInstructions
         )
 
