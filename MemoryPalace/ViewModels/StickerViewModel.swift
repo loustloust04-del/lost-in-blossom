@@ -119,8 +119,8 @@ final class StickerViewModel {
         placedStickers = (try? context.fetch(desc)) ?? []
     }
 
-    /// 当前楼层贴纸素材数（设置页统计用，fetchCount 不拉全量）
-    func assetCount(profileId: String, context: ModelContext) -> Int {
+    /// 当前楼层贴纸素材数（设置页统计用，fetchCount 不拉全量；static——设置页没有 vm 实例）
+    static func assetCount(profileId: String, context: ModelContext) -> Int {
         let pid = profileId
         let desc = FetchDescriptor<StickerAsset>(
             predicate: #Predicate<StickerAsset> { a in a.profileId == pid }
@@ -129,7 +129,7 @@ final class StickerViewModel {
     }
 
     /// 当前楼层已放置贴纸数（设置页统计用）
-    func placedCount(profileId: String, context: ModelContext) -> Int {
+    static func placedCount(profileId: String, context: ModelContext) -> Int {
         let pid = profileId
         let desc = FetchDescriptor<PlacedSticker>(
             predicate: #Predicate<PlacedSticker> { s in s.profileId == pid }

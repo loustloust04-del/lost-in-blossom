@@ -97,17 +97,9 @@ struct StickerSettingsTab: View {
 
     private func loadStickerStats() {
         guard let pid = profileManager?.currentProfile.id else { return }
-        let pidCopy = pid
 
-        let assetDesc = FetchDescriptor<StickerAsset>(
-            predicate: #Predicate<StickerAsset> { a in a.profileId == pidCopy }
-        )
-        stickerAssetCount = (try? modelContext.fetch(assetDesc))?.count ?? 0
-
-        let placedDesc = FetchDescriptor<PlacedSticker>(
-            predicate: #Predicate<PlacedSticker> { s in s.profileId == pidCopy }
-        )
-        placedStickerCount = (try? modelContext.fetch(placedDesc))?.count ?? 0
+        stickerAssetCount = StickerViewModel.assetCount(profileId: pid, context: modelContext)
+        placedStickerCount = StickerViewModel.placedCount(profileId: pid, context: modelContext)
 
         let dir = StickerFileManager.stickerDirectory(profileId: pid)
         if let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey]) {
@@ -245,17 +237,9 @@ struct IOSStickerPage: View {
 
     private func loadStats() {
         guard let pid = profileManager?.currentProfile.id else { return }
-        let pidCopy = pid
 
-        let assetDesc = FetchDescriptor<StickerAsset>(
-            predicate: #Predicate<StickerAsset> { a in a.profileId == pidCopy }
-        )
-        stickerAssetCount = (try? modelContext.fetch(assetDesc))?.count ?? 0
-
-        let placedDesc = FetchDescriptor<PlacedSticker>(
-            predicate: #Predicate<PlacedSticker> { s in s.profileId == pidCopy }
-        )
-        placedStickerCount = (try? modelContext.fetch(placedDesc))?.count ?? 0
+        stickerAssetCount = StickerViewModel.assetCount(profileId: pid, context: modelContext)
+        placedStickerCount = StickerViewModel.placedCount(profileId: pid, context: modelContext)
 
         let dir = StickerFileManager.stickerDirectory(profileId: pid)
         if let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey]) {
