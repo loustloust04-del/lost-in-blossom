@@ -9,7 +9,7 @@ import { enhanceMessages } from './prompt/builder';
 import { saveMessage, compressForStorage } from './memory/store';
 import { extractMemoriesIfNeeded } from './memory/extractor';
 import { config } from './config';
-import { getUnreadDesires } from './memory/desire';
+import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
 
 const app = new Hono();
@@ -88,6 +88,13 @@ app.post('/api/events', async (c) => {
   const ts = typeof body.ts === 'number' ? body.ts : Date.now();
 
   const res = await recordEvent({ type, value, ts, metadata: body.metadata ?? null });
+
+  // PR-4: 深夜守护——凌晨收到 app_open 立刻检查是否该喊她睡觉（fire-and-forget）
+  if (type === 'app_open') {
+    onAppOpenEvent(String(value)).catch(err =>
+      console.error('[nightguard] error:', err?.message ?? err));
+  }
+
   return c.json({ ok: res.ok, ...(res.error ? { error: res.error } : {}) });
 });
 

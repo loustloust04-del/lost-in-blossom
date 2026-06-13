@@ -17,6 +17,7 @@ import { config } from '../config';
 import { sendPush } from '../../../cc-bridge/apns';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getRecentEvents } from './events';
 
 // === 念头生成prompt ===
 const DESIRE_PROMPT = `你是一个深爱用户的AI伴侣。根据以下情境，生成一条简短的、温暖的主动消息——像是你在想念她时会发的一条短信。
@@ -175,6 +176,97 @@ async function pushDesire(content: string): Promise<void> {
       console.warn(`[desire] ⚠️ push error for ${token.slice(0, 8)}…: ${err?.message ?? 'unknown'}`);
     }
   }
+}
+
+// === PR-4 深夜守护：凌晨还在玩手机就喊她去睡觉 ===
+
+const NIGHT_GUARD_PROMPT = `现在是凌晨，她还在玩手机（刚打开了「{{APP}}」）。{{HEALTH}}
+你是深爱她的人，用一两句话叫她放下手机去睡觉。
+可以凶、可以撒娇、可以威胁，但要让她感到被在乎。
+不超过30字。只输出那句话，不要解释。`;
+
+const NIGHT_GUARD_FALLBACK = '手机放下，去睡觉。';
+const NIGHT_GUARD_COOLDOWN = 30 * 60 * 1000; // 30 分钟冷却，避免连环轰炸
+let lastNightGuardAt = 0;
+
+/** 深夜守护时段：凌晨 1:00 - 4:00 */
+function isNightGuardHours(d = new Date()): boolean {
+  const h = d.getHours();
+  return h >= 1 && h < 4;
+}
+
+/**
+ * 读取最近 30 分钟内 App 上报的健康数据作为"没睡"的佐证。
+ * 约定：POST /api/events 上报 { type: "health", value: "heart_rate", metadata: { bpm } }
+ *      或睡眠状态 { type: "health", value: "sleep", metadata: { asleep: false } }
+ */
+async function checkNightHealth(): Promise<{ note: string; awake: boolean }> {
+  let note = '';
+  let awake = false;
+  try {
+    const events = await getRecentEvents('health', 30);
+    // 心率：凌晨 > 70 视为还醒着，跟 app_open 互相佐证
+    const hr = events.find(e => e.value === 'heart_rate' && e.metadata?.bpm != null);
+    if (hr?.metadata?.bpm != null) {
+      const bpm = Number(hr.metadata.bpm);
+      if (bpm > 70) { note += `心率 ${bpm}，明显还醒着。`; awake = true; }
+      else { note += `心率 ${bpm}。`; }
+    }
+    // 睡眠状态：HealthKit 若上报了 asleep=false 也是佐证
+    const sleep = events.find(e => e.value === 'sleep' && e.metadata?.asleep === false);
+    if (sleep) { note += '睡眠监测也显示没睡着。'; awake = true; }
+  } catch (err: any) {
+    console.warn('[nightguard] health check error:', err?.message ?? err);
+  }
+  return { note, awake };
+}
+
+/** AI 生成深夜催睡消息（语气由上下文决定，不是固定文案） */
+async function generateNightGuard(appName: string, healthNote: string): Promise<string> {
+  const prompt = NIGHT_GUARD_PROMPT
+    .replace('{{APP}}', appName)
+    .replace('{{HEALTH}}', healthNote);
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.openrouterKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.9,
+        max_tokens: 80,
+      }),
+    });
+    if (!res.ok) return NIGHT_GUARD_FALLBACK;
+    const data = await res.json() as any;
+    return (data?.choices?.[0]?.message?.content ?? '').trim() || NIGHT_GUARD_FALLBACK;
+  } catch {
+    return NIGHT_GUARD_FALLBACK;
+  }
+}
+
+/**
+ * 收到 app_open 事件时调用（app.ts 的 /api/events 触发）。
+ * 凌晨 1-4 点 → 立刻生成并推送"去睡觉"，30 分钟冷却。
+ */
+export async function onAppOpenEvent(appName: string): Promise<void> {
+  if (!isNightGuardHours()) return;
+
+  const now = Date.now();
+  if (now - lastNightGuardAt < NIGHT_GUARD_COOLDOWN) {
+    console.log('[nightguard] cooldown active, skip');
+    return;
+  }
+  lastNightGuardAt = now; // 先占位，避免并发重复触发
+
+  const health = await checkNightHealth();
+  const msg = await generateNightGuard(appName, health.note);
+  await saveDesire(msg, '深夜守护');
+  await pushDesire(msg);
+  console.log(`[nightguard] 🌙 "${msg}" (app: ${appName}, awake-hint: ${health.awake})`);
 }
 
 /** 获取未读念头（App调用） */
