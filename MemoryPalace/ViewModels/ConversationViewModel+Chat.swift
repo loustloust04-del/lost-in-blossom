@@ -1,3 +1,4 @@
+import UIKit
 import Foundation
 import SwiftData
 
@@ -104,7 +105,7 @@ extension ConversationViewModel {
 
         // 时间感：距离上次对话多久了
         if let lastNode = currentPath.last(where: { $0.role == "user" && !$0.content.isEmpty }),
-           let lastDate = lastNode.createdAt {
+           let lastDate = lastNode.createTime {
             let gap = Date().timeIntervalSince(lastDate)
             let minutes = Int(gap / 60)
             if minutes > 2 {
@@ -445,7 +446,9 @@ extension ConversationViewModel {
                 scrollToNodeId = assistantNodeId
 
                 // 后台本地通知
+                #if os(iOS)
                 self.notifyIfBackground(text: fullText, conversationId: conversation.id)
+                #endif
 
                 // 结束后台任务
                 #if os(iOS)

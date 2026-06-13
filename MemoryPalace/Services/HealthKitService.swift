@@ -226,8 +226,6 @@ final class HealthKitService {
             context.menstrualDay = m
         }
     }
-}
-
 
     // MARK: - Heart Rate (Watch placeholder)
 
@@ -250,3 +248,4 @@ final class HealthKitService {
         guard let result = try? await descriptor.result(for: store).first else { return nil }
         return result.quantity.doubleValue(for: HKUnit.percent()) * 100
     }
+}

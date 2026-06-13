@@ -38,6 +38,8 @@ final class Conversation {
     /// 记忆参与开关（默认 true）
     /// false = 此对话不贡献记忆到楼层池，也不接收记忆注入
     var memoryEnabled: Bool = true
+    /// Stub: upstream sync dependency
+    var selectedModelId: String = ""
 
     /// 所属项目 ID（nil = 不属于任何项目）
     var projectId: String?
