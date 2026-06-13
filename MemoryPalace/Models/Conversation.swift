@@ -106,6 +106,13 @@ final class MessageNode {
     var senderId: String? = nil
     var senderName: String? = nil
 
+    /// Stubs: upstream sync dependencies
+    var ccMessageId: String? = nil
+    var replyToId: String? = nil
+    var ccEdited: Bool = false
+    var ccThinking: String? = nil
+    @Attribute(.externalStorage) var imageDescsData: Data? = nil
+
     // Computed: has branches (more than 1 child)
     var hasBranches: Bool {
         childrenIds.count > 1

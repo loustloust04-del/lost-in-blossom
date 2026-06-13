@@ -54,7 +54,7 @@ struct CreateGroupChatView: View {
         return Button { toggle(card.id) } label: {
             HStack {
                 Image(systemName: on ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(on ? .accentColor : .secondary)
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
                 Text(card.name).foregroundStyle(.primary)
                 Spacer()
                 if on, let idx = selectedIds.firstIndex(of: card.id) {

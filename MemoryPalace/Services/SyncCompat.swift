@@ -1,6 +1,7 @@
 import Foundation
 
 // MARK: - Compatibility stubs for upstream sync dependencies
+// These types exist in 粟儿's upstream but haven't been cherry-picked yet.
 
 /// Stub: SyncProbe — upstream cherry-pick dependency
 struct SyncProbe {
@@ -11,16 +12,23 @@ struct SyncProbe {
     static func run() async -> SyncProbe {
         SyncProbe()
     }
+    
+    static func log(_ message: String) {
+        print("[SyncProbe] \(message)")
+    }
 }
 
 /// Stub: LocalMode — upstream cherry-pick dependency
 enum LocalMode {
     case local
     case iCloud
+    
+    static var isOn: Bool { false }
 }
 
-/// Stub: FileLibraryStore — upstream dependency not yet cherry-picked
-class FileLibraryStore {
+// MARK: - FileLibraryStore iCloud extensions (stub)
+
+extension FileLibraryStore {
     static func primeICloudContainer(completion: @escaping (Bool) -> Void) {
         completion(false)
     }
