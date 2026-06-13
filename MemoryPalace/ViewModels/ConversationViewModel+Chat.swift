@@ -347,7 +347,14 @@ extension ConversationViewModel {
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)
 
-        // 5. Stream
+        // 5. Stream (with background task protection)
+        #if os(iOS)
+        var bgTask: UIBackgroundTaskIdentifier = .invalid
+        bgTask = UIApplication.shared.beginBackgroundTask {
+            UIApplication.shared.endBackgroundTask(bgTask)
+            bgTask = .invalid
+        }
+        #endif
         providerRouter.sendStreaming(
             model: model,
             messages: payload.messages,
@@ -410,6 +417,17 @@ extension ConversationViewModel {
                 }
                 try? context.save()
                 scrollToNodeId = assistantNodeId
+
+                // 后台本地通知
+                self.notifyIfBackground(text: fullText, conversationId: conversation.id)
+
+                // 结束后台任务
+                #if os(iOS)
+                if bgTask != .invalid {
+                    UIApplication.shared.endBackgroundTask(bgTask)
+                    bgTask = .invalid
+                }
+                #endif
 
                 // 预算扣费（Phase C 完整接入前先只用 usage）
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
@@ -1046,3 +1064,28 @@ extension ConversationViewModel {
         )
     }
 }
+
+
+// MARK: - Background Local Notification
+
+#if os(iOS)
+import UserNotifications
+
+extension ConversationViewModel {
+    /// Fire a local notification when API reply arrives while app is backgrounded
+    func notifyIfBackground(text: String, conversationId: String) {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Lost in Blossom"
+        content.body = String(text.prefix(120))
+        content.sound = .default
+        content.userInfo = ["chat_id": conversationId]
+        let request = UNNotificationRequest(
+            identifier: "api-reply-\(UUID().uuidString.prefix(8))",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { _ in }
+    }
+}
+#endif
