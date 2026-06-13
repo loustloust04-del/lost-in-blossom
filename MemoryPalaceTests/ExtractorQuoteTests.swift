@@ -160,6 +160,62 @@ final class ExtractorQuoteTests: XCTestCase {
         XCTAssertTrue(store.listHotAndWarm(profileId: pid, context: context).isEmpty)
     }
 
+    // MARK: - 写时近似去重（paramecium sim>0.75）
+
+    private func memoryWithVector(_ content: String, _ vector: [Float], revision: Int = 7,
+                                  superseded: Bool = false) -> Memory {
+        let m = Memory(content: content, category: "fact", keywords: [], profileId: pid)
+        m.embeddingData = MemoryVector.data(from: vector)
+        m.embeddingRevision = revision
+        if superseded { m.supersededAt = Date() }
+        return m
+    }
+
+    func testNearDuplicateFoundAboveThreshold() {
+        let old = memoryWithVector("用户喜欢暖奶白配色", [1, 0, 0])
+        // 新向量与旧向量夹角小（点积 0.95 > 0.75）
+        let hit = MemoryExtractor.findNearDuplicate(vector: [0.95, 0.312, 0], revision: 7, in: [old])
+        XCTAssertNotNil(hit)
+        XCTAssertEqual(hit?.content, "用户喜欢暖奶白配色")
+    }
+
+    func testDissimilarNotDuplicate() {
+        let old = memoryWithVector("用户喜欢暖奶白配色", [1, 0, 0])
+        XCTAssertNil(MemoryExtractor.findNearDuplicate(vector: [0, 1, 0], revision: 7, in: [old]), "正交向量不算重复")
+    }
+
+    func testSupersededExcludedFromDedup() {
+        // 矛盾更新场景：被失效的旧版本不许吸收新事实（否则 supersede 被去重打穿）
+        let old = memoryWithVector("用户爱喝乌龙茶", [1, 0, 0], superseded: true)
+        XCTAssertNil(MemoryExtractor.findNearDuplicate(vector: [0.99, 0.141, 0], revision: 7, in: [old]))
+    }
+
+    func testRevisionMismatchExcluded() {
+        // 模型升级后旧向量不在同一空间，不比对
+        let old = memoryWithVector("用户喜欢暖奶白配色", [1, 0, 0], revision: 3)
+        XCTAssertNil(MemoryExtractor.findNearDuplicate(vector: [1, 0, 0], revision: 7, in: [old]))
+    }
+
+    func testDeleteOrderedBeforeAdd() throws {
+        // delete旧+add新 同批：delete 必须先执行（软失效后新事实不被旧条吸收）
+        let mem = try store.add(content: "用户爱喝乌龙茶", category: "preference", keywords: [],
+                                profileId: pid, isUserExplicit: false, extractedBy: "test",
+                                sourceConversationId: nil, context: context)
+        // 给旧条造一个与任何文本都"近似"的场景不可行（embed 在测试机可能未就绪），
+        // 这里验证执行序本身：add 在前 delete 在后的输入，执行后旧条已失效且新条存在
+        let actions: [MemoryAction] = [
+            .add(content: "用户现在喝茉莉奶绿", category: "preference", keywords: [], quote: "我现在喝茉莉奶绿啦"),
+            .delete(id: mem.id),
+        ]
+        try MemoryExtractor.executeActions(actions, store: store, profileId: pid,
+                                           extractedBy: "test", sourceConversationId: nil,
+                                           recentMessages: [(id: "n1", role: "user", content: "我现在喝茉莉奶绿啦")],
+                                           context: context)
+        let all = store.listAll(profileId: pid, context: context)
+        XCTAssertNotNil(all.first(where: { $0.content == "用户爱喝乌龙茶" })?.supersededAt, "旧条被失效")
+        XCTAssertNotNil(all.first(where: { $0.content == "用户现在喝茉莉奶绿" }), "新条正常入库")
+    }
+
     // MARK: - update 出处语义
 
     func testUpdateKeepsQuoteWhenNoNewQuote() throws {

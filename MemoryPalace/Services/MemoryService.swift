@@ -568,6 +568,30 @@ update 可选带 "quote"，同样要求逐字。
         return messages.first { normalizeForQuote($0.content).contains(nq) }?.id
     }
 
+    // MARK: - 写时近似去重（paramecium sim>0.75 同款，2026-06-13）
+
+    /// 近似重复 = 同一事实再确认 → 强化旧条不开新条（全等去重挡不住"喜欢暖奶白"vs"偏好暖奶白色调"）
+    static let dedupSimilarityThreshold: Float = 0.75
+
+    /// 纯比对层（可测）：在候选里找与新向量相似度超阈的最相近条。
+    /// 排除已失效条——否则"delete旧+add新"的矛盾更新会被去重打穿（新事实被旧版本吸收）。
+    static func findNearDuplicate(vector newVec: [Float], revision: Int, in existing: [Memory]) -> Memory? {
+        var best: (memory: Memory, sim: Float)? = nil
+        for m in existing {
+            guard m.supersededAt == nil,
+                  let data = m.embeddingData, m.embeddingRevision == revision else { continue }
+            let sim = MemoryVector.dot(newVec, MemoryVector.floats(from: data))
+            if sim > dedupSimilarityThreshold, sim > (best?.sim ?? 0) { best = (m, sim) }
+        }
+        return best?.memory
+    }
+
+    /// embed 外壳：模型未就绪/无向量 → nil = 跳过去重（app 自包含，向量路静默退场）
+    static func findNearDuplicate(of content: String, in existing: [Memory]) -> Memory? {
+        guard let newVec = AppleMemoryEmbedder.shared.embed(content) else { return nil }
+        return findNearDuplicate(vector: newVec, revision: AppleMemoryEmbedder.shared.revision, in: existing)
+    }
+
     /// 构建发给 LLM 的 system prompt 和 messages（窗口带 node id，定位 quote 出处用；id 不进 prompt）
     static func buildRequest(
         recentMessages: [(id: String, role: String, content: String)],
@@ -656,7 +680,12 @@ update 可选带 "quote"，同样要求逐字。
         let existingContents = Set(existing.map(\.content))
         let windowText = recentMessages.map(\.content).joined(separator: "\n")
 
-        for action in actions {
+        // delete 先行：模型的矛盾更新是 delete旧+add新 两动作，若 add 先跑、
+        // 还活着的旧版本会把新事实近似去重吸收掉 → 随后 delete 失效旧条 = 新事实丢失
+        let isDelete: (MemoryAction) -> Bool = { if case .delete = $0 { return true } else { return false } }
+        let ordered = actions.filter(isDelete) + actions.filter { !isDelete($0) }
+
+        for action in ordered {
             switch action {
             case .add(let content, let category, let keywords, let quote):
                 if existingContents.contains(content) { continue }
@@ -666,6 +695,17 @@ update 可选带 "quote"，同样要求逐字。
                     if quoteRequiredForAdd { continue }
                 }
                 let nodeId = validQuote.flatMap { locateQuote($0, in: recentMessages) }
+                // 写时近似去重：超阈 → 强化旧条（reinforce）不开新条；旧条无锚时顺手补 quote
+                if let dup = findNearDuplicate(of: content, in: existing) {
+                    CacheDiagLog.shared.log("🧠 写时去重：「\(content.prefix(24))」≈「\(dup.content.prefix(24))」→ 强化旧条")
+                    try store.recordAccess(ids: [dup.id], context: context)
+                    if dup.sourceQuote == nil, let validQuote {
+                        dup.sourceQuote = validQuote
+                        dup.sourceNodeId = nodeId
+                        try? context.save()
+                    }
+                    continue
+                }
                 try store.add(
                     content: content,
                     category: category,
