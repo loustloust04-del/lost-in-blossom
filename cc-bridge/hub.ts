@@ -33,8 +33,9 @@ export function buildChannelTag(msg: ChatMessage, ts: string, attachments: strin
   let safe = msg.content.replace(/\n/g, " ")
   // 防御：超长 content 让 tmux send-keys -l 失败。截断到安全长度。
   if (safe.length > 4000) safe = safe.slice(0, 4000) + " …[截断]"
-  // CC↔API 上下文共享：把 API 会话摘要作为〔历史摘要〕前缀嵌入可见文本（压平+截断）。
-  if (typeof msg.context === "string" && msg.context.trim().length > 0) {
+  // CC↔API 上下文共享（可通过环境变量 CC_INJECT_SUMMARY=0 关闭）
+  const injectSummary = (process.env.CC_INJECT_SUMMARY ?? "1") !== "0"
+  if (injectSummary && typeof msg.context === "string" && msg.context.trim().length > 0) {
     let ctx = msg.context.replace(/\n/g, " ")
     if (ctx.length > 1500) ctx = ctx.slice(0, 1500) + " …[截断]"
     safe = `〔历史摘要〕${ctx}〔/历史摘要〕 ${safe}`
