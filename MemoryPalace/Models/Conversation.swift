@@ -45,6 +45,20 @@ final class Conversation {
     /// CC Bridge session 绑定（nil = 用默认 mp-cc 会话）
     var ccBridgeSessionName: String? = nil
 
+    /// 群聊 V2："single" = 单聊（默认），"group" = 多角色群聊。
+    var kind: String = "single"
+    /// 群聊参与者（JSON 编码的 [GroupParticipant]）。单聊为 nil。
+    @Attribute(.externalStorage) var participantsData: Data? = nil
+
+    /// 解码/编码参与者（计算属性，不持久化）。
+    var participants: [GroupParticipant] {
+        get {
+            guard let data = participantsData else { return [] }
+            return (try? JSONDecoder().decode([GroupParticipant].self, from: data)) ?? []
+        }
+        set { participantsData = try? JSONEncoder().encode(newValue) }
+    }
+
     init(id: String, title: String, createTime: Date, updateTime: Date, currentNodeId: String, provider: String = "chatgpt", profileId: String = "") {
         self.id = id
         self.title = title
@@ -85,6 +99,10 @@ final class MessageNode {
     /// 结构化分段（Claude importer v2 写入）。JSON 编码的 [MessageSegment]。
     /// 为 nil 时消息按旧路径渲染（基于 content 字符串 + extractThinking）。
     @Attribute(.externalStorage) var segmentsData: Data?
+
+    /// 群聊 V2：发言者身份（单聊为 nil）。senderName 用于渲染名字标签 + 镜像 prompt 前缀。
+    var senderId: String? = nil
+    var senderName: String? = nil
 
     // Computed: has branches (more than 1 child)
     var hasBranches: Bool {
