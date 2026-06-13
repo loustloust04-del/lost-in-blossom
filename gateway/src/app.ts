@@ -43,8 +43,8 @@ app.get('/v1/models', auth, (c) => c.json({
     { id: 'openai/gpt-4o-2024-11-20', object: 'model', owned_by: 'openai' },
     { id: 'openai/gpt-4o', object: 'model', owned_by: 'openai' },
     { id: 'openai/gpt-4o-mini', object: 'model', owned_by: 'openai' },
-    { id: 'deepseek/deepseek-chat', object: 'model', owned_by: 'deepseek' },
-    { id: 'deepseek/deepseek-reasoner', object: 'model', owned_by: 'deepseek' },
+    { id: 'deepseek/deepseek-v4-pro', object: 'model', owned_by: 'deepseek' },
+    { id: 'deepseek/deepseek-r1-0528', object: 'model', owned_by: 'deepseek' },
     { id: 'google/gemini-2.5-flash', object: 'model', owned_by: 'google' },
     // TreeGPT [官]对话分组 — 日常主力 ¥18.75/M
     { id: 'tree-chat/claude-opus-4-8', object: 'model', owned_by: 'treegpt-chat' },
@@ -164,7 +164,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
 
   // --- 记忆增强（如果 Supabase 已配置）---
   let enhancedMessages = messages;
-  if (config.supabaseUrl && userText) {
+  if (config.supabaseUrl && config.brainEnabled && userText) {
     try {
       enhancedMessages = await enhanceMessages(messages, userText);
       console.log(`[memory] enhanced: +${enhancedMessages.length - messages.length} system entries`);
@@ -298,7 +298,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
         saveMessage(sessionId, 'assistant', compressedContent, model).catch(() => {});
         if (userText && fullContent) {
           const recent = [{role: "user", content: userText}, {role: "assistant", content: fullContent}];
-          extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
+          config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
         }
       }
       console.log(`[thinking] stream done, content: ${fullContent.length} chars`);
@@ -346,7 +346,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
         // Phase 3: 异步提取记忆
         if (userText && fullContent) {
           const recent = [{role: "user", content: userText}, {role: "assistant", content: fullContent}];
-          extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
+          config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
         }
       }
     })();
@@ -368,7 +368,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
       // Phase 3: 异步提取记忆
       if (userText && assistantContent) {
         const recent = [{role: "user", content: userText}, {role: "assistant", content: assistantContent}];
-        extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
+        config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
       }
     }
     return c.json(data);
@@ -385,4 +385,14 @@ app.post('/v1/chat/completions', auth, async (c) => {
   }
 });
 
-export default app;
+export default {
+  port: config.port,
+  fetch: app.fetch,
+};
+
+console.log(`🌸 Lost in Blossom Gateway`);
+console.log(`   port: ${config.port}`);
+console.log(`   token: ${config.gatewayToken ? '✅ set' : '❌ missing'}`);
+console.log(`   deepseek: ${config.deepseekKey ? '✅ set' : '❌ missing'}`);
+console.log(`   openrouter: ${config.openrouterKey ? '✅ set' : '❌ missing'}`);
+console.log(`   ✅ listening on http://localhost:${config.port}/`);

@@ -17,9 +17,12 @@ console.log(`   deepseek: ${config.deepseekKey ? '✅ set' : '❌ missing'}`);
 console.log(`   openrouter: ${config.openrouterKey ? '✅ set' : '❌ missing'}`);
 console.log(`   ✅ listening on http://localhost:${config.port}/`);
 
-if (config.supabaseUrl) {
+if (config.supabaseUrl && config.brainEnabled) {
   startDecayTimer();    // Phase 3: 遗忘曲线 (每6h)
   startDreamTimer();    // Phase 4: Dream系统 (每日4am)
   startDesireTimer();   // Phase 6: 欲望系统 (动态调度)
   startMurmurTimer();   // Phase 7: 碎碎念 (每日 4am & 2pm)
+  console.log('   brain: ✅ enabled');
+} else if (config.supabaseUrl) {
+  console.log('   brain: ⏸️ disabled (set BRAIN_ENABLED=true to activate)');
 }

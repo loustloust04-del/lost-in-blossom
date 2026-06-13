@@ -64,7 +64,7 @@ async function callLLM(prompt: string): Promise<string> {
         'Authorization': `Bearer ${config.openrouterKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
+        model: 'anthropic/claude-opus-4.6',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.9,
         max_tokens: 500,
