@@ -362,6 +362,10 @@ struct ContentView: View {
         .onAppear {
             viewModel.globalWorldBookEntries = (globalWBManager?.enabledBooks ?? []).flatMap { $0.entries }
             autoCreateFirstConversationIfNeeded()
+            // 冷启动点通知兜底：didReceive 的 post 可能早于本视图订阅，pending 里补跳转
+            if let convId = LocalNotificationService.shared.consumePendingConversationId() {
+                navigateToNotificationConversation(convId)
+            }
         }
         .onChange(of: viewModel.selectedConversation?.id) { _, newId in
             if newId != nil {
@@ -374,12 +378,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .notificationNavigationRequested)) { notification in
             guard let convId = notification.userInfo?["conversationId"] as? String else { return }
-            let descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == convId })
-            if let conv = try? modelContext.fetch(descriptor).first {
-                viewModel.selectedConversation = conv
-                withAnimation { iOSPage = 0 }
-                withAnimation(sidebarAnimation) { isSidebarOpen = false }
-            }
+            // 已实时处理，清掉 pending 兜底（避免之后 onAppear 重复消费导致 spurious 跳转）
+            _ = LocalNotificationService.shared.consumePendingConversationId()
+            navigateToNotificationConversation(convId)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardVisible = true
@@ -406,6 +407,17 @@ struct ContentView: View {
                 .environment(\.modelContext, modelContext)
                 .environment(manager)
         }
+    }
+
+    /// 推送通知点击跳转：fetch 目标会话，完整加载消息树（loadConversation 会构建
+    /// path / branch map；直接赋值 selectedConversation 会留下空白或上一会话的残留内容），
+    /// 然后切到聊天页并收起侧边栏。
+    private func navigateToNotificationConversation(_ convId: String) {
+        let descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == convId })
+        guard let conv = try? modelContext.fetch(descriptor).first else { return }
+        viewModel.loadConversation(conv, context: modelContext)
+        withAnimation { iOSPage = 0 }
+        withAnimation(sidebarAnimation) { isSidebarOpen = false }
     }
 
     /// Wallpaper overlay gradient 颜色（复刻 ChatWallpaperBackdrop.overlayColors），

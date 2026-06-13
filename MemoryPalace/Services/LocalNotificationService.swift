@@ -31,6 +31,18 @@ final class LocalNotificationService: NSObject {
     /// 系统通知权限状态（.notDetermined / .authorized / .denied / .provisional）
     private(set) var authStatus: UNAuthorizationStatus = .notDetermined
 
+    /// 冷启动点通知时，didReceive 的 post 可能早于 ContentView 订阅
+    /// notificationNavigationRequested（NotificationCenter 不缓存事件，直接丢失）。
+    /// 这里暂存待跳转会话 id，ContentView onAppear 时消费兜底。
+    @ObservationIgnored private var pendingConversationId: String?
+
+    /// 取出并清除待跳转会话 id（ContentView onAppear 兜底 / onReceive 实时处理后清除）。
+    func consumePendingConversationId() -> String? {
+        let id = pendingConversationId
+        pendingConversationId = nil
+        return id
+    }
+
     /// 偏好设置；默认值为空偏好，init 里从 UserDefaults 加载真实值。
     /// 使用默认值 + super.init() 先行的模式，避免 @Observable+NSObject 初始化顺序问题。
     /// didSet 在 init 体内首次赋值时也会触发（persist() 是幂等的，无副作用）。
@@ -208,6 +220,8 @@ extension LocalNotificationService: UNUserNotificationCenterDelegate {
         let info = response.notification.request.content.userInfo
         if let convId = info["conversationId"] as? String {
             DispatchQueue.main.async {
+                // 先暂存（冷启动时 ContentView 可能还没订阅，onAppear 兜底消费），再实时广播
+                self.pendingConversationId = convId
                 NotificationCenter.default.post(
                     name: .notificationNavigationRequested,
                     object: nil,
