@@ -440,10 +440,10 @@ struct ContentView: View {
 
     // MARK: - iOS Page indicator (debug-mode aware)
 
-    /// 页面指示点：侧边栏已改为 overlay，显示 chat(0) / dashboard(1) / archive(2) 三个点
+    /// 页面指示点：chat(0) / dashboard(1) / console(2) / archive(3) 四个点
     private var pageIndicatorDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<3) { i in
+            ForEach(0..<4) { i in
                 Circle()
                     .fill(iOSPage == i ? Theme.branchIndicator : Theme.textMuted.opacity(0.3))
                     .frame(width: 6, height: 6)
