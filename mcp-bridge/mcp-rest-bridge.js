@@ -6,7 +6,11 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.MCP_BRIDGE_PORT || 3200;
-const BRIDGE_TOKEN = process.env.MCP_BRIDGE_TOKEN || 'bunny-mcp-2026';
+const BRIDGE_TOKEN = process.env.MCP_BRIDGE_TOKEN;
+if (!BRIDGE_TOKEN) {
+  console.error('[mcp-bridge] MCP_BRIDGE_TOKEN env required — refusing to start without auth token');
+  process.exit(1);
+}
 
 const connections = new Map();
 
@@ -77,7 +81,7 @@ app.get('/mcp/status', auth, (req, res) => {
   res.json({ connections: status });
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
+app.listen(PORT, '127.0.0.1', async () => {
   console.log(`[mcp-bridge] REST API on port ${PORT}`);
   const defaults = process.env.MCP_DEFAULT_SERVERS;
   if (defaults) {

@@ -28,7 +28,12 @@ done
 
 # Start MCP REST bridge (port 3200), auto-connect to supergateway
 export MCP_BRIDGE_PORT=3200
-export MCP_BRIDGE_TOKEN="bunny-mcp-2026"
+# MCP_BRIDGE_TOKEN must be set in the environment before calling this script.
+# Do NOT set a default here — the bridge will refuse to start without a real token.
+if [ -z "${MCP_BRIDGE_TOKEN}" ]; then
+  echo "[mcp-bridge] error: MCP_BRIDGE_TOKEN is not set" >&2
+  exit 1
+fi
 export MCP_DEFAULT_SERVERS="vps=http://localhost:3100/mcp"
 
 exec node mcp-rest-bridge.js
