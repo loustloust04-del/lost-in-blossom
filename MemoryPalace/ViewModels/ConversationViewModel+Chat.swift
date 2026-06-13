@@ -936,6 +936,46 @@ extension ConversationViewModel {
         scrollToNodeId = newUserId
     }
 
+    /// 群聊 V2：建 Conversation(kind:"group") + 各卡 firstMes 首条消息（线性串成树）。
+    @discardableResult
+    func createGroupConversation(participants: [GroupParticipant], cards: [CharacterCard],
+                                 title: String, profileId: String, context: ModelContext) -> Conversation {
+        let rootId = UUID().uuidString
+        let conversation = Conversation(
+            id: UUID().uuidString, title: title, createTime: Date(), updateTime: Date(),
+            currentNodeId: rootId, provider: "api", profileId: profileId)
+        conversation.kind = "group"
+        conversation.participants = participants
+        context.insert(conversation)
+
+        let rootNode = MessageNode(
+            id: rootId, role: "system", content: "", contentType: "text",
+            createTime: Date(), parentId: nil, childrenIds: [], conversationId: conversation.id,
+            profileId: profileId)
+        context.insert(rootNode)
+
+        var parentId = rootId
+        var parentNode = rootNode
+        for p in participants {
+            let firstMes = cards.first(where: { $0.id == p.characterCardID })?.firstMes ?? ""
+            guard !firstMes.isEmpty else { continue }
+            let nid = UUID().uuidString
+            let node = MessageNode(
+                id: nid, role: "assistant", content: firstMes, contentType: "text",
+                createTime: Date(), parentId: parentId, childrenIds: [], conversationId: conversation.id,
+                profileId: profileId)
+            node.senderId = p.id
+            node.senderName = p.name
+            context.insert(node)
+            parentNode.childrenIds.append(nid)
+            parentId = nid
+            parentNode = node
+        }
+        conversation.currentNodeId = parentId
+        try? context.save()
+        return conversation
+    }
+
     /// Create a new empty conversation for chatting
     func createNewConversation(title: String, profileId: String, context: ModelContext, projectId: String? = nil) -> Conversation {
         let rootId = UUID().uuidString
