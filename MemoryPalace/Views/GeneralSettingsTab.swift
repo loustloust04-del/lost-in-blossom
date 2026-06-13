@@ -102,8 +102,7 @@ private struct IOSGeneralWorldBookBindingSection: View {
     var body: some View {
         let profileId = profileManager?.currentProfile.id ?? ""
         let linkedIds = profileManager?.currentProfile.linkedWorldBookIDs ?? []
-        let wbDescriptor = FetchDescriptor<WorldBook>(predicate: #Predicate { $0.profileId == profileId })
-        let floorBooks = (try? modelContext.fetch(wbDescriptor)) ?? []
+        let floorBooks = WorldBookStore.fetchBooks(profileId: profileId, context: modelContext)
 
         Group {
         if floorBooks.isEmpty {
@@ -172,13 +171,10 @@ private struct IOSGeneralWorldBookBindingSection: View {
     }
 
     private func deleteWorldBook(_ book: WorldBook) {
-        modelContext.delete(book)
+        WorldBookStore.delete(book, context: modelContext)
         if var profile = profileManager?.currentProfile {
             profile.linkedWorldBookIDs.removeAll { $0 == book.id.uuidString }
             profileManager?.updateProfile(profile)
-        }
-        do { try modelContext.save() } catch {
-            print("[worldbook] 删除保存失败: \(error)")
         }
     }
 }
@@ -235,8 +231,7 @@ private struct OrphanWorldBookCleanupSection: View {
         ) {
             Button("删除", role: .destructive) {
                 if let book = deletingOrphan {
-                    modelContext.delete(book)
-                    try? modelContext.save()
+                    WorldBookStore.delete(book, context: modelContext)
                     orphans.removeAll { $0.id == book.id }
                 }
                 deletingOrphan = nil
@@ -251,7 +246,6 @@ private struct OrphanWorldBookCleanupSection: View {
     }
 
     private func loadOrphans() {
-        let allDescriptor = FetchDescriptor<WorldBook>()
-        orphans = (try? modelContext.fetch(allDescriptor)) ?? []
+        orphans = WorldBookStore.fetchAllBooks(context: modelContext)
     }
 }

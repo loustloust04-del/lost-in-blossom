@@ -13,6 +13,12 @@ enum WorldBookStore {
         return (try? context.fetch(descriptor)) ?? []
     }
 
+    /// 全库世界书（跨楼层，孤儿清理用）
+    static func fetchAllBooks(context: ModelContext) -> [WorldBook] {
+        let descriptor = FetchDescriptor<WorldBook>()
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
     /// 最近打开的对话 id（"当前对话"作用域绑定用）
     static func latestConversationId(profileId: String, context: ModelContext) -> String? {
         let pid = profileId
