@@ -135,6 +135,8 @@ actor MCPService {
         }
         cachedTools = tools
         cacheTimestamp = Date()
+        let snapshot = tools
+        DispatchQueue.main.async { MCPToolCache.shared.update(snapshot) }
         return tools
     }
 
@@ -165,4 +167,16 @@ actor MCPService {
         cachedTools = []
         cacheTimestamp = nil
     }
+}
+
+
+// MARK: - 同步快照
+
+/// providers 的 sendStreaming 是同步的，需要在构造请求体前同步拿到工具列表。
+/// MCPService（actor）异步刷新后把结果推到这里，ProviderRouter 同步读取。
+/// Swift 5 下普通单例即可；读写约定在主线程。
+final class MCPToolCache {
+    static let shared = MCPToolCache()
+    private(set) var tools: [MCPToolDescriptor] = []
+    func update(_ t: [MCPToolDescriptor]) { tools = t }
 }

@@ -28,6 +28,19 @@ final class AnthropicProvider: BaseChatProvider {
     /// content_block_stop 时已完成的段（text + tool，保持顺序）
     private var pendingSegments: [MessageSegment] = []
 
+    // MARK: - PR-2 客户端 tool-calling 循环（bridge 工具，Anthropic 不代为执行）
+    /// 由 ProviderRouter 在调用前设置；非空时注入 body["tools"] 并启用多轮循环。
+    var bridgeTools: [MCPToolDescriptor] = []
+    private var toolRound = 0
+    private var roundStopReason: String?
+    private var loopBody: [String: Any] = [:]
+    private var loopURL: URL?
+    private var loopApiKey = ""
+    private var loopHeaders: [String: String] = [:]
+    private var loopUseMCPBeta = false
+    /// 跨轮累积的 segments（每轮 toolUse + 本地生成的 toolResult），终轮一次性回调 UI。
+    private var accumulatedToolSegments: [MessageSegment] = []
+
     override func sendStreaming(
         messages: [(role: String, content: String)],
         model: String,
@@ -127,8 +140,41 @@ final class AnthropicProvider: BaseChatProvider {
         if !enabledMCP.isEmpty {
             request.setValue("mcp-client-0.1", forHTTPHeaderField: "anthropic-beta")
         }
+        // PR-2: bridge 工具（客户端执行；Anthropic 只返回 tool_use 并停）。工具定义写死保证缓存稳定。
+        if !bridgeTools.isEmpty {
+            body["tools"] = ToolCallLoop.anthropicTools(bridgeTools)
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
+        // PR-2: 存循环上下文，bridge 工具触发 tool_use 时多轮重发
+        loopBody = body
+        loopURL = url
+        loopApiKey = apiKey
+        loopHeaders = extraHeaders
+        loopUseMCPBeta = !enabledMCP.isEmpty
+        toolRound = 0
+        accumulatedToolSegments = []
+        roundStopReason = nil
+        startRequest(request)
+    }
+
+    /// PR-2: 用当前 loopBody（已追加 assistant tool_use + user tool_result）重发一轮。
+    private func fireAnthropicRound() {
+        currentEventType = ""
+        activeBlocks = [:]
+        pendingSegments = []
+        roundStopReason = nil
+        receivedDone = false
+        buffer = ""
+        guard let url = loopURL else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(loopApiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (key, value) in loopHeaders { request.setValue(value, forHTTPHeaderField: key) }
+        if loopUseMCPBeta { request.setValue("mcp-client-0.1", forHTTPHeaderField: "anthropic-beta") }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: loopBody)
+        isStreaming = true
         startRequest(request)
     }
 
@@ -311,6 +357,9 @@ final class AnthropicProvider: BaseChatProvider {
             }
 
         case "message_delta":
+            if let d = obj["delta"] as? [String: Any], let sr = d["stop_reason"] as? String {
+                roundStopReason = sr
+            }
             // { "usage": { "output_tokens": N } }
             if let u = obj["usage"] as? [String: Any],
                let ot = u["output_tokens"] as? Int {
@@ -320,17 +369,59 @@ final class AnthropicProvider: BaseChatProvider {
 
         case "message_stop":
             receivedDone = true
-            let segments = pendingSegments
-            let hasTool = segments.contains {
+            let roundSegments = pendingSegments
+            // PR-2: 本轮里属于 bridge 工具的 tool_use（Anthropic 没代执行，等客户端跑）
+            let bridgeCalls: [ToolCallLoop.ToolCall] = roundSegments.compactMap { seg in
+                if case .toolUse(let id, let name, let inputJSON, _, _) = seg,
+                   bridgeTools.contains(where: { $0.name == name }) {
+                    return ToolCallLoop.ToolCall(id: id, name: name, argumentsJSON: inputJSON)
+                }
+                return nil
+            }
+            if roundStopReason == "tool_use", !bridgeCalls.isEmpty, toolRound < ToolCallLoop.maxRounds {
+                accumulatedToolSegments.append(contentsOf: roundSegments)
+                var assistantContent: [[String: Any]] = []
+                for seg in roundSegments {
+                    switch seg {
+                    case .text(let t):
+                        if !t.isEmpty { assistantContent.append(["type": "text", "text": t]) }
+                    case .toolUse(let id, let name, let inputJSON, _, _):
+                        let input = (try? JSONSerialization.jsonObject(with: Data(inputJSON.utf8))) as? [String: Any] ?? [:]
+                        assistantContent.append(["type": "tool_use", "id": id, "name": name, "input": input])
+                    default: break
+                    }
+                }
+                toolRound += 1
+                Task { [weak self] in
+                    guard let self else { return }
+                    let outcomes = await ToolCallLoop.execute(bridgeCalls, bridgeTools: self.bridgeTools)
+                    await MainActor.run {
+                        var userContent: [[String: Any]] = []
+                        for o in outcomes {
+                            var tr: [String: Any] = ["type": "tool_result", "tool_use_id": o.id, "content": o.text]
+                            if o.isError { tr["is_error"] = true }
+                            userContent.append(tr)
+                            self.accumulatedToolSegments.append(.toolResult(toolUseId: o.id, text: o.text, isError: o.isError, integrationName: nil))
+                        }
+                        var msgs = (self.loopBody["messages"] as? [[String: Any]]) ?? []
+                        msgs.append(["role": "assistant", "content": assistantContent])
+                        msgs.append(["role": "user", "content": userContent])
+                        self.loopBody["messages"] = msgs
+                        self.fireAnthropicRound()
+                    }
+                }
+                return
+            }
+            let allSegs = accumulatedToolSegments.isEmpty ? roundSegments : (accumulatedToolSegments + roundSegments)
+            let hasTool = allSegs.contains {
                 if case .toolUse = $0 { return true }
                 if case .toolResult = $0 { return true }
                 return false
             }
             DispatchQueue.main.async { [self] in
                 isStreaming = false
-                // 仅在存在 tool 段时调用 onSegmentsCallback（纯文本走原有路径）
                 if hasTool {
-                    onSegmentsCallback?(segments)
+                    onSegmentsCallback?(allSegs)
                 }
                 onComplete?(streamingContent, finalUsage)
             }

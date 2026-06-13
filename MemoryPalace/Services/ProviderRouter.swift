@@ -68,6 +68,9 @@ final class ProviderRouter {
             let mcpEnabled = samplingParams?.mcpEnabled ?? true
             anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
             anthropicProvider.onSegmentsCallback = onSegments
+            // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
+            anthropicProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
+            if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = anthropicProvider
         case .ccBridge:
             ccBridgeProvider.onSegmentsCallback = onSegments
