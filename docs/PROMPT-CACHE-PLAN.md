@@ -199,3 +199,25 @@ write 变小不代表命中。read 在涨才代表命中。
 只有 Anthropic 原生 `/v1/messages` 认 cache_control。
 OpenAI 兼容 `/v1/chat/completions` 会丢掉缓存标记。
 走 gateway 确保用原生格式。
+
+## 第 7 步（gateway 原生缓存）暂缓 — 决策记录
+
+**决定**：跳过，仅记录原因，等有需求再做。
+
+**为什么跳过**
+- 现状所有 gateway 上游都是 OpenAI 兼容 `/v1/chat/completions`
+  （deepseek / openrouter / treegpt 三家都是这个端点）。该协议会静默丢弃
+  `cache_control`——挂了断点也没有任何效果，read 永远 0。
+- 要让 gateway 支持缓存，前置条件是**先**在 gateway 里新增一条 Anthropic 原生
+  `/v1/messages` 上游通道（透传 `cache_control` 与分层 system block），
+  这是独立且更大的一刀，不属于本次客户端缓存改造的范围。
+- 客户端侧（AnthropicProvider 直连）缓存已在第 1–6 步落地并验证；
+  走 gateway 的请求目前按未缓存全价计费，功能正确，只是省不到钱。
+
+**重新启用的前提**
+1. gateway 增加 Anthropic 原生 `/v1/messages` provider 路径；
+2. 该路径透传 `metadata.user_id`（节点粘性，见上文「metadata.user_id」一节）；
+3. 用 `scripts/probe-prompt-cache.mjs` 指向 gateway 端点跑探针，
+   确认第二次请求 `cache_read_input_tokens > 0`。
+
+在上述三条满足前，gateway 缓存保持关闭，避免只付 1.25× 写入价却永远读不到。
