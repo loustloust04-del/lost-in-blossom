@@ -132,7 +132,7 @@ struct ProjectsView: View {
                                     }
                                     Divider()
                                     Button(role: .destructive) {
-                                        modelContext.delete(project)
+                                        ProjectStore.delete(project, context: modelContext)
                                     } label: {
                                         Label("删除项目", systemImage: "trash")
                                     }
@@ -165,7 +165,7 @@ struct ProjectsView: View {
                 instructions: editorDraft.instructions,
                 profileId: profileId
             )
-            modelContext.insert(project)
+            ProjectStore.insert(project, context: modelContext)
         }
         showEditor = false
     }
