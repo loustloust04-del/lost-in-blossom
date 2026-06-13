@@ -100,8 +100,9 @@ extension ConversationViewModel {
             let h = HealthService.shared.injectedSummary
             if !h.isEmpty { volatileParts.append(h) }
         }
-        if usesDate { volatileParts.append("当前日期：\(df.string(from: Date()))") }
-        if usesTime { volatileParts.append("当前时间：\(tf.string(from: Date()))") }
+        // 始终注入当前日期和时间（不再依赖 {{date}}/{{time}} 宏）
+        volatileParts.append("当前日期：\(df.string(from: Date()))")
+        volatileParts.append("当前时间：\(tf.string(from: Date()))")
 
         // 时间感：距离上次对话多久了
         if let lastNode = currentPath.last(where: { $0.role == "user" && !$0.content.isEmpty }),
