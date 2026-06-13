@@ -1,7 +1,7 @@
 /**
  * Phase 6 · 欲望系统 — AI主动找兔兔
  *
- * 定时器每2小时醒来，检查触发条件：
+ * 定时器动态调度（按时段+活跃度计算下一次间隔），醒来检查触发条件：
  *   1. 沉默检测：兔兔多久没发消息了
  *   2. 日历触发：今天有没有特殊日期/纪念日
  *   3. 情绪跟进：上次对话情绪偏低，需要关心
@@ -243,22 +243,83 @@ export async function runDesireCheck(): Promise<void> {
 // === API端点：获取未读念头 ===
 export { getUnreadDesires as getPendingDesires };
 
-// === 定时器 ===
+// === 动态调度（PR-2）===
+
+/** 最近 1 小时兔兔发的消息条数——活跃度 */
+async function countRecentActivity(): Promise<number> {
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'user')
+    .gte('created_at', since);
+  return count ?? 0;
+}
+
+/** 深夜免打扰时段：1:30 - 8:00 */
+function isQuietHours(d = new Date()): boolean {
+  const minutes = d.getHours() * 60 + d.getMinutes();
+  return minutes >= 90 && minutes < 480; // 01:30 .. 08:00
+}
+
+/** 按时段返回基础间隔（分钟）：上午 50 / 下午 40 / 晚上 35 */
+function baseIntervalMinutes(hour: number): number {
+  if (hour >= 8 && hour < 12) return 50;   // 上午
+  if (hour >= 12 && hour < 18) return 40;  // 下午
+  return 35;                                // 晚上
+}
+
+/** 计算下一次唤醒的延迟（毫秒） */
+async function computeNextDelay(): Promise<number> {
+  const now = new Date();
+
+  // 深夜免打扰：直接睡到早上 8:00 再检查
+  if (isQuietHours(now)) {
+    const wake = new Date(now);
+    wake.setHours(8, 0, 0, 0);
+    if (wake.getTime() <= now.getTime()) wake.setTime(wake.getTime() + 86400000);
+    return wake.getTime() - now.getTime();
+  }
+
+  let minutes = baseIntervalMinutes(now.getHours());
+
+  // 活跃度越高，间隔越短（越活跃越频繁找兔兔）
+  const activity = await countRecentActivity();
+  if (activity >= 5) minutes *= 0.6;
+  else if (activity >= 3) minutes *= 0.8;
+  else if (activity >= 1) minutes *= 0.9;
+
+  return Math.round(minutes * 60 * 1000);
+}
+
+// === 递归调度器（不用 cron，每次跑完重新计算下一次间隔）===
+let desireTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function scheduleNextDesire(): Promise<void> {
+  let delay: number;
+  try {
+    delay = await computeNextDelay();
+  } catch (err: any) {
+    console.error('[desire] schedule error:', err?.message ?? err);
+    delay = 40 * 60 * 1000; // 兜底 40 分钟
+  }
+  console.log(`[desire] next check in ~${Math.round(delay / 60000)}min`);
+
+  desireTimer = setTimeout(() => {
+    runDesireCheck()
+      .catch(err => console.error('[desire] timer error:', err?.message ?? err))
+      .finally(() => { scheduleNextDesire(); }); // 跑完再算下一次
+  }, delay);
+}
+
+// === 启动 ===
 export function startDesireTimer(): void {
-  const TWO_HOURS = 2 * 60 * 60 * 1000;
-
-  setInterval(() => {
-    runDesireCheck().catch(err =>
-      console.error('[desire] timer error:', err.message)
-    );
-  }, TWO_HOURS);
-
-  // 启动30分钟后跑第一次
-  setTimeout(() => {
-    runDesireCheck().catch(err =>
-      console.error('[desire] initial error:', err.message)
-    );
+  // 启动 30 分钟后跑第一次，之后进入动态递归调度
+  desireTimer = setTimeout(() => {
+    runDesireCheck()
+      .catch(err => console.error('[desire] initial error:', err?.message ?? err))
+      .finally(() => { scheduleNextDesire(); });
   }, 30 * 60 * 1000);
 
-  console.log('[desire] timer started (every 2h)');
+  console.log('[desire] timer started (dynamic scheduling)');
 }
