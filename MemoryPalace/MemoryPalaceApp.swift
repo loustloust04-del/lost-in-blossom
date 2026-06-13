@@ -455,6 +455,8 @@ struct MemoryPalaceApp: App {
                         CCBridgeWebSocketClient.shared.sendAppState("background")
                     case .active:
                         CCBridgeWebSocketClient.shared.sendAppState("foreground")
+                        // PR-6: App 回前台时检查未读念头并用本地通知展示
+                        Task { await DesireInboxService.shared.checkUnread() }
                     default:
                         break
                     }
