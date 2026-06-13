@@ -385,6 +385,57 @@ app.post('/v1/chat/completions', auth, async (c) => {
   }
 });
 
+
+// ============ Anthropic 原生透传端点 ============
+// App 的 AnthropicProvider 直接连这里，原生格式进出，cache_control 完整保留。
+app.post('/v1/messages', auth, async (c) => {
+  const body = await c.req.json();
+  const model = body.model || '';
+  console.log('[/v1/messages] model:', model, 'stream:', body.stream);
+
+  // 决定上游：有中转站 key 优先走中转站，否则走直连 Anthropic
+  let upstreamUrl: string;
+  let authHeader: string;
+
+  if (config.treeChatKey) {
+    upstreamUrl = 'https://api.treegpt.cc/v1/messages';
+    authHeader = 'Bearer ' + config.treeChatKey;
+  } else if (config.openrouterKey) {
+    upstreamUrl = 'https://openrouter.ai/api/v1/messages';
+    authHeader = 'Bearer ' + config.openrouterKey;
+  } else if (config.anthropicKey) {
+    upstreamUrl = 'https://api.anthropic.com/v1/messages';
+    authHeader = config.anthropicKey;
+  } else {
+    return c.json({ error: 'No upstream API key configured' }, 500);
+  }
+
+  const isAnthropicDirect = upstreamUrl.includes('api.anthropic.com');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01',
+  };
+  if (isAnthropicDirect) {
+    headers['x-api-key'] = config.anthropicKey;
+  } else {
+    headers['Authorization'] = authHeader;
+  }
+
+  const upstream = await fetch(upstreamUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      'Content-Type': upstream.headers.get('Content-Type') || 'text/event-stream',
+      'Cache-Control': 'no-cache',
+    },
+  });
+});
+
 export default {
   port: config.port,
   fetch: app.fetch,
