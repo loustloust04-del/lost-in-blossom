@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 
 /// S2.5 准实时同步引擎（plan-cross-device-sync）。
-/// - 导出泵：前台每 15s 跑一次指纹增量导出（无变化 = 一次轻量 fetch + 比较，近零成本）
-/// - 云端监听：NSMetadataQuery 盯同步目录，对端文档一到货 debounce 自动导入
+/// - 导出泵：前台每 5s 跑一次指纹增量导出（无变化 = 轻量 fetch + 比较，近零成本；连续空转自动降频）
+/// - 云端监听：NSMetadataQuery（iOS）+ DispatchSource 目录监听（Mac）双通道，对端文档一到货 debounce 自动导入
 /// 上限被 iCloud 传输卡死（秒~几十秒），手动「立即同步」仍保留为强制档。
 @MainActor
 final class SyncEngine: NSObject {
@@ -15,18 +15,18 @@ final class SyncEngine: NSObject {
     private var metadataQuery: NSMetadataQuery?
     private var importDebounce: Timer?
     private var busy = false
+    private var idleCount = 0
+    private var dirSource: DispatchSourceFileSystemObject?
+    private var dirFd: Int32 = -1
 
     /// 幂等：楼层切换/开关重开直接重 start
     func start(profileId: String, container: ModelContainer) {
         stop()
-        // 测试宿主里禁动：引擎会拿真楼层在测试期间偷跑导出（非确定性来源）
         guard NSClassFromString("XCTestCase") == nil else { return }
         guard SyncStore.isEnabled(profileId: profileId) else { return }
         self.profileId = profileId
         self.container = container
 
-        // ⚠️ 必须先预热容器：iOS 重启后 ubiquity URL 缓存是 nil，不预热 = 同步根为 nil，
-        // 泵全程对空气抽（手机实测：听得见云事件、永远导不进）。Mac 预热是 no-op 秒回。
         FileLibraryStore.primeICloudContainer { [weak self] available in
             guard let self, self.profileId == profileId else { return }
             guard available else {
@@ -35,14 +35,12 @@ final class SyncEngine: NSObject {
             }
             SyncProbe.log("engine START floor=\(profileId.prefix(12))")
 
-            // 全量泵：导出推本地变化 + 导入拉云端变化（mtime 增量，闲时近零成本）。
-            // Mac 没挂 iCloud entitlement，NSMetadataQuery 听不到——接收方向全靠这条轮询。
-            self.exportTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            self.exportTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.pump(exportOnly: false) }
             }
 
             self.startMetadataQuery()
-            // 启动先全量对一次（拉对端积压 + 推本地积压）
+            self.startDirectoryMonitor()
             self.pump(exportOnly: false)
         }
     }
@@ -58,17 +56,20 @@ final class SyncEngine: NSObject {
             NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
         }
         metadataQuery = nil
+        dirSource?.cancel()
+        dirSource = nil
+        // fd 由 cancelHandler 关闭
         profileId = nil
         container = nil
+        idleCount = 0
     }
 
-    // MARK: - 云端监听
+    // MARK: - 云端监听（iOS 主力）
 
     private func startMetadataQuery() {
         guard let profileId else { return }
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
-        // 只关心本楼层同步目录里的 json（含还没下载完的占位项——到货事件就是导入时机）
         query.predicate = NSPredicate(
             format: "%K LIKE '*.json' AND %K CONTAINS %@",
             NSMetadataItemFSNameKey, NSMetadataItemPathKey, "/sync/\(profileId)/"
@@ -87,28 +88,72 @@ final class SyncEngine: NSObject {
 
     @objc private func cloudChanged(_ note: Notification) {
         SyncProbe.log("cloud EVENT \(note.name == .NSMetadataQueryDidFinishGathering ? "gathered" : "update")")
-        // 自己导出也会触发（再导入一遍是指纹级 no-op），debounce 合并风暴
+        scheduleImport()
+    }
+
+    // MARK: - 目录监听（Mac 主力 — kqueue 不需要 iCloud entitlement）
+
+    private func startDirectoryMonitor() {
+        #if os(macOS)
+        guard let pid = profileId,
+              let root = SyncStore.syncRoot(profileId: pid) else { return }
+        let fd = open(root.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .rename], queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            SyncProbe.log("fs EVENT dir-write")
+            self?.scheduleImport()
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        dirSource = source
+        dirFd = fd
+        #endif
+    }
+
+    // MARK: - Debounce 共用入口
+
+    private func scheduleImport() {
         importDebounce?.invalidate()
         importDebounce = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.pump(exportOnly: false) }
+            Task { @MainActor in self?.pump(exportOnly: false, eventDriven: true) }
         }
     }
 
     // MARK: - 泵
 
-    private func pump(exportOnly: Bool) {
+    private func pump(exportOnly: Bool, eventDriven: Bool = false) {
         guard !busy, let profileId, let container else { return }
         guard SyncStore.isEnabled(profileId: profileId) else { stop(); return }
+        // 空转降频：连续 6 轮无实质变化 → Timer 驱动的轮询跳过。
+        // EVENT 驱动（FS/cloud 事件）始终放行——有新文件到了值得查。
+        if !eventDriven && idleCount >= 6 { return }
         busy = true
         let pid = profileId
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let context = ModelContext(container)
+            let result: (imported: SyncStore.ImportResult, exported: SyncStore.ExportResult)
             if exportOnly {
-                _ = SyncStore.exportChanged(profileId: pid, context: context)
+                let exp = SyncStore.exportChanged(profileId: pid, context: context)
+                result = (SyncStore.ImportResult(), exp)
             } else {
-                _ = SyncStore.syncNow(profileId: pid, context: context)
+                result = SyncStore.syncNow(profileId: pid, context: context)
             }
-            Task { @MainActor in self?.busy = false }
+            let hadWork = result.exported.exported > 0
+                || result.imported.nodesInserted > 0
+                || result.imported.conversationsCreated > 0
+                || result.imported.conversationsUpdated > 0
+            Task { @MainActor in
+                guard let self else { return }
+                self.busy = false
+                if hadWork {
+                    self.idleCount = 0
+                } else {
+                    self.idleCount += 1
+                }
+            }
         }
     }
 }

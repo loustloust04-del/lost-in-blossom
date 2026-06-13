@@ -277,6 +277,8 @@ enum SyncStore {
 
     /// iOS 不自动下载 iCloud 文档（Mac 会）：未下载的占位项触发下载并短暂等待。
     /// 返回（就绪的 json 文件，仍在下载的数量）。
+    /// ⚠️ Mac 用裸路径 ~/Library/Mobile Documents/，文件永远在本地，跳过 startDownloadingUbiquitousItem——
+    /// 否则 iCloud daemon 反复"重新下载"已有文件改 mtime，引发死循环（探针实测抓出）。
     private static func materializeDocuments(in root: URL) -> (ready: [URL], downloading: Int) {
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(
@@ -285,9 +287,9 @@ enum SyncStore {
             options: []
         ) else { return ([], 0) }
 
+        #if os(iOS)
         var pending: [URL] = []
         for item in items {
-            // 占位文件形如 .xxx.json.icloud；触发下载用去壳后的目标 URL 也可以，直接对占位 URL 调用同样有效
             if item.lastPathComponent.hasSuffix(".icloud") || isNotDownloaded(item) {
                 try? fm.startDownloadingUbiquitousItem(at: item)
                 pending.append(item)
@@ -295,13 +297,13 @@ enum SyncStore {
         }
         if !pending.isEmpty { SyncProbe.log("DOWNLOAD triggered n=\(pending.count)") }
 
-        // 小文档通常秒级到位：短暂轮询给它机会（最长 ~6s），大文件留给下一轮
         var waited = 0
         while !pending.isEmpty, waited < 12 {
             Thread.sleep(forTimeInterval: 0.5)
             waited += 1
             pending = pending.filter { isNotDownloaded($0) || $0.lastPathComponent.hasSuffix(".icloud") && fm.fileExists(atPath: $0.path) }
         }
+        #endif
 
         let ready = ((try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "json" }
