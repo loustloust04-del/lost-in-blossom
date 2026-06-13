@@ -148,6 +148,9 @@ extension ConversationViewModel {
         #endif
 
         selectedConversation = conversation
+        // CC Bridge：随对话加载（重新）注册兜底 handler，让 CC 主动/连发的消息
+        // 在没有 in-flight 请求时也能落进对话树（不依赖先 sendMessage 一次）。
+        installCCFollowUpHandler(context: context)
         // 点击对话本身不影响排序（旧逻辑 lastOpenedAt = Date() + sidebarRefreshTrigger++
         // 会让对话立刻跳到列表顶部，粟粟的新语义是"纯浏览不打乱列表"）。
         // 真正的内容改动（发消息/rename/贴纸）走 markConversationDirty() 的 3s debounce。

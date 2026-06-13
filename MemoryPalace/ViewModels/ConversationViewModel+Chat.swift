@@ -294,15 +294,7 @@ extension ConversationViewModel {
 
         // Register fallback for additional CC replies that arrive after the single-shot
         // sendStreaming handler has been consumed (hub offline-replay burst, proactive CC messages).
-        // Appends follow-up content to the same assistant node so multiple CC turns in one
-        // conversation don't get silently dropped.
-        let convId = conversation.id
-        let capturedContext = context
-        CCBridgeWebSocketClient.shared.unhandledReplyHandler = { [weak assistantNode] incomingChatId, followUpContent in
-            guard incomingChatId == convId, let node = assistantNode else { return }
-            node.content = node.content.isEmpty ? followUpContent : node.content + "\n\n---\n\n" + followUpContent
-            try? capturedContext.save()
-        }
+        installCCFollowUpHandler(context: context)
 
         // 4. Assemble prompt using PromptAssembler
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
@@ -398,6 +390,98 @@ extension ConversationViewModel {
         )
 
         scrollToNodeId = userNodeId
+    }
+
+    /// CC Bridge：注册"无人认领 reply"的兜底 handler。
+    /// 单发 handler 被第一条 reply 消费后，CC 连续发来的第 2..N 条、以及没有
+    /// in-flight 请求时 CC 主动发来的消息都落到这里。每条插入一个独立的
+    /// assistant 节点（旧实现往上一轮气泡里拼接，换对话/重启后 handler 失效，
+    /// 连发场景只有第一条能显示，后续全部静默丢弃）。
+    /// 在 loadConversation 和 sendMessage 时都会（重新）注册，保证 handler
+    /// 持有的 context 始终是当前楼层的。
+    func installCCFollowUpHandler(context: ModelContext) {
+        CCBridgeWebSocketClient.shared.unhandledReplyHandler = { [weak self] chatId, content in
+            guard let self else { return }
+            // hub 在 reply 前先广播 cc_thinking；和单发路径一样嵌入 content
+            let fullContent: String
+            if let think = CCBridgeWebSocketClient.shared.consumePendingThinking(), !think.thinking.isEmpty {
+                fullContent = "[thinking]\(think.thinking)[/thinking]\(content)"
+            } else {
+                fullContent = content
+            }
+            self.appendCCMessage(chatId: chatId, content: fullContent, context: context)
+        }
+    }
+
+    /// 把一条 CC 消息作为独立 assistant 节点插入对应对话。
+    /// 当前打开的对话 → 同步更新 currentPath/nodeMap，UI 直接长出新气泡；
+    /// 其他对话 → 直接持久化，下次打开可见。
+    private func appendCCMessage(chatId: String, content: String, context: ModelContext) {
+        if let conversation = selectedConversation, conversation.id == chatId {
+            let parentId = currentPath.last?.id
+            let nodeId = UUID().uuidString
+            let node = MessageNode(
+                id: nodeId,
+                role: "assistant",
+                content: content,
+                contentType: "text",
+                createTime: Date(),
+                parentId: parentId,
+                childrenIds: [],
+                conversationId: conversation.id,
+                profileId: conversation.profileId
+            )
+            context.insert(node)
+            if let parentId, let parent = nodeMap[parentId],
+               !parent.childrenIds.contains(nodeId) {
+                parent.childrenIds.append(nodeId)
+            }
+            nodeMap[nodeId] = node
+            effectiveChildrenMap[nodeId] = []
+            if let parentId {
+                effectiveChildrenMap[parentId, default: []].append(nodeId)
+            }
+            currentPath.append(node)
+            conversation.currentNodeId = nodeId
+            conversation.updateTime = Date()
+            conversation.nodeCount = currentPath.filter {
+                ($0.role == "user" || $0.role == "assistant") && !$0.content.isEmpty
+            }.count
+            markConversationDirty()
+            try? context.save()
+            scrollToNodeId = nodeId
+            return
+        }
+
+        // 非当前对话（用户在别的对话里 / CC 主动发消息）：直接写库
+        let cid = chatId
+        let convFetch = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == cid })
+        guard let conversation = try? context.fetch(convFetch).first else { return }
+        let parentId = conversation.currentNodeId
+        let nodeId = UUID().uuidString
+        let node = MessageNode(
+            id: nodeId,
+            role: "assistant",
+            content: content,
+            contentType: "text",
+            createTime: Date(),
+            parentId: parentId,
+            childrenIds: [],
+            conversationId: conversation.id,
+            profileId: conversation.profileId
+        )
+        context.insert(node)
+        let pid = parentId
+        let parentFetch = FetchDescriptor<MessageNode>(predicate: #Predicate { $0.id == pid })
+        if let parent = try? context.fetch(parentFetch).first,
+           !parent.childrenIds.contains(nodeId) {
+            parent.childrenIds.append(nodeId)
+        }
+        conversation.currentNodeId = nodeId
+        conversation.updateTime = Date()
+        conversation.nodeCount += 1
+        markConversationDirty()
+        try? context.save()
     }
 
     /// AUDN 记忆提取：每轮对话后异步调用便宜模型提取/更新/删除记忆
