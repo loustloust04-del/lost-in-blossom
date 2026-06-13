@@ -830,6 +830,7 @@ struct SidebarView: View {
         .onChange(of: showImporter) { _, showing in if !showing { refreshList() } }
         .onChange(of: showSettings) { _, showing in if !showing { refreshList() } }
         .onChange(of: viewModel.sidebarRefreshTrigger) { _, _ in refreshList() }
+        .onReceive(NotificationCenter.default.publisher(for: .syncDidImport)) { _ in refreshList() }
         .sheet(isPresented: $showNewTagSheet) {
             NewTagSheet(profileId: profileId)
         }

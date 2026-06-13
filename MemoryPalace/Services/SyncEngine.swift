@@ -127,33 +127,37 @@ final class SyncEngine: NSObject {
     private func pump(exportOnly: Bool, eventDriven: Bool = false) {
         guard !busy, let profileId, let container else { return }
         guard SyncStore.isEnabled(profileId: profileId) else { stop(); return }
-        // 空转降频：连续 6 轮无实质变化 → Timer 驱动的轮询跳过。
+        // 空转降频：连续 6 轮无实质变化 → Timer 驱动的导入跳过。
+        // 导出永远跑（本地发消息不触发任何 EVENT，全靠 Timer 捕获）。
         // EVENT 驱动（FS/cloud 事件）始终放行——有新文件到了值得查。
-        if !eventDriven && idleCount >= 6 { return }
+        let skipImport = !eventDriven && idleCount >= 6
         busy = true
         let pid = profileId
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let context = ModelContext(container)
-            let result: (imported: SyncStore.ImportResult, exported: SyncStore.ExportResult)
-            if exportOnly {
-                let exp = SyncStore.exportChanged(profileId: pid, context: context)
-                result = (SyncStore.ImportResult(), exp)
-            } else {
-                result = SyncStore.syncNow(profileId: pid, context: context)
+            var imported = SyncStore.ImportResult()
+            if !skipImport {
+                imported = SyncStore.importAll(profileId: pid, context: context)
             }
-            let hadWork = result.exported.exported > 0
-                || result.imported.nodesInserted > 0
-                || result.imported.conversationsCreated > 0
-                || result.imported.conversationsUpdated > 0
+            let exported = SyncStore.exportChanged(profileId: pid, context: context)
+            let hadWork = exported.exported > 0
+                || imported.nodesInserted > 0
+                || imported.conversationsCreated > 0
+                || imported.conversationsUpdated > 0
             Task { @MainActor in
                 guard let self else { return }
                 self.busy = false
                 if hadWork {
                     self.idleCount = 0
+                    NotificationCenter.default.post(name: .syncDidImport, object: nil)
                 } else {
                     self.idleCount += 1
                 }
             }
         }
     }
+}
+
+extension Notification.Name {
+    static let syncDidImport = Notification.Name("syncDidImport")
 }
