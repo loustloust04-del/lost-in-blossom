@@ -44,7 +44,8 @@ struct RightPanelView: View {
         case "calendar":
             CalendarPanelView(viewModel: viewModel, profileId: profileManager?.currentProfile.id ?? "")
         case "memory":
-            MemoryPanelView(viewModel: viewModel)
+            // PR-3: 本地记忆 / 网关记忆 双轨容器（MemoryPanelView 本体未改）
+            MemoryDualTrackView(viewModel: viewModel)
         case "worldBook":
             WorldBookPanelView()
         case "cardLibrary":
