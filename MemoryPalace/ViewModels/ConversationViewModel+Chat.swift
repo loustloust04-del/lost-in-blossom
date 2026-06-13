@@ -245,6 +245,8 @@ extension ConversationViewModel {
 
     /// Send a user message and get a streaming response
     func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
+        // 清洗零宽字符（iOS输入法切换时偷偷插入）
+        let text = text.replacingOccurrences(of: "[\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00AD}]", with: "", options: .regularExpression)
         guard let conversation = selectedConversation else { return }
         guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
 
