@@ -189,16 +189,11 @@ struct CCSessionPickerContent: View {
     // MARK: - Actions
 
     private func loadOwners() {
-        let descriptor = FetchDescriptor<Conversation>()
-        guard let all = try? modelContext.fetch(descriptor) else { return }
-        var map: [String: String] = [:]
-        for c in all {
-            guard !c.isDeleted, c.id != conversation.id,
-                  let name = c.ccBridgeSessionName,
-                  !name.isEmpty, name != Self.defaultSession else { continue }
-            map[name] = c.title
-        }
-        sessionOwners = map
+        sessionOwners = ConversationListStore.ccSessionOwners(
+            excludingConversationId: conversation.id,
+            excludingSession: Self.defaultSession,
+            context: modelContext
+        )
     }
 
     private func refresh() {

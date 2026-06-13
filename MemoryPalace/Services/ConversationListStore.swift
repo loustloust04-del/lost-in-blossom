@@ -136,6 +136,26 @@ enum ConversationListStore {
         try? context.save()
     }
 
+    /// CC Bridge session → 占用它的对话标题映射（CCSessionPickerSheet 用）。
+    /// excludingConversationId / excludingSession：当前对话和默认 session 不算占用。
+    /// TODO: 谓词可下推（ccBridgeSessionName != nil && isDeleted == false），对话多时这里是全表扫
+    static func ccSessionOwners(
+        excludingConversationId: String,
+        excludingSession: String,
+        context: ModelContext
+    ) -> [String: String] {
+        let descriptor = FetchDescriptor<Conversation>()
+        guard let all = try? context.fetch(descriptor) else { return [:] }
+        var map: [String: String] = [:]
+        for c in all {
+            guard !c.isDeleted, c.id != excludingConversationId,
+                  let name = c.ccBridgeSessionName,
+                  !name.isEmpty, name != excludingSession else { continue }
+            map[name] = c.title
+        }
+        return map
+    }
+
     // MARK: - Paginated conversation list (fetchPage)
 
     struct ConversationPage {
