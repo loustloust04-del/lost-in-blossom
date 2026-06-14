@@ -70,10 +70,68 @@ struct PromptAssembler {
             .filter { $0.isEnabled || $0.isSystemPrompt }
             .sorted { $0.injectionOrder < $1.injectionOrder }
 
+<<<<<<< HEAD
         // tagged system parts：追踪每个 part 的来源 slot id，世界书需要按 position 插入
         var systemParts: [(tag: String, content: String)] = []
         var preHistoryMessages: [(role: String, content: String)] = []
         var postHistoryInjections: [(depth: Int, role: String, content: String)] = []
+=======
+        // chatHistory marker 是分割点：之前的插槽在历史前，之后的在历史后
+        let chatHistoryOrder = activeSlots
+            .first { $0.isMarker && $0.id == PromptSlot.chatHistoryId }?
+            .injectionOrder ?? Int.max
+
+        var preHistorySystem: [TaggedSegment] = []
+        var preHistoryMessages: [TaggedSegment] = []
+        var postHistorySystem: [TaggedSegment] = []
+        var depthInjections: [(depth: Int, segment: TaggedSegment)] = []
+
+        // cacheFriendly：每轮会变的内容不留在前缀里（system/历史一变缓存全废），
+        // 收集到这里，最后并成一条伪 user 段插在当前消息之前
+        let cacheFriendly = preset.sampling.cacheFriendly == true
+        var volatileParts: [String] = []
+
+        // ── 世界书预扫描（B27）：before/after 桶由 World Info 插槽承载，按插槽位排序。
+        // marker 存在 → 桶归插槽（disabled 时槽不进 activeSlots = 整桶不注入，对齐酒馆）；
+        // marker 不存在 → 桶退回 charDef 旁注入兜底（不丢条目）
+        var wiBeforeBucket: [ResolvedEntry] = []
+        var wiAfterBucket: [ResolvedEntry] = []
+        var wiRestEntries: [ResolvedEntry] = []
+        if !worldBooks.isEmpty || !globalEntries.isEmpty {
+            var resolved = WorldBookScanner.scan(
+                worldBooks: worldBooks, recentMessages: trimmedHistory.map { $0.content },
+                profile: profile, globalEntries: globalEntries
+            )
+            // SC-B4 刀3：世界书预算闸——唯一无闸全注的源。按 insertionOrder 优先级进预算，
+            // 超出裁尾 + log。默认 0 = 无限 = 现状（行为零退化）
+            let wbBudget = UserDefaults.standard.integer(forKey: "wb_inject_budget")
+            if wbBudget > 0 {
+                var used = 0
+                var kept: [ResolvedEntry] = []
+                for entry in resolved {
+                    guard used + entry.tokenCount <= wbBudget else { continue }
+                    used += entry.tokenCount
+                    kept.append(entry)
+                }
+                if kept.count < resolved.count {
+                    CacheDiagLog.shared.log("📚 世界书预算闸：命中 \(resolved.count) 条 → 注入 \(kept.count) 条（预算 \(wbBudget) tok）")
+                }
+                resolved = kept
+            }
+            let hasBeforeSlot = preset.prompts.contains { $0.id == PromptSlot.worldInfoBeforeId }
+            let hasAfterSlot = preset.prompts.contains { $0.id == PromptSlot.worldInfoAfterId }
+            for entry in resolved {
+                switch entry.position {
+                case .beforeCharDef where hasBeforeSlot: wiBeforeBucket.append(entry)
+                case .afterCharDef where hasAfterSlot: wiAfterBucket.append(entry)
+                default: wiRestEntries.append(entry)
+                }
+            }
+        }
+
+        var sawSummarySlot = false
+        var sawProfileSlot = false
+>>>>>>> 357bd54 (feat(SC-B4): 刀3 — 世界书预算闸（唯一无闸全注源收口）)
 
         for slot in activeSlots {
             let content = resolveSlotContent(
