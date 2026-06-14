@@ -158,11 +158,27 @@ extension ConversationViewModel {
         // ccBridge：只取最后一条 user 的 raw 文字，丢掉 system prompt 和历史
         let lastUser = assembled.messages.last(where: { $0.role == "user" })?.content ?? ""
         let userLabel = profile.userName.isEmpty ? "tianyi" : profile.userName
-        let headers: [String: String] = [
+        var headers: [String: String] = [
             "X-MP-ChatId": conversation.id,
             "X-MP-MessageId": messageNodeId,
             "X-MP-User": userLabel,
         ]
+        // PR-3: 注入最近 10 条原始对话（不用摘要），让 CC 接话时知道刚聊了什么
+        let ctxUserLabel = profile.userName.isEmpty ? "兔兔" : profile.userName
+        let ctxAsstLabel = profile.assistantName.isEmpty ? "Caelum" : profile.assistantName
+        let history = currentPath.filter {
+            ($0.role == "user" || $0.role == "assistant") && !$0.content.isEmpty
+        }
+        // 去掉最后一条（= 本次要发的 user 消息，已作为 content 单独发送）
+        let priorHistory = history.count > 1 ? Array(history.dropLast()) : []
+        let recentContext = priorHistory.suffix(10).map { node -> String in
+            let label = node.role == "user" ? ctxUserLabel : (node.senderName ?? ctxAsstLabel)
+            let clean = ContentCleaner.extractThinking(from: node.content).content
+            return "[\(label)]: \(clean)"
+        }.joined(separator: "\n")
+        if !recentContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            headers["X-MP-Context"] = recentContext
+        }
         return (
             messages: [(role: "user", content: lastUser)],
             systemPrompt: nil,

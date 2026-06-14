@@ -110,8 +110,12 @@ final class CCBridgeProvider: BaseChatProvider {
             payload["session_name"] = ccSession
         }
         // CC↔API 上下文共享（正向）：附带本对话 API 侧已压缩的摘要，CC 接话时能看到历史。
-        if let ctx = ContextSummarizer.load(conversationId: chatId)?.summary,
-           !ctx.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        // PR-3: 优先用 App 注入的最近原始对话；缺失才 fallback 到 ContextSummarizer 摘要
+        if let raw = extraHeaders["X-MP-Context"],
+           !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            payload["context"] = raw
+        } else if let ctx = ContextSummarizer.load(conversationId: chatId)?.summary,
+                  !ctx.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             payload["context"] = ctx
         }
         wsClient.send(payload) { err in

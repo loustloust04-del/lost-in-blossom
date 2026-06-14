@@ -26,7 +26,7 @@ export interface ChatMessage {
   content: string
   user?: string
   session_name?: string  // route to specific tmux session; defaults to TMUX_SESSION
-  context?: string       // API 会话的 ContextSummarizer 摘要，注入 channel tag 供 CC 接话
+  context?: string       // API 会话最近的原始对话（缺省 fallback 摘要），注入 channel tag 供 CC 接话
 }
 
 export function buildChannelTag(msg: ChatMessage, ts: string, attachments: string[] = []): string {
@@ -37,8 +37,8 @@ export function buildChannelTag(msg: ChatMessage, ts: string, attachments: strin
   const injectSummary = (process.env.CC_INJECT_SUMMARY ?? "1") !== "0"
   if (injectSummary && typeof msg.context === "string" && msg.context.trim().length > 0) {
     let ctx = msg.context.replace(/\n/g, " ")
-    if (ctx.length > 1500) ctx = ctx.slice(0, 1500) + " …[截断]"
-    safe = `〔历史摘要〕${ctx}〔/历史摘要〕 ${safe}`
+    if (ctx.length > 3000) ctx = ctx.slice(0, 3000) + " …[截断]"
+    safe = `〔最近对话〕${ctx}〔/最近对话〕 ${safe}`
   }
   if (attachments.length > 0) {
     safe += ` [附件 ${attachments.length} 个，已存到本机，用 Read 工具查看/处理：${attachments.join(" ; ")}]`
