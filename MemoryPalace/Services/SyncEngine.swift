@@ -144,7 +144,11 @@ final class SyncEngine: NSObject {
         busy = true
         let pid = profileId
         // 导出写文件会触发 DispatchSource → 回声循环，泵期间挂起监听
+<<<<<<< HEAD
         if !dirSuspended { dirSource?.suspend(); dirSuspended = true }
+=======
+        dirSource?.suspend()
+>>>>>>> ba2cf7f (fix(sync): DispatchSource 回声循环 — 泵期间 suspend 目录监听)
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let context = ModelContext(container)
             var imported = SyncStore.ImportResult()
@@ -158,7 +162,11 @@ final class SyncEngine: NSObject {
                 || imported.conversationsUpdated > 0
             Task { @MainActor in
                 guard let self else { return }
+<<<<<<< HEAD
                 if self.dirSuspended { self.dirSource?.resume(); self.dirSuspended = false }
+=======
+                self.dirSource?.resume()
+>>>>>>> ba2cf7f (fix(sync): DispatchSource 回声循环 — 泵期间 suspend 目录监听)
                 self.busy = false
                 if hadWork {
                     self.idleCount = 0
