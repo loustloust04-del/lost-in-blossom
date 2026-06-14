@@ -24,11 +24,14 @@ enum RecallTool {
 
     // MARK: - 工具定义（双格式，FileLibraryTools 同款模式）
 
+    // 检索契约（obelisk Retrieval Contract 浓缩，2026-06-13）：窄定位优先/证据先行/记忆非权威/结论提议存档
     private static let toolDescription = """
     回忆对话历史（我们说过的话），逐字搜索并返回原话片段及上下文。找文件库笔记请用 fs_search。\
     一次查清：用最可能命中的关键词查询，不要翻页式反复调用（每轮最多 \(maxCallsPerTurn) 次）。\
     查询范围太宽（如"昨天说的话"）时不要穷举——先和用户确认具体主题再查。\
-    结果带 conv id，可用 conversation_id 在单场对话里继续深挖。
+    结果带 conv id，可用 conversation_id 在单场对话里继续深挖；已知 conv id 时直接限定它查，别再全库广搜。\
+    引用回忆要带出处（日期/原话），别凭印象转述；【记忆】段是先前的笔记不是最终事实，关键处以【对话原文】为准。\
+    查到值得长期记住的结论时，先问用户要不要存进记忆树，同意了再写。
     """
 
     private static let properties: [String: Any] = [
