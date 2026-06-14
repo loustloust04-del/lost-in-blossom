@@ -45,6 +45,14 @@ enum SyncStore {
         return dir
     }
 
+    /// 墓碑目录 sync/{pid}/tombstones（与 conversations 同级）
+    static func tombstoneRoot(profileId: String) -> URL? {
+        guard let conv = syncRoot(profileId: profileId) else { return nil }
+        let dir = conv.deletingLastPathComponent().appendingPathComponent("tombstones", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
     // MARK: - 楼层身份（跨设备接入：同步按 profileId 走，对端必须先拥有同 id 楼层）
 
     struct FloorInfo: Codable {
@@ -99,6 +107,18 @@ enum SyncStore {
         var memoryEnabled: Bool
         var selectedModelId: String
         var nodes: [NodeDocument]
+        // S4 软删除状态（optional：今早之前的老文档无此 key，decode 为 nil，读取处 ?? false）
+        var isDeleted: Bool?
+        var deletedAt: Date?
+    }
+
+    /// 永久删除墓碑：对话彻底删时写一份，对端扫到无条件永久删本地副本（永久删赢）。
+    /// 90 天缓冲后清理——保证慢同步设备也能收到，又不无限堆积。
+    struct TombstoneDocument: Codable {
+        var schemaVersion: Int
+        var conversationId: String
+        var profileId: String
+        var deletedAt: Date
     }
 
     struct NodeDocument: Codable {
@@ -196,7 +216,8 @@ enum SyncStore {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// 导出该楼层有变化的对话（updateTime > 已导出指纹）。回收站对话不导（v1 不同步删除语义）。
+    /// 导出该楼层有变化的对话（updateTime > 已导出指纹）。
+    /// S4：含软删对话（带 isDeleted=true）——回收站状态也要传播，对端跟着进回收站。
     /// ⚠️ 必须在后台 context 上跑：大楼层初次全量导出会卡死主线程（Mac 实测事故）。
     static func exportChanged(profileId: String, context: ModelContext, progress: ((String) -> Void)? = nil) -> ExportResult {
         var result = ExportResult()
@@ -205,7 +226,7 @@ enum SyncStore {
 
         let pid = profileId
         let descriptor = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false }
+            predicate: #Predicate<Conversation> { $0.profileId == pid }
         )
         let conversations = (try? context.fetch(descriptor)) ?? []
 
@@ -243,7 +264,9 @@ enum SyncStore {
                         replyToId: node.replyToId, ccEdited: node.ccEdited, ccThinking: node.ccThinking,
                         imageDescsData: node.imageDescsData
                     )
-                }
+                },
+                isDeleted: conversation.isDeleted,
+                deletedAt: conversation.deletedAt
             )
 
             guard let data = try? encoder.encode(document) else { continue }
@@ -255,6 +278,7 @@ enum SyncStore {
                let existingDoc = try? decoder.decode(ConversationDocument.self, from: existingData),
                existingDoc.title == document.title,
                existingDoc.currentNodeId == document.currentNodeId,
+               (existingDoc.isDeleted ?? false) == (document.isDeleted ?? false),
                existingDoc.nodes.count == document.nodes.count,
                let existingNodes = try? encoder.encode(existingDoc.nodes),
                let newNodes = try? encoder.encode(document.nodes),
@@ -333,9 +357,68 @@ enum SyncStore {
         return status != .current
     }
 
+    /// 墓碑缓冲期（秒）：90 天后清理墓碑文件，慢同步设备此前必能收到。
+    private static let tombstoneTTL: TimeInterval = 90 * 24 * 60 * 60
+
+    /// S4 导入第一步：扫墓碑无条件永久删本地副本（永久删赢），顺手清 90 天过期墓碑。
+    private static func processTombstones(profileId: String, context: ModelContext) {
+        guard let tombDir = tombstoneRoot(profileId: profileId) else { return }
+        guard let files = try? FileManager.default.contentsOfDirectory(at: tombDir, includingPropertiesForKeys: nil) else { return }
+        let pid = profileId
+        var exp = loadExportState(profileId: profileId)
+        var imp = loadImportState(profileId: profileId)
+        var stateDirty = false
+
+        for file in files where file.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: file),
+                  let tomb = try? decoder.decode(TombstoneDocument.self, from: data),
+                  tomb.profileId == profileId else { continue }
+
+            // 90 天过期 → 清墓碑文件，不再触发删除
+            if Date().timeIntervalSince(tomb.deletedAt) > tombstoneTTL {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+
+            let convId = tomb.conversationId
+            let convDesc = FetchDescriptor<Conversation>(
+                predicate: #Predicate<Conversation> { $0.id == convId && $0.profileId == pid }
+            )
+            guard let conv = (try? context.fetch(convDesc))?.first else { continue }
+
+            // 无条件永久删（即使本地 updateTime 比墓碑新 = 对端恢复过，墓碑仍赢）
+            let nodeDesc = FetchDescriptor<MessageNode>(
+                predicate: #Predicate<MessageNode> { $0.conversationId == convId && $0.profileId == pid }
+            )
+            if let nodes = try? context.fetch(nodeDesc) { for n in nodes { context.delete(n) } }
+            let favDesc = FetchDescriptor<FavoriteItem>(
+                predicate: #Predicate<FavoriteItem> { $0.conversationId == convId && $0.profileId == pid }
+            )
+            if let items = try? context.fetch(favDesc) { for i in items { context.delete(i) } }
+            AttachmentStore.deleteConversationAttachments(conversationId: convId, profileId: profileId)
+            context.delete(conv)
+            try? context.save()
+
+            // 清指纹 + 删可能残留的云文档（对端误重导出的副本）
+            exp[convId] = nil
+            imp["\(convId).json"] = nil
+            stateDirty = true
+            if let root = syncRoot(profileId: profileId) {
+                try? FileManager.default.removeItem(at: root.appendingPathComponent("\(convId).json"))
+            }
+            SyncProbe.log("TOMBSTONE delete conv=\(convId.prefix(8))")
+        }
+
+        if stateDirty {
+            saveExportState(exp, profileId: profileId)
+            saveImportState(imp, profileId: profileId)
+        }
+    }
+
     /// 扫描同步目录全部文档（含 iCloud 冲突副本——并集合并天然幂等，越合越全）。
     /// 合并规则见 plan：元数据 LWW / 只插缺失节点 / childrenIds 并集。后台 context 上跑。
     static func importAll(profileId: String, context: ModelContext) -> ImportResult {
+        processTombstones(profileId: profileId, context: context)
         var result = ImportResult()
         guard let root = syncRoot(profileId: profileId) else { return result }
         let (allFiles, downloading) = materializeDocuments(in: root)
@@ -379,6 +462,9 @@ enum SyncStore {
                     existing.pinnedAt = document.pinnedAt
                     existing.memoryEnabled = document.memoryEnabled
                     existing.selectedModelId = document.selectedModelId
+                    // S4：软删状态走 LWW（对端删→本地进回收站，对端恢复→本地恢复）
+                    existing.isDeleted = document.isDeleted ?? false
+                    existing.deletedAt = document.deletedAt
                     result.conversationsUpdated += 1
                     dirty = true
                 }
@@ -394,6 +480,9 @@ enum SyncStore {
                 created.pinnedAt = document.pinnedAt
                 created.memoryEnabled = document.memoryEnabled
                 created.selectedModelId = document.selectedModelId
+                // S4：对端软删的对话首次到货 → 直接建成回收站状态
+                created.isDeleted = document.isDeleted ?? false
+                created.deletedAt = document.deletedAt
                 context.insert(created)
                 conversation = created
                 result.conversationsCreated += 1
