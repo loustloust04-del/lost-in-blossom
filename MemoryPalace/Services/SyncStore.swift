@@ -248,13 +248,17 @@ enum SyncStore {
 
             guard let data = try? encoder.encode(document) else { continue }
             let fileURL = root.appendingPathComponent("\(conversation.id).json")
-            // 内容级去重：节点数和标题没变 → 只更新指纹不重写文件。
-            // updateTime 被浏览/CC 流式频繁碰但内容不变，不做此检查会引发 2-3s 循环重写。
+            // 内容级去重：编码 nodes 数组单独比较——updateTime/lastOpenedAt 这类
+            // 浏览态字段不放进 nodes 不参与比较。注意必须包含 content（流式回复时
+            // nodes.count 不变但 content 逐 token 更新——只比 count 会漏掉中间帧）。
             if let existingData = try? Data(contentsOf: fileURL),
                let existingDoc = try? decoder.decode(ConversationDocument.self, from: existingData),
-               existingDoc.nodes.count == document.nodes.count,
                existingDoc.title == document.title,
-               existingDoc.currentNodeId == document.currentNodeId {
+               existingDoc.currentNodeId == document.currentNodeId,
+               existingDoc.nodes.count == document.nodes.count,
+               let existingNodes = try? encoder.encode(existingDoc.nodes),
+               let newNodes = try? encoder.encode(document.nodes),
+               existingNodes == newNodes {
                 state[conversation.id] = conversation.updateTime
                 continue
             }
