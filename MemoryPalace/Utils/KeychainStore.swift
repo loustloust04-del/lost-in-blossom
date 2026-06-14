@@ -79,13 +79,15 @@ enum KeychainStore {
     /// 一次性读出当前 service 下所有 account→value 映射。
     /// 一次 SecItemCopyMatching 只触发一次 Keychain 授权弹窗，避免循环调 get 导致狂弹。
     static func getAll() -> [String: String] {
+        // macOS legacy 钥匙串不支持 kSecMatchLimitAll + kSecReturnData 同用，会返回
+        // errSecParam(-50) → 整批读空 → 启动后所有 key 像被清空（iOS 支持该组合故无此症）。
+        // 改成：批量只取 account 名（仅属性，不取 data），再逐条 get() 取值。
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
             kSecMatchLimit as String: kSecMatchLimitAll,
             kSecReturnAttributes as String: kCFBooleanTrue!,
-            kSecReturnData as String: kCFBooleanTrue!,
         ]
 
         var out: CFTypeRef?
@@ -97,12 +99,20 @@ enum KeychainStore {
             return [:]
         }
 
+        // 关掉钥匙串交互：旧签名创建的"外来"条目读 data 需要弹 login 密码框，逐条读会狂弹 +
+        // 卡死主线程。关掉后外来条目静默失败(errSecInteractionNotAllowed)被跳过，本 app
+        // 自己写的条目（在 ACL 可信列表里）照常静默读出。
+        #if os(macOS)
+        SecKeychainSetUserInteractionAllowed(false)
+        defer { SecKeychainSetUserInteractionAllowed(true) }
+        #endif
+
         var result: [String: String] = [:]
         for item in items {
-            guard let account = item[kSecAttrAccount as String] as? String,
-                  let data = item[kSecValueData as String] as? Data,
-                  let value = String(data: data, encoding: .utf8) else { continue }
-            result[account] = value
+            guard let account = item[kSecAttrAccount as String] as? String else { continue }
+            if let value = get(account: account) {
+                result[account] = value
+            }
         }
         return result
     }
