@@ -162,6 +162,13 @@ struct CalendarPanelView: View {
     @ViewBuilder
     private func dayConversationSection(_ conversations: [Conversation]) -> some View {
         if conversations.isEmpty {
+            emptyDayView
+        } else {
+            populatedDayView(conversations)
+        }
+    }
+
+    private var emptyDayView: some View {
             VStack(spacing: 0) {
                 dayConversationHeader(count: 0)
 
@@ -189,7 +196,9 @@ struct CalendarPanelView: View {
             .padding(.horizontal, isIOSStyle ? 8 : 10)
             .padding(.top, isIOSStyle ? 0 : 2)
             .padding(.bottom, isIOSStyle ? 0 : 4)
-        } else {
+    }
+
+    private func populatedDayView(_ conversations: [Conversation]) -> some View {
             VStack(spacing: 0) {
                 dayConversationHeader(count: conversations.count)
 

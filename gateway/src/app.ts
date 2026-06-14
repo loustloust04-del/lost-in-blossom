@@ -200,17 +200,33 @@ app.post('/v1/chat/completions', auth, async (c) => {
 
   if (actualModel.includes("deepseek")) {
     upstream = await forwardDeepSeek(forwardBody);
+  } else if (actualModel.startsWith("tree-chat/") && actualModel.includes("claude")) {
+    // TreeGPT chat 组 Claude → A社格式直连，保留缓存断点
+    const modelName = actualModel.replace('tree-chat/', '');
+    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
+      baseUrl: 'https://api.treegpt.cc/v1/messages',
+      apiKey: config.treeChatKey,
+      modelName,
+    });
+  } else if (actualModel.startsWith("tree-api/") && actualModel.includes("claude")) {
+    // TreeGPT api 组 Claude → A社格式直连
+    const modelName = actualModel.replace('tree-api/', '');
+    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
+      baseUrl: 'https://api.treegpt.cc/v1/messages',
+      apiKey: config.treeApiKey,
+      modelName,
+    });
   } else if (actualModel.startsWith("tree-chat/")) {
     upstream = await forwardTreeChat(forwardBody);
   } else if (actualModel.startsWith("tree-api/")) {
     upstream = await forwardTreeApi(forwardBody);
-  } else if (process.env.ENABLE_BUILTIN_TOOLS === "1" && actualModel.includes("claude") && config.anthropicKey) {
-    // Task F: gateway 内置工具（exec + recall）+ MCP fall-through 的流式 tool loop（opt-in）
-    upstream = await runToolLoop(forwardBody, sessionId);
-  } else if (actualModel.includes("claude") && config.anthropicKey) {
-    // Claude 走 Anthropic 原生 /v1/messages，保留 cache_control 断点。
-    // 未配 ANTHROPIC_API_KEY 时回退 OpenRouter，保证部署非破坏性。
-    upstream = await forwardAnthropicNative(forwardBody, sessionId);
+  } else if (actualModel.includes("claude")) {
+    // 所有其他 Claude → OR 的 A社格式端点，保留缓存断点
+    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
+      baseUrl: 'https://openrouter.ai/api/v1/messages',
+      apiKey: config.openrouterKey,
+      modelName: actualModel,
+    });
   } else {
     upstream = await forwardOpenRouter(forwardBody);
   }

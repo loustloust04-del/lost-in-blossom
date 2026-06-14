@@ -5,6 +5,13 @@ const ANTHROPIC_BASE = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const REQUEST_TIMEOUT_MS = 120_000;
 
+// 上游配置：不同 provider 用不同的 base/key/模型名
+export interface UpstreamOpts {
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;  // 已转换好的上游模型名
+}
+
 // gateway 模型名 → 真实 Anthropic model id
 //   anthropic/claude-opus-4.8        → claude-opus-4-8
 //   anthropic/claude-sonnet-4.6      → claude-sonnet-4-6
@@ -195,17 +202,27 @@ function translateStream(upstream: Response, model: string): Response {
   });
 }
 
-export async function forwardAnthropicNative(body: any, sessionId: string): Promise<Response> {
-  if (!config.anthropicKey) return errorResponse('ANTHROPIC_API_KEY not configured', 500);
+export async function forwardAnthropicNative(body: any, sessionId: string, opts?: UpstreamOpts): Promise<Response> {
+  const baseUrl = opts?.baseUrl || ANTHROPIC_BASE;
+  const apiKey = opts?.apiKey || config.anthropicKey;
+  if (!apiKey) return errorResponse('No API key for anthropic-native', 500);
+
   const payload = buildAnthropicPayload(body, sessionId);
+  // 覆盖模型名（中转站可能需要不同格式）
+  if (opts?.modelName) payload.model = opts.modelName;
+
+  const isAnthropicDirect = baseUrl === ANTHROPIC_BASE;
 
   let upstream: Response;
   try {
-    upstream = await fetch(ANTHROPIC_BASE, {
+    upstream = await fetch(baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': config.anthropicKey,
+        // 直连 Anthropic 用 x-api-key，中转站用 Authorization: Bearer
+        ...(isAnthropicDirect
+          ? { 'x-api-key': apiKey }
+          : { 'Authorization': `Bearer ${apiKey}` }),
         'anthropic-version': ANTHROPIC_VERSION,
       },
       body: JSON.stringify(payload),
