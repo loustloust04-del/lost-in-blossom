@@ -18,6 +18,7 @@ final class SyncEngine: NSObject {
     private var idleCount = 0
     private var dirSource: DispatchSourceFileSystemObject?
     private var dirFd: Int32 = -1
+    private var dirSuspended = false
 
     /// 幂等：楼层切换/开关重开直接重 start
     func start(profileId: String, container: ModelContainer) {
@@ -60,9 +61,12 @@ final class SyncEngine: NSObject {
             NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
         }
         metadataQuery = nil
-        dirSource?.cancel()
+        if let ds = dirSource {
+            if dirSuspended { ds.resume() }
+            ds.cancel()
+        }
         dirSource = nil
-        // fd 由 cancelHandler 关闭
+        dirSuspended = false
         profileId = nil
         container = nil
         idleCount = 0
@@ -140,7 +144,7 @@ final class SyncEngine: NSObject {
         busy = true
         let pid = profileId
         // 导出写文件会触发 DispatchSource → 回声循环，泵期间挂起监听
-        dirSource?.suspend()
+        if !dirSuspended { dirSource?.suspend(); dirSuspended = true }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let context = ModelContext(container)
             var imported = SyncStore.ImportResult()
@@ -154,7 +158,7 @@ final class SyncEngine: NSObject {
                 || imported.conversationsUpdated > 0
             Task { @MainActor in
                 guard let self else { return }
-                self.dirSource?.resume()
+                if self.dirSuspended { self.dirSource?.resume(); self.dirSuspended = false }
                 self.busy = false
                 if hadWork {
                     self.idleCount = 0
