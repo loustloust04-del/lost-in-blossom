@@ -70,12 +70,6 @@ struct PromptAssembler {
             .filter { $0.isEnabled || $0.isSystemPrompt }
             .sorted { $0.injectionOrder < $1.injectionOrder }
 
-<<<<<<< HEAD
-        // tagged system parts：追踪每个 part 的来源 slot id，世界书需要按 position 插入
-        var systemParts: [(tag: String, content: String)] = []
-        var preHistoryMessages: [(role: String, content: String)] = []
-        var postHistoryInjections: [(depth: Int, role: String, content: String)] = []
-=======
         // chatHistory marker 是分割点：之前的插槽在历史前，之后的在历史后
         let chatHistoryOrder = activeSlots
             .first { $0.isMarker && $0.id == PromptSlot.chatHistoryId }?
@@ -131,7 +125,6 @@ struct PromptAssembler {
 
         var sawSummarySlot = false
         var sawProfileSlot = false
->>>>>>> 357bd54 (feat(SC-B4): 刀3 — 世界书预算闸（唯一无闸全注源收口）)
 
         for slot in activeSlots {
             let content = resolveSlotContent(

@@ -142,37 +142,3 @@ obelisk 对我们的剩余价值集中在两处：**记忆树 v2 解冻时抄闸
 1. **检索契约 + 提议批准** ✅ 落进 recall 工具描述尾三句（窄定位优先/引用带出处·记忆非权威/durable 结论先问再存）。
 2. **闸门机制**：提示词层先行（上条尾句）；机制层（写读分离/path 先存在/summary 自含 + 注册表）= 记忆树 v2 施工图，停车场指针已接本节。
 3. **FTS 边车**：✅ **数据结案停车**——unified.store 25.2 万 node 真库只读实测（Mac CLI 冷态、immutable 全表 LIKE）：高频词"猫"1.8 万命中 count 0.98s / **全量 fetch 上界 1.23s** / 低频 0.60s / 不存在词 0.36s。recall 实际有 maxL0Windows=4 早停远好于上界。结论：纯谓词扫描在 25 万 node 量级秒内，索引层不立项；真机 Air 复核降级为顺手项（预计 2-4 倍仍在验收线内）。
-<<<<<<< HEAD
-
----
-
-## 八、paramecium 本体深读补遗（2026-06-13 · ~/Downloads/paramecium-main 2 逐行）
-
-> 对照供应链收官位的我们，第二节五件套 + 防护杂项已全落地。本节是剩余没学完的——收敛为三项 + 一个意外发现。
-
-### 8.1 BP2/BP3 多块缓存断点（没学完的最大金矿 → B4 刀6 的实证输入）
-
-草履虫实现（gateway.mjs:247-275 亲读）：**system 不是一段，是 block 数组**，每块独立挂 `cache_control`（全部 ttl 1h）：
-- BP1 人设+画像（几乎不变）/ BP2 日记备忘（**按日锚定**：`_diaryCacheDay` 守卫，日内 vault 写入不毁缓存）/ BP3 **只放压缩摘要**。
-- 关键收益：**摘要更新只 miss BP3 之后，BP1/BP2 保住**。我们现状 contextSummary 插槽在 system 大段中间（order 55）——每次压缩毁整段 system 缓存。滞后压缩已把 miss 降到每 N 轮一次，多块断点能把"那一次 miss"的代价从全 system 缩到摘要块。实测 60-80% 命中率背书。
-- ~~前提：OR 多块透传需实测~~ → **✅ 实验完成（2026-06-13，粟粟授权 key 实测）**：OR→Anthropic 官方，三块 system 各挂 cache_control，R2 相同重发 cached_read 17836/17844（99.96%，成本 1/12）；R3 只改第三块（模拟摘要更新）cached_read=12224 恰为前两块 token 数——**多块透传 + 分段命中双实锤**。摘要更新场景成本 $0.0223→$0.0082（省 63%）。Anthropic 上限 4 断点，我们 BP1+BP4 已占 2，剩 2 个正好给 BP2（画像/日记/时间轴天级段）+BP3（摘要）。
-- → 落点：B4 刀6 评估从"不知可不可行"升级为"有实证参考，差 OR 透传一个实验"。
-
-### 8.2 写时去重 sim>0.75 并入强化（✅ 已落地 2026-06-13 当天）
-
-memory-gateway.py:676-697 亲读：新记忆入库前向量查 top3，相似度 >0.75 → **不开新条**，文本并入旧条（<2000 字拼接否则替换）+ 旧条 heat+0.1、access+1。语义：近似重复=同一事实再确认=强化信号，不是新知识。
-我们现状：executeActions 只有 content **全等** Set 去重——"喜欢暖奶白"vs"用户偏好暖奶白色调"会重复入库。落点：add 前用现成 embedding 管道（M2 VectorRetriever 同源）查近似，>阈值改 reinforce 旧条。**已落地（粟粟"继续冲"授权）**：与草履虫的差异——我们不拼接文本（原子事实哲学），只 reinforce 旧条 + 旧条无锚时补 quote；外加两个体系特有护栏（delete 重排先行防新事实被吸收丢失 / 对照面排除 superseded+revision 失配）。本地 NLContextualEmbedding 同步算，未就绪静默跳过。5 测试。
-
-### 8.3 L0 语义档案搜索（大件，方向已记录，停车）
-
-archive-import.mjs：句界切 ≤350 字段 → 贪心打包 ≤700 字窗 + 1 段重叠，说话人/日期**烤进窗口文本**再向量化——模糊印象（"那次聊到很晚的谈话"）也能召回原文。我们 recall L0 是 contains 逐字，语义档案是 recall research 记过的"二期"。工程量：25 万 node 切窗向量化 + 增量管道，不动，方向保留。
-
-### 8.4 意外发现：BP4 落点差异（候选嫌疑人，记录不动）
-
-草履虫 gateway.mjs:396 注释：**"array-wrapping assistant msgs breaks thinking on some providers"**——实战把 BP4 从末 assistant 挪到**末 user**。我们 ChatService.swift:391-393 正是"末 assistant 包 array 挂标"模式。粟粟的 OR 缓存是日志实测调通的（feedback_openrouter_cache_zero_hit），未观察到 thinking 破坏——**没坏不修**。记录：将来 OR 上 thinking 模型若出现思考丢失/截断，第一嫌疑人是这里，修法=断点挪末 user（命中语义几乎等价）。
-
-### 结论
-
-草履虫剩余价值三件：**多块断点给 B4 刀6 当实证拐杖**（差一个 OR 透传实验）、**写时近似去重小刀等批**、**L0 语义档案停车**。加一个 thinking 嫌疑人档案。其余全部已在 sprint 等效落地——两个对标对象至此都榨干。
-=======
->>>>>>> 517cb3c (feat(recall): obelisk 三处落地 — 检索契约三句+提议批准进工具描述；FTS边车数据结案（25万node真库实测全场景<1.3s，停车不立项）；记忆树v2施工图指针接停车场)
