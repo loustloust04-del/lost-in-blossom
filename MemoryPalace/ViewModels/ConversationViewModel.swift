@@ -141,27 +141,6 @@ final class ConversationViewModel {
         let allNodeIds: Set<String>
     }
 
-    /// BranchMap v6 用：拍一份只读快照（root + nodeMap + childrenMap + currentPath ids）
-    /// 让 sheet view 不直接碰 private 状态。
-    struct BranchMapSnapshot {
-        let rootId: String
-        let nodeMap: [String: MessageNode]
-        let childrenMap: [String: [String]]
-        let currentPathIds: Set<String>
-        let mainPathIds: Set<String>   // v10: conversation 永久主路径（切 currentPath 不变）
-    }
-
-    func branchMapSnapshot() -> BranchMapSnapshot? {
-        guard let root = cachedRootId, nodeMap[root] != nil else { return nil }
-        return BranchMapSnapshot(
-            rootId: root,
-            nodeMap: nodeMap,
-            childrenMap: effectiveChildrenMap,
-            currentPathIds: Set(currentPath.map { $0.id }),
-            mainPathIds: mainPathIds
-        )
-    }
-
     /// BranchMap v6 用：单击节点 = 快切 currentPath。
     /// 不走 loadConversation（那是异步全量 buildTree，200ms+）；
     /// 沿 nodeId 的 parent 链回 root，对每个 multi-child anchor 设 branchChoices = next-child idx，
