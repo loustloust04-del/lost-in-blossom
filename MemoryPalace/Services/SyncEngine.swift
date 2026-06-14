@@ -27,6 +27,11 @@ final class SyncEngine: NSObject {
         self.profileId = profileId
         self.container = container
 
+<<<<<<< HEAD
+=======
+        // ⚠️ 必须先预热容器：iOS 重启后 ubiquity URL 缓存是 nil，不预热 = 同步根为 nil，
+        // 泵全程对空气抽（手机实测：听得见云事件、永远导不进）。Mac 预热是 no-op 秒回。
+>>>>>>> 8261c34 (fix(sync): 引擎启动先预热容器 — iOS 重启后 ubiquity 缓存 nil，泵对空气抽（听得见云事件导不进）)
         FileLibraryStore.primeICloudContainer { [weak self] available in
             guard let self, self.profileId == profileId else { return }
             guard available else {
@@ -35,12 +40,22 @@ final class SyncEngine: NSObject {
             }
             SyncProbe.log("engine START floor=\(profileId.prefix(12))")
 
+<<<<<<< HEAD
             self.exportTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+=======
+            // 全量泵：导出推本地变化 + 导入拉云端变化（mtime 增量，闲时近零成本）。
+            // Mac 没挂 iCloud entitlement，NSMetadataQuery 听不到——接收方向全靠这条轮询。
+            self.exportTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+>>>>>>> 8261c34 (fix(sync): 引擎启动先预热容器 — iOS 重启后 ubiquity 缓存 nil，泵对空气抽（听得见云事件导不进）)
                 Task { @MainActor in self?.pump(exportOnly: false) }
             }
 
             self.startMetadataQuery()
+<<<<<<< HEAD
             self.startDirectoryMonitor()
+=======
+            // 启动先全量对一次（拉对端积压 + 推本地积压）
+>>>>>>> 8261c34 (fix(sync): 引擎启动先预热容器 — iOS 重启后 ubiquity 缓存 nil，泵对空气抽（听得见云事件导不进）)
             self.pump(exportOnly: false)
         }
     }
