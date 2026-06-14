@@ -248,6 +248,16 @@ enum SyncStore {
 
             guard let data = try? encoder.encode(document) else { continue }
             let fileURL = root.appendingPathComponent("\(conversation.id).json")
+            // 内容级去重：节点数和标题没变 → 只更新指纹不重写文件。
+            // updateTime 被浏览/CC 流式频繁碰但内容不变，不做此检查会引发 2-3s 循环重写。
+            if let existingData = try? Data(contentsOf: fileURL),
+               let existingDoc = try? decoder.decode(ConversationDocument.self, from: existingData),
+               existingDoc.nodes.count == document.nodes.count,
+               existingDoc.title == document.title,
+               existingDoc.currentNodeId == document.currentNodeId {
+                state[conversation.id] = conversation.updateTime
+                continue
+            }
             do {
                 try data.write(to: fileURL, options: .atomic)
                 state[conversation.id] = conversation.updateTime
