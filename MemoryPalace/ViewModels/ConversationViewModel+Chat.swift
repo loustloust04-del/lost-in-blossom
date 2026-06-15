@@ -171,7 +171,7 @@ extension ConversationViewModel {
         }
         // 去掉最后一条（= 本次要发的 user 消息，已作为 content 单独发送）
         let priorHistory = history.count > 1 ? Array(history.dropLast()) : []
-        let recentContext = priorHistory.suffix(10).map { node -> String in
+        let recentContext = priorHistory.suffix(20).map { node -> String in
             let label = node.role == "user" ? ctxUserLabel : (node.senderName ?? ctxAsstLabel)
             let clean = ContentCleaner.extractThinking(from: node.content).content
             return "[\(label)]: \(clean)"
