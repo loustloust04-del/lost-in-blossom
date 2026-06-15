@@ -479,6 +479,11 @@ final class ProviderManager {
         enabledProviders.flatMap(\.models)
     }
 
+    /// 所有 provider 的所有模型（不管有没有填 key），给群聊选择器用
+    var allModels: [ProviderModel] {
+        providers.flatMap(\.models)
+    }
+
     func provider(for model: ProviderModel) -> APIProvider? {
         providers.first(where: { $0.id == model.providerId })
     }

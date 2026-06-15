@@ -18,7 +18,7 @@ struct CreateGroupChatView: View {
 
     private var cards: [CharacterCard] { cardManager?.cards ?? [] }
     private var presets: [Preset] { presetManager?.presets ?? [] }
-    private var models: [ProviderModel] { providerManager?.availableModels ?? [] }
+    private var models: [ProviderModel] { providerManager?.allModels ?? [] }
     private var canCreate: Bool { selectedIds.count >= 2 && selectedIds.count <= 4 }
 
     var body: some View {
