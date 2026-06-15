@@ -25,6 +25,7 @@ struct SettingsView: View {
         case rightPanel = "右栏"
         case memory = "记忆"
         case tokenStats = "Token 统计"
+        case providerManage = "Provider 管理"
         case sticker = "贴纸"
         case notifications = "通知"
         case appearance = "外观"
@@ -56,6 +57,7 @@ struct SettingsView: View {
                 }
                 Section {
                     settingsButton(icon: "network", title: "API", color: Theme.textSecondary, tab: .api)
+                    settingsButton(icon: "server.rack", title: "Provider 管理", color: Theme.textSecondary, tab: .providerManage)
                     settingsButton(icon: "wrench.and.screwdriver", title: "MCP 工具", color: Theme.textSecondary, tab: .mcp)
                     settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
                     settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
@@ -105,6 +107,7 @@ struct SettingsView: View {
                 case .theme: IOSThemePage()
                 case .persona: PersonaSettingsTab()
                 case .api: APISettingsTab()
+                case .providerManage: ProviderManageView()
                 case .mcp: MCPSettingsTab()
                 case .memory: IOSMemoryPage()
                 case .tokenStats: TokenStatsView()
