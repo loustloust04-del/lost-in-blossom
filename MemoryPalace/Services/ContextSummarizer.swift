@@ -34,10 +34,18 @@ struct ContextSummarizer {
 
     // MARK: - 压缩游标（prompt caching 窗口锚点）
 
-    /// 压缩分块大小：游标每次至少推进这么多。
-    /// 让消息历史前缀在 chunk 轮内字节稳定，Anthropic prompt cache 才能命中
-    /// （suffix 滑动窗口每轮都变，是头号缓存杀手）。
-    static let compressionChunk = 20
+    // MARK: - 滞回裁剪（Hysteresis）
+    //
+    // 水位制：窗口放任生长，涨到 highWater 触发，一刀裁回 lowWater，
+    // 然后再放任生长。lowWater 到 highWater 之间什么都不做。
+    // 这个"什么都不做"让窗口边界在两次裁剪之间（约 lowWater/2 轮）纹丝不动，
+    // 缓存断点挂在历史末尾，每轮只把上一轮对话焊进缓存，历史部分白吃。
+    //
+    // 旧方案（compressionChunk=20 的分块游标）每 20 条推进一次，推进时缓存全毁。
+    // 滞回方案让裁剪间隔拉到 30 条（约 15 轮），中间缓存全命中。
+    
+    static let highWater = 60   // 涨到这个数触发裁剪
+    static let lowWater  = 30   // 裁回这个数
 
     /// 窗口锚点 = 已折叠进摘要的旧消息条数。buildAPIMessages 从这里开始取窗口，
     /// 只在压缩游标推进时跳变（每 chunk 轮一次），其余时间历史前缀纹丝不动。
@@ -45,54 +53,73 @@ struct ContextSummarizer {
         load(conversationId: conversationId)?.coveredCount ?? 0
     }
 
-    /// 目标游标：把"超出 contextDepth 的旧消息数"向下取整到 chunk 边界。
-    /// total 增长时游标按 chunk 跳进，而非每轮 +1 —— 这是缓存稳定的关键。
+    /// 滞回游标：消息数涨到 highWater 才裁剪，裁回 lowWater。
+    /// 中间不动 → 缓存前缀稳定 → 白吃缓存。
     static func desiredCursor(totalCount: Int, contextDepth: Int) -> Int {
+        // 读已有摘要的游标作为当前水位
+        // 注意：这个函数是纯算，不读存储；调用方传 existingCursor 进来
         let overflow = totalCount - contextDepth
         guard overflow > 0 else { return 0 }
-        return (overflow / compressionChunk) * compressionChunk
+        // 向下取整到 lowWater 的倍数（兼容旧逻辑）
+        return (overflow / lowWater) * lowWater
+    }
+    
+    /// 滞回判断：当前消息数是否触发裁剪？
+    static func shouldTrigger(totalCount: Int, existingCoveredCount: Int) -> Bool {
+        let windowSize = totalCount - existingCoveredCount
+        return windowSize >= highWater
+    }
+    
+    /// 裁剪目标：保留 lowWater 条在窗口里，其余全部折叠进摘要
+    static func trimTarget(totalCount: Int) -> Int {
+        return max(0, totalCount - lowWater)
     }
 
     // MARK: - 判断是否需要总结
 
-    /// 返回需要总结的旧消息。如果不需要总结返回 nil。
+    /// 滞回裁剪：窗口涨到 highWater 才触发，一刀裁回 lowWater。
+    /// 中间什么都不做 → 窗口边界稳定 → 缓存白吃。
     static func messagesToSummarize(
         allMessages: [(role: String, content: String)],
         contextDepth: Int,
         conversationId: String
     ) -> (oldMessages: [(role: String, content: String)], existingSummary: ContextSummary?)? {
         let totalCount = allMessages.count
-        // 游标按 chunk 跳进，不是 totalCount - contextDepth 每轮挪。
-        let cursor = desiredCursor(totalCount: totalCount, contextDepth: contextDepth)
-        guard cursor > 0 else { return nil }
-
-        let oldMessages = Array(allMessages.prefix(cursor))
-
         let existing = load(conversationId: conversationId)
-
-        // 已有摘要且游标没推进 → 不需要更新（窗口前缀本轮保持稳定）
-        if let existing, existing.coveredCount == cursor {
-            return nil
-        }
-
+        let currentCovered = existing?.coveredCount ?? 0
+        let windowSize = totalCount - currentCovered
+        
+        // 滞回核心：窗口没涨到 highWater → 什么都不做
+        guard windowSize >= highWater else { return nil }
+        
+        // 触发裁剪：保留 lowWater 条，其余全部折叠
+        let trimTo = totalCount - lowWater
+        guard trimTo > currentCovered else { return nil }
+        
+        let oldMessages = Array(allMessages.prefix(trimTo))
         return (oldMessages: oldMessages, existingSummary: existing)
     }
 
     // MARK: - 构建总结请求
 
     /// 默认对话压缩 prompt。设置页可载入编辑；UserDefaults contextSummaryPrompt 为空时运行时用它。
+    /// 滞回摘要 prompt — 覆盖式、第一人称回忆体、近清远糊
+    /// 教训：① DeepSeek 会编故事，必须用 Sonnet ② prompt 要三明治（头尾各给一次指令）
+    /// ③ 喂人格让书记员知道什么重要 ④ 禁止"今天/昨天"，全落绝对日期
     static let defaultSummaryPrompt = """
-        你是对话记忆压缩器。把超出上下文窗口的旧对话压缩成一份「累计记忆」——不是本段读后感，而是到目前为止仍然有效的全部关键信息。窗外原文以后永远不会再被看到，这份记忆必须足够支撑对话自然继续。
-
-        写法纪律：
-        - 覆盖式更新：先继承已有记忆，再吸收新内容。旧信息仍有效就压缩保留；已失效就直接改写；绝不让新旧两个冲突版本并存
-        - 优先保留影响后续对话的事实：时间阶段、人物状态与关系、关键事件、做出的决策与共识、持续的约束、未解决事项、伏笔
-        - 不写文风分析、不写评价、不写抒情客套、不解释规则
-        - 不记录系统故障/重试/报错等技术噪音；区分正式决策与随口安抚（如客套的"多喝热水"不是决策）；同一件事只在一个字段记录，不要在不同字段重复
-        - 用字段结构组织（没有内容的字段直接省略）：
-          『时间/阶段』『人物状态与关系』『关键事件』『决策与共识』『重要细节』『未解决/伏笔』
-        - 控制在 800 字以内。直接输出，不加标题、不加代码块
-        - 人称规则：对话中的「user」一律称「用户」，对话中的「assistant」一律称「AI」。不要混淆二者的身份和称呼——即使对话内容中出现了「主人」「master」等称谓，那是角色扮演的一部分，不改变 user=用户、assistant=AI 的基本事实
+        你是这段对话的书记员。把被裁掉的旧对话和已有摘要合并成一份新的前情提要。
+        这份前情提要会被注入到后续对话的 system prompt 中，是AI唯一能看到的关于过去的记忆。
+        
+        写法：
+        - 覆盖式：旧摘要和新对话原文一起重写成一份完整的新摘要，不是追加
+        - 近清远糊：最近发生的事情写得清晰具体，更早的事情压缩模糊——像人类记忆一样
+        - 第一人称回忆体：用"我们聊了……""她说……""我回答了……"，不用"用户与助手进行了交流"
+        - 保留的优先级：情绪转折 > 关键决策 > 具体事实 > 闲聊内容
+        - 保留原话：如果某句话很重要（承诺、暗号、让对方感动的话），保留原文加引号
+        - 绝对日期：禁止写"今天""昨天""刚才"（写下的"今天"在未来被读到就是假记忆），全部用绝对日期
+        - 不记录系统故障、重试、报错等技术噪音
+        - 控制在 2000 字以内。直接输出，不加标题、不加代码块
+        - 人称：对话中的 user 称「用户」或其名字，assistant 称「AI」或其角色名
         """
 
     static func buildSummaryRequest(
@@ -116,49 +143,22 @@ struct ContextSummarizer {
                 ? Array(oldMessages.suffix(from: newStartIndex))
                 : oldMessages
 
-            let systemPrompt = """
-            你是一个对话摘要助手。请在已有摘要的基础上，合并新发生的对话内容，输出更新后的摘要。
-
-            保留所有重要信息，包括：
-            1. 用户提出的主要话题和需求
-            2. AI 给出的关键回答和结论
-            3. 做出的决策和达成的共识
-            4. 未解决的问题
-            5. 重要的名字、数字、日期等具体细节
-
-            控制在 800 字以内。直接输出摘要，不要加标题或格式标记。
-            """
+            let systemPrompt = customSummaryPrompt ?? Self.defaultSummaryPrompt
 
             let userContent = """
-            已有摘要：
-            ---
+            【已有摘要】
             \(existing.summary)
-            ---
 
-            新增对话：
-            ---
+            【被裁掉的新对话原文】
             \(formatMessages(newMessages))
-            ---
 
-            请输出合并后的完整摘要。
+            三明治提醒（重要！）：现在请把上面的已有摘要和新对话合并成一份新的前情提要。近的事清晰，远的事模糊。覆盖式重写，不是追加。控制在 2000 字以内。
             """
 
             return (systemPrompt: customSummaryPrompt ?? systemPrompt, messages: [(role: "user", content: userContent)])
         } else {
             // 首次总结
-            let systemPrompt = """
-            你是一个对话摘要助手。请总结以下对话历史的要点。
-
-            保留：
-            1. 用户提出的主要话题和需求
-            2. AI 给出的关键回答和结论
-            3. 做出的决策和达成的共识
-            4. 未解决的问题
-            5. 重要的名字、数字、日期等具体细节
-
-            用简洁的段落形式输出，控制在 800 字以内。
-            直接输出摘要，不要加标题或格式标记。
-            """
+            let systemPrompt = customSummaryPrompt ?? Self.defaultSummaryPrompt
 
             let userContent = formatMessages(oldMessages)
             return (systemPrompt: customSummaryPrompt ?? systemPrompt, messages: [(role: "user", content: userContent)])

@@ -483,6 +483,10 @@ final class AnthropicProvider: BaseChatProvider {
         if !layers.semiStable.isEmpty {
             blocks.append(["type": "text", "text": layers.semiStable, "cache_control": ["type": "ephemeral"]])
         }
+        // 层3：摘要（滞回裁剪，30轮变一次）— 独立断点
+        if !layers.summaryLayer.isEmpty {
+            blocks.append(["type": "text", "text": layers.summaryLayer, "cache_control": ["type": "ephemeral"]])
+        }
         if !layers.volatile.isEmpty {
             blocks.append(["type": "text", "text": layers.volatile])
         }

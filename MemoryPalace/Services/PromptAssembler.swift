@@ -13,7 +13,7 @@ struct SystemPromptLayers {
 
     /// 拼成单字符串，供非 Anthropic provider / 预算估算用。
     var combined: String {
-        [stableCore, semiStable, volatile].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        [stableCore, semiStable, summaryLayer, volatile].filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }
 
@@ -72,6 +72,7 @@ struct PromptAssembler {
 
         // tagged system parts：追踪每个 part 的来源 slot id，世界书需要按 position 插入
         var systemParts: [(tag: String, content: String)] = []
+        var summaryParts: [String] = []
         var preHistoryMessages: [(role: String, content: String)] = []
         var postHistoryInjections: [(depth: Int, role: String, content: String)] = []
 
@@ -182,9 +183,10 @@ struct PromptAssembler {
         // 清理 marker 占位符
         preHistoryMessages.removeAll { $0.role == "_examples_marker_" || $0.role == "_examples_end_marker_" }
 
-        // 上下文摘要注入（记忆之后、对话历史之前）
+        // 上下文摘要注入 → 独立的 summaryLayer（滞回裁剪，30轮变一次）
+        // 不放 semiStable 里，因为摘要的变化频率跟记忆/世界书不同
         if let summary = contextSummary, !summary.isEmpty {
-            systemParts.append((tag: "contextSummary", content: "[对话历史摘要]\n\(summary)"))
+            summaryParts.append("[前情提要]\n\(summary)")
         }
 
         // Task H 跨窗口记忆：新对话首轮注入最近 15 个对话的摘要（semiStable 层）
