@@ -111,6 +111,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (name === 'exec') return runExec(String(input?.command || ''));
   if (name === 'recall') return runRecall(input);
   if (name === 'remember') return runRemember(input);
+  const gmailResult = await callGmailTool(name, input);
+  if (gmailResult !== null) return gmailResult;
   return null;
 }
 
