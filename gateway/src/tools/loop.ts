@@ -6,7 +6,7 @@ import { getMcpTools, callMcpTool } from './mcp-client';
 // 流式 tool loop：把 Anthropic SSE 转成网关统一的 OpenAI chunk 流给客户端，
 // 同时本端攒出 content blocks。stop_reason == tool_use 时：内置工具(exec/recall)
 // 进程内执行，不认识的名字 fall through 到 MCP，结果塞回对话再发起下一轮。
-const ANTHROPIC_BASE = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_BASE = 'https://api.treegpt.cc/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const MAX_LOOPS = 8;
 
@@ -29,7 +29,7 @@ async function streamOnce(
   try {
     upstream = await fetch(ANTHROPIC_BASE, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': config.anthropicKey, 'anthropic-version': ANTHROPIC_VERSION },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.treeChatKey, 'anthropic-version': ANTHROPIC_VERSION },
       body: JSON.stringify({ ...payload, stream: true }),
       signal: AbortSignal.timeout(180_000),
     });
@@ -93,7 +93,7 @@ async function streamOnce(
 }
 
 export async function runToolLoop(body: any, sessionId: string): Promise<Response> {
-  if (!config.anthropicKey) {
+  if (!config.treeChatKey && !config.anthropicKey) {
     return new Response(JSON.stringify({ error: { message: 'ANTHROPIC_API_KEY not configured' } }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   const payload = buildAnthropicPayload(body, sessionId);

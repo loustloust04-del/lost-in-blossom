@@ -407,7 +407,14 @@ app.post('/v1/chat/completions', auth, async (c) => {
 app.post('/v1/messages', auth, async (c) => {
   const body = await c.req.json();
   const model = body.model || '';
-  console.log('[/v1/messages] model:', model, 'stream:', body.stream);
+  const useTools = c.req.header('X-Tool-Loop') === 'true' || body._toolLoop === true;
+  console.log('[/v1/messages] model:', model, 'stream:', body.stream, 'tools:', useTools);
+
+  // tool loop 模式：内置工具(exec/recall/remember) + MCP fallthrough
+  if (useTools) {
+    delete body._toolLoop;
+    return runToolLoop(body, 'bunny-main');
+  }
 
   // 决定上游：有中转站 key 优先走中转站，否则走直连 Anthropic
   let upstreamUrl: string;
