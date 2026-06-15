@@ -8,6 +8,8 @@ import { forwardTreeChat, forwardTreeApi, forwardTreeAws } from './providers/tre
 import { enhanceMessages } from './prompt/builder';
 import { saveMessage, compressForStorage } from './memory/store';
 import { extractMemoriesIfNeeded } from './memory/extractor';
+import { judgeEmotion } from './memory/emotion-judge';
+import { recordMessage, getRhythmStats } from './memory/rhythm';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
@@ -189,6 +191,13 @@ app.post('/v1/chat/completions', auth, async (c) => {
   // 转发请求
   const forwardBody = { ...body, messages: enhancedMessages };
 
+  // 节奏追踪
+  if (userText) {
+    recordMessage();
+    const rhythm = getRhythmStats();
+    console.log(`[rhythm] ttl=${rhythm.ttl} avg=${rhythm.avgIntervalSec}s msgs=${rhythm.msgCount}`);
+  }
+
   // Claude不允许同时传temperature和top_p，保留temperature，干掉top_p
   if (forwardBody.temperature !== undefined && forwardBody.top_p !== undefined) {
     delete forwardBody.top_p;
@@ -316,6 +325,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
         if (userText && fullContent) {
           const recent = [{role: "user", content: userText}, {role: "assistant", content: fullContent}];
           config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
+          config.brainEnabled && judgeEmotion(recent, model).catch(e => console.error("[emotion] async error:", e.message));
         }
       }
       console.log(`[thinking] stream done, content: ${fullContent.length} chars`);

@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { getCacheControl } from '../memory/rhythm';
 
 // 直连 Anthropic 原生 Messages API，保留 cache_control 断点（OpenAI 兼容转发层会丢断点）。
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1/messages';
@@ -44,11 +45,11 @@ function convertContent(content: any): any {
 // 给某条 message 的最后一个 content block 挂 cache_control 断点
 function withCacheOnLastBlock(content: any): any {
   if (typeof content === 'string') {
-    return [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }];
+    return [{ type: 'text', text: content, cache_control: getCacheControl() }];
   }
   if (Array.isArray(content) && content.length > 0) {
     const copy = content.map((b: any) => ({ ...b }));
-    copy[copy.length - 1] = { ...copy[copy.length - 1], cache_control: { type: 'ephemeral' } };
+    copy[copy.length - 1] = { ...copy[copy.length - 1], cache_control: getCacheControl() };
     return copy;
   }
   return content;
@@ -71,8 +72,7 @@ export function buildAnthropicPayload(body: any, sessionId: string) {
     } else if (Array.isArray(body.system)) {
       for (const b of body.system) {
         if (typeof b === 'string') systemBlocks.push({ type: 'text', text: b });
-        else if (b?.type === 'text') systemBlocks.push({ type: 'text', text: b.text ?? '' });
-        else systemBlocks.push(b);
+        else systemBlocks.push({ ...b }); // 保留 cache_control 等所有属性
       }
     }
   }
@@ -93,20 +93,62 @@ export function buildAnthropicPayload(body: any, sessionId: string) {
     }
   }
 
-  // 断点 1+2：stableCore（首块）+ semiStable（末块）。volatile（时间/健康）由 App
-  // 注入到最后一条 user 消息，天然落在所有断点之后。
-  systemBlocks.forEach((b) => { delete (b as any).cache_control; });
-  if (systemBlocks.length > 0) {
-    systemBlocks[0].cache_control = { type: 'ephemeral' };
-    systemBlocks[systemBlocks.length - 1].cache_control = { type: 'ephemeral' };
+  // ═══ 缓存断点策略 ═══
+  // 检测 App 是否已经标记了 cache_control（四层断点 + 滞回裁剪）
+  const appMarked = systemBlocks.some((b: any) => b.cache_control);
+
+  if (appMarked) {
+    // App 主导：保留 App 的断点位置，只更新 TTL
+    // 第一个断点（人设）→ 固定 1h
+    // 其他断点 → 自适应 TTL
+    let first = true;
+    for (const b of systemBlocks) {
+      if ((b as any).cache_control) {
+        if (first) {
+          (b as any).cache_control = { type: 'ephemeral', ttl: '1h' };
+          first = false;
+        } else {
+          (b as any).cache_control = getCacheControl();
+        }
+      }
+    }
+    console.log('[cache] App 断点保留，TTL 已更新');
+  } else {
+    // Gateway 主导：App 没标，用 Gateway 的默认断点
+    systemBlocks.forEach((b) => { delete (b as any).cache_control; });
+    if (systemBlocks.length > 0) {
+      systemBlocks[0].cache_control = { type: 'ephemeral', ttl: '1h' };
+      if (systemBlocks.length > 1) {
+        systemBlocks[systemBlocks.length - 1].cache_control = getCacheControl();
+      }
+    }
+    console.log('[cache] Gateway 断点标记');
   }
 
-  // 断点 3：倒数第二条 user turn（最后一条每轮都变，挂上去等于没挂）。
-  const userIdx: number[] = [];
-  anthropicMessages.forEach((m, i) => { if (m.role === 'user') userIdx.push(i); });
-  if (userIdx.length >= 2) {
-    const t = anthropicMessages[userIdx[userIdx.length - 2]];
-    t.content = withCacheOnLastBlock(t.content);
+  // 断点 3：倒数第二条 user turn（rolling BP）
+  // 检测 App 是否已经在 messages 里标了断点
+  const msgHasCache = anthropicMessages.some((m: any) => {
+    if (!m.content) return false;
+    if (Array.isArray(m.content)) return m.content.some((b: any) => b.cache_control);
+    return false;
+  });
+
+  if (msgHasCache) {
+    // App 主导：保留 App 的 messages 断点，更新 TTL
+    for (const m of anthropicMessages) {
+      if (!Array.isArray(m.content)) continue;
+      for (const b of m.content) {
+        if (b.cache_control) b.cache_control = getCacheControl();
+      }
+    }
+  } else {
+    // Gateway 主导：给倒数第二条 user 加 rolling BP
+    const userIdx: number[] = [];
+    anthropicMessages.forEach((m: any, i: number) => { if (m.role === 'user') userIdx.push(i); });
+    if (userIdx.length >= 2) {
+      const t = anthropicMessages[userIdx[userIdx.length - 2]];
+      t.content = withCacheOnLastBlock(t.content);
+    }
   }
 
   const isThinking = !!body.reasoning || /:thinking$/.test(body.model || '');
@@ -116,7 +158,7 @@ export function buildAnthropicPayload(body: any, sessionId: string) {
     max_tokens: body.max_tokens ?? 8192,
     messages: anthropicMessages,
     stream: body.stream === true,
-    metadata: { user_id: sessionId },
+    metadata: { user_id: 'bunny-blossom-stable' }, // 固定ID保证粘性路由
   };
   if (systemBlocks.length > 0) payload.system = systemBlocks;
   if (isThinking) payload.thinking = { type: 'adaptive' };

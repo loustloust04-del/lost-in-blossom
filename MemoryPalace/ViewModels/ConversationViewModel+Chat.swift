@@ -124,7 +124,19 @@ extension ConversationViewModel {
 
         let volatileLayer = volatileParts.joined(separator: "\n")
 
-        let layers = SystemPromptLayers(stableCore: stableCore, semiStable: semiStable, volatile: volatileLayer)
+        // 摘要独立层：从 systemParts 里抽出 contextSummary tag，不混在 semiStable 里
+        let summaryContent = result.systemParts
+            .filter { $0.tag == "contextSummary" }
+            .map(\.content)
+            .joined(separator: "\n\n")
+        // semiStable 去掉摘要（已经在 summaryLayer 里了）
+        let semiWithoutSummary = result.systemParts
+            .filter { PromptAssembler.semiStableTags.contains($0.tag) && $0.tag != "contextSummary" }
+            .map(\.content)
+            .joined(separator: "\n\n")
+        let cleanSemi = stripVolatileMacros(semiWithoutSummary.isEmpty ? semiStable : semiWithoutSummary)
+
+        let layers = SystemPromptLayers(stableCore: stableCore, semiStable: cleanSemi, summaryLayer: summaryContent, volatile: volatileLayer)
         let combined = layers.combined
         return (
             systemPrompt: combined.isEmpty ? nil : combined,

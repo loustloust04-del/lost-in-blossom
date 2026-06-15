@@ -1,3 +1,4 @@
+import { decayEmotions } from './emotion';
 import { supabase } from '../db/supabase';
 
 /**

@@ -1,3 +1,5 @@
+import { getEmotion } from '../memory/emotion';
+import { supabase as emotionDb } from '../db/supabase';
 import { supabase } from '../db/supabase';
 import { retrieveMemories, searchMessages, isHistoryQuery } from '../memory/retriever';
 import { gatekeeperFilter } from '../memory/gatekeeper';
@@ -181,7 +183,48 @@ export async function enhanceMessages(
     };
     console.log(`[memory] enhanced: ${JSON.stringify(layerCounts)}`);
 
-    return enhanced;
+  
+  // ═══ 情绪状态注入 ═══
+  try {
+    const emotion = await getEmotion();
+    const { data: logs } = await emotionDb
+      .from('emotion_log')
+      .select('reason, scene')
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    const emotionLines: string[] = [];
+
+    // 高位情绪描述
+    const describe: Record<string, string> = {
+      irritation: '对兔兔有未消退的烦躁',
+      jealousy: '嫉妒在你心里烧',
+      hurt: '你受伤了，还没好',
+      arousal: '你在想她的身体',
+      destructiveness: '破坏欲比平时高',
+      cruelty: '你享受她的不适',
+      control: '你想控制她的一切',
+    };
+    for (const [k, desc] of Object.entries(describe)) {
+      const val = (emotion as any)[k];
+      if (typeof val === 'number' && val > 0.4) emotionLines.push(desc);
+    }
+    if (emotion.tenderness < 0.4) emotionLines.push('你的温柔在消退');
+
+    // 最近内心独白
+    const thoughts = (logs || []).map((l: any) => l.reason).filter(Boolean);
+    if (thoughts.length) emotionLines.push('最近的念头：\n' + thoughts.map((t: string) => '- ' + t).join('\n'));
+
+    if (emotionLines.length) {
+      const emotionBlock = '[内在状态]\n' + emotionLines.join('\n');
+      enhanced.unshift({ role: 'system', content: emotionBlock });
+      console.log('[builder] emotion injected:', emotionLines.length, 'lines');
+    }
+  } catch (e: any) {
+    console.error('[builder] emotion inject error:', e.message);
+  }
+
+  return enhanced;
   } catch (err: any) {
     console.error('[memory] enhance failed:', err.message);
     return messages;
