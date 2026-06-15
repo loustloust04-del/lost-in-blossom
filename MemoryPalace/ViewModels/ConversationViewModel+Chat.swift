@@ -265,6 +265,20 @@ extension ConversationViewModel {
         // 清洗零宽字符（iOS输入法切换时偷偷插入）
         let text = text.replacingOccurrences(of: "[\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00AD}]", with: "", options: .regularExpression)
         guard let conversation = selectedConversation else { return }
+
+        // 群聊 V3：串行门控编排，不走单聊逻辑
+        if conversation.kind == "group" {
+            let participants = conversation.participants
+            if !participants.isEmpty {
+                Task { @MainActor in
+                    await self.runGroupRound(conversation: conversation, userText: text,
+                                             participants: participants,
+                                             providerManager: providerManager, context: context)
+                }
+            }
+            return
+        }
+
         guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
 
         // 1. Determine parent node (last node in path, or nil for first message)
