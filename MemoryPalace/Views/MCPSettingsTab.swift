@@ -8,6 +8,9 @@ struct MCPSettingsTab: View {
 
     @State private var editingServer: MCPServerConfig?
     @State private var isAddingServer = false
+    @State private var backendTools: [BackendTool] = []
+    @State private var loadingTools = false
+    @State private var toolsError = ""
 
     private var selectedProvider: APIProvider? {
         providerManager?.providers.first(where: { $0.id == apiSelectedProviderId })
@@ -21,8 +24,75 @@ struct MCPSettingsTab: View {
         selectedProvider?.mcpServers ?? []
     }
 
+    struct BackendTool: Decodable, Identifiable {
+        let name: String
+        let description: String
+        let source: String
+        var id: String { name }
+    }
+    private struct BackendToolsResp: Decodable { let tools: [BackendTool] }
+
+    private func loadBackendTools() {
+        loadingTools = true
+        toolsError = ""
+        let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
+        guard let url = URL(string: "\(base)/api/mcp/tools") else { loadingTools = false; return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        if let token = UserDefaults.standard.string(forKey: "gatewayAuthToken"), !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        Task {
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                    let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                    await MainActor.run { toolsError = "HTTP \(code)"; loadingTools = false }
+                    return
+                }
+                let decoded = try JSONDecoder().decode(BackendToolsResp.self, from: data)
+                await MainActor.run { backendTools = decoded.tools; loadingTools = false }
+            } catch {
+                await MainActor.run { toolsError = error.localizedDescription; loadingTools = false }
+            }
+        }
+    }
+
     var body: some View {
         List {
+            // Section 1：后端工具（网关 /api/mcp/tools，只读）
+            Section("后端工具") {
+                if loadingTools {
+                    HStack(spacing: 8) { ProgressView(); Text("加载中…").font(.system(size: Theme.F.secondary)) }
+                } else if !toolsError.isEmpty {
+                    Text("加载失败：\(toolsError)").font(.system(size: Theme.F.secondary)).foregroundColor(.red)
+                } else if backendTools.isEmpty {
+                    Text("暂无后端工具").font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted)
+                } else {
+                    ForEach(backendTools) { t in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(t.name).font(.system(size: 14, weight: .medium)).foregroundColor(Theme.textPrimary)
+                                Text(t.source)
+                                    .font(.system(size: 10))
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Capsule().fill((t.source == "builtin" ? Color.blue : Color.green).opacity(0.15)))
+                                    .foregroundColor(t.source == "builtin" ? .blue : .green)
+                            }
+                            if !t.description.isEmpty {
+                                Text(t.description).font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted)
+                            }
+                        }
+                        .padding(.vertical, 1)
+                    }
+                }
+                Button("刷新") { loadBackendTools() }
+                    .font(.system(size: Theme.F.secondary))
+                    .disabled(loadingTools)
+            }
+            .listRowBackground(Theme.mainBg)
+            .onAppear { if backendTools.isEmpty && !loadingTools { loadBackendTools() } }
+
             // 说明
             Section {
                 Text("MCP 让 AI 连接外部工具（文件系统、数据库、API 等）。")
