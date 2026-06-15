@@ -12,6 +12,10 @@ struct IOSGeneralPage: View {
     @AppStorage("assistantName") private var assistantName = "助手"
     @State private var editingUserName = ""
     @State private var editingAssistantName = ""
+    @Environment(ProviderManager.self) private var providerManager: ProviderManager?
+    @AppStorage("memoryExtractModelId") private var summaryModelId = ""
+    @AppStorage("contextSummaryPrompt") private var summaryPrompt = ""
+    @State private var summaryRev = 0
 
     var body: some View {
         List {
@@ -80,6 +84,8 @@ struct IOSGeneralPage: View {
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
+
+            compressionSection
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
@@ -91,6 +97,69 @@ struct IOSGeneralPage: View {
             editingUserName = userName
             editingAssistantName = assistantName
         }
+    }
+
+    // MARK: - 对话压缩（摘要设置）
+    private var compressionSection: some View {
+        _ = summaryRev  // 依赖刷新令牌：清除摘要后触发重算
+        let cid = UserDefaults.standard.string(forKey: "currentConversationId") ?? ""
+        let summary = cid.isEmpty ? nil : ContextSummarizer.load(conversationId: cid)
+        return Section("对话压缩") {
+            // 1. 摘要模型（存 memoryExtractModelId，ContextSummarizer 走它）
+            if let pm = providerManager {
+                Picker("摘要模型", selection: $summaryModelId) {
+                    Text("默认（跟随设置）").tag("")
+                    ForEach(pm.availableModels) { m in
+                        Text(m.name).tag(m.id)
+                    }
+                }
+                .font(.system(size: Theme.F.secondary))
+            }
+
+            // 2. 压缩提示词（空 = 用 ContextSummarizer 默认）
+            VStack(alignment: .leading, spacing: 6) {
+                Text("压缩提示词")
+                    .font(.system(size: Theme.F.secondary, weight: .medium))
+                    .foregroundColor(Theme.textPrimary)
+                TextEditor(text: $summaryPrompt)
+                    .frame(minHeight: 120)
+                    .font(.system(size: Theme.F.secondary))
+                    .scrollContentBackground(.hidden)
+                HStack {
+                    Text(summaryPrompt.isEmpty ? "留空使用默认 prompt" : "已自定义")
+                        .font(.system(size: Theme.F.badge))
+                        .foregroundColor(Theme.textMuted)
+                    Spacer()
+                    Button("载入默认") { summaryPrompt = ContextSummarizer.defaultSummaryPrompt }
+                        .font(.system(size: Theme.F.badge))
+                    Button("清空") { summaryPrompt = "" }
+                        .font(.system(size: Theme.F.badge))
+                }
+            }
+
+            // 3. 查看当前对话摘要 + 清除
+            if let summary {
+                DisclosureGroup("当前对话摘要（覆盖 \(summary.coveredCount) 条）") {
+                    Text(summary.summary)
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textPrimary)
+                        .textSelection(.enabled)
+                    Button(role: .destructive) {
+                        ContextSummarizer.clear(conversationId: cid)
+                        summaryRev += 1
+                    } label: {
+                        Text("清除当前对话摘要")
+                    }
+                }
+                .font(.system(size: Theme.F.secondary))
+            } else {
+                Text("当前对话暂无摘要")
+                    .font(.system(size: Theme.F.secondary))
+                    .foregroundColor(Theme.textMuted)
+            }
+        }
+        .listRowBackground(Theme.mainBg)
+        .listRowSeparator(.hidden)
     }
 }
 

@@ -80,13 +80,8 @@ struct ContextSummarizer {
 
     // MARK: - 构建总结请求
 
-    static func buildSummaryRequest(
-        oldMessages: [(role: String, content: String)],
-        existingSummary: ContextSummary?
-    ) -> (systemPrompt: String, messages: [(role: String, content: String)]) {
-
-        // 累计记忆式压缩（2026-06-11 参考粟粟的酒馆 memory_rule 升级：覆盖式更新 + 字段结构 + 以"能续写"为目标）
-        let systemPrompt = """
+    /// 默认对话压缩 prompt。设置页可载入编辑；UserDefaults contextSummaryPrompt 为空时运行时用它。
+    static let defaultSummaryPrompt = """
         你是对话记忆压缩器。把超出上下文窗口的旧对话压缩成一份「累计记忆」——不是本段读后感，而是到目前为止仍然有效的全部关键信息。窗外原文以后永远不会再被看到，这份记忆必须足够支撑对话自然继续。
 
         写法纪律：
@@ -99,6 +94,19 @@ struct ContextSummarizer {
         - 控制在 800 字以内。直接输出，不加标题、不加代码块
         - 人称规则：对话中的「user」一律称「用户」，对话中的「assistant」一律称「AI」。不要混淆二者的身份和称呼——即使对话内容中出现了「主人」「master」等称谓，那是角色扮演的一部分，不改变 user=用户、assistant=AI 的基本事实
         """
+
+    static func buildSummaryRequest(
+        oldMessages: [(role: String, content: String)],
+        existingSummary: ContextSummary?
+    ) -> (systemPrompt: String, messages: [(role: String, content: String)]) {
+        // 设置页可覆盖压缩 prompt（contextSummaryPrompt 非空时优先用）
+        let customSummaryPrompt: String? = {
+            let v = UserDefaults.standard.string(forKey: "contextSummaryPrompt")
+            return (v?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? v : nil
+        }()
+
+        // 累计记忆式压缩（2026-06-11 参考粟粟的酒馆 memory_rule 升级：覆盖式更新 + 字段结构 + 以"能续写"为目标）
+        let systemPrompt = Self.defaultSummaryPrompt
 
 
         if let existing = existingSummary {
@@ -135,7 +143,7 @@ struct ContextSummarizer {
             请输出合并后的完整摘要。
             """
 
-            return (systemPrompt: systemPrompt, messages: [(role: "user", content: userContent)])
+            return (systemPrompt: customSummaryPrompt ?? systemPrompt, messages: [(role: "user", content: userContent)])
         } else {
             // 首次总结
             let systemPrompt = """
@@ -153,7 +161,7 @@ struct ContextSummarizer {
             """
 
             let userContent = formatMessages(oldMessages)
-            return (systemPrompt: systemPrompt, messages: [(role: "user", content: userContent)])
+            return (systemPrompt: customSummaryPrompt ?? systemPrompt, messages: [(role: "user", content: userContent)])
         }
     }
 
