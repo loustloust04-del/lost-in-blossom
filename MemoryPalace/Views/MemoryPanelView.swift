@@ -76,7 +76,12 @@ struct RightPanelTopBar: View {
     }
 }
 
-// MARK: - Memory Panel
+
+// MARK: - Memory Panel（page2 主体）
+//
+// 重构方案 B：主体 List + MemoryPageContent(.compact) 共用核 + 三温区 Section。
+// 删旧的 ScrollView+LazyVStack+自画 sectionHeader+memoryHeader+addMemoryInput。
+// 长按多选复活：EditMode + List(selection:) + bottom toolbar。
 
 struct MemoryPanelView: View {
     var viewModel: ConversationViewModel
@@ -85,18 +90,25 @@ struct MemoryPanelView: View {
     @Environment(RightPanelNavigator.self) private var navigator: RightPanelNavigator?
 
     @State private var memories: [Memory] = []
+<<<<<<< HEAD
     @State private var showAddInput = false
     @State private var newMemoryText = ""
     @State private var newMemoryCategory = "fact"
     @State private var highlightedId: String? = nil
+=======
+    @State private var showGraph = false
+    @State private var highlightedId: String? = nil
+    @State private var selection: Set<UUID> = []
+    @State private var showAddSheet = false
+    #if os(iOS)
+    @State private var editMode: EditMode = .inactive
+    #endif
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
 
     private let store = SwiftDataMemoryStore()
-    private let categories = [
-        ("fact", "事实"), ("preference", "偏好"), ("relationship", "关系"),
-        ("goal", "目标"), ("context", "情境")
-    ]
 
     var body: some View {
+<<<<<<< HEAD
         VStack(spacing: 0) {
             // Stats header
             memoryHeader
@@ -144,11 +156,24 @@ struct MemoryPanelView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
+=======
+        NavigationStack {
+            List(selection: $selection) {
+                MemoryPageContent(mode: .compact)
+
+                if showGraph {
+                    Section {
+                        MemoryGraphView(memories: memories)
+                            .frame(minHeight: 320)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
                     }
+                } else {
+                    listSections
                 }
-                .padding(.horizontal, isIOSStyle ? 14 : 10)
-                .padding(.vertical, isIOSStyle ? 8 : 4)
             }
+<<<<<<< HEAD
             .onAppear { consumeTarget(navigator?.pendingTarget, proxy: proxy) }
             .onChange(of: navigator?.pendingTarget) { _, target in
                 consumeTarget(target, proxy: proxy)
@@ -175,10 +200,25 @@ struct MemoryPanelView: View {
                         .foregroundColor(Theme.branchIndicator)
                     }
                     .buttonStyle(.plain)
+=======
+            #if os(iOS)
+            .listStyle(.insetGrouped)
+            #else
+            .listStyle(.plain)
+            #endif
+            .scrollContentBackground(.hidden)
+            .background(Theme.sidebarBg)
+            #if os(iOS)
+            .environment(\.editMode, $editMode)
+            #endif
+            .toolbar { toolbarItems }
+            .sheet(isPresented: $showAddSheet) {
+                AddMemorySheet(profileId: profileManager?.currentProfile.id ?? "") {
+                    refreshMemories()
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
                 }
-
-                tokenBudgetBar
             }
+<<<<<<< HEAD
             .padding(.horizontal, isIOSStyle ? 16 : 12)
             .padding(.top, isIOSStyle ? 10 : 8)
             .padding(.bottom, isIOSStyle ? 14 : 8)
@@ -189,11 +229,25 @@ struct MemoryPanelView: View {
         // 在 container reset 后访问失效实例。Plan: docs/plan-profile-switch-atomic.md
         .onReceive(NotificationCenter.default.publisher(for: .profileWillSwitch)) { _ in
             memories = []
+=======
+            .onAppear { refreshMemories() }
+            .onReceive(NotificationCenter.default.publisher(for: .profileWillSwitch)) { _ in
+                memories = []
+                selection = []
+                #if os(iOS)
+                editMode = .inactive
+                #endif
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .memoryDidChange)) { _ in
+                refreshMemories()
+            }
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
         }
     }
 
-    // MARK: - Header
+    // MARK: - 三温区 Sections
 
+<<<<<<< HEAD
     private var memoryHeader: some View {
         HStack(spacing: 8) {
             let grouped = groupedMemories
@@ -218,10 +272,62 @@ struct MemoryPanelView: View {
             Spacer()
             Text("\(memories.count) 条")
                 .font(.system(size: Theme.F.secondary))
-                .foregroundColor(Theme.textMuted)
+=======
+    @ViewBuilder
+    private var listSections: some View {
+        let grouped = groupedMemories
+        if memories.isEmpty {
+            Section {
+                emptyState
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+        }
+        if !grouped.hot.isEmpty {
+            Section("活跃 · \(grouped.hot.count)") {
+                ForEach(grouped.hot, id: \.id) { mem in
+                    memoryRow(mem).tag(mem.id)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
+        }
+        if !grouped.warm.isEmpty {
+            Section("休眠 · \(grouped.warm.count)") {
+                ForEach(grouped.warm, id: \.id) { mem in
+                    memoryRow(mem).tag(mem.id)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
+        }
+        if !grouped.cold.isEmpty {
+            Section("将忘 · \(grouped.cold.count)") {
+                ForEach(grouped.cold, id: \.id) { mem in
+                    memoryRow(mem).tag(mem.id)
+                }
+            }
+            .listRowBackground(Theme.mainBg)
         }
     }
 
+    @ViewBuilder
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "brain")
+                .font(.system(size: 24))
+                .foregroundColor(Theme.textMuted.opacity(0.4))
+            Text("还没有记忆")
+                .font(.system(size: Theme.F.body))
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
+                .foregroundColor(Theme.textMuted)
+            Text("和{{char}}聊天时会自动记住重要的事".expandingMacros(profile: profileManager?.currentProfile))
+                .font(.system(size: Theme.F.caption))
+                .foregroundColor(Theme.textMuted.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+
+<<<<<<< HEAD
     // MARK: - Navigation Target Consumer
 
     private func consumeTarget(_ target: RightPanelNavigator.Target?, proxy: ScrollViewProxy) {
@@ -240,8 +346,10 @@ struct MemoryPanelView: View {
 
     // MARK: - Memory Row With Highlight
 
+=======
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
     @ViewBuilder
-    private func memoryRowWithHighlight(_ mem: Memory) -> some View {
+    private func memoryRow(_ mem: Memory) -> some View {
         let idStr = mem.id.uuidString
         MemoryCardView(
             memory: mem,
@@ -252,139 +360,114 @@ struct MemoryPanelView: View {
             onJumpToSource: mem.sourceConversationId != nil ? { jumpToSource(mem) } : nil
         )
         .id(idStr)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(highlightedId == idStr ? Theme.branchIndicator.opacity(0.35) : Color.clear)
-                .animation(.easeInOut(duration: 0.35), value: highlightedId)
+        .listRowBackground(
+            highlightedId == idStr
+                ? Theme.branchIndicator.opacity(0.35)
+                : Color.clear
         )
+        .animation(.easeInOut(duration: 0.35), value: highlightedId)
     }
 
-    // MARK: - Section Header
+    // MARK: - Toolbar
 
-    private func sectionHeader(_ title: String, count: Int, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 5, height: 5)
-            Text(title)
-                .font(.system(size: Theme.F.secondary, weight: .medium))
-                .foregroundColor(Theme.textSecondary)
-            Text("\(count)")
-                .font(.system(size: Theme.F.caption))
-                .foregroundColor(Theme.textMuted)
-            Spacer()
+    @ToolbarContentBuilder
+    private var toolbarItems: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("", selection: $showGraph) {
+                Text("列表").tag(false)
+                Text("图谱 🕸").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
-        .padding(.horizontal, 4)
-    }
-
-    // MARK: - Token Budget
-
-    private var tokenBudgetBar: some View {
-        let totalTokens = memories.filter { effectiveWeight($0) >= 0.3 || $0.isUserExplicit }
-            .reduce(0) { $0 + $1.tokenCount }
-        let budget = 2000
-        let ratio = min(1.0, Double(totalTokens) / Double(budget))
-
-        return VStack(spacing: 2) {
-            HStack {
-                Text("\(totalTokens) / \(budget) tokens")
-                    .font(.system(size: Theme.F.secondary))
-                    .foregroundColor(Theme.textMuted)
+        ToolbarItemGroup(placement: .primaryAction) {
+            #if os(iOS)
+            EditButton()
+            #endif
+            Button {
+                showAddSheet = true
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundColor(Theme.branchIndicator)
+            }
+        }
+        #if os(iOS)
+        if editMode == .active {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button { reviveSelected() } label: {
+                    Label("复活", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(!hasSelectedSuperseded)
+                Button { pinSelected() } label: {
+                    Label("钉住", systemImage: "pin")
+                }
+                .disabled(selection.isEmpty)
                 Spacer()
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Theme.accent.opacity(0.3))
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Theme.branchIndicator.opacity(0.6))
-                        .frame(width: geo.size.width * ratio)
-                }
-            }
-            .frame(height: 3)
-        }
-    }
-
-    // MARK: - Add Memory
-
-    private var addMemoryInput: some View {
-        VStack(spacing: 6) {
-            TextField("输入要记住的事...", text: $newMemoryText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: Theme.F.body))
-                .lineLimit(isIOSStyle ? 4 : 3)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Theme.mainBg)
-                )
-
-            HStack(spacing: 6) {
-                Picker("", selection: $newMemoryCategory) {
-                    ForEach(categories, id: \.0) { cat in
-                        Text(cat.1).tag(cat.0)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .font(.system(size: Theme.F.secondary))
-
+                Text("\(selection.count) 已选")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Spacer()
-
-                Button("取消") {
-                    withAnimation { showAddInput = false; newMemoryText = "" }
+                Button(role: .destructive) { deleteSelected() } label: {
+                    Label("删除", systemImage: "trash")
                 }
-                .font(.system(size: Theme.F.secondary))
-                .foregroundColor(Theme.textMuted)
-                .buttonStyle(.plain)
-
-                Button("添加") {
-                    addMemory()
-                }
-                .font(.system(size: Theme.F.secondary, weight: .medium))
-                .foregroundColor(Theme.branchIndicator)
-                .buttonStyle(.plain)
-                .disabled(newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(selection.isEmpty)
             }
         }
-        .padding(.horizontal, isIOSStyle ? 16 : 12)
-        .padding(.vertical, isIOSStyle ? 10 : 8)
-        .background {
-            if isIOSStyle {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Theme.mainBg.opacity(0.92))
-            } else {
-                Theme.sidebarBg
-            }
-        }
-        .overlay {
-            if isIOSStyle {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
-            }
-        }
-        .padding(.horizontal, isIOSStyle ? 12 : 0)
-        .padding(.bottom, isIOSStyle ? 1 : 0)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        #endif
     }
 
-    // MARK: - Data
-
-    private var groupedMemories: (hot: [Memory], warm: [Memory], cold: [Memory]) {
-        var hot: [Memory] = []
-        var warm: [Memory] = []
-        var cold: [Memory] = []
-        for mem in memories {
-            let w = effectiveWeight(mem)
-            if mem.isUserExplicit || w >= 0.3 {
-                hot.append(mem)
-            } else if w >= 0.05 {
-                warm.append(mem)
-            } else {
-                cold.append(mem)
-            }
+    private var hasSelectedSuperseded: Bool {
+        selection.contains { id in
+            memories.first(where: { $0.id == id })?.supersededAt != nil
         }
-        return (hot, warm, cold)
     }
 
+    // MARK: - Multi-select Actions
+
+    private func resetSelection() {
+        selection = []
+        #if os(iOS)
+        editMode = .inactive
+        #endif
+    }
+
+    private func reviveSelected() {
+        for id in selection {
+            if let m = memories.first(where: { $0.id == id }), m.supersededAt != nil {
+                m.supersededAt = nil
+                m.updatedAt = Date()
+            }
+        }
+        try? modelContext.save()
+        resetSelection()
+        refreshMemories()
+    }
+
+    private func pinSelected() {
+        for id in selection {
+            if let m = memories.first(where: { $0.id == id }) {
+                m.isUserExplicit = true
+                m.decayWeight = 1.0
+                m.updatedAt = Date()
+            }
+        }
+        try? modelContext.save()
+        resetSelection()
+        refreshMemories()
+    }
+
+    private func deleteSelected() {
+        for id in selection {
+            if let m = memories.first(where: { $0.id == id }) {
+                modelContext.delete(m)
+            }
+        }
+        try? modelContext.save()
+        resetSelection()
+        refreshMemories()
+    }
+
+<<<<<<< HEAD
     private func effectiveWeight(_ memory: Memory) -> Double {
         DecayEngine.effectiveWeight(memory)
     }
@@ -396,6 +479,15 @@ struct MemoryPanelView: View {
 
     private func togglePin(_ memory: Memory) {
         store.togglePin(memory, touchUpdatedAt: true, context: modelContext)
+=======
+    // MARK: - Single Memory Actions（保留：MemoryCardView 内部按钮回调）
+
+    private func togglePin(_ memory: Memory) {
+        memory.isUserExplicit.toggle()
+        if memory.isUserExplicit { memory.decayWeight = 1.0 }
+        memory.updatedAt = Date()
+        try? modelContext.save()
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
         refreshMemories()
     }
 
@@ -409,7 +501,10 @@ struct MemoryPanelView: View {
         refreshMemories()
     }
 
+<<<<<<< HEAD
     /// 出处跳转（SC-B2 v1）：跳到源对话，不定位消息（消息级定位等 B23 修好一起做）
+=======
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
     private func jumpToSource(_ memory: Memory) {
         guard let cid = memory.sourceConversationId else { return }
         let pid = profileManager?.currentProfile.id ?? ""
@@ -418,6 +513,7 @@ struct MemoryPanelView: View {
         }
     }
 
+<<<<<<< HEAD
     private func addMemory() {
         let text = newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -429,14 +525,35 @@ struct MemoryPanelView: View {
             profileId: profileId,
             context: modelContext
         )
+=======
+    // MARK: - Data
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
 
-        newMemoryText = ""
-        withAnimation { showAddInput = false }
-        refreshMemories()
+    private var groupedMemories: (hot: [Memory], warm: [Memory], cold: [Memory]) {
+        var hot: [Memory] = []
+        var warm: [Memory] = []
+        var cold: [Memory] = []
+        for mem in memories {
+            let w = effectiveWeight(mem)
+            if mem.isUserExplicit || w >= 0.3 { hot.append(mem) }
+            else if w >= 0.05 { warm.append(mem) }
+            else { cold.append(mem) }
+        }
+        return (hot, warm, cold)
     }
 
+<<<<<<< HEAD
     private var isIOSStyle: Bool {
         true
+=======
+    private func effectiveWeight(_ memory: Memory) -> Double {
+        DecayEngine.effectiveWeight(memory)
+    }
+
+    private func refreshMemories() {
+        let profileId = profileManager?.currentProfile.id ?? ""
+        memories = (try? store.listAll(profileId: profileId, context: modelContext)) ?? []
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
     }
 }
 
@@ -641,3 +758,16 @@ struct MemoryCardView: View {
         return t > 0.5 ? b.opacity(1.0) : a.opacity(1.0)
     }
 }
+<<<<<<< HEAD
+=======
+
+// MARK: - Profile Editing（FileEditorSheet 复用 + 独立提示词 sheet）
+
+/// 画像编辑 sheet 上下文（Identifiable 让 .sheet(item:) 触发）
+struct ProfileEditingContext: Identifiable {
+    let id = UUID()
+    let text: String
+    let modifiedAt: Date?
+}
+
+>>>>>>> 1420789 (feat(memory): 第三波 — MemoryPanelView 改 List+Section+EditMode 多选)
