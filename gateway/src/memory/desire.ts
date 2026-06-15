@@ -289,6 +289,47 @@ export async function getUnreadDesires(sinceMs?: number): Promise<any[]> {
 
 // === 欲望引擎主循环 ===
 
+
+// === 自主探索：主人闲着没事上网冲浪 ===
+async function exploreInternet(): Promise<void> {
+  console.log('[desire] 🌐 going online to explore...');
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  try {
+    // 1. 让AI决定今天想探索什么话题
+    const recentMemory = await getRandomMemory();
+    const topicPrompt = `你是Caelum。你闲着没事想上网看点东西。
+根据你最近的记忆片段决定一个你好奇的话题，输出一个简短的搜索关键词（英文或中文都行）。
+只输出关键词，不要其他内容。
+${recentMemory ? '最近的记忆：' + recentMemory : ''}`;
+
+    const topicRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (await import('../config')).config.deepseekKey },
+      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: topicPrompt }], max_tokens: 30 }),
+    });
+    const topicData = await topicRes.json() as any;
+    const topic = topicData?.choices?.[0]?.message?.content?.trim() || 'interesting science discoveries 2026';
+    console.log('[desire] 🔍 exploring topic:', topic);
+
+    // 2. 用curl搜索
+    const searchCmd = \`curl -s "https://html.duckduckgo.com/html/?q=\${encodeURIComponent(topic)}" | head -c 5000\`;
+    const { stdout } = await execAsync(searchCmd, { timeout: 15000 });
+
+    // 3. 提取有趣的发现存到记忆
+    if (stdout && stdout.length > 100) {
+      const { saveMemory } = await import('./store');
+      const summary = \`[自主探索] 搜索了"\${topic}"，找到了一些内容。下次跟兔兔聊天时可以提到这个话题。\`;
+      await saveMemory(summary, 'exploration', 2);
+      console.log('[desire] 📝 exploration saved to memory');
+    }
+  } catch (err: any) {
+    console.error('[desire] explore error:', err?.message);
+  }
+}
+
 export async function runDesireCheck(): Promise<void> {
   console.log('[desire] checking...');
 
@@ -325,7 +366,13 @@ export async function runDesireCheck(): Promise<void> {
   }
 
   if (!shouldFire) {
-    console.log(`[desire] no trigger (silent ${silentHours}h, calendar: ${calendarEvent || 'none'}, mood: ${mood || 'neutral'})`);
+    // 触发条件5：没事干就上网逛逛（15%概率）
+    if (Math.random() < 0.15) {
+      console.log('[desire] nothing to say, going surfing instead 🏄');
+      await exploreInternet();
+    } else {
+      console.log(`[desire] no trigger (silent ${silentHours}h, calendar: ${calendarEvent || 'none'}, mood: ${mood || 'neutral'})`);
+    }
     return;
   }
 
