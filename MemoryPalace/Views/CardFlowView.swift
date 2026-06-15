@@ -595,6 +595,7 @@ struct ChatInputBar: View {
     @AppStorage("blurRadius") private var blurRadius = 1.3
     @AppStorage("selectedChatModel") private var selectedModelId = ""
     @State private var showModelPicker = false
+    @State private var showCCDisconnectedAlert = false
     @FocusState private var isFocused: Bool
 
     private var currentModel: ProviderModel {
@@ -690,6 +691,11 @@ struct ChatInputBar: View {
         } message: {
             Text(viewModel.budgetBlockedMessage ?? "")
         }
+        .alert("CC 未连接", isPresented: $showCCDisconnectedAlert) {
+            Button("好") { }
+        } message: {
+            Text("CC 未连接，请检查 CC Bridge 设置")
+        }
     }
 
     /// 返回 true 表示发送成功（子 view 应清空 text），false = 预算被拦（text 保留）
@@ -699,6 +705,13 @@ struct ChatInputBar: View {
         let fileData = pendingFileData.wrappedValue
         let fileName = pendingFileName.wrappedValue
         guard !trimmed.isEmpty || imageData != nil || fileData != nil else { return false }
+
+        // Task 3: 选了 CC 模型但 CC 未连接 → 弹提示，不发送（保留 text）
+        if providerManager.provider(for: currentModel)?.type == .ccBridge,
+           !CCBridgeWebSocketClient.shared.isConnected {
+            showCCDisconnectedAlert = true
+            return false
+        }
 
         let prof = profileManager?.currentProfile ?? Profile(name: "", emoji: "", description: "", userName: "你", assistantName: "AI")
         let preset = presetManager?.preset(byId: prof.presetId) ?? Preset.balanced
