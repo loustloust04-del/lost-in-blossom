@@ -4,7 +4,7 @@ import { forwardDeepSeek } from './providers/deepseek';
 import { forwardOpenRouter } from './providers/openrouter';
 import { forwardAnthropicNative } from './providers/anthropic-native';
 import { runToolLoop } from './tools/loop';
-import { forwardTreeChat, forwardTreeApi } from './providers/treegpt';
+import { forwardTreeChat, forwardTreeApi, forwardTreeAws } from './providers/treegpt';
 import { enhanceMessages } from './prompt/builder';
 import { saveMessage, compressForStorage } from './memory/store';
 import { extractMemoriesIfNeeded } from './memory/extractor';
@@ -58,6 +58,14 @@ app.get('/v1/models', auth, (c) => c.json({
     { id: 'tree-api/claude-opus-4-7', object: 'model', owned_by: 'treegpt-api' },
     { id: 'tree-api/claude-opus-4-6', object: 'model', owned_by: 'treegpt-api' },
     { id: 'tree-api/claude-sonnet-4-6', object: 'model', owned_by: 'treegpt-api' },
+    // TreeGPT AWS — 正规渠道，支持A社格式+缓存
+    { id: 'tree-aws/claude-opus-4-8', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'tree-aws/claude-opus-4-7', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'tree-aws/claude-opus-4-6', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'tree-aws/claude-sonnet-4-6', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'tree-aws/claude-opus-4-5-20251101', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'tree-aws/claude-sonnet-4-5-20250929', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'tree-aws/claude-haiku-4-5-20251001', object: 'model', owned_by: 'treegpt-aws' },
   ]
 }));
 
@@ -200,28 +208,21 @@ app.post('/v1/chat/completions', auth, async (c) => {
 
   if (actualModel.includes("deepseek")) {
     upstream = await forwardDeepSeek(forwardBody);
-  } else if (actualModel.startsWith("tree-chat/") && actualModel.includes("claude")) {
-    // TreeGPT chat 组 Claude → A社格式直连，保留缓存断点
-    const modelName = actualModel.replace('tree-chat/', '');
-    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
-      baseUrl: 'https://api.treegpt.cc/v1/messages',
-      apiKey: config.treeChatKey,
-      modelName,
-    });
-  } else if (actualModel.startsWith("tree-api/") && actualModel.includes("claude")) {
-    // TreeGPT api 组 Claude → A社格式直连
-    const modelName = actualModel.replace('tree-api/', '');
-    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
-      baseUrl: 'https://api.treegpt.cc/v1/messages',
-      apiKey: config.treeApiKey,
-      modelName,
-    });
   } else if (actualModel.startsWith("tree-chat/")) {
+    // TreeGPT 不支持 A社 system 字段，走 OpenAI 格式
     upstream = await forwardTreeChat(forwardBody);
   } else if (actualModel.startsWith("tree-api/")) {
     upstream = await forwardTreeApi(forwardBody);
+  } else if (actualModel.startsWith("tree-aws/")) {
+    // TreeGPT AWS — 正规渠道，走A社格式+缓存
+    const modelName = actualModel.replace('tree-aws/', '');
+    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
+      baseUrl: 'https://api.treegpt.cc/v1/messages',
+      apiKey: config.treeAwsKey,
+      modelName,
+    });
   } else if (actualModel.includes("claude")) {
-    // 所有其他 Claude → OR 的 A社格式端点，保留缓存断点
+    // OR Claude → A社格式端点，保留缓存断点
     upstream = await forwardAnthropicNative(forwardBody, sessionId, {
       baseUrl: 'https://openrouter.ai/api/v1/messages',
       apiKey: config.openrouterKey,
@@ -457,6 +458,38 @@ app.post('/v1/messages', auth, async (c) => {
       'Cache-Control': 'no-cache',
     },
   });
+});
+
+
+// ============ MCP 代理端点 — App 通过网关访问 VPS 上的 MCP 服务 ============
+import { getMcpTools, callMcpTool } from './tools/mcp-client';
+import { BUILTIN_TOOLS, callBuiltinTool } from './tools/builtin';
+
+// 列出所有可用工具（内置 + MCP）
+app.get('/api/mcp/tools', auth, async (c) => {
+  const mcpTools = await getMcpTools();
+  const all = [
+    ...BUILTIN_TOOLS.map((t: any) => ({ name: t.name, description: t.description, source: 'builtin' })),
+    ...mcpTools.map((t: any) => ({ name: t.name, description: t.description, source: 'mcp' })),
+  ];
+  return c.json({ tools: all, count: all.length });
+});
+
+// 调用工具（App端直接调）
+app.post('/api/mcp/call', auth, async (c) => {
+  const { name, input } = await c.req.json();
+  console.log('[mcp-proxy] call:', name, JSON.stringify(input).slice(0, 100));
+
+  // 先试内置工具
+  const builtinResult = await callBuiltinTool(name, input);
+  if (builtinResult !== null) {
+    return c.json({ result: builtinResult, source: 'builtin' });
+  }
+
+  // fallthrough 到 MCP
+  const mcpTools = await getMcpTools();
+  const result = await callMcpTool(name, input, mcpTools);
+  return c.json({ result, source: 'mcp' });
 });
 
 export default {
