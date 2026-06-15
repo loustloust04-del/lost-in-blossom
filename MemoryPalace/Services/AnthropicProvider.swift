@@ -484,9 +484,9 @@ final class AnthropicProvider: BaseChatProvider {
         if !layers.summaryLayer.isEmpty {
             blocks.append(["type": "text", "text": layers.summaryLayer, "cache_control": ["type": "ephemeral"]])
         }
-        // BP3：记忆+世界书（可能每轮变）
+        // 记忆+世界书（每轮可能变，不打断点——打了会破坏后面messages的缓存）
         if !layers.semiStable.isEmpty {
-            blocks.append(["type": "text", "text": layers.semiStable, "cache_control": ["type": "ephemeral"]])
+            blocks.append(["type": "text", "text": layers.semiStable])
         }
         if !layers.volatile.isEmpty {
             blocks.append(["type": "text", "text": layers.volatile])
