@@ -100,6 +100,7 @@ struct ConsoleView: View {
             HStack(spacing: 10) { waterCard; foodCard }
             HStack(spacing: 10) { medicationCard; sleepCard }
             menstrualCard
+            anniversaryCard
             stepsCard
             screenTimeCard
             memoCard
@@ -352,6 +353,55 @@ struct ConsoleView: View {
     }
 
     // MARK: - 8. 碎碎念
+
+
+    // MARK: - 纪念日
+
+    private var anniversaryCard: some View {
+        NavigationLink(destination: AnniversaryView()) {
+            ConsoleCard(id: "anniversary", tappedCardId: $tappedCardId) {
+                ConsoleTag(icon: "heart.fill", label: "纪念日")
+                let items = AnniversaryStore.load()
+                if items.isEmpty {
+                    Text("点击添加第一个纪念日")
+                        .font(.system(size: 14))
+                        .foregroundColor(Self.textMuted)
+                        .padding(.vertical, 4)
+                } else {
+                    let nearest = items.sorted(by: { $0.daysUntilNext < $1.daysUntilNext }).first!
+                    HStack {
+                        Text(nearest.emoji)
+                            .font(.system(size: 22))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(nearest.name)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Self.textPrimary)
+                            if nearest.daysFromNow < 0 {
+                                Text("已经 \(nearest.daysSince) 天")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Self.textMuted)
+                            } else if nearest.daysFromNow == 0 {
+                                Text("就是今天！")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.orange)
+                            } else {
+                                Text("还有 \(nearest.daysFromNow) 天")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Self.textMuted)
+                            }
+                        }
+                        Spacer()
+                        if items.count > 1 {
+                            Text("共 \(items.count) 个")
+                                .font(.system(size: 11))
+                                .foregroundColor(Self.textMuted)
+                        }
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
 
     private var memoCard: some View {
         ConsoleCard(id: "memo", tappedCardId: $tappedCardId, onTap: {
