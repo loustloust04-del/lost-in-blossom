@@ -128,205 +128,21 @@ final class ConversationViewModel {
 
     // MARK: - Chat (API) stored properties
 
-    // MARK: - Load Conversation
-
-    /// Background-computed tree data (pure value types, safe to cross threads)
-    private struct TreeData {
-        let effectiveChildrenMap: [String: [String]]
-        let rootId: String?
-        let mainPathIds: Set<String>
-        let pathNodeIds: [String]
-        let bubbledBranches: [String: String]
-        let displayableCount: Int
-        let allNodeIds: Set<String>
-    }
-
-    /// BranchMap v6 用：单击节点 = 快切 currentPath。
-
-    /// 旧入口保留：搜索结果 / 外部跳转 用全量 reload（含 fetch）。
-    /// 搜索结果点击的统一入口（B20 part 2）。
-    /// - 300ms 同 nodeId 去抖，吃掉用户连点
-    /// - 主线 node：path 不切（保持 conversation.currentNodeId 主线）+ 仅 scroll
-    /// - 分支 node：切 branch（loadConversation scrollTargetNodeId）+ 弹"已切换到分支"
-    /// - 不论主/分支：都发 conversationNavigationRequested 通知让 ContentView 切 page 0→1
-    /// Build path for selected conversation (fetch + tree computation on background thread)
-    /// - scrollTargetNodeId: if set, build path through this node instead of conversation.currentNodeId
-    /// Compute the main-path nodeId set for a given conversation snapshot.
-    /// 给定 nodes 和 currentNodeId，按 buildTreeInBackground 同套算法
-    /// （反向 trace mainPath + 正向走选 child）算出主线 nodeId Set。
-    /// 用于搜索过滤、UI 高亮等不需要全套 TreeData 的场景。
-    /// 算法跟 buildTreeInBackground 必须一致（搜索结果不能跟 chat 显示打架）。
-    /// Heavy lifting on background thread: fetch nodes, build tree, compute path (all with pure IDs)
-    private static func buildTreeInBackground(convId: String, profileId: String, currentNodeId: String, container: ModelContainer) -> TreeData {
-        let bgContext = ModelContext(container)
-
-        // Fetch all nodes for this conversation
-        let descriptor = FetchDescriptor<MessageNode>(
-            predicate: #Predicate<MessageNode> { node in node.conversationId == convId && node.profileId == profileId }
-        )
-        let nodes = (try? bgContext.fetch(descriptor)) ?? []
-
-        // Lightweight node data for pure computation
-        var infoMap: [String: NodeInfo] = [:]
-        infoMap.reserveCapacity(nodes.count)
-        for node in nodes {
-            infoMap[node.id] = NodeInfo(id: node.id, role: node.role, hasContent: node.hasDisplayableContent, isDeleted: node.isDeleted, parentId: node.parentId, childrenIds: node.childrenIds)
-        }
-
-        // Chase missing ancestors on background context
-        var missingIds = Set<String>()
-        for info in infoMap.values {
-            if let pid = info.parentId, !pid.isEmpty, infoMap[pid] == nil {
-                missingIds.insert(pid)
-            }
-        }
-        var toChase = missingIds
-        while !toChase.isEmpty {
-            var nextChase = Set<String>()
-            for mid in toChase {
-                let targetId = mid
-                let targetProfileId = profileId
-                let desc = FetchDescriptor<MessageNode>(
-                    predicate: #Predicate<MessageNode> { node in node.id == targetId && node.profileId == targetProfileId }
-                )
-                if let found = try? bgContext.fetch(desc).first {
-                    infoMap[found.id] = NodeInfo(id: found.id, role: found.role, hasContent: found.hasDisplayableContent, isDeleted: found.isDeleted, parentId: found.parentId, childrenIds: found.childrenIds)
-                    if let pid = found.parentId, !pid.isEmpty, infoMap[pid] == nil {
-                        nextChase.insert(pid)
-                    }
-                }
-            }
-            toChase = nextChase
-        }
-
-        // Build effective children map
-        var effectiveChildren: [String: [String]] = [:]
-        effectiveChildren.reserveCapacity(infoMap.count)
-        for (nodeId, info) in infoMap {
-            effectiveChildren[nodeId] = info.childrenIds.filter { infoMap[$0] != nil }
-        }
-        for (nodeId, info) in infoMap {
-            if let pid = info.parentId, infoMap[pid] != nil {
-                if !(effectiveChildren[pid]?.contains(nodeId) ?? false) {
-                    effectiveChildren[pid, default: []].append(nodeId)
-                }
-            }
-        }
-
-        // Trace main path from currentNodeId to root — 一次循环既建 mainPathIds 又确定 rootId
-        //
-        // 之前用 `infoMap.values.first(where:)` 选 root 是 bug：Swift dict 迭代顺序
-        // 非确定性，多个 parentId==nil 候选（真 root + 孤立 system/tool 节点等）时每次
-        // 可能选到不同节点，导致同一对话 pathNodeIds 随机返回 0 或 N（"抽盲盒"式空白）。
-        // 详见 docs/research-conversation-blank-bug.md。
-        var mainPathIds = Set<String>()
-        var rootId: String? = nil
-        var traceId: String? = currentNodeId
-        while let nid = traceId, let info = infoMap[nid] {
-            mainPathIds.insert(nid)
-            if info.parentId == nil || infoMap[info.parentId ?? ""] == nil {
-                rootId = nid   // 最顶层的可达祖先
-            }
-            traceId = info.parentId
-        }
-
-        // Fallback：currentNodeId 不在 infoMap（脏数据/stale currentNodeId）时，
-        // 按 id 字典序选 parentId==nil 的最小者 — 至少保证确定性
-        if rootId == nil {
-            let candidates = infoMap.values.filter { $0.parentId == nil || infoMap[$0.parentId ?? ""] == nil }
-            rootId = candidates.map(\.id).min()
-        }
-
-        // Build display path (collect node IDs + bubbled branches)
-        var pathNodeIds: [String] = []
-        var bubbledBranches: [String: String] = [:]
-
-        if let rootId = rootId {
-            var visited = Set<String>()
-            var currentId: String? = rootId
-            var lastDisplayedId: String? = nil
-
-            while let nid = currentId, let info = infoMap[nid], !visited.contains(nid) {
-                visited.insert(nid)
-                let isDisplayable = (info.role == "user" || info.role == "assistant") && info.hasContent && !info.isDeleted
-                let children = effectiveChildren[nid] ?? []
-
-                if isDisplayable {
-                    pathNodeIds.append(nid)
-                    lastDisplayedId = nid
-                }
-                if children.count > 1 && !isDisplayable {
-                    if let lastId = lastDisplayedId {
-                        bubbledBranches[lastId] = nid
-                    }
-                }
-                if children.isEmpty {
-                    break
-                } else if children.count == 1 {
-                    currentId = children[0]
-                } else {
-                    let mainChild = children.first(where: { mainPathIds.contains($0) })
-                    currentId = mainChild ?? children[0]
-                }
-            }
-        }
-
-        let displayableCount = infoMap.values.filter {
-            ($0.role == "user" || $0.role == "assistant") && $0.hasContent && !$0.isDeleted
-        }.count
-
-        return TreeData(
-            effectiveChildrenMap: effectiveChildren,
-            rootId: rootId,
-            mainPathIds: mainPathIds,
-            pathNodeIds: pathNodeIds,
-            bubbledBranches: bubbledBranches,
-            displayableCount: displayableCount,
-            allNodeIds: Set(infoMap.keys)
-        )
-    }
-
-    /// Apply background results on main thread (re-fetch managed objects for UI)
-    /// Fetch ancestor nodes missing from nodeMap — query only the missing IDs
-    /// Build effective children map from actual parent→child relationships
-    /// Get children IDs for a node
-    // MARK: - Path Building
-
-    // MARK: - Branch Navigation
-
-    /// "你在哪"位置 hint — 给 BranchMapSheet v2 mini-map 标当前位置用。
-    /// 直接读 highlightedNodeId（最近交互过的 node：搜索点击 / pin 跳转 / branch 切换都会设）。
-    /// 3s 后会被清空，sheet 打开时如果是 nil 就不画位置 marker（视觉降级，不出 false 信息）。
-    /// 详见 docs/plan-branch-map-v2-minimap.md Q1。
-    var currentPositionHint: String? { highlightedNodeId }
-
-    /// 给定 child nodeId（某条 branch 的入口），顺向走到 leaf 数 displayable node 数。
-    /// 分叉时优先选 mainPathIds 里的 child，跟 buildTreeInBackground 一致。
-    /// 用于分支地图显示"分支 N 共 X 条"。B20 part 2 A3 反馈。
-    /// 一条分支的完整描述（含嵌套）。给 BranchMapSheet v2 用。
-    /// branchInfoMap 只覆盖当前 currentPath 上的 anchor，看不到嵌套二级分支；
-    /// 这个函数 DFS 整棵 effectiveChildrenMap 树，收集所有有 ≥2 displayable
-    /// children 的 anchor 的所有非"主选 child"，包括分支之中的子分支。
-    /// depth=0 表示 anchor 在主线上；depth>0 表示 anchor 自己也是别人的分支。
-    /// 给 collectAllBranches 用：找 anchor 在主线上能定位的"显示位置"。
-    /// anchor 可能是 invisible system/tool 节点（在 mainPathIds 但不在 currentPath），
-    /// 此时 currentPath.firstIndex 返回 nil。改沿 parent 链回溯，找最近的
-    /// displayable + 在 currentPath 的 ancestor，取它的 index。
-    // MARK: - In-Conversation Search
-
-    // MARK: - Actions
-
-    // MARK: - Chat (API) stored properties
-
     var providerRouter = ProviderRouter()
     let memoryStore: MemoryStore = SwiftDataMemoryStore()
+    /// Content being streamed for the current assistant response
     var streamingText = ""
+    /// Reasoning content being streamed (DeepSeek / models with reasoning_content)
     var streamingThinkingText: String = ""
+    /// True while reasoning_content is arriving and before regular content starts
     var isThinking: Bool = false
+    /// One-sentence summary generated after thinking completes; cleared on next send
     var thinkingSummary: String = ""
+    /// Recent messages to send for memory extraction
     let memoryExtractWindow = 5
 
-    // MARK: - Budget
+    // MARK: - Budget (保险闸)
+    /// 被拦截时 UI 层通过这个显示 alert；UI 消掉后置 nil
     var budgetBlockedMessage: String? = nil
     /// Pre-send 的估算额度，发送完没 usage 时兜底扣费
     var pendingEstimatedCost: Double = 0
