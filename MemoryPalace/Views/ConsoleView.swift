@@ -37,6 +37,7 @@ struct ConsoleView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: tappedCardId)
         .sensoryFeedback(.success, trigger: medicationToggled)
         .task {
+            loadVitals()
             ensureTodayContext()
             await healthKit.requestAuthorization()
             if healthKit.authState == .authorized, let ctx = todayCtx {
@@ -136,30 +137,22 @@ struct ConsoleView: View {
     private var foodCard: some View {
         ConsoleCard(id: "food", tappedCardId: $tappedCardId) {
             ConsoleTag(icon: "fork.knife", label: "进食")
-            if let ctx = todayCtx {
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text("\(ctx.meals.count)")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(Self.textPrimary)
-                    Text("/ 3 餐")
-                        .font(.system(size: 13))
-                        .foregroundColor(Self.textUnit)
-                }
-                if let meal = ctx.latestMeal {
-                    Text("\(meal.description) · \(timeString(meal.time))")
-                        .font(.system(size: 12))
-                        .foregroundColor(Self.textMuted)
-                        .padding(.top, 3)
-                        .lineLimit(1)
-                } else {
-                    Text("未记录")
-                        .font(.system(size: 12))
-                        .foregroundColor(Self.textMuted)
-                        .padding(.top, 3)
-                }
-            } else {
-                noDataView
+            let fCount = todayCtx?.meals.count ?? vitalsData?.food.count ?? 0
+            let fGoal = vitalsData?.food.goal ?? 3
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text("\(fCount)")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(Self.textPrimary)
+                Text("/ \(fGoal) 餐")
+                    .font(.system(size: 13))
+                    .foregroundColor(Self.textUnit)
             }
+            let latestMeal = vitalsData?.food.meals.last
+            Text(latestMeal ?? "未记录")
+                .font(.system(size: 12))
+                .foregroundColor(Self.textMuted)
+                .padding(.top, 3)
+                .lineLimit(1)
         }
     }
 
@@ -168,16 +161,15 @@ struct ConsoleView: View {
     private var medicationCard: some View {
         ConsoleCard(id: "medication", tappedCardId: $tappedCardId) {
             ConsoleTag(icon: "pills", label: "药物")
-            if let ctx = todayCtx {
-                let pillStyle: PillStyle = ctx.medicationStatus == .taken  ? .ok  :
-                                          ctx.medicationStatus == .skipped ? .off : .warn
-                let pillText =            ctx.medicationStatus == .taken  ? "已服用" :
-                                          ctx.medicationStatus == .skipped ? "已跳过" : "未报告"
-                ConsolePill(text: pillText, style: pillStyle)
-                    .padding(.top, 4)
-                Text("\(ctx.medicationName) · 昨晚")
-                    .font(.system(size: 12))
-                    .foregroundColor(Self.textMuted)
+            let medsTaken = todayCtx?.medicationStatus == .taken || vitalsData?.meds.taken == true
+            let medsName = vitalsData?.meds.name ?? todayCtx?.medicationName ?? "右佐匹克隆"
+            let pillStyle: PillStyle = medsTaken ? .ok : .warn
+            let pillText = medsTaken ? "已服用" : "未报告"
+            ConsolePill(text: pillText, style: pillStyle)
+                .padding(.top, 4)
+            Text("\(medsName) · 昨晚")
+                .font(.system(size: 12))
+                .foregroundColor(Self.textMuted)
                     .padding(.top, 6)
                     .lineLimit(1)
             } else {
