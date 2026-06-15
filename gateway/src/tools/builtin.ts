@@ -2,11 +2,13 @@
 // 工具定义排在 prompt 前缀最前面，必须字节级稳定（任何改动都会打破 prompt cache 前缀）。
 import { exec as execShell } from 'node:child_process';
 import { GMAIL_TOOLS, callGmailTool } from './gmail';
+import { VITALS_TOOLS, callVitalsTool } from '../vitals';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 
 export const BUILTIN_TOOLS = [
   ...GMAIL_TOOLS,
+  ...VITALS_TOOLS,
   {
     name: 'exec',
     description: 'Run a shell command on the host this gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs. SECURITY: arbitrary command execution as the gateway process — only on a private, authenticated gateway.',
@@ -111,6 +113,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (name === 'exec') return runExec(String(input?.command || ''));
   if (name === 'recall') return runRecall(input);
   if (name === 'remember') return runRemember(input);
+  const vitalsResult = await callVitalsTool(name, input);
+  if (vitalsResult !== null) return vitalsResult;
   const gmailResult = await callGmailTool(name, input);
   if (gmailResult !== null) return gmailResult;
   return null;

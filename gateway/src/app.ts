@@ -4,12 +4,14 @@ import { forwardDeepSeek } from './providers/deepseek';
 import { forwardOpenRouter } from './providers/openrouter';
 import { forwardAnthropicNative } from './providers/anthropic-native';
 import { runToolLoop } from './tools/loop';
+import { vitalsRoutes } from './vitals';
 import { forwardTreeChat, forwardTreeApi, forwardTreeAws } from './providers/treegpt';
 import { enhanceMessages } from './prompt/builder';
 import { saveMessage, compressForStorage } from './memory/store';
 import { extractMemoriesIfNeeded } from './memory/extractor';
 import { judgeEmotion } from './memory/emotion-judge';
 import { recordMessage, getRhythmStats } from './memory/rhythm';
+import { updateSummary } from './memory/keepalive';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
@@ -501,6 +503,8 @@ app.post('/api/mcp/call', auth, async (c) => {
   const result = await callMcpTool(name, input, mcpTools);
   return c.json({ result, source: 'mcp' });
 });
+
+vitalsRoutes(app);
 
 export default {
   port: config.port,
