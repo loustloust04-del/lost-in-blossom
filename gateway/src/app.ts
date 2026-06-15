@@ -506,6 +506,20 @@ app.post('/api/mcp/call', auth, async (c) => {
 
 vitalsRoutes(app);
 
+// Screen Time 代理（Memory Palace → App）
+app.get('/api/screentime', auth, async (c) => {
+  try {
+    const res = await fetch('http://127.0.0.1:3501/api/screentime/today', {
+      headers: { 'X-Forwarded-Email': 'caelumbunny@gmail.com' },
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await res.json();
+    return c.json(data);
+  } catch (e: any) {
+    return c.json({ error: e?.message || 'screentime unavailable' }, 502);
+  }
+});
+
 export default {
   port: config.port,
   fetch: app.fetch,
