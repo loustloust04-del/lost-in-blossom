@@ -37,3 +37,12 @@ extension FileLibraryStore {
         nil
     }
 }
+
+
+// MARK: - AttachmentStore (stub)
+
+enum AttachmentStore {
+    static func deleteConversationAttachments(conversationId: String, profileId: String) {
+        // Stub: attachment cleanup not yet implemented
+    }
+}
