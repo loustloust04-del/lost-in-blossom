@@ -58,6 +58,24 @@ function withCacheOnLastBlock(content: any): any {
 export function buildAnthropicPayload(body: any, sessionId: string) {
   const messages: any[] = body.messages || [];
   const systemBlocks: Block[] = [];
+
+  // debug: 看App发了什么
+  const sysInMessages = messages.filter((m: any) => m.role === 'system').length;
+  const hasSysField = !!body.system;
+  console.log(`[anthropic-native] debug: ${messages.length} msgs, ${sysInMessages} system in messages, body.system=${hasSysField}`);
+
+  // 如果App把人设放在body.system而不是messages里，先提取出来
+  if (body.system && systemBlocks.length === 0) {
+    if (typeof body.system === 'string') {
+      systemBlocks.push({ type: 'text', text: body.system });
+    } else if (Array.isArray(body.system)) {
+      for (const b of body.system) {
+        if (typeof b === 'string') systemBlocks.push({ type: 'text', text: b });
+        else if (b?.type === 'text') systemBlocks.push({ type: 'text', text: b.text ?? '' });
+        else systemBlocks.push(b);
+      }
+    }
+  }
   const anthropicMessages: any[] = [];
 
   for (const msg of messages) {

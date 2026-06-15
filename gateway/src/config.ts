@@ -9,6 +9,7 @@ export const config = {
   embeddingKey: Bun.env.EMBEDDING_API_KEY || '',
   treeChatKey: Bun.env.TREE_CHAT_KEY || '',
   treeApiKey: Bun.env.TREE_API_KEY || '',
+  treeAwsKey: Bun.env.TREE_AWS_KEY || '',
   embeddingModel: Bun.env.EMBEDDING_MODEL || 'text-embedding-3-small',
   brainEnabled: Bun.env.BRAIN_ENABLED === 'true',
   embeddingBase: Bun.env.EMBEDDING_BASE_URL || 'https://api.openai.com/v1',
