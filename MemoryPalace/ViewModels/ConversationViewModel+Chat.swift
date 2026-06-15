@@ -398,6 +398,7 @@ extension ConversationViewModel {
         streamingThinkingText = ""
         isThinking = false
         thinkingSummary = ""
+        turnStartTime = Date()  // PR: Token 统计——记本轮起点
 
         // Register fallback for additional CC replies that arrive after the single-shot
         // sendStreaming handler has been consumed (hub offline-replay burst, proactive CC messages).
@@ -493,6 +494,26 @@ extension ConversationViewModel {
 
                 // 预算扣费（Phase C 完整接入前先只用 usage）
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
+
+                // PR: Token 统计——记一条 usage 记录
+                if let usage {
+                    let cost = providerManager.provider(for: model).map {
+                        BudgetCalculator.actualCost(provider: $0, modelId: model.modelId, usage: usage)
+                    } ?? 0
+                    let rt = self.turnStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                    TokenStatsStore.append(TokenRecord(
+                        date: Date(),
+                        model: model.name,
+                        conversationId: conversation.id,
+                        conversationTitle: conversation.title,
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        cacheReadTokens: usage.cacheReadInputTokens,
+                        cacheWriteTokens: usage.cacheCreationInputTokens,
+                        cost: cost,
+                        responseTime: rt
+                    ))
+                }
 
                 // AUDN 记忆提取（memoryEnabled=false 的对话不提取）
                 if conversation.memoryEnabled {

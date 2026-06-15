@@ -24,6 +24,7 @@ struct SettingsView: View {
         case regex = "正则"
         case rightPanel = "右栏"
         case memory = "记忆"
+        case tokenStats = "Token 统计"
         case sticker = "贴纸"
         case notifications = "通知"
         case appearance = "外观"
@@ -59,6 +60,7 @@ struct SettingsView: View {
                     settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
                     settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
+                    settingsButton(icon: "chart.bar", title: "Token 统计", color: Theme.textSecondary, tab: .tokenStats)
                 } header: {
                     settingsSectionHeader("对话与模型")
                 }
@@ -105,6 +107,7 @@ struct SettingsView: View {
                 case .api: APISettingsTab()
                 case .mcp: MCPSettingsTab()
                 case .memory: IOSMemoryPage()
+                case .tokenStats: TokenStatsView()
                 case .regex: IOSRegexPage()
                 case .sticker:
                     IOSStickerPage()
