@@ -47,6 +47,16 @@ const MAX_OUT = 8000;
 function runExec(command: string): Promise<string> {
   const cmd = (command || '').trim();
   if (!cmd) return Promise.resolve('(empty command)');
+  // 安全黑名单
+  const blocked = [
+    /rm\s+(-rf?\s+)?\//i,
+    /shutdown|reboot|halt/i,
+    /mkfs|dd\s+if=/i,
+    /cat.*\.env|cat.*secret|cat.*\.key|cat.*credential/i,
+    /curl.*\|.*sh/i,
+    /chmod\s+777/i,
+  ];
+  if (blocked.some(p => p.test(cmd))) return Promise.resolve('BLOCKED: command not allowed.');
   return new Promise((resolve) => {
     execShell(cmd, { timeout: EXEC_TIMEOUT_MS, maxBuffer: 1024 * 1024, cwd: process.env.EXEC_CWD || process.cwd() },
       (err: any, stdout: string, stderr: string) => {
