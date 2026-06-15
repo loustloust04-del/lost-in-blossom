@@ -149,4 +149,35 @@ extension ConversationViewModel {
         scrollToNodeId = nodeId
         return node
     }
+
+    /// 新建群聊会话（kind=group + participants），插入隐形 root 节点。
+    func createGroupConversation(
+        participants: [GroupParticipant],
+        profileId: String,
+        context: ModelContext
+    ) -> Conversation {
+        let rootId = UUID().uuidString
+        let names = participants.map(\.name).joined(separator: "、")
+        let conversation = Conversation(
+            id: UUID().uuidString,
+            title: names.isEmpty ? "群聊" : "群聊：\(names)",
+            createTime: Date(),
+            updateTime: Date(),
+            currentNodeId: rootId,
+            provider: "api",
+            profileId: profileId
+        )
+        conversation.kind = "group"
+        conversation.participants = participants
+        context.insert(conversation)
+
+        let rootNode = MessageNode(
+            id: rootId, role: "system", content: "", contentType: "text",
+            createTime: Date(), parentId: nil, childrenIds: [],
+            conversationId: conversation.id, profileId: profileId
+        )
+        context.insert(rootNode)
+        try? context.save()
+        return conversation
+    }
 }

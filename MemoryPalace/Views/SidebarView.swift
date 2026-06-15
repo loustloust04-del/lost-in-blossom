@@ -73,6 +73,7 @@ struct SidebarView: View {
     @State private var lastNavTapTime: Date = .distantPast
     @State private var isLoadingMore = false
     @State private var showNewTagSheet = false
+    @State private var showCreateGroup = false
     @State private var selectedTagId: String? = nil
     @State private var favoritedNodes: [(node: MessageNode, convTitle: String)] = []
     @State private var deletedNodes: [(node: MessageNode, convTitle: String)] = []
@@ -769,19 +770,30 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) {
             if isIOSStyle {
-                Button(action: createNewConversation) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("New chat")
+                HStack(spacing: 10) {
+                    Button { showCreateGroup = true } label: {
+                        Image(systemName: "person.3.fill")
                             .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(Color.black))
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 11)
-                    .background(Capsule().fill(Color.black))
+                    .buttonStyle(.plain)
+
+                    Button(action: createNewConversation) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("New chat")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 11)
+                        .background(Capsule().fill(Color.black))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
                 .padding(.trailing, 20)
                 .padding(.bottom, 32)
             }
@@ -833,6 +845,11 @@ struct SidebarView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncDidImport)) { _ in refreshList() }
         .sheet(isPresented: $showNewTagSheet) {
             NewTagSheet(profileId: profileId)
+        }
+        .sheet(isPresented: $showCreateGroup) {
+            CreateGroupChatView { participants in
+                handleCreateGroup(participants)
+            }
         }
         // Settings sheet is presented from ContentView for proper centering
         .sheet(item: $exportingConversation) { conversation in
@@ -1534,6 +1551,13 @@ struct SidebarView: View {
         viewModel.loadConversation(conversation, context: modelContext)
     }
 
+    private func handleCreateGroup(_ participants: [GroupParticipant]) {
+        let profileId = profileManager?.currentProfile.id ?? ""
+        let conversation = viewModel.createGroupConversation(participants: participants, profileId: profileId, context: modelContext)
+        refreshList()
+        viewModel.loadConversation(conversation, context: modelContext)
+    }
+
     private func refreshList() {
         conversations.removeAll()
         fetchPage(offset: 0)
@@ -1863,6 +1887,11 @@ struct ConversationRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
+                if conversation.kind == "group" {
+                    Image(systemName: "person.3.fill")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
+                }
                 Text(conversation.title)
                     .font(.system(size: Theme.F.label, weight: .medium))
                     .foregroundColor(Theme.textPrimary)
