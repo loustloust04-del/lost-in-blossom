@@ -546,6 +546,8 @@ extension ConversationViewModel {
                 profileId: conversation.profileId
             )
             context.insert(node)
+            node.senderName = "CC Caelum"  // PR-4: 标注 CC 发言者
+            node.senderId = "cc-caelum"
             if let parentId, let parent = nodeMap[parentId],
                !parent.childrenIds.contains(nodeId) {
                 parent.childrenIds.append(nodeId)
@@ -585,6 +587,8 @@ extension ConversationViewModel {
             profileId: conversation.profileId
         )
         context.insert(node)
+        node.senderName = "CC Caelum"  // PR-4: 标注 CC 发言者
+        node.senderId = "cc-caelum"
         let pid = parentId
         let parentFetch = FetchDescriptor<MessageNode>(predicate: #Predicate { $0.id == pid })
         if let parent = try? context.fetch(parentFetch).first,
