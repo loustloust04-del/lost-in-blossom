@@ -136,7 +136,7 @@ extension ConversationViewModel {
             .joined(separator: "\n\n")
         let cleanSemi = stripVolatileMacros(semiWithoutSummary.isEmpty ? semiStable : semiWithoutSummary)
 
-        let layers = SystemPromptLayers(stableCore: stableCore, semiStable: cleanSemi, summaryLayer: summaryContent, volatile: volatileLayer)
+        let layers = SystemPromptLayers(stableCore: stableCore, summaryLayer: summaryContent, semiStable: cleanSemi, volatile: volatileLayer)
         let combined = layers.combined
         return (
             systemPrompt: combined.isEmpty ? nil : combined,

@@ -23,7 +23,7 @@ struct SystemPromptLayers {
 struct PromptAssembler {
 
     /// 层 2（半稳定）的 tag：记忆 / 世界书 / 上下文摘要。其余（preset 插槽 + 项目指令）归层 1。
-    static let semiStableTags: Set<String> = [PromptSlot.memoryInjectionId, "wb", "contextSummary", "crossWindow"]
+    static let semiStableTags: Set<String> = ["contextSummary", "crossWindow"]
 
     /// 把带 tag 的 systemParts 拆成稳定核心 / 半稳定两层（层内保持原有顺序）。
     static func splitLayers(_ parts: [(tag: String, content: String)]) -> (stable: String, semi: String) {
