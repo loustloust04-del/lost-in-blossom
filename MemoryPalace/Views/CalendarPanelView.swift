@@ -160,8 +160,9 @@ struct CalendarPanelView: View {
     // MARK: - Day Conversation List
 
     @ViewBuilder
-    private func dayConversationSection(_ conversations: [Conversation]) -> some View {
+    private func dayConversationSection(_ conversations: [Conversation]) -> AnyView {
         if conversations.isEmpty {
+            return AnyView(
             VStack(spacing: 0) {
                 dayConversationHeader(count: 0)
 
@@ -189,8 +190,9 @@ struct CalendarPanelView: View {
             .padding(.horizontal, isIOSStyle ? 8 : 10)
             .padding(.top, isIOSStyle ? 0 : 2)
             .padding(.bottom, isIOSStyle ? 0 : 4)
+            )
         } else {
-            VStack(spacing: 0) {
+            return AnyView(VStack(spacing: 0) {
                 dayConversationHeader(count: conversations.count)
 
                 Rectangle()
@@ -221,6 +223,7 @@ struct CalendarPanelView: View {
             .padding(.horizontal, isIOSStyle ? 8 : 10)
             .padding(.top, isIOSStyle ? 0 : 2)
             .padding(.bottom, isIOSStyle ? 0 : 4)
+            )
         }
     }
 

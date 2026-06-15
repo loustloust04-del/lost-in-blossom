@@ -861,14 +861,19 @@ final class ConversationViewModel {
         }
     }
 
-    func clearInConvSearch() {
-        inConvSearchKeyword = ""
-        inConvMatches = []
-        inConvMatchIndex = -1
-    }
-
     // MARK: - Actions
 
+    // MARK: - Chat (API) stored properties
+
+    var providerRouter = ProviderRouter()
+    let memoryStore: MemoryStore = SwiftDataMemoryStore()
+    var streamingText = ""
+    var streamingThinkingText: String = ""
+    var isThinking: Bool = false
+    var thinkingSummary: String = ""
+    let memoryExtractWindow = 5
+
+    // MARK: - Budget
     var budgetBlockedMessage: String? = nil
     /// Pre-send 的估算额度，发送完没 usage 时兜底扣费
     var pendingEstimatedCost: Double = 0
