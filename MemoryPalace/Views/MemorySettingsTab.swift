@@ -390,31 +390,20 @@ struct MemorySettingsTab: View {
     }
 }
 
-// MARK: - iOS Memory Page
+// MARK: - iOS Memory Page（壳 — 内容全交给 MemoryPageContent 共用核）
 
 struct IOSMemoryPage: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
-    @Environment(ProviderManager.self) private var providerManager: ProviderManager?
-
-    @State private var memories: [Memory] = []
-    @State private var newNoteText = ""
-    @State private var editingNoteId: UUID? = nil
-    @State private var editingNoteText = ""
     @AppStorage("memoryExplanationExpanded") private var memoryExplanationExpanded = true
+<<<<<<< HEAD
     @AppStorage("memoryExtractModelId") private var memoryExtractModelId = ""
     @AppStorage("customMemoryExtractionPrompt") private var customMemoryPrompt = ""
     @State private var isEditingPrompt = false
+=======
+>>>>>>> 0bf9ab7 (feat(memory): 第二波 — IOSMemoryPage 缩成 50 行壳)
 
     var body: some View {
-        let profileId = profileManager?.currentProfile.id ?? ""
-        let hotMems = memories.filter { DecayEngine.tier($0) == .hot }
-        let warmMems = memories.filter { DecayEngine.tier($0) == .warm }
-        let coldMems = memories.filter { DecayEngine.tier($0) == .cold }
-        let totalTokens = hotMems.reduce(0) { $0 + $1.tokenCount }
-
         List {
-            // 说明
+            // 说明卡（设置-记忆 专属，page2 不显示）
             Section {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { memoryExplanationExpanded.toggle() }
@@ -433,16 +422,17 @@ struct IOSMemoryPage: View {
 
                 if memoryExplanationExpanded {
                     VStack(alignment: .leading, spacing: 6) {
-                        memoryExplanationLine("每轮对话后，后台自动用小模型分析对话，提取值得记住的事实")
-                        memoryExplanationLine("🟢 活跃记忆会注入每次对话")
-                        memoryExplanationLine("🟠 7 天没提起进入休眠")
-                        memoryExplanationLine("📌 手动钉住永远不会忘")
+                        explanationLine("每轮对话后，后台自动用小模型分析对话，提取值得记住的事实")
+                        explanationLine("🟢 活跃记忆会注入每次对话")
+                        explanationLine("🟠 7 天没提起进入休眠")
+                        explanationLine("📌 手动钉住永远不会忘")
                     }
                 }
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
 
+<<<<<<< HEAD
             // 提取模型（只读提示；切换入口在 API 设置 model list 的 🌛）
             Section("配置") {
                 HStack {
@@ -582,6 +572,10 @@ struct IOSMemoryPage: View {
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
+=======
+            // 共用核：六组 Section
+            MemoryPageContent(mode: .full)
+>>>>>>> 0bf9ab7 (feat(memory): 第二波 — IOSMemoryPage 缩成 50 行壳)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
@@ -589,20 +583,22 @@ struct IOSMemoryPage: View {
         .scrollDismissesKeyboard(.immediately)
         .navigationTitle("记忆")
         .navigationBarTitleDisplayMode(.inline)
+<<<<<<< HEAD
         .onAppear { refreshMemories() }
         // 切楼层 race defense，见 docs/plan-profile-switch-atomic.md
         .onReceive(NotificationCenter.default.publisher(for: .profileWillSwitch)) { _ in
             memories = []
         }
+=======
+>>>>>>> 0bf9ab7 (feat(memory): 第二波 — IOSMemoryPage 缩成 50 行壳)
     }
 
-    // MARK: - Helpers
-
-    private func memoryExplanationLine(_ text: String) -> some View {
+    private func explanationLine(_ text: String) -> some View {
         Text(text)
             .font(.system(size: Theme.F.caption))
             .foregroundColor(Theme.textSecondary)
     }
+<<<<<<< HEAD
 
     private var iosMemoryModelDisplayName: String {
         guard let pm = providerManager else { return "—" }
@@ -714,4 +710,6 @@ struct IOSMemoryPage: View {
         let store = SwiftDataMemoryStore()
         memories = store.listAll(profileId: profileId, context: modelContext)
     }
+=======
+>>>>>>> 0bf9ab7 (feat(memory): 第二波 — IOSMemoryPage 缩成 50 行壳)
 }
