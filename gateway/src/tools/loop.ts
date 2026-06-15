@@ -6,7 +6,13 @@ import { getMcpTools, callMcpTool } from './mcp-client';
 // 流式 tool loop：把 Anthropic SSE 转成网关统一的 OpenAI chunk 流给客户端，
 // 同时本端攒出 content blocks。stop_reason == tool_use 时：内置工具(exec/recall)
 // 进程内执行，不认识的名字 fall through 到 MCP，结果塞回对话再发起下一轮。
-const ANTHROPIC_BASE = 'https://api.treegpt.cc/v1/messages';
+// 上游优先级：TreeGPT → OR → 直连 Anthropic
+function getUpstream(): { url: string; auth: string } {
+  if (config.treeChatKey) return { url: 'https://api.treegpt.cc/v1/messages', auth: 'Bearer ' + config.treeChatKey };
+  if (config.openrouterKey) return { url: 'https://openrouter.ai/api/v1/messages', auth: 'Bearer ' + config.openrouterKey };
+  if (config.anthropicKey) return { url: 'https://api.anthropic.com/v1/messages', auth: config.anthropicKey };
+  throw new Error('No upstream API key configured');
+}
 const ANTHROPIC_VERSION = '2023-06-01';
 const MAX_LOOPS = 8;
 
@@ -27,9 +33,11 @@ async function streamOnce(
 ): Promise<RoundResult> {
   let upstream: Response;
   try {
-    upstream = await fetch(ANTHROPIC_BASE, {
+    const up = getUpstream();
+    const isDirectAnthropic = up.url.includes('api.anthropic.com');
+    upstream = await fetch(up.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.treeChatKey, 'anthropic-version': ANTHROPIC_VERSION },
+      headers: { 'Content-Type': 'application/json', ...(isDirectAnthropic ? { 'x-api-key': up.auth } : { 'Authorization': up.auth }), 'anthropic-version': ANTHROPIC_VERSION },
       body: JSON.stringify({ ...payload, stream: true }),
       signal: AbortSignal.timeout(180_000),
     });
