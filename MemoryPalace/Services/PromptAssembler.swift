@@ -6,15 +6,15 @@ import Foundation
 /// 按"几乎不变 → 低频变 → 每轮变"排序，断点打在层 1/层 2 末尾。
 struct SystemPromptLayers {
     var stableCore: String = ""   // 层1：preset 插槽 persona + 项目指令（会话期间字节不变）
-    var semiStable: String = ""   // 层2：记忆 + 世界书命中（每隔几轮才变）
-    var summaryLayer: String = "" // 层3：上下文摘要（滞回裁剪，30轮变一次）
+    var summaryLayer: String = "" // 层2：上下文摘要（滞回裁剪，30轮变一次，最稳定）
+    var semiStable: String = ""   // 层3：记忆 + 世界书（可能每轮变）
     var volatile: String = ""     // 层3：{{date}}/{{time}}/{{health}} 展开（每轮变，不打断点）
 
     var isEmpty: Bool { stableCore.isEmpty && semiStable.isEmpty && summaryLayer.isEmpty && volatile.isEmpty }
 
     /// 拼成单字符串，供非 Anthropic provider / 预算估算用。
     var combined: String {
-        [stableCore, semiStable, summaryLayer, volatile].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        [stableCore, summaryLayer, semiStable, volatile].filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }
 

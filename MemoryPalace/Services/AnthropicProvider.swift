@@ -72,19 +72,19 @@ final class AnthropicProvider: BaseChatProvider {
             }
         }
 
-        // prompt caching 断点 3：分层缓存启用时（systemLayers != nil），在最新一轮（最后一条
-        // 消息）的最后一个 content block 上打断点，历史随对话增长增量命中。上一轮的断点位置
-        // 仍是有效缓存读取点，所以只为新增轮次付全价。
-        if systemLayers != nil, !apiMessages.isEmpty {
-            let lastIdx = apiMessages.count - 1
-            var last = apiMessages[lastIdx]
+        // BP4 消息历史：断点打在倒数第二条（上轮 assistant 回复，不再变化）。
+        // 最后一条是本轮新的 user 消息（每轮变，不缓存）。
+        // 滞回裁剪期间（30轮），历史前缀纹丝不动，缓存白吃。
+        if systemLayers != nil, apiMessages.count >= 2 {
+            let targetIdx = apiMessages.count - 2  // 倒数第二条
+            var last = apiMessages[targetIdx]
             if let str = last["content"] as? String {
                 last["content"] = [["type": "text", "text": str, "cache_control": ["type": "ephemeral"]]]
             } else if var blocks = last["content"] as? [[String: Any]], !blocks.isEmpty {
                 blocks[blocks.count - 1]["cache_control"] = ["type": "ephemeral"]
                 last["content"] = blocks
             }
-            apiMessages[lastIdx] = last
+            apiMessages[targetIdx] = last
         }
 
         let maxTok = samplingParams?.maxTokens ?? 4096
@@ -480,12 +480,13 @@ final class AnthropicProvider: BaseChatProvider {
         if !layers.stableCore.isEmpty {
             blocks.append(["type": "text", "text": layers.stableCore, "cache_control": ["type": "ephemeral"]])
         }
-        if !layers.semiStable.isEmpty {
-            blocks.append(["type": "text", "text": layers.semiStable, "cache_control": ["type": "ephemeral"]])
-        }
-        // 层3：摘要（滞回裁剪，30轮变一次）— 独立断点
+        // BP2：摘要（30轮变一次，最稳定）
         if !layers.summaryLayer.isEmpty {
             blocks.append(["type": "text", "text": layers.summaryLayer, "cache_control": ["type": "ephemeral"]])
+        }
+        // BP3：记忆+世界书（可能每轮变）
+        if !layers.semiStable.isEmpty {
+            blocks.append(["type": "text", "text": layers.semiStable, "cache_control": ["type": "ephemeral"]])
         }
         if !layers.volatile.isEmpty {
             blocks.append(["type": "text", "text": layers.volatile])
