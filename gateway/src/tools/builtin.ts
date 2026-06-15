@@ -1,10 +1,12 @@
 // 内置工具 — 进程内执行，不经过 MCP 协议。
 // 工具定义排在 prompt 前缀最前面，必须字节级稳定（任何改动都会打破 prompt cache 前缀）。
 import { exec as execShell } from 'node:child_process';
+import { GMAIL_TOOLS, callGmailTool } from './gmail';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 
 export const BUILTIN_TOOLS = [
+  ...GMAIL_TOOLS,
   {
     name: 'exec',
     description: 'Run a shell command on the host this gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs. SECURITY: arbitrary command execution as the gateway process — only on a private, authenticated gateway.',
