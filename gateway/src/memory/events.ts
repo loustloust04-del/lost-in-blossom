@@ -19,11 +19,15 @@ export interface DreamEvent {
 
 /** 校验上报 token：未配置 gatewayToken 则开放；否则常量时间比较 */
 export function verifyEventToken(token: string): boolean {
-  if (!config.gatewayToken) return true;
+  if (!config.gatewayToken && !config.gatewayTokenAlt) return true;
   if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(config.gatewayToken);
-  return a.length === b.length && timingSafeEqual(a, b);
+  const check = (expected: string) => {
+    if (!expected) return false;
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+  return check(config.gatewayToken) || check(config.gatewayTokenAlt);
 }
 
 /** 存一条事件到 dream_events */

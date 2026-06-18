@@ -14,7 +14,8 @@ export async function auth(c: Context, next: Next) {
   const h = c.req.header('Authorization');
   if (!h?.startsWith('Bearer ')) return c.json({ error: 'unauthorized' }, 401);
   const token = h.slice(7);
-  if (!config.gatewayToken || !safeEqual(token, config.gatewayToken)) {
+  const ok = (config.gatewayToken && safeEqual(token, config.gatewayToken)) || (config.gatewayTokenAlt && safeEqual(token, config.gatewayTokenAlt));
+  if (!ok) {
     return c.json({ error: 'forbidden' }, 403);
   }
   await next();

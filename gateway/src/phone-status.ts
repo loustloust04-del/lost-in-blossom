@@ -80,7 +80,8 @@ export function phoneStatusRoutes(app: Hono) {
     const key = c.req.query('key') || '';
     const bearer = (c.req.header('Authorization') || '').replace('Bearer ', '');
     const token = key || bearer;
-    if (config.gatewayToken && token !== config.gatewayToken) {
+    const valid = (!config.gatewayToken && !config.gatewayTokenAlt) || token === config.gatewayToken || token === config.gatewayTokenAlt;
+    if (!valid) {
       return c.json({ error: 'unauthorized' }, 401);
     }
 
