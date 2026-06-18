@@ -43,6 +43,12 @@ struct ConsoleView: View {
             if healthKit.authState == .authorized, let ctx = todayCtx {
                 await healthKit.populate(context: ctx)
             }
+            // 屏幕使用时间：从网关聚合的 app_open 拉取，写入今日 DailyContext（分钟→小时）
+            if let st = await ScreenTimeClient.fetch(), let ctx = todayCtx {
+                ctx.screenTime = st.total_minutes / 60.0
+                ctx.socialScreenTime = st.social_minutes / 60.0
+                try? modelContext.save()
+            }
         }
     }
 
