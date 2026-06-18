@@ -16,6 +16,7 @@ struct ConsoleView: View {
     @State private var tappedCardId: String? = nil
     @State private var memoTabForYou: Bool = true
     @State private var showMemoBoard: Bool = false
+    @State private var vitalsData: VitalsResponse? = nil
 
     // 今天的 DailyContext（如果没有则为 nil）
     private var todayCtx: DailyContext? {
@@ -56,6 +57,13 @@ struct ConsoleView: View {
 
     private func ensureTodayContext() {
         DailyContextStore.ensureToday(context: modelContext)
+    }
+
+    private func loadVitals() {
+        Task {
+            let v = await VitalsClient.fetch()
+            await MainActor.run { vitalsData = v }
+        }
     }
 
     // MARK: - Header
