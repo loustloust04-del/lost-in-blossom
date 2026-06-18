@@ -1530,7 +1530,7 @@ struct BubbleView: View {
                         }
                         .padding(.vertical, 4)
                     } else if !displayText.isEmpty {
-                        let needsWebView = displayText.contains("{color:") || displayText.contains("||")
+                        let needsWebView = displayText.contains("{color:")
                         if needsWebView {
                             // 富文本消息：WebView 渲染（保留 {color:} 支持）
                             MessageContentWebView(
@@ -1546,7 +1546,7 @@ struct BubbleView: View {
                                 ],
                                 dynamicHeight: $messageWebViewHeight
                             )
-                            .frame(height: max(44, min(messageWebViewHeight, UIScreen.main.bounds.height * 1.5)))
+                            .frame(height: messageWebViewHeight)
                         } else {
                             // 普通消息：MarkdownUI 渲染（纯 SwiftUI，零白屏）
                             Markdown(displayText)
