@@ -15,6 +15,7 @@ import { updateSummary } from './memory/keepalive';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
+import { getScreenTime } from './screentime';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
 const app = new Hono();
@@ -506,15 +507,12 @@ app.post('/api/mcp/call', auth, async (c) => {
 
 vitalsRoutes(app);
 
-// Screen Time 代理（Memory Palace → App）
+// Screen Time 代理：从 dream_events 聚合今日 app_open
 app.get('/api/screentime', auth, async (c) => {
+  const date = c.req.query('date'); // 可选，默认今天
   try {
-    const res = await fetch('http://127.0.0.1:3501/api/screentime/today', {
-      headers: { 'X-Forwarded-Email': 'caelumbunny@gmail.com' },
-      signal: AbortSignal.timeout(5000),
-    });
-    const data = await res.json();
-    return c.json(data);
+    const result = await getScreenTime(date || undefined);
+    return c.json(result);
   } catch (e: any) {
     return c.json({ error: e?.message || 'screentime unavailable' }, 502);
   }
