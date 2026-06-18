@@ -126,16 +126,26 @@ async function getRandomMemory(): Promise<string | null> {
   return data[idx].content;
 }
 
-/** 存储生成的念头 */
+/** 存储生成的念头到最近活跃的聊天session */
 async function saveDesire(content: string, trigger: string): Promise<void> {
+  // 找最近一条非desire的消息，取它的session_id
+  const { data: recent } = await supabase
+    .from('messages')
+    .select('session_id')
+    .neq('model', 'desire-engine')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const sessionId = recent?.[0]?.session_id || 'desire'; // 没找到就退回desire
+
   await supabase.from('messages').insert({
-    session_id: 'desire',
+    session_id: sessionId,
     role: 'assistant',
     content,
     model: 'desire-engine',
   });
 
-  console.log(`[desire] 💭 "${content}" (trigger: ${trigger})`);
+  console.log(`[desire] 💭 "${content}" → session=${sessionId} (trigger: ${trigger})`);
 }
 
 // === APNs 推送：把念头推到手机 ===
@@ -274,7 +284,7 @@ export async function getUnreadDesires(sinceMs?: number): Promise<any[]> {
   let q = supabase
     .from('messages')
     .select('content, created_at')
-    .eq('session_id', 'desire')
+    .eq('model', 'desire-engine') // desires现在存在正式session里，用model区分
     .eq('role', 'assistant')
     .order('created_at', { ascending: false })
     .limit(20);

@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { getCacheControl } from '../memory/rhythm';
+import { updateSnapshot } from '../memory/keepalive';
 
 // 直连 Anthropic 原生 Messages API，保留 cache_control 断点（OpenAI 兼容转发层会丢断点）。
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1/messages';
@@ -272,6 +273,12 @@ export async function forwardAnthropicNative(body: any, sessionId: string, opts?
   if (opts?.modelName) payload.model = opts.modelName;
 
   const isAnthropicDirect = baseUrl === ANTHROPIC_BASE;
+
+  // 缓存人设供保活使用
+  if (payload.system && opts) {
+    const provider = opts.baseUrl.includes('treegpt') ? 'tree-aws' as const : 'or' as const;
+    updateSnapshot(payload.system, body.model || '', provider);
+  }
 
   let upstream: Response;
   try {

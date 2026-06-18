@@ -771,16 +771,14 @@ struct SidebarView: View {
         .overlay(alignment: .bottomTrailing) {
             if isIOSStyle {
                 HStack(spacing: 10) {
-                    Button { showCreateGroup = true } label: {
-                        Image(systemName: "person.3.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Circle().fill(Color.black))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: createNewConversation) {
+                    Menu {
+                        Button { createNewConversation() } label: {
+                            Label("单聊", systemImage: "bubble.left")
+                        }
+                        Button { showCreateGroup = true } label: {
+                            Label("群聊", systemImage: "person.3")
+                        }
+                    } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .semibold))
@@ -792,7 +790,6 @@ struct SidebarView: View {
                         .padding(.vertical, 11)
                         .background(Capsule().fill(Color.black))
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 32)

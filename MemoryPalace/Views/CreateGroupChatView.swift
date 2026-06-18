@@ -1,38 +1,42 @@
 import SwiftUI
 
-/// 群聊 V3 创建页（简化版）：多选 2~4 张角色卡，每张可选模型 + preset。
+/// 群聊创建页 V4：直接输入名字 + 选模型 + 可选 system prompt。
+/// 不依赖角色卡，每个参与者独立配置。
 struct CreateGroupChatView: View {
     let onCreate: ([GroupParticipant]) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(CharacterCardManager.self) private var cardManager: CharacterCardManager?
-    @Environment(PresetManager.self) private var presetManager: PresetManager?
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
 
-    @State private var selectedIds: [String] = []
-    @State private var nameOverride: [String: String] = [:]
-    @State private var modelChoice: [String: String] = [:]
-    @State private var presetChoice: [String: String] = [:]
+    @State private var slots: [SlotState] = [
+        SlotState(name: "Caelum", colorHex: "#7C9CBF"),
+        SlotState(name: "", colorHex: "#C28E6B")
+    ]
 
-    private let palette = ["#7C9CBF", "#C28E6B", "#8FA876", "#B07CA8"]
+    private var models: [ProviderModel] {
+        providerManager?.availableModels ?? []
+    }
 
-    private var cards: [CharacterCard] { cardManager?.cards ?? [] }
-    private var presets: [Preset] { presetManager?.presets ?? [] }
-    private var models: [ProviderModel] { providerManager?.allModels ?? [] }
-    private var canCreate: Bool { selectedIds.count >= 2 && selectedIds.count <= 4 }
+    private var canCreate: Bool {
+        let filled = slots.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        return filled.count >= 2 && !models.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                cardSelectionSection
                 participantSections
+                addButton
             }
             .navigationTitle("新建群聊")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("创建") { create() }.disabled(!canCreate)
+                    Button("开始") { create() }
+                        .disabled(!canCreate)
                 }
             }
         }
@@ -40,87 +44,114 @@ struct CreateGroupChatView: View {
 
     // MARK: - Sections
 
-    private var cardSelectionSection: some View {
-        Section("选择角色（2~4 个）") {
-            if cards.isEmpty {
-                Text("还没有角色卡，先去卡库创建").foregroundStyle(.secondary)
-            } else {
-                ForEach(cards) { card in cardRow(card) }
-            }
-        }
-    }
-
-    private func cardRow(_ card: CharacterCard) -> some View {
-        let on = selectedIds.contains(card.id)
-        return Button { toggle(card.id) } label: {
-            HStack {
-                Image(systemName: on ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
-                Text(card.name).foregroundStyle(.primary)
-                Spacer()
-                if on, let idx = selectedIds.firstIndex(of: card.id) {
-                    Text("\(idx + 1)").font(.caption).foregroundStyle(.secondary)
+    private var participantSections: some View {
+        ForEach(slots.indices, id: \.self) { idx in
+            Section {
+                TextField("名字", text: $slots[idx].name)
+                modelPicker(for: idx)
+                systemPromptField(for: idx)
+            } header: {
+                HStack {
+                    Circle()
+                        .fill(Color(hex: slots[idx].colorHex) ?? .gray)
+                        .frame(width: 8, height: 8)
+                    Text("AI \(Character(UnicodeScalar(65 + idx)!))")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if slots.count > 2 {
+                        Button { slots.remove(at: idx) } label: {
+                            Image(systemName: "minus.circle")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
-        .buttonStyle(.plain)
     }
 
-    private var participantSections: some View {
-        ForEach(selectedIds, id: \.self) { cid in
-            if let card = cards.first(where: { $0.id == cid }) {
-                participantSection(cid: cid, card: card)
+    private func modelPicker(for idx: Int) -> some View {
+        Picker("模型", selection: $slots[idx].modelId) {
+            if models.isEmpty {
+                Text("无可用模型").tag("")
+            }
+            ForEach(models) { m in
+                Text(m.name).tag(m.id)
+            }
+        }
+        .onAppear {
+            if slots[idx].modelId.isEmpty, let first = models.first {
+                slots[idx].modelId = first.id
             }
         }
     }
 
-    private func participantSection(cid: String, card: CharacterCard) -> some View {
-        Section("参与者：\(card.name)") {
-            TextField("显示名", text: bindingName(cid, card.name))
-            Picker("模型", selection: bindingModel(cid)) {
-                ForEach(models) { m in Text(m.name).tag(m.id) }
-            }
-            Picker("Preset", selection: bindingPreset(cid)) {
-                Text("默认").tag("")
-                ForEach(presets) { p in Text(p.name).tag(p.id) }
+    private func systemPromptField(for idx: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("System Prompt（可选）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextEditor(text: $slots[idx].systemPrompt)
+                .frame(minHeight: 60, maxHeight: 120)
+                .font(.callout)
+        }
+    }
+
+    @ViewBuilder
+    private var addButton: some View {
+        if slots.count < 4 {
+            Section {
+                Button {
+                    let colors = ["#7C9CBF", "#C28E6B", "#8FA876", "#B07CA8"]
+                    let color = colors[slots.count % colors.count]
+                    slots.append(SlotState(name: "", colorHex: color))
+                } label: {
+                    Label("添加参与者", systemImage: "plus.circle")
+                }
             }
         }
     }
 
-    // MARK: - Logic
-
-    private func toggle(_ id: String) {
-        if let i = selectedIds.firstIndex(of: id) { selectedIds.remove(at: i) }
-        else if selectedIds.count < 4 { selectedIds.append(id) }
-    }
-
-    private func bindingName(_ cid: String, _ def: String) -> Binding<String> {
-        Binding(get: { nameOverride[cid] ?? def }, set: { nameOverride[cid] = $0 })
-    }
-    private func bindingModel(_ cid: String) -> Binding<String> {
-        Binding(get: { modelChoice[cid] ?? models.first?.id ?? "" }, set: { modelChoice[cid] = $0 })
-    }
-    private func bindingPreset(_ cid: String) -> Binding<String> {
-        Binding(get: { presetChoice[cid] ?? "" }, set: { presetChoice[cid] = $0 })
-    }
+    // MARK: - Create
 
     private func create() {
-        let parts: [GroupParticipant] = selectedIds.enumerated().compactMap { (idx, cid) -> GroupParticipant? in
-            guard let card = cards.first(where: { $0.id == cid }) else { return nil }
-            let nameRaw = (nameOverride[cid] ?? card.name).trimmingCharacters(in: .whitespacesAndNewlines)
-            let model = modelChoice[cid] ?? models.first?.id ?? ""
-            let preset = presetChoice[cid] ?? ""
-            let color = palette[idx % palette.count]
+        let participants: [GroupParticipant] = slots.enumerated().compactMap { idx, slot in
+            let name = slot.name.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return nil }
+            let modelId = slot.modelId.isEmpty ? (models.first?.id ?? "") : slot.modelId
             return GroupParticipant(
-                name: nameRaw.isEmpty ? card.name : nameRaw,
-                characterCardID: cid,
-                model: model,
-                presetId: preset,
-                colorHex: color
+                name: name,
+                model: modelId,
+                colorHex: slot.colorHex,
+                systemPrompt: slot.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
-        guard parts.count >= 2 else { return }
-        onCreate(parts)
+        guard participants.count >= 2 else { return }
+        onCreate(participants)
         dismiss()
+    }
+}
+
+// MARK: - Slot State
+
+private struct SlotState {
+    var name: String
+    var modelId: String = ""
+    var systemPrompt: String = ""
+    var colorHex: String
+}
+
+// MARK: - Color(hex:)
+
+private extension Color {
+    init?(hex: String) {
+        var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if h.hasPrefix("#") { h.removeFirst() }
+        guard h.count == 6, let val = UInt64(h, radix: 16) else { return nil }
+        self.init(
+            red: Double((val >> 16) & 0xFF) / 255,
+            green: Double((val >> 8) & 0xFF) / 255,
+            blue: Double(val & 0xFF) / 255
+        )
     }
 }
