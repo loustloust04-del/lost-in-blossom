@@ -19,7 +19,10 @@ interface ScreenTimeResult {
 }
 
 export async function getScreenTime(dateStr?: string): Promise<ScreenTimeResult> {
-  const date = dateStr || new Date().toISOString().slice(0, 10);
+  // 默认用北京时间的今天（VPS 是 UTC，兔兔在 UTC+8）
+  const now = new Date();
+  const beijingNow = new Date(now.getTime() + 8 * 3600 * 1000);
+  const date = dateStr || beijingNow.toISOString().slice(0, 10);
 
   // 取今天 00:00 ~ 23:59 的所有 app_open 事件，按时间排序（北京时间）
   const dayStart = new Date(date + 'T00:00:00+08:00').getTime();

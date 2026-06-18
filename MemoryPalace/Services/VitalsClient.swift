@@ -14,7 +14,7 @@ struct VitalsResponse: Codable {
 enum VitalsClient {
     static func fetch() async -> VitalsResponse? {
         let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
-        let token = UserDefaults.standard.string(forKey: "gatewayToken") ?? ""
+        let token = UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? ""
         guard let url = URL(string: "\(base)/api/vitals") else { return nil }
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
