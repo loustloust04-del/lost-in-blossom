@@ -15,7 +15,7 @@ import { updateSummary } from './memory/keepalive';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
-import { getScreenTime } from './screentime';
+import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
@@ -104,13 +104,20 @@ app.post('/api/events', async (c) => {
 
   const res = await recordEvent({ type, value, ts, metadata: body.metadata ?? null });
 
+  // 本地文件存储（不依赖 Supabase dream_events 表）
+  if (type === 'app_open') {
+    await recordAppOpen(String(value));
+  }
+
   // PR-4: 深夜守护——凌晨收到 app_open 立刻检查是否该喊她睡觉（fire-and-forget）
   if (type === 'app_open') {
     onAppOpenEvent(String(value)).catch(err =>
       console.error('[nightguard] error:', err?.message ?? err));
   }
 
-  return c.json({ ok: res.ok, ...(res.error ? { error: res.error } : {}) });
+  // app_open 已存本地文件，Supabase 失败不影响
+    const ok = (type === 'app_open') ? true : res.ok;
+    return c.json({ ok, ...(res.error && type !== 'app_open' ? { error: res.error } : {}) });
 });
 
 // ============ 未读念头（App 端拉取，支持 ?since=ms 增量）（PR-6）============
