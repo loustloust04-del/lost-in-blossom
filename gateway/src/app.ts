@@ -16,6 +16,7 @@ import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
 import { getScreenTime } from './screentime';
+import { phoneStatusRoutes } from './phone-status';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
 const app = new Hono();
@@ -506,6 +507,7 @@ app.post('/api/mcp/call', auth, async (c) => {
 });
 
 vitalsRoutes(app);
+phoneStatusRoutes(app);
 
 // Screen Time 代理：从 dream_events 聚合今日 app_open
 app.get('/api/screentime', auth, async (c) => {
