@@ -176,11 +176,8 @@ struct ConsoleView: View {
             Text("\(medsName) · 昨晚")
                 .font(.system(size: 12))
                 .foregroundColor(Self.textMuted)
-                    .padding(.top, 6)
-                    .lineLimit(1)
-            } else {
-                noDataView
-            }
+                .padding(.top, 6)
+                .lineLimit(1)
         }
     }
 
