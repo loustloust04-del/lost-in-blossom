@@ -119,3 +119,24 @@ from dream_events order by created_at desc limit 5;
 
 - 上报的只有 **App 名称 + 时间**，不含 App 内任何内容。
 - 数据只进你自己的 Supabase，用于 AI 主动关心你的作息，不外传。
+
+## 七、推荐监控的 App 列表
+
+为了覆盖主要使用场景（屏幕使用时间统计依赖这些 app_open 事件聚合），建议给以下 App 各建一条「打开时」自动化：
+
+| App | type | value |
+|-----|------|-------|
+| 小红书 | app_open | 小红书 |
+| 微博 | app_open | 微博 |
+| 抖音 | app_open | 抖音 |
+| B站 | app_open | B站 |
+| 微信 | app_open | 微信 |
+| QQ | app_open | QQ |
+| Safari | app_open | Safari |
+| YouTube | app_open | YouTube |
+| Twitter | app_open | Twitter |
+| Memory Palace | app_open | MemoryPalace |
+
+每个 Shortcut 只需改 `value` 字段和触发的 App，其余（POST 到 `/api/events`、JSON body、Authorization header）按第四节配置一致。
+
+> 其中「小红书 / 微博 / 抖音 / B站 / 微信 / QQ / Twitter」会被网关计入**社交 App 时长**（`/api/screentime` 的 `social_minutes`），在 ConsoleView 屏幕使用时间卡片里单独显示。社交分类列表在 `gateway/src/screentime.ts` 的 `SOCIAL_APPS` 里，可后续扩展。
