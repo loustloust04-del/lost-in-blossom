@@ -36,23 +36,20 @@ struct ScreenTimeApp: Codable {
 struct ScreenTimeResponse: Codable {
     let date: String
     let total_minutes: Double
+    let social_minutes: Double
     let apps: [ScreenTimeApp]
 }
 
 enum ScreenTimeClient {
     static func fetch() async -> ScreenTimeResponse? {
-        guard let url = URL(string: "http://127.0.0.1:3501/api/screentime/today") else { return nil }
-        var req = URLRequest(url: url)
-        req.setValue("caelumbunny@gmail.com", forHTTPHeaderField: "X-Forwarded-Email")
-        req.timeoutInterval = 5
-        // 走网关代理（App不能直连VPS内网）
+        // 只走网关代理；token 用 App 统一的 gatewayAuthToken（gatewayToken 是历史空键）
         let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
-        let token = UserDefaults.standard.string(forKey: "gatewayToken") ?? ""
-        guard let proxyUrl = URL(string: "\(base)/api/screentime") else { return nil }
-        var proxyReq = URLRequest(url: proxyUrl)
-        proxyReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        proxyReq.timeoutInterval = 5
-        guard let (data, _) = try? await URLSession.shared.data(for: proxyReq) else { return nil }
+        let token = UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? ""
+        guard let url = URL(string: "\(base)/api/screentime") else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 5
+        guard let (data, _) = try? await URLSession.shared.data(for: req) else { return nil }
         return try? JSONDecoder().decode(ScreenTimeResponse.self, from: data)
     }
 }
