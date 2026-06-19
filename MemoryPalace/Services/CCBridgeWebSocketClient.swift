@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 
 /// hub 端返回的远程错误（spawn_cc_err / list 失败 / WS send err）。
@@ -196,6 +197,15 @@ final class CCBridgeWebSocketClient: NSObject {
 
     /// 强制重连：断开旧连接，等待底层 TCP 资源释放后重建。
     /// 给 UI 按钮用——比 disconnect()+connect() 更可靠。
+
+    /// 回前台/网络恢复时调用：未连接且有候选URL时自动重连
+    func reconnectIfNeeded() {
+        guard !isConnected, !urls.isEmpty, !manualClose else { return }
+        print("[CCBridge] reconnectIfNeeded: not connected, scheduling reconnect")
+        reconnectDelay = 1  // 重置退避，立即重连
+        scheduleReconnect()
+    }
+
     func forceReconnect(url: URL, token: String? = nil) {
         print("[CCBridge] forceReconnect called, url=\(url)")
         disconnect()
@@ -577,6 +587,24 @@ final class CCBridgeWebSocketClient: NSObject {
                 self.scheduleReconnect()
             }
         }
+    }
+
+
+    private var networkMonitor: NWPathMonitor?
+
+    /// 监听网络状态变化，WiFi↔蜂窝切换时自动重连
+    func startNetworkMonitor() {
+        networkMonitor?.cancel()
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            if path.status == .satisfied && !self.isConnected && !self.urls.isEmpty {
+                print("[CCBridge] network restored, reconnecting")
+                DispatchQueue.main.async { self.reconnectIfNeeded() }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "cc.network.monitor"))
+        networkMonitor = monitor
     }
 
     private func scheduleReconnect() {
