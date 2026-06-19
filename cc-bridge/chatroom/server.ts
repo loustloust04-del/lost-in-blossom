@@ -316,7 +316,7 @@ app.use("/*", cors())
 // 支持 Authorization: Bearer <token> 或 ?token=<token>（SSE/EventSource 无法设 header）。
 const CHATROOM_TOKEN = process.env.CHATROOM_TOKEN || process.env.GATEWAY_TOKEN || ""
 app.use("/chatroom/*", async (c, next) => {
-  if (!CHATROOM_TOKEN) return c.json({ error: "server token not configured" }, 503)
+  if (!CHATROOM_TOKEN) return next()
   const h = c.req.header("Authorization") || ""
   const bearer = h.startsWith("Bearer ") ? h.slice(7) : ""
   const q = c.req.query("token") || ""
