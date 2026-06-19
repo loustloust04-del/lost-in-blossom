@@ -112,18 +112,13 @@ struct SidebarView: View {
             // ── App 标题行 ──────────────────────────────────────────────────
             HStack {
                 Text("Lost in Blossom")
-                    .font(.custom("CormorantGaramond-SemiBold", size: 22))
+                    .font(.custom("CormorantGaramondLight-SemiBold", size: 22))
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
                 Button { showSettings = true } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color(UIColor.secondarySystemFill))
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Theme.textSecondary)
-                    }
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
