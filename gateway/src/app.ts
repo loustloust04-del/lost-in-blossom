@@ -29,7 +29,7 @@ app.get('/health', (c) => c.json({
 }));
 
 // ============ 模型列表 ============
-app.get('/v1/models', auth, (c) => c.json({
+app.get('/v1/models', (c) => c.json({
   object: 'list',
   data: [
     { id: 'anthropic/claude-opus-4.8', object: 'model', owned_by: 'anthropic' },
