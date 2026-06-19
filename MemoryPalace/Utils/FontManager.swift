@@ -21,6 +21,7 @@ enum FontManager {
         ("PingFangSC-Semibold", "苹方 Semibold"),
         ("LXGWWenKai-Regular", "霞鹜文楷"),
         ("SourceHanSerifSC-Regular", "思源宋体"),
+        ("CormorantGaramond-SemiBold", "Cormorant Garamond"),
     ]
 
     /// Register fonts bundled with the app (Resources/Fonts/*.ttf|*.otf)

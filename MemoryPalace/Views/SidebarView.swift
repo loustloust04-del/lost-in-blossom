@@ -112,7 +112,7 @@ struct SidebarView: View {
             // ── App 标题行 ──────────────────────────────────────────────────
             HStack {
                 Text("Lost in Blossom")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.custom("CormorantGaramond-SemiBold", size: 22))
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
                 Button { showSettings = true } label: {
@@ -788,7 +788,7 @@ struct SidebarView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 11)
-                        .background(Capsule().fill(Color(red: 0xB9/255, green: 0x67/255, blue: 0x47/255)))
+                        .background(Capsule().fill(Color.black))
                     }
                 }
                 .padding(.trailing, 20)
@@ -1918,17 +1918,8 @@ struct ConversationRow: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? Color(red: 0xE0/255, green: 0xD6/255, blue: 0xC6/255) : Color.clear)
+                    .fill(isSelected ? Theme.accent.opacity(0.45) : Color.clear)
             )
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color(red: 0xB9/255, green: 0x67/255, blue: 0x47/255))
-                        .frame(width: 3)
-                        .padding(.vertical, 6)
-                        .padding(.leading, 6)
-                }
-            }
             .padding(.horizontal, 4)
 
             if showDivider && !isSelected {
