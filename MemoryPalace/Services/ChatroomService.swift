@@ -85,7 +85,7 @@ final class ChatroomService {
     func sendMessage(sessionId: String, content: String) async throws {
         // 立即把用户消息加到本地列表，UI即时显示
         await MainActor.run {
-            let userMsg = ChatroomMessage(id: UUID().uuidString, role: "user", name: nil, content: content)
+            let userMsg = ChatroomMessage(id: self.currentMessages.count + 1, role: "user", content: content, model: nil, created_at: "")
             self.currentMessages.append(userMsg)
         }
 
@@ -150,7 +150,9 @@ final class ChatroomService {
                         let msg = ChatroomMessage(
                             id: self.currentMessages.count + 1,
                             role: role,
-                            content: self.streamingContent
+                            content: self.streamingContent,
+                            model: nil,
+                            created_at: ""
                         )
                         self.currentMessages.append(msg)
                         self.streamingContent = ""
