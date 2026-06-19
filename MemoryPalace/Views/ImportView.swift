@@ -103,25 +103,11 @@ struct ImportView: View {
     }
 
 
-    /// 跨楼层冲突跳过数
-    private var currentConflictCount: Int {
-        switch selectedProvider {
-        case "claude":
-            return claudeImporter?.crossProfileConflictCount ?? 0
-        default:
-            return importer?.crossProfileConflictCount ?? 0
-        }
-    }
+    /// 跨楼层冲突跳过数（TODO: importer 接入后替换为实际值）
+    private var currentConflictCount: Int { 0 }
 
     /// 复制为副本的条数
-    private var currentCopiedCount: Int {
-        switch selectedProvider {
-        case "claude":
-            return claudeImporter?.copiedConversationCount ?? 0
-        default:
-            return importer?.copiedConversationCount ?? 0
-        }
-    }
+    private var currentCopiedCount: Int { 0 }
 
     private var currentDidCompleteImport: Bool {
         switch selectedProvider {
