@@ -52,6 +52,12 @@ final class CCBridgeProvider: BaseChatProvider {
         replyTimer = nil
 
         // 4. 先注册 reply handler（即便 WS 还没连上也无妨，dict 里等 reply 到达再触发）
+        // 4a. 注册附件 handler：CC回复带文件时暂存，replyHandler里一并处理
+        var pendingAttachment: PendingChatAttachment?
+        wsClient.registerReplyAttachmentHandler(chatId: chatId) { att in
+            pendingAttachment = att
+        }
+
         wsClient.registerReplyHandler(chatId: chatId) { [weak self] replyText in
             guard let self else { return }
             self.replyTimer?.invalidate()
@@ -64,6 +70,29 @@ final class CCBridgeProvider: BaseChatProvider {
                 contentToSave = "[thinking]\(think.thinking)[/thinking]\(replyText)"
             } else {
                 contentToSave = replyText
+            }
+            // 如果CC回复带了文件附件，把它拼进content
+            if let att = pendingAttachment {
+                if att.isImage, let imgData = att.imageData {
+                    let b64 = imgData.base64EncodedString()
+                    let mime = att.mimeType ?? "image/png"
+                    let blocks: [[String: Any]] = [
+                        ["type": "image", "source": ["type": "base64", "media_type": mime, "data": b64]],
+                        ["type": "text", "text": contentToSave]
+                    ]
+                    if let json = try? JSONSerialization.data(withJSONObject: blocks),
+                       let jsonStr = String(data: json, encoding: .utf8) {
+                        self.streamingContent = jsonStr
+                        onComplete(jsonStr, nil)
+                        return
+                    }
+                } else {
+                    // 非图片文件：在内容末尾附上文件名
+                    let withFile = contentToSave + "\n\n📎 \(att.name)"
+                    self.streamingContent = withFile
+                    onComplete(withFile, nil)
+                    return
+                }
             }
             self.streamingContent = contentToSave
             onComplete(contentToSave, nil)  // CC 不上报 token 用量
@@ -83,6 +112,7 @@ final class CCBridgeProvider: BaseChatProvider {
         replyTimer = Timer.scheduledTimer(withTimeInterval: replyGracePeriod, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.wsClient.unregisterReplyHandler(chatId: chatId)
+            self.wsClient.unregisterReplyAttachmentHandler(chatId: chatId)
             self.wsClient.unregisterStreamHandler()
             self.failNow("CC 60 秒内没回（可能 CC 思考超时 / hub 中断 / reply 真的丢了）",
                          onError: onError)
