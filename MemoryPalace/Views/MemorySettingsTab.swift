@@ -16,6 +16,7 @@ struct MemorySettingsTab: View {
     @AppStorage("memoryExtractModelId") private var memoryExtractModelId = ""
     @AppStorage("customMemoryExtractionPrompt") private var customMemoryPrompt = ""
     @State private var isEditingPrompt = false
+    @AppStorage("localMemoryEnabled") private var localMemoryEnabled = true
     @AppStorage("useBackendMemory") private var useBackendMemory = false
     @State private var aligning = false
     @State private var alignStatus: String? = nil
@@ -23,6 +24,21 @@ struct MemorySettingsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             let profileId = profileManager?.currentProfile.id ?? ""
+
+            // 本地记忆总开关
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $localMemoryEnabled) {
+                    Text("启用本地记忆")
+                        .font(.system(size: Theme.SettingsFont.label, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                }
+                .tint(Theme.accent)
+
+                Text("关闭后停止记忆提取和注入。已有记忆不会删除，重新开启后恢复。")
+                    .font(.system(size: Theme.SettingsFont.caption))
+                    .foregroundColor(Theme.textMuted)
+            }
+            .padding(.vertical, 4)
 
             // PR-5: 后端记忆系统开关 + 手动对齐
             VStack(alignment: .leading, spacing: 8) {

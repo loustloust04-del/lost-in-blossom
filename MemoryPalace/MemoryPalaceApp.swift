@@ -349,6 +349,7 @@ struct MemoryPalaceApp: App {
     @State private var rightPanelNavigator = RightPanelNavigator()
 
     init() {
+        UserDefaults.standard.register(defaults: ["localMemoryEnabled": true])
         let t0 = CFAbsoluteTimeGetCurrent()
         // Phase 3.1: 尽早初始化通知 delegate（须在 willFinishLaunchingWithOptions 前完成）
         _ = LocalNotificationService.shared
