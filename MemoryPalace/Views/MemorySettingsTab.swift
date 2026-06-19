@@ -417,6 +417,7 @@ struct IOSMemoryPage: View {
     @State private var newNoteText = ""
     @State private var editingNoteId: UUID? = nil
     @State private var editingNoteText = ""
+    @AppStorage("localMemoryEnabled") private var localMemoryEnabled = true
     @AppStorage("memoryExplanationExpanded") private var memoryExplanationExpanded = true
     @AppStorage("memoryExtractModelId") private var memoryExtractModelId = ""
     @AppStorage("customMemoryExtractionPrompt") private var customMemoryPrompt = ""
@@ -430,6 +431,20 @@ struct IOSMemoryPage: View {
         let totalTokens = hotMems.reduce(0) { $0 + $1.tokenCount }
 
         List {
+            // 本地记忆总开关
+            Section {
+                Toggle(isOn: $localMemoryEnabled) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("启用本地记忆")
+                            .font(.system(size: Theme.F.body, weight: .medium))
+                        Text("关闭后停止记忆提取和注入，已有记忆不会删除")
+                            .font(.system(size: Theme.F.caption))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .tint(Theme.accent)
+            }
+
             // 说明
             Section {
                 Button {
