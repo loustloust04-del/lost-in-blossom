@@ -137,6 +137,12 @@ final class ChatroomService {
         streamingContent = ""
 
         Task {
+            defer {
+                Task { @MainActor in
+                    self.isStreaming = false
+                    self.streamingRole = nil
+                }
+            }
             let (bytes, _) = try await URLSession.shared.bytes(from: url)
             var eventType = ""
 
