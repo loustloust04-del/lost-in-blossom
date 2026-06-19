@@ -561,6 +561,27 @@ extension ConversationViewModel {
     /// 在 loadConversation 和 sendMessage 时都会（重新）注册，保证 handler
     /// 持有的 context 始终是当前楼层的。
     func installCCFollowUpHandler(context: ModelContext, providerManager: ProviderManager? = nil) {
+        // proactive 附件 fallback：CC主动发的文件走这里
+        CCBridgeWebSocketClient.shared.unhandledAttachmentHandler = { [weak self] chatId, att in
+            guard let self else { return }
+            // 图片：作为独立 multimodal 消息插入
+            if att.isImage, let imgData = att.imageData {
+                let b64 = imgData.base64EncodedString()
+                let mime = att.mimeType ?? "image/png"
+                let blocks: [[String: Any]] = [
+                    ["type": "image", "source": ["type": "base64", "media_type": mime, "data": b64]],
+                    ["type": "text", "text": "📎 \(att.name)"]
+                ]
+                if let json = try? JSONSerialization.data(withJSONObject: blocks),
+                   let jsonStr = String(data: json, encoding: .utf8) {
+                    self.appendCCMessage(chatId: chatId, content: jsonStr, context: context)
+                }
+            } else {
+                // 非图片文件：标注文件名
+                self.appendCCMessage(chatId: chatId, content: "📎 \(att.name)", context: context)
+            }
+        }
+
         CCBridgeWebSocketClient.shared.unhandledReplyHandler = { [weak self] chatId, content in
             guard let self else { return }
             // hub 在 reply 前先广播 cc_thinking；和单发路径一样嵌入 content

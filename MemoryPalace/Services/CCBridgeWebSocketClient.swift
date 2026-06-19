@@ -78,7 +78,8 @@ final class CCBridgeWebSocketClient: NSObject {
     /// Fires on main queue when a reply arrives but no active sendStreaming handler is registered
     /// for its chatId. Captures from ConversationViewModel to handle hub offline-replay bursts and
     /// proactive CC messages after the single-shot handler has already been consumed.
-    var unhandledReplyHandler: ((String, String) -> Void)?  // (chatId, content)
+    var unhandledReplyHandler: ((String, String) -> Void)?
+    var unhandledAttachmentHandler: ((String, PendingChatAttachment) -> Void)?  // (chatId, content)
 
     // MARK: - Terminal streaming (Phase 2)
 
@@ -487,8 +488,12 @@ final class CCBridgeWebSocketClient: NSObject {
                         // (handles hub offline-replay bursts and proactive CC messages).
                         DispatchQueue.main.async { fallback(chatId, content) }
                     }
-                    if let att = incomingFile, let attHandler = self.replyAttachmentHandlers[chatId] {
-                        DispatchQueue.main.async { attHandler(att) }
+                    if let att = incomingFile {
+                        if let attHandler = self.replyAttachmentHandlers[chatId] {
+                            DispatchQueue.main.async { attHandler(att) }
+                        } else if let fallback = self.unhandledAttachmentHandler {
+                            DispatchQueue.main.async { fallback(chatId, att) }
+                        }
                     }
                 }
             }
