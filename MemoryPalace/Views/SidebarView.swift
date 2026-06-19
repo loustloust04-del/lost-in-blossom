@@ -100,7 +100,7 @@ struct SidebarView: View {
     @State private var showAllChats = false
     @AppStorage("exportMode") private var exportMode = "lightweight"
     @AppStorage("userName") private var userName = "你"
-    @AppStorage("assistantName") private var assistantName = "助手"
+    @AppStorage("assistantName") private var assistantName = "Caelum"
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
     @Environment(CharacterCardManager.self) private var cardManager: CharacterCardManager?
     @Environment(GlobalWorldBookManager.self) private var globalWBManager: GlobalWorldBookManager?
@@ -120,7 +120,7 @@ struct SidebarView: View {
                         Circle()
                             .fill(Color(UIColor.secondarySystemFill))
                             .frame(width: 32, height: 32)
-                        Image(systemName: "gearshape")
+                        Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(Theme.textSecondary)
                     }
@@ -788,7 +788,7 @@ struct SidebarView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 11)
-                        .background(Capsule().fill(Color.black))
+                        .background(Capsule().fill(Color(red: 0xB9/255, green: 0x67/255, blue: 0x47/255)))
                     }
                 }
                 .padding(.trailing, 20)
@@ -1918,8 +1918,17 @@ struct ConversationRow: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? Theme.accent.opacity(0.45) : Color.clear)
+                    .fill(isSelected ? Color(red: 0xE0/255, green: 0xD6/255, blue: 0xC6/255) : Color.clear)
             )
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color(red: 0xB9/255, green: 0x67/255, blue: 0x47/255))
+                        .frame(width: 3)
+                        .padding(.vertical, 6)
+                        .padding(.leading, 6)
+                }
+            }
             .padding(.horizontal, 4)
 
             if showDivider && !isSelected {
@@ -1936,7 +1945,7 @@ struct FavoritedBubbleRow: View {
     let convTitle: String
     let isSelected: Bool
     @AppStorage("userName") private var userName = "你"
-    @AppStorage("assistantName") private var assistantName = "助手"
+    @AppStorage("assistantName") private var assistantName = "Caelum"
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1979,7 +1988,7 @@ struct DeletedBubbleRow: View {
     let node: MessageNode
     let convTitle: String
     @AppStorage("userName") private var userName = "你"
-    @AppStorage("assistantName") private var assistantName = "助手"
+    @AppStorage("assistantName") private var assistantName = "Caelum"
 
     var body: some View {
         HStack(spacing: 8) {
