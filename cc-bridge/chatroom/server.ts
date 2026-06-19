@@ -162,6 +162,7 @@ async function callAI(opts: AICallOptions): Promise<string> {
     model,
     messages: finalMessages,
     stream: true,
+    max_tokens: 4096,
   }
 
   const res = await fetch(apiURL, {

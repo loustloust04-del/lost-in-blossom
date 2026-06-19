@@ -145,6 +145,16 @@ final class ChatroomService {
         Task {
             defer {
                 Task { @MainActor in
+                    // 断连时保存已收到的partial内容，不丢失
+                    if !self.streamingContent.isEmpty, let role = self.streamingRole {
+                        let msg = ChatroomMessage(
+                            id: self.currentMessages.count + 1,
+                            role: role,
+                            content: self.streamingContent
+                        )
+                        self.currentMessages.append(msg)
+                        self.streamingContent = ""
+                    }
                     self.isStreaming = false
                     self.streamingRole = nil
                 }
