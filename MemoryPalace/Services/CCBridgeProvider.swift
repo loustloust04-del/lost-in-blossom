@@ -129,13 +129,40 @@ final class CCBridgeProvider: BaseChatProvider {
 
         // 7. 发送 send 帧；send err 不立即 fail，让 grace timer 等 reply
         //    （网络抖动/reconnect 是常态，CC 那边大概率仍能收到我们发的消息且会回复）
+        // 提取图片：如果content是multimodal JSON，提取纯文本和图片数据
+        var textContent = lastUser.content
+        var images: [[String: String]] = []
+        if let data = lastUser.content.data(using: .utf8),
+           let blocks = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            var textParts: [String] = []
+            for block in blocks {
+                if let type = block["type"] as? String {
+                    if type == "text", let text = block["text"] as? String {
+                        textParts.append(text)
+                    } else if type == "image",
+                              let source = block["source"] as? [String: Any],
+                              let b64 = source["data"] as? String,
+                              let mime = source["media_type"] as? String {
+                        images.append(["b64": b64, "mime": mime])
+                    }
+                }
+            }
+            if !textParts.isEmpty || !images.isEmpty {
+                textContent = textParts.joined(separator: "
+")
+            }
+        }
+
         var payload: [String: Any] = [
             "type":       "chat",
             "chat_id":    chatId,
             "message_id": messageId,
-            "content":    lastUser.content,
+            "content":    textContent,
             "user":       user,
         ]
+        if !images.isEmpty {
+            payload["images"] = images
+        }
         if let ccSession, !ccSession.isEmpty {
             payload["session_name"] = ccSession
         }
