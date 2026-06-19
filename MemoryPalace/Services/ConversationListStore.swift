@@ -144,7 +144,9 @@ enum ConversationListStore {
         excludingSession: String,
         context: ModelContext
     ) -> [String: String] {
-        let descriptor = FetchDescriptor<Conversation>()
+        var descriptor = FetchDescriptor<Conversation>(
+            predicate: #Predicate<Conversation> { $0.isDeleted == false }
+        )
         guard let all = try? context.fetch(descriptor) else { return [:] }
         var map: [String: String] = [:]
         for c in all {

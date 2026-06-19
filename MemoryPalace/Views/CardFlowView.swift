@@ -80,7 +80,7 @@ struct CardFlowView: View {
     private func makeRegenerateAction(for node: MessageNode) -> (() -> Void)? {
         guard node.role == "assistant", let pm = providerManager else { return nil }
         return {
-            let prof = self.profileManager!.currentProfile
+            guard let prof = self.profileManager?.currentProfile else { return }
             let preset = self.presetManager?.preset(byId: prof.presetId) ?? Preset.balanced
             let modelId = UserDefaults.standard.string(forKey: "selectedChatModel") ?? ""
             let model = pm.model(byId: modelId) ?? pm.availableModels.first ?? ProviderModel(providerId: "openrouter", modelId: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4")
@@ -91,7 +91,7 @@ struct CardFlowView: View {
     private func makeEditAction(for node: MessageNode) -> ((String) -> Void)? {
         guard node.role == "user", let pm = providerManager else { return nil }
         return { newText in
-            let prof = self.profileManager!.currentProfile
+            guard let prof = self.profileManager?.currentProfile else { return }
             let preset = self.presetManager?.preset(byId: prof.presetId) ?? Preset.balanced
             let modelId = UserDefaults.standard.string(forKey: "selectedChatModel") ?? ""
             let model = pm.model(byId: modelId) ?? pm.availableModels.first ?? ProviderModel(providerId: "openrouter", modelId: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4")
