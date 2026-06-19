@@ -102,10 +102,6 @@ enum KeychainStore {
         // 关掉钥匙串交互：旧签名创建的"外来"条目读 data 需要弹 login 密码框，逐条读会狂弹 +
         // 卡死主线程。关掉后外来条目静默失败(errSecInteractionNotAllowed)被跳过，本 app
         // 自己写的条目（在 ACL 可信列表里）照常静默读出。
-        #if os(macOS)
-        SecKeychainSetUserInteractionAllowed(false)
-        defer { SecKeychainSetUserInteractionAllowed(true) }
-        #endif
 
         var result: [String: String] = [:]
         for item in items {

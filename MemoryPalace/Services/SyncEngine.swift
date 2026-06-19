@@ -102,23 +102,6 @@ final class SyncEngine: NSObject {
     // MARK: - 目录监听（Mac 主力 — kqueue 不需要 iCloud entitlement）
 
     private func startDirectoryMonitor() {
-        #if os(macOS)
-        guard let pid = profileId,
-              let root = SyncStore.syncRoot(profileId: pid) else { return }
-        let fd = open(root.path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd, eventMask: [.write, .rename], queue: .main
-        )
-        source.setEventHandler { [weak self] in
-            SyncProbe.log("fs EVENT dir-write")
-            self?.scheduleImport()
-        }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        dirSource = source
-        dirFd = fd
-        #endif
     }
 
     // MARK: - Debounce 共用入口

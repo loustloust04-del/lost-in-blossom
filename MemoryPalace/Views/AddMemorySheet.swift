@@ -63,9 +63,6 @@ struct AddMemorySheet: View {
                         .disabled(trimmed.isEmpty)
                 }
             }
-            #if os(macOS)
-            .frame(width: 480, height: 380)
-            #endif
         }
     }
 
