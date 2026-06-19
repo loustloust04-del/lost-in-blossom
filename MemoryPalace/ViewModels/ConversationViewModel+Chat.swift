@@ -414,7 +414,7 @@ extension ConversationViewModel {
 
         // Register fallback for additional CC replies that arrive after the single-shot
         // sendStreaming handler has been consumed (hub offline-replay burst, proactive CC messages).
-        installCCFollowUpHandler(context: context)
+        installCCFollowUpHandler(context: context, providerManager: providerManager)
 
         // 4. Assemble prompt using PromptAssembler
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
@@ -560,7 +560,7 @@ extension ConversationViewModel {
     /// 连发场景只有第一条能显示，后续全部静默丢弃）。
     /// 在 loadConversation 和 sendMessage 时都会（重新）注册，保证 handler
     /// 持有的 context 始终是当前楼层的。
-    func installCCFollowUpHandler(context: ModelContext) {
+    func installCCFollowUpHandler(context: ModelContext, providerManager: ProviderManager? = nil) {
         CCBridgeWebSocketClient.shared.unhandledReplyHandler = { [weak self] chatId, content in
             guard let self else { return }
             // hub 在 reply 前先广播 cc_thinking；和单发路径一样嵌入 content
@@ -571,6 +571,13 @@ extension ConversationViewModel {
                 fullContent = content
             }
             self.appendCCMessage(chatId: chatId, content: fullContent, context: context)
+            // CC→记忆（反向共享）：CC回复也触发记忆提取
+            if let conversation = self.selectedConversation, conversation.id == chatId,
+               let pm = providerManager {
+                let profileId = conversation.profileId
+                let fallbackModel = pm.availableModels.first ?? ProviderModel(providerId: "deepseek", modelId: "deepseek-chat", name: "DeepSeek Chat")
+                self.extractMemoriesIfNeeded(profileId: profileId, conversationId: chatId, model: fallbackModel, providerManager: pm, context: context)
+            }
         }
     }
 
