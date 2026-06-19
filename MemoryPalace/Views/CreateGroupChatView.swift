@@ -14,7 +14,7 @@ struct CreateGroupChatView: View {
     ]
 
     private var models: [ProviderModel] {
-        providerManager?.availableModels ?? []
+        providerManager?.allModels ?? []
     }
 
     private var canCreate: Bool {
