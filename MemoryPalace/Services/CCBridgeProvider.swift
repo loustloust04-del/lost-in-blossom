@@ -148,8 +148,7 @@ final class CCBridgeProvider: BaseChatProvider {
                 }
             }
             if !textParts.isEmpty || !images.isEmpty {
-                textContent = textParts.joined(separator: "
-")
+                textContent = textParts.joined(separator: "\n")
             }
         }
 
