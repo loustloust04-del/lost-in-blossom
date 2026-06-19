@@ -83,6 +83,12 @@ final class ChatroomService {
 
     // 用户发消息
     func sendMessage(sessionId: String, content: String) async throws {
+        // 立即把用户消息加到本地列表，UI即时显示
+        await MainActor.run {
+            let userMsg = ChatroomMessage(id: UUID().uuidString, role: "user", name: nil, content: content)
+            self.currentMessages.append(userMsg)
+        }
+
         let url = URL(string: "\(baseURL)/chatroom/send")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
