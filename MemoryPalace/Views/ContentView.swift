@@ -387,10 +387,10 @@ struct ContentView: View {
             isKeyboardVisible = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             CCBridgeWebSocketClient.shared.reconnectIfNeeded()
-        }
-            isKeyboardVisible = false
         }
     }
 
