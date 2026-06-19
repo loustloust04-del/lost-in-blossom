@@ -136,6 +136,8 @@ interface AICallOptions {
   sessionId: string
   speakerRole: string  // "ai_a" or "ai_b"
   presetSlots?: PresetSlot[] | null
+  selfName?: string
+  otherName?: string
 }
 
 async function callAI(opts: AICallOptions): Promise<string> {
@@ -147,7 +149,10 @@ async function callAI(opts: AICallOptions): Promise<string> {
   const apiKey = isDeepSeek ? DEEPSEEK_KEY : OPENROUTER_KEY
 
   // 自动追加：不要模仿输入的 [角色名]: 前缀格式
-  const antiPrefix = "Direct reply only. Never prefix your response with any name tag like [Name]: or brackets."
+  // 构建群聊上下文：告诉AI自己是谁、对方是谁、这是群聊
+  const selfName = opts.selfName || "AI"
+  const otherName = opts.otherName || "对方"
+  const antiPrefix = `这是一个群聊。你是「${selfName}」。和你对话的还有另一个AI「${otherName}」以及用户。直接用你自己的身份说话，不要在回复开头加任何名字标签或前缀（如[${selfName}]:），不要模仿消息格式。`
 
   // 有 preset slots → 按楼层注入；否则回退到原有 system prompt 文本
   let finalMessages: { role: string; content: string }[]
@@ -270,6 +275,8 @@ async function runRound(sessionId: string) {
     sessionId,
     speakerRole: "ai_a",
     presetSlots: slotsA,
+    selfName: session.ai_a_name,
+    otherName: session.ai_b_name,
   })
 
   // 存 A 的消息
@@ -289,6 +296,8 @@ async function runRound(sessionId: string) {
     sessionId,
     speakerRole: "ai_b",
     presetSlots: slotsB,
+    selfName: session.ai_b_name,
+    otherName: session.ai_a_name,
   })
 
   // 存 B 的消息
