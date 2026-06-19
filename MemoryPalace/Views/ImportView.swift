@@ -12,6 +12,8 @@ struct ImportView: View {
     @State private var claudeImporter: ClaudeImporter?
     @State private var selectedProvider: String = "chatgpt"
     @State private var mergeMode: Bool = false
+    /// 已在其他楼层的对话：false=跳过（默认），true=复制为副本导入
+    @State private var copyConflicts: Bool = false
     @State private var downloadError: String?
     @State private var showFilePicker = false
 
@@ -100,6 +102,27 @@ struct ImportView: View {
         }
     }
 
+
+    /// 跨楼层冲突跳过数
+    private var currentConflictCount: Int {
+        switch selectedProvider {
+        case "claude":
+            return claudeImporter?.crossProfileConflictCount ?? 0
+        default:
+            return importer?.crossProfileConflictCount ?? 0
+        }
+    }
+
+    /// 复制为副本的条数
+    private var currentCopiedCount: Int {
+        switch selectedProvider {
+        case "claude":
+            return claudeImporter?.copiedConversationCount ?? 0
+        default:
+            return importer?.copiedConversationCount ?? 0
+        }
+    }
+
     private var currentDidCompleteImport: Bool {
         switch selectedProvider {
         case "claude":
@@ -131,6 +154,15 @@ struct ImportView: View {
 
     private var mergeModeDescription: String {
         "只追加本地没有的对话，已有对话保留本地版本。"
+    }
+
+
+    private var actionButtonTitle: String {
+        mergeMode ? "选择 \(providerName) 文件（叠加）" : "选择 \(providerName) 文件"
+    }
+
+    private var currentPureIgnoredCount: Int {
+        max(0, currentIgnoredCount - currentConflictCount)
     }
 
     private var completionSummaryText: String {
@@ -347,6 +379,22 @@ struct ImportView: View {
                     .tint(Theme.branchIndicator)
             }
         } header: {
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("复制已在其他楼层的对话")
+                        .font(.system(size: Theme.F.body, weight: .medium))
+                    Text(copyConflicts
+                         ? "已在其他楼层的对话会复制一份到本楼层。"
+                         : "已在其他楼层的对话将被跳过（默认）。")
+                        .font(.system(size: Theme.F.caption))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: $copyConflicts)
+                    .labelsHidden()
+            }
+
             Text("选择文件")
         } footer: {
             Text("文件名一般是 conversations.json。只读本地，不联网。")
@@ -357,10 +405,15 @@ struct ImportView: View {
 
         Section {
 
-            Button("选择文件导入") {
+            Button {
                 showFilePicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.badge.plus")
+                    Text(actionButtonTitle)
+                }
+                .font(.system(size: Theme.F.body, weight: .semibold))
             }
-            .font(.system(size: 14))
             .buttonStyle(.bordered)
             .disabled(isImporting)
 
