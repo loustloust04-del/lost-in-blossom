@@ -88,6 +88,8 @@ final class CCBridgeWebSocketClient: NSObject {
         let onError: (String) -> Void
     }
     @ObservationIgnored private var terminalHandlers: [String: TerminalHandlers] = [:]
+    /// 记录活跃的终端会话参数，重连后自动 re-attach
+    @ObservationIgnored private var activeTerminalSessions: [String: (cols: Int, rows: Int)] = [:]
 
     // MARK: - File exchange (Phase 4.2)
 
@@ -354,6 +356,7 @@ final class CCBridgeWebSocketClient: NSObject {
     ) {
         handlersQueue.async {
             self.terminalHandlers[session] = TerminalHandlers(onInit: onInit, onChunk: onChunk, onError: onError)
+            self.activeTerminalSessions[session] = (cols: cols, rows: rows)
         }
         let payload: [String: Any] = [
             "type": "terminal_attach",
@@ -370,7 +373,10 @@ final class CCBridgeWebSocketClient: NSObject {
 
     /// Detach from a session's terminal stream.
     func detachTerminal(session: String) {
-        handlersQueue.async { self.terminalHandlers.removeValue(forKey: session) }
+        handlersQueue.async {
+            self.terminalHandlers.removeValue(forKey: session)
+            self.activeTerminalSessions.removeValue(forKey: session)
+        }
         send(["type": "terminal_detach", "session_name": session]) { _ in }
     }
 
@@ -635,10 +641,28 @@ extension CCBridgeWebSocketClient: URLSessionWebSocketDelegate {
             guard webSocketTask === self.task else { return }
             self.isConnected = true
             self.resendPushTokenIfNeeded()
+            self.reattachTerminals()
             self.lastError = nil
             self.reconnectDelay = 1  // 连接成功后重置退避计数
             self.currentIndex = 0    // 下次断重连优先回主 URL
             self.startPingTimer()
+        }
+    }
+
+    /// 重连后自动 re-attach 所有活跃终端会话
+    private func reattachTerminals() {
+        handlersQueue.async { [weak self] in
+            guard let self else { return }
+            for (session, size) in self.activeTerminalSessions {
+                let payload: [String: Any] = [
+                    "type": "terminal_attach",
+                    "session_name": session,
+                    "cols": size.cols,
+                    "rows": size.rows,
+                ]
+                self.send(payload) { _ in }
+                print("[CCBridge] re-attached terminal: \(session)")
+            }
         }
     }
 
