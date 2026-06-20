@@ -260,19 +260,28 @@ app.post("/chatroom/start", async (c) => {
   const body = await c.req.json()
   const id = crypto.randomUUID()
   const topic = body.topic || "新群聊"
-  const participants = body.participants || []
-  const a = participants[0] || {}
-  const b = participants[1] || {}
+  // 支持两种格式：扁平字段（App端）或 participants 数组
+  const p = body.participants || []
+  const aiAName = body.ai_a_name || p[0]?.name || "A"
+  const aiAModel = body.ai_a_model || p[0]?.model || "deepseek/deepseek-chat"
+  const aiASystem = body.ai_a_system || p[0]?.systemPrompt || ""
+  const aiBName = body.ai_b_name || p[1]?.name || "B"
+  const aiBModel = body.ai_b_model || p[1]?.model || "deepseek/deepseek-chat"
+  const aiBSystem = body.ai_b_system || p[1]?.systemPrompt || ""
+  const aiASlots = body.ai_a_preset_slots || p[0]?.presetSlots || null
+  const aiBSlots = body.ai_b_preset_slots || p[1]?.presetSlots || null
+  const aiAPName = body.ai_a_preset_name || p[0]?.presetName || null
+  const aiBPName = body.ai_b_preset_name || p[1]?.presetName || null
 
   db.query(`INSERT INTO chatroom_sessions
     (id, topic, ai_a_name, ai_a_model, ai_a_system, ai_b_name, ai_b_model, ai_b_system,
      ai_a_preset_slots, ai_b_preset_slots, ai_a_preset_name, ai_b_preset_name)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, topic, a.name||"A", a.model||"deepseek/deepseek-chat", a.systemPrompt||"",
-         b.name||"B", b.model||"deepseek/deepseek-chat", b.systemPrompt||"",
-         a.presetSlots ? JSON.stringify(a.presetSlots) : null,
-         b.presetSlots ? JSON.stringify(b.presetSlots) : null,
-         a.presetName || null, b.presetName || null)
+    .run(id, topic, aiAName, aiAModel, aiASystem,
+         aiBName, aiBModel, aiBSystem,
+         aiASlots ? JSON.stringify(aiASlots) : null,
+         aiBSlots ? JSON.stringify(aiBSlots) : null,
+         aiAPName, aiBPName)
 
   // initial round with topic
   if (topic) {

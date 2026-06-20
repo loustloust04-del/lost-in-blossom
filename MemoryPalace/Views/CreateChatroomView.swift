@@ -9,11 +9,11 @@ struct CreateChatroomView: View {
     @Environment(PresetManager.self) private var presetManager: PresetManager?
 
     @State private var topic = ""
-    @State private var aiAName = "Caelum"
+    @State private var aiAName = ""
     @State private var aiAModel = "anthropic/claude-sonnet-4"
     @State private var aiASystem = ""
     @State private var aiAPresetId: String? = nil
-    @State private var aiBName = "DeepSeek"
+    @State private var aiBName = ""
     @State private var aiBModel = "deepseek/deepseek-chat"
     @State private var aiBSystem = ""
     @State private var aiBPresetId: String? = nil
