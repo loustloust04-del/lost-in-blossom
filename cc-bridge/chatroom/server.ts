@@ -118,7 +118,15 @@ async function callAI(opts: CallOpts): Promise<string> {
   const apiURL = isDeepSeek ? DEEPSEEK_API : OPENROUTER_API
   const apiKey = isDeepSeek ? DEEPSEEK_KEY : OPENROUTER_KEY
 
-  const groupCtx = `这是一个群聊。你是「${selfName}」。还有另一个AI「${otherName}」和用户在对话。直接说话，不要加[${selfName}]:等前缀。`
+  const groupCtx = `## 群聊规则
+你是「${selfName}」，正在和「${otherName}」以及用户进行群聊。
+
+1. 直接以自己的身份说话，绝对不要加任何名字前缀（如[${selfName}]:）
+2. 每次回复控制在200字以内，简洁有力，不要长篇大论
+3. 认真阅读对方（${otherName}）的发言再回应，可以引用、质疑、补充或反驳
+4. 不要重复对方或自己说过的话
+5. 如果用户在场，优先回应用户的问题
+6. 保持对话感——你在和真人以及另一个有独立思考的AI交谈，不是在写文章`
 
   let finalMessages: {role:string;content:string}[]
   if (presetSlots && presetSlots.length > 0) {
