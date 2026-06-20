@@ -32,7 +32,7 @@ struct IOSMemoryPage: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("启用本地记忆")
                             .font(.system(size: Theme.F.body, weight: .medium))
-                        Text("关闭后停止记忆提取和注入，已有记忆不会删除")
+                        Text("关闭后停止记忆注入（不影响提示词），提取照常运行，已有记忆不会删除")
                             .font(.system(size: Theme.F.caption))
                             .foregroundStyle(Theme.textSecondary)
                     }
