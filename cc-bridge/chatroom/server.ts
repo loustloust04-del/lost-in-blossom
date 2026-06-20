@@ -349,10 +349,7 @@ app.get("/chatroom/stream/:id", (c) => {
 
 // List sessions
 app.get("/chatroom/sessions", (c) => {
-  const status = new URL(c.req.url).searchParams.get("status")
-  const rows = status === "all"
-    ? db.query("SELECT * FROM chatroom_sessions ORDER BY created_at DESC LIMIT 50").all()
-    : db.query("SELECT * FROM chatroom_sessions WHERE status != 'ended' ORDER BY created_at DESC LIMIT 50").all()
+  const rows = db.query("SELECT * FROM chatroom_sessions ORDER BY created_at DESC LIMIT 50").all()
   return c.json(rows)
 })
 
