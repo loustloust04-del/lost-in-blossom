@@ -91,8 +91,9 @@ function assembleForAI(
 
   const mapped = recent.map(m => {
     if (m.role === forRole) return { role: "assistant", content: m.content }
-    if (m.role === other)  return { role: "user", content: `[${otherName}]: ${m.content}` }
-    return { role: "user", content: `[用户]: ${m.content}` }
+    if (m.role === other)  return { role: "user", content: `--- ${otherName}说 ---
+${m.content}` }
+    return { role: "user", content: m.content }  // 用户消息不加前缀，直接作为user role
   })
 
   // prepend summary if history was truncated
