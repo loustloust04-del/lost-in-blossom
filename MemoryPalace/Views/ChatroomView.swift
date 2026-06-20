@@ -14,8 +14,8 @@ struct ChatroomView: View {
 
     private var targetLabel: String {
         switch sendTarget {
-        case "ai_a": return "@" + (session?.participants.first?.name ?? "A")
-        case "ai_b": return "@" + (session?.participants.count ?? 0 > 1 ? session!.participants[1].name : "B")
+        case "ai_a": return "@" + (session?.ai_a_name ?? "A")
+        case "ai_b": return "@" + (session?.ai_b_name ?? "B")
         case "silent": return "只发送"
         default: return "Round"
         }
@@ -206,13 +206,11 @@ struct ChatroomView: View {
                     Label("Round（都说）", systemImage: sendTarget == "round" ? "checkmark" : "")
                 }
                 if let s = session {
-                    let nameA = s.participants.first?.name ?? "A"
-                    let nameB = s.participants.count > 1 ? s.participants[1].name : "B"
                     Button { sendTarget = "ai_a" } label: {
-                        Label("@\(nameA)", systemImage: sendTarget == "ai_a" ? "checkmark" : "")
+                        Label("@\(s.ai_a_name)", systemImage: sendTarget == "ai_a" ? "checkmark" : "")
                     }
                     Button { sendTarget = "ai_b" } label: {
-                        Label("@\(nameB)", systemImage: sendTarget == "ai_b" ? "checkmark" : "")
+                        Label("@\(s.ai_b_name)", systemImage: sendTarget == "ai_b" ? "checkmark" : "")
                     }
                 }
                 Button { sendTarget = "silent" } label: {
