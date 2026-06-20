@@ -314,6 +314,14 @@ app.post("/chatroom/end", async (c) => {
   return c.json({ ok: true })
 })
 
+// Delete session
+app.delete("/chatroom/:id", async (c) => {
+  const id = c.req.param("id")
+  db.query("DELETE FROM chatroom_messages WHERE session_id = ?").run(id)
+  db.query("DELETE FROM chatroom_sessions WHERE id = ?").run(id)
+  return c.json({ ok: true })
+})
+
 // SSE stream
 app.get("/chatroom/stream/:id", (c) => {
   const sessionId = c.req.param("id")

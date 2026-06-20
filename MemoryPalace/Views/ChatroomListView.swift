@@ -49,6 +49,13 @@ struct ChatroomListView: View {
                         ForEach(service.sessions) { session in
                             ChatroomSessionRow(session: session)
                                 .onTapGesture { activeSession = session }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        sessionToDelete = session
+                                    } label: {
+                                        Label("删除", systemImage: "trash")
+                                    }
+                                }
                                 .contextMenu {
                                     Button(role: .destructive) {
                                         sessionToDelete = session
