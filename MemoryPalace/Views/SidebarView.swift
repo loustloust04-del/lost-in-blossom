@@ -765,26 +765,17 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) {
             if isIOSStyle {
-                HStack(spacing: 10) {
-                    Menu {
-                        Button { createNewConversation() } label: {
-                            Label("单聊", systemImage: "bubble.left")
-                        }
-                        Button { showCreateGroup = true } label: {
-                            Label("群聊", systemImage: "person.3")
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("New chat")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 11)
-                        .background(Capsule().fill(Color.black))
+                Button { createNewConversation() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("New chat")
+                            .font(.system(size: 15, weight: .semibold))
                     }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
+                    .background(Capsule().fill(Color.black))
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 32)
