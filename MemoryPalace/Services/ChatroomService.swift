@@ -137,6 +137,16 @@ final class ChatroomService {
     }
 
     // SSE 流式订阅
+    /// 切换session时清空旧状态
+    func prepareForSession() {
+        streamTask?.cancel()
+        streamTask = nil
+        currentMessages = []
+        isStreaming = false
+        streamingContent = ""
+        streamingRole = nil
+    }
+
     func subscribeStream(sessionId: String) {
         guard let url = URL(string: "\(baseURL)/chatroom/stream/\(sessionId)") else { return }
         isStreaming = true

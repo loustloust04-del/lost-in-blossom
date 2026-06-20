@@ -26,8 +26,6 @@ struct CreateChatroomView: View {
 
     private var canStart: Bool {
         !topic.trimmingCharacters(in: .whitespaces).isEmpty
-            && !aiAName.trimmingCharacters(in: .whitespaces).isEmpty
-            && !aiBName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -251,10 +249,10 @@ struct CreateChatroomView: View {
                 let id = try await service.startSession(
                     topic: topic.trimmingCharacters(in: .whitespaces),
                     aiAModel: aiAModel,
-                    aiAName: aiAName.trimmingCharacters(in: .whitespaces),
+                    aiAName: aiAName.trimmingCharacters(in: .whitespaces).isEmpty ? "AI A" : aiAName.trimmingCharacters(in: .whitespaces),
                     aiASystem: aiASystem,
                     aiBModel: aiBModel,
-                    aiBName: aiBName.trimmingCharacters(in: .whitespaces),
+                    aiBName: aiBName.trimmingCharacters(in: .whitespaces).isEmpty ? "AI B" : aiBName.trimmingCharacters(in: .whitespaces),
                     aiBSystem: aiBSystem,
                     aiAPresetSlots: aiASlots,
                     aiBPresetSlots: aiBSlots,
