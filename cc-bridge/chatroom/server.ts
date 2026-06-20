@@ -111,6 +111,9 @@ interface CallOpts {
 
 async function callAI(opts: CallOpts): Promise<string> {
   const { model, systemPrompt, presetSlots, messages, sessionId, selfName, otherName } = opts
+  // 模型名映射：去前缀 + DeepSeek旧名兼容
+  let actualModel = model.includes("/") ? model.split("/").pop()! : model
+  if (actualModel === "deepseek-chat") actualModel = "deepseek-v4-pro"
   const isDeepSeek = model.toLowerCase().includes("deepseek")
   const apiURL = isDeepSeek ? DEEPSEEK_API : OPENROUTER_API
   const apiKey = isDeepSeek ? DEEPSEEK_KEY : OPENROUTER_KEY
@@ -128,7 +131,7 @@ async function callAI(opts: CallOpts): Promise<string> {
   const res = await fetch(apiURL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, messages: finalMessages, stream: true, max_tokens: MAX_TOKENS }),
+    body: JSON.stringify({ model: actualModel, messages: finalMessages, stream: true, max_tokens: MAX_TOKENS }),
   })
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
 
