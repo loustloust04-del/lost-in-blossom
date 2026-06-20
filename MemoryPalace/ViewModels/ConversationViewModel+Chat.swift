@@ -679,7 +679,6 @@ extension ConversationViewModel {
 
     /// AUDN 记忆提取：每轮对话后异步调用便宜模型提取/更新/删除记忆
     private func extractMemoriesIfNeeded(profileId: String, conversationId: String, model: ProviderModel, providerManager: ProviderManager, context: ModelContext) {
-        guard UserDefaults.standard.bool(forKey: "localMemoryEnabled") else { return }
         guard !profileId.isEmpty else { return }
 
         // SC-B2：recentMessages 带节点 id，供 quote 锚定回溯到具体消息
