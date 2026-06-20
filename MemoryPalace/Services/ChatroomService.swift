@@ -113,7 +113,7 @@ final class ChatroomService {
 
     // 获取消息历史
     func fetchHistory(sessionId: String) async throws {
-        let url = URL(string: "\(baseURL)/chatroom/history/\(sessionId)")!
+        let url = URL(string: "\(baseURL)/chatroom/messages/\(sessionId)")!
         let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
         struct Resp: Codable { let messages: [ChatroomMessage] }
         let resp = try JSONDecoder().decode(Resp.self, from: data)
@@ -154,11 +154,13 @@ final class ChatroomService {
         isStreaming = true
         streamingContent = ""
 
-        Task {
+        streamTask?.cancel()
+        streamTask = Task {
+            var aiDoneHandled = false
             defer {
                 Task { @MainActor in
-                    // 断连时保存已收到的partial内容，不丢失
-                    if !self.streamingContent.isEmpty, let role = self.streamingRole {
+                    // 断连时保存已收到的partial内容（仅当ai_done没处理过）
+                    if !aiDoneHandled && !self.streamingContent.isEmpty, let role = self.streamingRole {
                         let msg = ChatroomMessage(
                             id: self.currentMessages.count + 1,
                             role: role,
