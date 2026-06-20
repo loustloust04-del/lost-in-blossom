@@ -72,17 +72,17 @@ final class ChatroomService {
     }
 
     // 继续下一轮
-    func continueRound(sessionId: String) async throws {
+    func continueRound(sessionId: String, target: String = "round") async throws {
         let url = URL(string: "\(baseURL)/chatroom/continue")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["session_id": sessionId])
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["session_id": sessionId, "target": target])
         let _ = try await URLSession.shared.data(for: req)
     }
 
     // 用户发消息
-    func sendMessage(sessionId: String, content: String) async throws {
+    func sendMessage(sessionId: String, content: String, target: String = "round") async throws {
         // 立即把用户消息加到本地列表，UI即时显示
         await MainActor.run {
             let userMsg = ChatroomMessage(id: self.currentMessages.count + 1, role: "user", content: content, model: nil, created_at: "")
@@ -94,7 +94,7 @@ final class ChatroomService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
-            "session_id": sessionId, "content": content
+            "session_id": sessionId, "content": content, "target": target
         ])
         let _ = try await URLSession.shared.data(for: req)
     }

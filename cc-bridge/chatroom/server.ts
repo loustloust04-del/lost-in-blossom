@@ -36,6 +36,7 @@ db.exec(`
     status TEXT DEFAULT 'active',
     rounds INTEGER DEFAULT 0,
     max_rounds INTEGER DEFAULT 20,
+    summary TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     ended_at TEXT
   )
@@ -231,25 +232,83 @@ function assembleMessages(
   allMessages: { role: string; content: string }[],
   forRole: "ai_a" | "ai_b",
   aiAName: string,
-  aiBName: string
+  aiBName: string,
+  summary?: string | null
 ): { role: string; content: string }[] {
   const otherRole = forRole === "ai_a" ? "ai_b" : "ai_a"
   const otherName = forRole === "ai_a" ? aiBName : aiAName
+  const selfName = forRole === "ai_a" ? aiAName : aiBName
 
-  return allMessages.map((msg) => {
+  // 只取最近 MAX_CONTEXT_MESSAGES 条
+  const recent = allMessages.slice(-MAX_CONTEXT_MESSAGES)
+
+  const mapped = recent.map((msg) => {
     if (msg.role === forRole) {
       return { role: "assistant", content: msg.content }
     } else if (msg.role === otherRole) {
       return { role: "user", content: `[${otherName}]: ${msg.content}` }
     } else {
-      // user
       return { role: "user", content: `[用户]: ${msg.content}` }
     }
   })
+
+  // 如果有摘要且历史被截断了，在消息开头插入摘要
+  if (summary && allMessages.length > MAX_CONTEXT_MESSAGES) {
+    mapped.unshift({
+      role: "user",
+      content: `[对话摘要] 以下是之前讨论的要点：\n${summary}\n---\n以上是摘要，接下来是最近的对话：`
+    })
+  }
+
+  return mapped
+}
+
+
+// ── Auto Summary ────────────────────────────────────────────
+async function generateSummary(sessionId: string) {
+  const messages = db.query(
+    "SELECT role, content FROM chatroom_messages WHERE session_id = ? ORDER BY id"
+  ).all(sessionId) as { role: string; content: string }[]
+
+  const session = db.query("SELECT * FROM chatroom_sessions WHERE id = ?").get(sessionId) as any
+  if (!session) return
+
+  // 用最便宜的模型生成摘要
+  const summaryPrompt = messages.map(m => {
+    const name = m.role === "ai_a" ? session.ai_a_name : m.role === "ai_b" ? session.ai_b_name : "用户"
+    return `${name}: ${m.content.slice(0, 200)}`
+  }).join("\n")
+
+  const isDeepSeek = true  // 用DeepSeek生成摘要（便宜）
+  const apiURL = DEEPSEEK_API
+  const apiKey = DEEPSEEK_KEY
+
+  if (!apiKey) { console.log("[chatroom] no DeepSeek key, skip summary"); return }
+
+  const res = await fetch(apiURL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: "用中文简洁总结以下多人对话的要点，包括各方的核心观点和结论。200字以内。" },
+        { role: "user", content: summaryPrompt }
+      ],
+      max_tokens: 500,
+    }),
+  })
+
+  if (!res.ok) { console.error("[chatroom] summary API error:", res.status); return }
+  const data = await res.json() as any
+  const summary = data.choices?.[0]?.message?.content || ""
+  if (summary) {
+    db.query("UPDATE chatroom_sessions SET summary = ? WHERE id = ?").run(summary, sessionId)
+    console.log(`[chatroom] auto-summary generated for ${sessionId} (${summary.length} chars)`)
+  }
 }
 
 // ── Run One Round ───────────────────────────────────────────
-async function runRound(sessionId: string) {
+async function runRound(sessionId: string, target: "round" | "ai_a" | "ai_b" = "round") {
   const session = db.query("SELECT * FROM chatroom_sessions WHERE id = ?").get(sessionId) as any
   if (!session || session.status === "ended") throw new Error("Session not found or ended")
 
@@ -265,9 +324,10 @@ async function runRound(sessionId: string) {
   const slotsA = parseSlots(session.ai_a_preset_slots)
   const slotsB = parseSlots(session.ai_b_preset_slots)
 
-  // AI A 发言
+  // AI A 发言（target=ai_b时跳过）
+  if (target !== "ai_b") {
   broadcastSSE(sessionId, "turn_start", { role: "ai_a", name: session.ai_a_name })
-  const messagesForA = assembleMessages(allMessages, "ai_a", session.ai_a_name, session.ai_b_name)
+  const messagesForA = assembleMessages(allMessages, "ai_a", session.ai_a_name, session.ai_b_name, session.summary)
   const contentA = await callAI({
     model: session.ai_a_model,
     systemPrompt: session.ai_a_system || "",
@@ -282,27 +342,26 @@ async function runRound(sessionId: string) {
   // 存 A 的消息
   db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)")
     .run(sessionId, "ai_a", contentA, session.ai_a_model)
-
-  // 更新 allMessages
   allMessages.push({ role: "ai_a", content: contentA })
+  }
 
-  // AI B 发言
-  broadcastSSE(sessionId, "turn_start", { role: "ai_b", name: session.ai_b_name })
-  const messagesForB = assembleMessages(allMessages, "ai_b", session.ai_a_name, session.ai_b_name)
-  const contentB = await callAI({
-    model: session.ai_b_model,
-    systemPrompt: session.ai_b_system || "",
-    messages: messagesForB,
-    sessionId,
-    speakerRole: "ai_b",
-    presetSlots: slotsB,
-    selfName: session.ai_b_name,
-    otherName: session.ai_a_name,
-  })
-
-  // 存 B 的消息
-  db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)")
-    .run(sessionId, "ai_b", contentB, session.ai_b_model)
+  // AI B 发言（target=ai_a时跳过）
+  if (target !== "ai_a") {
+    broadcastSSE(sessionId, "turn_start", { role: "ai_b", name: session.ai_b_name })
+    const messagesForB = assembleMessages(allMessages, "ai_b", session.ai_a_name, session.ai_b_name, session.summary)
+    const contentB = await callAI({
+      model: session.ai_b_model,
+      systemPrompt: session.ai_b_system || "",
+      messages: messagesForB,
+      sessionId,
+      speakerRole: "ai_b",
+      presetSlots: slotsB,
+      selfName: session.ai_b_name,
+      otherName: session.ai_a_name,
+    })
+    db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)")
+      .run(sessionId, "ai_b", contentB, session.ai_b_model)
+  }
 
   // 更新轮次
   const newRounds = session.rounds + 1
@@ -310,6 +369,12 @@ async function runRound(sessionId: string) {
     .run(newRounds, sessionId)
 
   // 通知前端一轮结束
+  // 自动摘要：消息超过阈值时压缩历史
+  const msgCount = (db.query("SELECT COUNT(*) as c FROM chatroom_messages WHERE session_id = ?").get(sessionId) as any).c
+  if (msgCount > SUMMARY_TRIGGER && !session.summary) {
+    generateSummary(sessionId).catch(err => console.error("[chatroom] auto-summary error:", err))
+  }
+
   broadcastSSE(sessionId, "round_complete", {
     round: newRounds,
     status: "waiting_user",
@@ -325,6 +390,8 @@ app.use("/*", cors())
 // S2: 鉴权——所有 /chatroom 路由要求 Bearer token（与 gateway 同口径）。
 // 支持 Authorization: Bearer <token> 或 ?token=<token>（SSE/EventSource 无法设 header）。
 const CHATROOM_TOKEN = process.env.CHATROOM_TOKEN || process.env.GATEWAY_TOKEN || ""
+const MAX_CONTEXT_MESSAGES = 12  // 每个AI最多看到最近12条消息
+const SUMMARY_TRIGGER = 20       // 消息超过20条时自动生成摘要
 app.use("/chatroom/*", async (c, next) => {
   if (!CHATROOM_TOKEN) return next()
   const h = c.req.header("Authorization") || ""
@@ -387,7 +454,8 @@ app.post("/chatroom/continue", async (c) => {
 
   db.query("UPDATE chatroom_sessions SET status = 'active' WHERE id = ?").run(session_id)
 
-  runRound(session_id).catch(err => {
+  const target = (body.target as "round" | "ai_a" | "ai_b") || "round"
+  runRound(session_id, target).catch(err => {
     console.error("[chatroom] round error:", err)
     broadcastSSE(session_id, "error", { message: err.message })
   })

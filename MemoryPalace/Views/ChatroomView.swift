@@ -5,10 +5,20 @@ struct ChatroomView: View {
 
     private var service = ChatroomService.shared
     @State private var inputText = ""
+    @State private var sendTarget = "round"  // round / ai_a / ai_b / silent
     @Environment(\.dismiss) private var dismiss
 
     init(session: ChatroomSession) {
         self.session = session
+    }
+
+    private var targetLabel: String {
+        switch sendTarget {
+        case "ai_a": return "@" + (session?.participants.first?.name ?? "A")
+        case "ai_b": return "@" + (session?.participants.count ?? 0 > 1 ? session!.participants[1].name : "B")
+        case "silent": return "只发送"
+        default: return "Round"
+        }
     }
 
     var body: some View {
@@ -190,6 +200,34 @@ struct ChatroomView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
+            // 发送目标选择
+            Menu {
+                Button { sendTarget = "round" } label: {
+                    Label("Round（都说）", systemImage: sendTarget == "round" ? "checkmark" : "")
+                }
+                if let s = session {
+                    let nameA = s.participants.first?.name ?? "A"
+                    let nameB = s.participants.count > 1 ? s.participants[1].name : "B"
+                    Button { sendTarget = "ai_a" } label: {
+                        Label("@\(nameA)", systemImage: sendTarget == "ai_a" ? "checkmark" : "")
+                    }
+                    Button { sendTarget = "ai_b" } label: {
+                        Label("@\(nameB)", systemImage: sendTarget == "ai_b" ? "checkmark" : "")
+                    }
+                }
+                Button { sendTarget = "silent" } label: {
+                    Label("只发送", systemImage: sendTarget == "silent" ? "checkmark" : "")
+                }
+            } label: {
+                Text(targetLabel)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Theme.accent.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+
             TextField("说点什么，或留空继续…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
@@ -205,11 +243,11 @@ struct ChatroomView: View {
             let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
             Button {
                 if trimmed.isEmpty {
-                    Task { try? await service.continueRound(sessionId: session.id) }
+                    Task { try? await service.continueRound(sessionId: session.id, target: sendTarget) }
                 } else {
                     let text = trimmed
                     inputText = ""
-                    Task { try? await service.sendMessage(sessionId: session.id, content: text) }
+                    Task { try? await service.sendMessage(sessionId: session.id, content: text, target: sendTarget) }
                 }
             } label: {
                 Text(trimmed.isEmpty ? "继续" : "发送")
