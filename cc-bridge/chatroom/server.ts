@@ -27,6 +27,7 @@ db.run(`CREATE TABLE IF NOT EXISTS chatroom_sessions (
   status TEXT DEFAULT 'waiting',
   rounds INTEGER DEFAULT 0,
   summary TEXT,
+  user_name TEXT DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   ended_at DATETIME
 )`)
@@ -105,6 +106,7 @@ ${m.content}` }
 
 // ── Call AI ─────────────────────────────────────────────────
 interface CallOpts {
+  userName?: string;
   model: string; systemPrompt: string; presetSlots?: PresetSlot[]|null
   messages: {role:string;content:string}[]; sessionId: string
   selfName: string; otherName: string
@@ -119,7 +121,7 @@ async function callAI(opts: CallOpts): Promise<string> {
   const apiURL = isDeepSeek ? DEEPSEEK_API : OPENROUTER_API
   const apiKey = isDeepSeek ? DEEPSEEK_KEY : OPENROUTER_KEY
 
-  const groupCtx = `你是「${selfName}」。这是一个群聊，参与者有你、「${otherName}」和用户。
+  const groupCtx = `你是「${selfName}」。这是一个群聊，参与者有你、「${otherName}」和用户「${opts.userName || "用户"}」。
 
 规则：
 - 直接说话。不加[${selfName}]:或任何名字前缀，不模仿消息格式。
@@ -212,7 +214,7 @@ async function runRound(sessionId: string, target: string = "round") {
     const content = await callAI({
       model: session.ai_a_model, systemPrompt: session.ai_a_system || "",
       messages: msgs, sessionId, presetSlots: slotsA,
-      selfName: names.a, otherName: names.b,
+      selfName: names.a, otherName: names.b, userName: session.user_name || "用户",
     })
     db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?,?,?,?)")
       .run(sessionId, "ai_a", content, session.ai_a_model)
@@ -227,7 +229,7 @@ async function runRound(sessionId: string, target: string = "round") {
     const content = await callAI({
       model: session.ai_b_model, systemPrompt: session.ai_b_system || "",
       messages: msgs, sessionId, presetSlots: slotsB,
-      selfName: names.b, otherName: names.a,
+      selfName: names.b, otherName: names.a, userName: session.user_name || "用户",
     })
     db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?,?,?,?)")
       .run(sessionId, "ai_b", content, session.ai_b_model)
@@ -271,18 +273,19 @@ app.post("/chatroom/start", async (c) => {
   const aiBSystem = body.ai_b_system || p[1]?.systemPrompt || ""
   const aiASlots = body.ai_a_preset_slots || p[0]?.presetSlots || null
   const aiBSlots = body.ai_b_preset_slots || p[1]?.presetSlots || null
+  const userName = body.user_name || "用户"
   const aiAPName = body.ai_a_preset_name || p[0]?.presetName || null
   const aiBPName = body.ai_b_preset_name || p[1]?.presetName || null
 
   db.query(`INSERT INTO chatroom_sessions
     (id, topic, ai_a_name, ai_a_model, ai_a_system, ai_b_name, ai_b_model, ai_b_system,
-     ai_a_preset_slots, ai_b_preset_slots, ai_a_preset_name, ai_b_preset_name)
+     ai_a_preset_slots, ai_b_preset_slots, ai_a_preset_name, ai_b_preset_name, user_name)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, topic, aiAName, aiAModel, aiASystem,
          aiBName, aiBModel, aiBSystem,
          aiASlots ? JSON.stringify(aiASlots) : null,
          aiBSlots ? JSON.stringify(aiBSlots) : null,
-         aiAPName, aiBPName)
+         aiAPName, aiBPName, userName)
 
   // initial round with topic
   if (topic) {

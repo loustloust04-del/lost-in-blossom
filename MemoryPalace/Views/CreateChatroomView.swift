@@ -257,7 +257,8 @@ struct CreateChatroomView: View {
                     aiAPresetSlots: aiASlots,
                     aiBPresetSlots: aiBSlots,
                     aiAPresetName: aiAPName,
-                    aiBPresetName: aiBPName
+                    aiBPresetName: aiBPName,
+                    userName: profileManager?.currentProfile.name
                 )
                 let newSession = ChatroomSession(
                     id: id,

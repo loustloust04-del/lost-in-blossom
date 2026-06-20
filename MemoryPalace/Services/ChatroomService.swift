@@ -50,7 +50,8 @@ final class ChatroomService {
         aiAPresetSlots: [[String: Any]]? = nil,
         aiBPresetSlots: [[String: Any]]? = nil,
         aiAPresetName: String? = nil,
-        aiBPresetName: String? = nil
+        aiBPresetName: String? = nil,
+        userName: String? = nil
     ) async throws -> String {
         let url = URL(string: "\(baseURL)/chatroom/start")!
         var req = URLRequest(url: url)
@@ -65,6 +66,7 @@ final class ChatroomService {
         if let slots = aiBPresetSlots { body["ai_b_preset_slots"] = slots }
         if let name = aiAPresetName { body["ai_a_preset_name"] = name }
         if let name = aiBPresetName { body["ai_b_preset_name"] = name }
+        if let name = userName { body["user_name"] = name }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: req)
         let result = try JSONDecoder().decode([String: String].self, from: data)
