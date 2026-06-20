@@ -38,7 +38,8 @@ final class ChatroomService {
     private(set) var sessions: [ChatroomSession] = []
     private(set) var currentMessages: [ChatroomMessage] = []
     private(set) var isStreaming = false
-    private(set) var streamingRole: String? = nil
+    private(set) var streamingRole: String?
+    private var streamTask: Task<Void, any Error>? = nil
     private(set) var streamingContent: String = ""
 
     // 创建聊天室
@@ -115,18 +116,16 @@ final class ChatroomService {
     func fetchHistory(sessionId: String) async throws {
         let url = URL(string: "\(baseURL)/chatroom/messages/\(sessionId)")!
         let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
-        struct Resp: Codable { let messages: [ChatroomMessage] }
-        let resp = try JSONDecoder().decode(Resp.self, from: data)
-        await MainActor.run { self.currentMessages = resp.messages }
+        let msgs = try JSONDecoder().decode([ChatroomMessage].self, from: data)
+        await MainActor.run { self.currentMessages = msgs }
     }
 
     // 获取所有聊天室列表
     func fetchSessions() async throws {
         let url = URL(string: "\(baseURL)/chatroom/sessions")!
         let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
-        struct Resp: Codable { let sessions: [ChatroomSession] }
-        let resp = try JSONDecoder().decode(Resp.self, from: data)
-        await MainActor.run { self.sessions = resp.sessions }
+        let list = try JSONDecoder().decode([ChatroomSession].self, from: data)
+        await MainActor.run { self.sessions = list }
     }
 
     // 删除聊天室
@@ -197,6 +196,7 @@ final class ChatroomService {
                                 self.streamingContent += delta
                             }
                         case "ai_done":
+                            aiDoneHandled = true
                             let role = obj["role"] as? String ?? ""
                             let msg = ChatroomMessage(
                                 id: self.currentMessages.count + 1,
