@@ -1,559 +1,337 @@
-import { Database } from "bun:sqlite"
 import { Hono } from "hono"
-import { cors } from "hono/cors"
+import { Database } from "bun:sqlite"
+import { join } from "node:path"
 
 // ── Config ──────────────────────────────────────────────────
-const PORT = 3300
-const DB_PATH = "/root/projects/BunnyPalace/cc-bridge/chatroom/chatroom.db"
-
-// OpenRouter API（统一入口，Claude/DeepSeek/Gemini 都从这走）
+const PORT = Number(process.env.CHATROOM_PORT) || 3300
 const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions"
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || ""
-
-// DeepSeek 直连（便宜的任务用这个）
 const DEEPSEEK_API = "https://api.deepseek.com/chat/completions"
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || ""
+const CHATROOM_TOKEN = process.env.CHATROOM_TOKEN || process.env.GATEWAY_TOKEN || ""
+const MAX_CONTEXT = 12   // AI sees at most this many recent messages
+const SUMMARY_AFTER = 20 // auto-summarize after this many messages
+const MAX_TOKENS = 4096
 
 // ── Database ────────────────────────────────────────────────
+const DB_PATH = join(import.meta.dir, "chatroom.db")
 const db = new Database(DB_PATH)
-db.exec("PRAGMA journal_mode = WAL")
-db.exec("PRAGMA foreign_keys = ON")
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS chatroom_sessions (
-    id TEXT PRIMARY KEY,
-    topic TEXT,
-    ai_a_model TEXT,
-    ai_a_name TEXT,
-    ai_a_system TEXT DEFAULT '',
-    ai_b_model TEXT,
-    ai_b_name TEXT,
-    ai_b_system TEXT DEFAULT '',
-    ai_a_preset_slots TEXT,
-    ai_b_preset_slots TEXT,
-    ai_a_preset_name TEXT,
-    ai_b_preset_name TEXT,
-    status TEXT DEFAULT 'active',
-    rounds INTEGER DEFAULT 0,
-    max_rounds INTEGER DEFAULT 20,
-    summary TEXT DEFAULT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    ended_at TEXT
-  )
-`)
-
-// 老库升级：已存在的表补上 preset 列（列已存在时 ALTER 报错，忽略即可）
-function ensureColumn(table: string, column: string, type: string) {
-  try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`) } catch {}
-}
-ensureColumn("chatroom_sessions", "ai_a_preset_slots", "TEXT")
-ensureColumn("chatroom_sessions", "ai_b_preset_slots", "TEXT")
-ensureColumn("chatroom_sessions", "ai_a_preset_name", "TEXT")
-ensureColumn("chatroom_sessions", "ai_b_preset_name", "TEXT")
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS chatroom_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    model TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (session_id) REFERENCES chatroom_sessions(id)
-  )
-`)
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS chatroom_summaries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (session_id) REFERENCES chatroom_sessions(id)
-  )
-`)
-
+db.run("PRAGMA journal_mode=WAL")
+db.run(`CREATE TABLE IF NOT EXISTS chatroom_sessions (
+  id TEXT PRIMARY KEY,
+  topic TEXT NOT NULL,
+  ai_a_name TEXT, ai_a_model TEXT, ai_a_system TEXT,
+  ai_b_name TEXT, ai_b_model TEXT, ai_b_system TEXT,
+  ai_a_preset_slots TEXT, ai_b_preset_slots TEXT,
+  ai_a_preset_name TEXT, ai_b_preset_name TEXT,
+  status TEXT DEFAULT 'waiting',
+  rounds INTEGER DEFAULT 0,
+  summary TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ended_at DATETIME
+)`)
+db.run(`CREATE TABLE IF NOT EXISTS chatroom_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  model TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`)
 console.log("[chatroom] database ready:", DB_PATH)
 
-// ── SSE Clients ─────────────────────────────────────────────
+// ── SSE ─────────────────────────────────────────────────────
 type SSEClient = { sessionId: string; controller: ReadableStreamDefaultController }
 const sseClients: SSEClient[] = []
 
-function broadcastSSE(sessionId: string, event: string, data: object) {
+function broadcast(sessionId: string, event: string, data: object) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
-  for (const client of sseClients) {
-    if (client.sessionId === sessionId) {
-      try { client.controller.enqueue(new TextEncoder().encode(payload)) } catch {}
+  for (const c of sseClients) {
+    if (c.sessionId === sessionId) {
+      try { c.controller.enqueue(new TextEncoder().encode(payload)) } catch {}
     }
   }
 }
 
-// ── Preset Slot ──────────────────────────────────────────────
-interface PresetSlot {
-  role?: string
-  content?: string
-  injection_depth?: number
-  injection_order?: number
-  is_marker?: boolean
-  name?: string
-}
+// ── Preset Slots ────────────────────────────────────────────
+interface PresetSlot { role?: string; content?: string; injection_depth?: number; injection_order?: number; is_marker?: boolean; name?: string }
 
-// 按 injection_order 排序后注入：depth=0 放开头，depth>0 从末尾数第 N 条插入，marker 跳过。
-function buildPresetMessages(
-  slots: PresetSlot[],
-  conversation: { role: string; content: string }[],
-  antiPrefix: string,
-): { role: string; content: string }[] {
-  const usable = slots
-    .filter((s) => !s.is_marker && (s.content ?? "").trim() !== "")
-    .sort((a, b) => (a.injection_order ?? 100) - (b.injection_order ?? 100))
-
-  const depth0 = usable.filter((s) => (s.injection_depth ?? 0) === 0)
-  const depthN = usable.filter((s) => (s.injection_depth ?? 0) > 0)
-
-  const result: { role: string; content: string }[] = []
-  // depth=0 插槽按顺序放在最前
-  for (const s of depth0) {
-    result.push({ role: s.role || "system", content: s.content ?? "" })
+function buildPresetMessages(slots: PresetSlot[], chatMessages: {role:string;content:string}[], extraSystem: string) {
+  const sorted = [...slots].filter(s => !s.is_marker).sort((a,b) => (a.injection_order ?? 0) - (b.injection_order ?? 0))
+  const systemParts: string[] = []
+  const depthSlots: PresetSlot[] = []
+  for (const s of sorted) {
+    if ((s.injection_depth ?? 0) === 0) systemParts.push(s.content || "")
+    else depthSlots.push(s)
   }
-  // 反前缀提醒
-  result.push({ role: "system", content: antiPrefix })
-  // 对话历史
-  result.push(...conversation)
-  // depth>0 从末尾数第 N 条插入
-  for (const s of depthN) {
-    const depth = s.injection_depth ?? 0
-    const idx = Math.max(0, result.length - depth)
-    result.splice(idx, 0, { role: s.role || "system", content: s.content ?? "" })
+  if (extraSystem) systemParts.push(extraSystem)
+  const result: {role:string;content:string}[] = [{ role: "system", content: systemParts.join("\n\n") }]
+  result.push(...chatMessages)
+  for (const s of depthSlots) {
+    const d = s.injection_depth ?? 1
+    const pos = Math.max(1, result.length - d)
+    result.splice(pos, 0, { role: s.role || "system", content: s.content || "" })
   }
   return result
 }
 
-// ── AI API Call ──────────────────────────────────────────────
-interface AICallOptions {
-  model: string
-  systemPrompt: string
-  messages: { role: string; content: string }[]
-  sessionId: string
-  speakerRole: string  // "ai_a" or "ai_b"
-  presetSlots?: PresetSlot[] | null
-  selfName?: string
-  otherName?: string
-}
-
-async function callAI(opts: AICallOptions): Promise<string> {
-  const { model, systemPrompt, messages, sessionId, speakerRole, presetSlots } = opts
-
-  // 判断走 OpenRouter 还是 DeepSeek 直连
-  const isDeepSeek = model.startsWith("deepseek") && !model.includes("/")
-  const apiURL = isDeepSeek ? DEEPSEEK_API : OPENROUTER_API
-  const apiKey = isDeepSeek ? DEEPSEEK_KEY : OPENROUTER_KEY
-
-  // 自动追加：不要模仿输入的 [角色名]: 前缀格式
-  // 构建群聊上下文：告诉AI自己是谁、对方是谁、这是群聊
-  const selfName = opts.selfName || "AI"
-  const otherName = opts.otherName || "对方"
-  const antiPrefix = `这是一个群聊。你是「${selfName}」。和你对话的还有另一个AI「${otherName}」以及用户。直接用你自己的身份说话，不要在回复开头加任何名字标签或前缀（如[${selfName}]:），不要模仿消息格式。`
-
-  // 有 preset slots → 按楼层注入；否则回退到原有 system prompt 文本
-  let finalMessages: { role: string; content: string }[]
-  if (presetSlots && presetSlots.length > 0) {
-    finalMessages = buildPresetMessages(presetSlots, messages, antiPrefix)
-  } else {
-    const fullSystem = systemPrompt ? systemPrompt + " " + antiPrefix : antiPrefix
-    finalMessages = [{ role: "system", content: fullSystem }, ...messages]
-  }
-
-  const body: any = {
-    model,
-    messages: finalMessages,
-    stream: true,
-    max_tokens: 4096,
-  }
-
-  const res = await fetch(apiURL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-      ...(isDeepSeek ? {} : { "HTTP-Referer": "https://lib.amberrib.com" }),
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`AI API error ${res.status}: ${err}`)
-  }
-
-  // 流式读取 + SSE 转推
-  let fullContent = ""
-  const reader = res.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ""
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split("\n")
-    buffer = lines.pop() || ""
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue
-      const data = line.slice(6).trim()
-      if (data === "[DONE]") continue
-
-      try {
-        const parsed = JSON.parse(data)
-        const delta = parsed.choices?.[0]?.delta?.content || ""
-        if (delta) {
-          fullContent += delta
-          broadcastSSE(sessionId, "ai_speaking", {
-            role: speakerRole,
-            delta,
-            model,
-          })
-        }
-      } catch {}
-    }
-  }
-
-  // 发送完成事件
-  broadcastSSE(sessionId, "ai_done", { role: speakerRole, model })
-
-  return fullContent
-}
-
 // ── Message Assembly ────────────────────────────────────────
-// 关键 trick：给每个 AI 组装消息时，自己的话是 assistant，对方的话和用户的话是 user（带前缀）
-function assembleMessages(
-  allMessages: { role: string; content: string }[],
-  forRole: "ai_a" | "ai_b",
-  aiAName: string,
-  aiBName: string,
-  summary?: string | null
-): { role: string; content: string }[] {
-  const otherRole = forRole === "ai_a" ? "ai_b" : "ai_a"
-  const otherName = forRole === "ai_a" ? aiBName : aiAName
-  const selfName = forRole === "ai_a" ? aiAName : aiBName
+function assembleForAI(
+  allMsgs: {role:string;content:string}[],
+  forRole: "ai_a"|"ai_b",
+  names: {a:string;b:string},
+  summary: string|null
+): {role:string;content:string}[] {
+  const other = forRole === "ai_a" ? "ai_b" : "ai_a"
+  const otherName = forRole === "ai_a" ? names.b : names.a
 
-  // 只取最近 MAX_CONTEXT_MESSAGES 条
-  const recent = allMessages.slice(-MAX_CONTEXT_MESSAGES)
+  // window: only recent MAX_CONTEXT messages
+  const recent = allMsgs.slice(-MAX_CONTEXT)
+  const truncated = allMsgs.length > MAX_CONTEXT
 
-  const mapped = recent.map((msg) => {
-    if (msg.role === forRole) {
-      return { role: "assistant", content: msg.content }
-    } else if (msg.role === otherRole) {
-      return { role: "user", content: `[${otherName}]: ${msg.content}` }
-    } else {
-      return { role: "user", content: `[用户]: ${msg.content}` }
-    }
+  const mapped = recent.map(m => {
+    if (m.role === forRole) return { role: "assistant", content: m.content }
+    if (m.role === other)  return { role: "user", content: `[${otherName}]: ${m.content}` }
+    return { role: "user", content: `[用户]: ${m.content}` }
   })
 
-  // 如果有摘要且历史被截断了，在消息开头插入摘要
-  if (summary && allMessages.length > MAX_CONTEXT_MESSAGES) {
-    mapped.unshift({
-      role: "user",
-      content: `[对话摘要] 以下是之前讨论的要点：\n${summary}\n---\n以上是摘要，接下来是最近的对话：`
-    })
+  // prepend summary if history was truncated
+  if (truncated && summary) {
+    mapped.unshift({ role: "user", content: `[对话摘要]\n${summary}\n---\n以下是最近的对话：` })
   }
-
   return mapped
 }
 
+// ── Call AI ─────────────────────────────────────────────────
+interface CallOpts {
+  model: string; systemPrompt: string; presetSlots?: PresetSlot[]|null
+  messages: {role:string;content:string}[]; sessionId: string
+  selfName: string; otherName: string
+}
 
-// ── Auto Summary ────────────────────────────────────────────
-async function generateSummary(sessionId: string) {
-  const messages = db.query(
-    "SELECT role, content FROM chatroom_messages WHERE session_id = ? ORDER BY id"
-  ).all(sessionId) as { role: string; content: string }[]
+async function callAI(opts: CallOpts): Promise<string> {
+  const { model, systemPrompt, presetSlots, messages, sessionId, selfName, otherName } = opts
+  const isDeepSeek = model.toLowerCase().includes("deepseek")
+  const apiURL = isDeepSeek ? DEEPSEEK_API : OPENROUTER_API
+  const apiKey = isDeepSeek ? DEEPSEEK_KEY : OPENROUTER_KEY
 
-  const session = db.query("SELECT * FROM chatroom_sessions WHERE id = ?").get(sessionId) as any
-  if (!session) return
+  const groupCtx = `这是一个群聊。你是「${selfName}」。还有另一个AI「${otherName}」和用户在对话。直接说话，不要加[${selfName}]:等前缀。`
 
-  // 用最便宜的模型生成摘要
-  const summaryPrompt = messages.map(m => {
-    const name = m.role === "ai_a" ? session.ai_a_name : m.role === "ai_b" ? session.ai_b_name : "用户"
-    return `${name}: ${m.content.slice(0, 200)}`
-  }).join("\n")
-
-  const isDeepSeek = true  // 用DeepSeek生成摘要（便宜）
-  const apiURL = DEEPSEEK_API
-  const apiKey = DEEPSEEK_KEY
-
-  if (!apiKey) { console.log("[chatroom] no DeepSeek key, skip summary"); return }
+  let finalMessages: {role:string;content:string}[]
+  if (presetSlots && presetSlots.length > 0) {
+    finalMessages = buildPresetMessages(presetSlots, messages, groupCtx)
+  } else {
+    const sys = [systemPrompt, groupCtx].filter(Boolean).join("\n\n")
+    finalMessages = [{ role: "system", content: sys }, ...messages]
+  }
 
   const res = await fetch(apiURL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [
-        { role: "system", content: "用中文简洁总结以下多人对话的要点，包括各方的核心观点和结论。200字以内。" },
-        { role: "user", content: summaryPrompt }
-      ],
-      max_tokens: 500,
-    }),
+    body: JSON.stringify({ model, messages: finalMessages, stream: true, max_tokens: MAX_TOKENS }),
   })
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
 
-  if (!res.ok) { console.error("[chatroom] summary API error:", res.status); return }
-  const data = await res.json() as any
-  const summary = data.choices?.[0]?.message?.content || ""
-  if (summary) {
-    db.query("UPDATE chatroom_sessions SET summary = ? WHERE id = ?").run(summary, sessionId)
-    console.log(`[chatroom] auto-summary generated for ${sessionId} (${summary.length} chars)`)
+  let full = ""
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value, { stream: true })
+    for (const line of chunk.split("\n")) {
+      if (!line.startsWith("data: ") || line.includes("[DONE]")) continue
+      try {
+        const delta = JSON.parse(line.slice(6))?.choices?.[0]?.delta?.content || ""
+        if (delta) { full += delta; broadcast(sessionId, "ai_speaking", { delta }) }
+      } catch {}
+    }
   }
+  return full
 }
 
-// ── Run One Round ───────────────────────────────────────────
-async function runRound(sessionId: string, target: "round" | "ai_a" | "ai_b" = "round") {
+// ── Auto Summary ────────────────────────────────────────────
+async function autoSummarize(sessionId: string) {
   const session = db.query("SELECT * FROM chatroom_sessions WHERE id = ?").get(sessionId) as any
-  if (!session || session.status === "ended") throw new Error("Session not found or ended")
+  if (!session || !DEEPSEEK_KEY) return
 
-  const allMessages = db.query(
-    "SELECT role, content FROM chatroom_messages WHERE session_id = ? ORDER BY id"
-  ).all(sessionId) as { role: string; content: string }[]
+  const msgs = db.query("SELECT role, content FROM chatroom_messages WHERE session_id = ? ORDER BY id").all(sessionId) as any[]
+  const text = msgs.map(m => {
+    const name = m.role === "ai_a" ? session.ai_a_name : m.role === "ai_b" ? session.ai_b_name : "用户"
+    return `${name}: ${m.content.slice(0, 300)}`
+  }).join("\n")
 
-  // 解析两个 AI 的 preset slots（没有就是 null，callAI 会回退到 system prompt 文本）
-  const parseSlots = (raw: string | null): PresetSlot[] | null => {
-    if (!raw) return null
-    try { return JSON.parse(raw) as PresetSlot[] } catch { return null }
-  }
+  try {
+    const res = await fetch(DEEPSEEK_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_KEY}` },
+      body: JSON.stringify({
+        model: "deepseek-chat", max_tokens: 500,
+        messages: [
+          { role: "system", content: "用中文简洁总结以下多人对话的要点和各方核心观点。200字以内。" },
+          { role: "user", content: text }
+        ],
+      }),
+    })
+    const data = await res.json() as any
+    const summary = data.choices?.[0]?.message?.content
+    if (summary) {
+      db.query("UPDATE chatroom_sessions SET summary = ? WHERE id = ?").run(summary, sessionId)
+      console.log(`[chatroom] summary: ${sessionId} (${summary.length} chars)`)
+    }
+  } catch (e) { console.error("[chatroom] summary error:", e) }
+}
+
+// ── Run Round ───────────────────────────────────────────────
+async function runRound(sessionId: string, target: string = "round") {
+  const session = db.query("SELECT * FROM chatroom_sessions WHERE id = ?").get(sessionId) as any
+  if (!session || session.status === "ended") throw new Error("session ended")
+
+  const allMsgs = db.query("SELECT role, content FROM chatroom_messages WHERE session_id = ? ORDER BY id")
+    .all(sessionId) as {role:string;content:string}[]
+
+  const names = { a: session.ai_a_name, b: session.ai_b_name }
+  const parseSlots = (raw: string|null) => { try { return raw ? JSON.parse(raw) : null } catch { return null } }
   const slotsA = parseSlots(session.ai_a_preset_slots)
   const slotsB = parseSlots(session.ai_b_preset_slots)
 
-  // AI A 发言（target=ai_b时跳过）
+  // AI A speaks (unless target=ai_b)
   if (target !== "ai_b") {
-  broadcastSSE(sessionId, "turn_start", { role: "ai_a", name: session.ai_a_name })
-  const messagesForA = assembleMessages(allMessages, "ai_a", session.ai_a_name, session.ai_b_name, session.summary)
-  const contentA = await callAI({
-    model: session.ai_a_model,
-    systemPrompt: session.ai_a_system || "",
-    messages: messagesForA,
-    sessionId,
-    speakerRole: "ai_a",
-    presetSlots: slotsA,
-    selfName: session.ai_a_name,
-    otherName: session.ai_b_name,
-  })
-
-  // 存 A 的消息
-  db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)")
-    .run(sessionId, "ai_a", contentA, session.ai_a_model)
-  allMessages.push({ role: "ai_a", content: contentA })
-  }
-
-  // AI B 发言（target=ai_a时跳过）
-  if (target !== "ai_a") {
-    broadcastSSE(sessionId, "turn_start", { role: "ai_b", name: session.ai_b_name })
-    const messagesForB = assembleMessages(allMessages, "ai_b", session.ai_a_name, session.ai_b_name, session.summary)
-    const contentB = await callAI({
-      model: session.ai_b_model,
-      systemPrompt: session.ai_b_system || "",
-      messages: messagesForB,
-      sessionId,
-      speakerRole: "ai_b",
-      presetSlots: slotsB,
-      selfName: session.ai_b_name,
-      otherName: session.ai_a_name,
+    broadcast(sessionId, "turn_start", { role: "ai_a", name: names.a })
+    const msgs = assembleForAI(allMsgs, "ai_a", names, session.summary)
+    const content = await callAI({
+      model: session.ai_a_model, systemPrompt: session.ai_a_system || "",
+      messages: msgs, sessionId, presetSlots: slotsA,
+      selfName: names.a, otherName: names.b,
     })
-    db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)")
-      .run(sessionId, "ai_b", contentB, session.ai_b_model)
+    db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?,?,?,?)")
+      .run(sessionId, "ai_a", content, session.ai_a_model)
+    allMsgs.push({ role: "ai_a", content })
+    broadcast(sessionId, "ai_done", { role: "ai_a", name: names.a, content })
   }
 
-  // 更新轮次
+  // AI B speaks (unless target=ai_a)
+  if (target !== "ai_a") {
+    broadcast(sessionId, "turn_start", { role: "ai_b", name: names.b })
+    const msgs = assembleForAI(allMsgs, "ai_b", names, session.summary)
+    const content = await callAI({
+      model: session.ai_b_model, systemPrompt: session.ai_b_system || "",
+      messages: msgs, sessionId, presetSlots: slotsB,
+      selfName: names.b, otherName: names.a,
+    })
+    db.query("INSERT INTO chatroom_messages (session_id, role, content, model) VALUES (?,?,?,?)")
+      .run(sessionId, "ai_b", content, session.ai_b_model)
+    broadcast(sessionId, "ai_done", { role: "ai_b", name: names.b, content })
+  }
+
   const newRounds = session.rounds + 1
-  db.query("UPDATE chatroom_sessions SET rounds = ?, status = 'waiting' WHERE id = ?")
-    .run(newRounds, sessionId)
+  db.query("UPDATE chatroom_sessions SET rounds = ?, status = 'waiting' WHERE id = ?").run(newRounds, sessionId)
+  broadcast(sessionId, "round_complete", { round: newRounds })
 
-  // 通知前端一轮结束
-  // 自动摘要：消息超过阈值时压缩历史
-  const msgCount = (db.query("SELECT COUNT(*) as c FROM chatroom_messages WHERE session_id = ?").get(sessionId) as any).c
-  if (msgCount > SUMMARY_TRIGGER && !session.summary) {
-    generateSummary(sessionId).catch(err => console.error("[chatroom] auto-summary error:", err))
-  }
-
-  broadcastSSE(sessionId, "round_complete", {
-    round: newRounds,
-    status: "waiting_user",
-    ai_a_content: contentA,
-    ai_b_content: contentB,
-  })
+  // auto-summarize
+  const count = (db.query("SELECT COUNT(*) as c FROM chatroom_messages WHERE session_id = ?").get(sessionId) as any).c
+  if (count >= SUMMARY_AFTER && !session.summary) autoSummarize(sessionId).catch(() => {})
 }
 
-// ── Hono App ────────────────────────────────────────────────
+// ── HTTP Routes ─────────────────────────────────────────────
 const app = new Hono()
-app.use("/*", cors())
 
-// S2: 鉴权——所有 /chatroom 路由要求 Bearer token（与 gateway 同口径）。
-// 支持 Authorization: Bearer <token> 或 ?token=<token>（SSE/EventSource 无法设 header）。
-const CHATROOM_TOKEN = process.env.CHATROOM_TOKEN || process.env.GATEWAY_TOKEN || ""
-const MAX_CONTEXT_MESSAGES = 12  // 每个AI最多看到最近12条消息
-const SUMMARY_TRIGGER = 20       // 消息超过20条时自动生成摘要
+// Auth (skip if no token configured)
 app.use("/chatroom/*", async (c, next) => {
   if (!CHATROOM_TOKEN) return next()
   const h = c.req.header("Authorization") || ""
   const bearer = h.startsWith("Bearer ") ? h.slice(7) : ""
-  const q = c.req.query("token") || ""
-  if (bearer !== CHATROOM_TOKEN && q !== CHATROOM_TOKEN) {
-    return c.json({ error: "unauthorized" }, 401)
-  }
-  await next()
+  const q = new URL(c.req.url).searchParams.get("token") || ""
+  if (bearer !== CHATROOM_TOKEN && q !== CHATROOM_TOKEN) return c.json({ error: "unauthorized" }, 401)
+  return next()
 })
 
-// 创建聊天室 + 第一轮
+// Start session
 app.post("/chatroom/start", async (c) => {
   const body = await c.req.json()
   const id = crypto.randomUUID()
-
-  // preset slots/names 可选；没传就存 null，runRound 回退到 system prompt 文本
-  const aiAPresetSlots = body.ai_a_preset_slots ? JSON.stringify(body.ai_a_preset_slots) : null
-  const aiBPresetSlots = body.ai_b_preset_slots ? JSON.stringify(body.ai_b_preset_slots) : null
-  const aiAPresetName = body.ai_a_preset_name || null
-  const aiBPresetName = body.ai_b_preset_name || null
+  const topic = body.topic || "新群聊"
+  const participants = body.participants || []
+  const a = participants[0] || {}
+  const b = participants[1] || {}
 
   db.query(`INSERT INTO chatroom_sessions
-    (id, topic, ai_a_model, ai_a_name, ai_a_system, ai_b_model, ai_b_name, ai_b_system,
+    (id, topic, ai_a_name, ai_a_model, ai_a_system, ai_b_name, ai_b_model, ai_b_system,
      ai_a_preset_slots, ai_b_preset_slots, ai_a_preset_name, ai_b_preset_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    id,
-    body.topic || "自由对话",
-    body.ai_a_model || "anthropic/claude-sonnet-4",
-    body.ai_a_name || "AI A",
-    body.ai_a_system || "",
-    body.ai_b_model || "deepseek/deepseek-chat",
-    body.ai_b_name || "AI B",
-    body.ai_b_system || "",
-    aiAPresetSlots,
-    aiBPresetSlots,
-    aiAPresetName,
-    aiBPresetName,
-  )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, topic, a.name||"A", a.model||"deepseek/deepseek-chat", a.systemPrompt||"",
+         b.name||"B", b.model||"deepseek/deepseek-chat", b.systemPrompt||"",
+         a.presetSlots ? JSON.stringify(a.presetSlots) : null,
+         b.presetSlots ? JSON.stringify(b.presetSlots) : null,
+         a.presetName || null, b.presetName || null)
 
-  // 用话题作为第一条用户消息，启动对话
-  if (body.topic) {
-    db.query("INSERT INTO chatroom_messages (session_id, role, content) VALUES (?, 'user', ?)")
-      .run(id, body.topic)
+  // initial round with topic
+  if (topic) {
+    db.query("INSERT INTO chatroom_messages (session_id, role, content) VALUES (?,?,?)").run(id, "user", topic)
   }
-
-  // 异步跑第一轮（不阻塞响应）
-  runRound(id).catch(err => {
-    console.error("[chatroom] round error:", err)
-    broadcastSSE(id, "error", { message: err.message })
-  })
-
+  const target = body.target || "round"
+  if (target !== "silent") {
+    runRound(id, target).catch(e => { console.error("[chatroom] start error:", e); broadcast(id, "error", { message: String(e) }) })
+  }
   return c.json({ id, status: "started" })
 })
 
-// 继续下一轮
-app.post("/chatroom/continue", async (c) => {
-  const { session_id } = await c.req.json()
-
-  db.query("UPDATE chatroom_sessions SET status = 'active' WHERE id = ?").run(session_id)
-
-  const target = (body.target as "round" | "ai_a" | "ai_b") || "round"
-  runRound(session_id, target).catch(err => {
-    console.error("[chatroom] round error:", err)
-    broadcastSSE(session_id, "error", { message: err.message })
-  })
-
-  return c.json({ status: "continuing" })
-})
-
-// 用户发消息
+// Send message
 app.post("/chatroom/send", async (c) => {
-  const { session_id, content } = await c.req.json()
+  const { session_id, content, target = "round" } = await c.req.json()
+  if (!session_id || !content) return c.json({ error: "missing fields" }, 400)
 
-  db.query("INSERT INTO chatroom_messages (session_id, role, content) VALUES (?, 'user', ?)")
-    .run(session_id, content)
+  db.query("INSERT INTO chatroom_messages (session_id, role, content) VALUES (?,?,?)").run(session_id, "user", content)
+  broadcast(session_id, "user_message", { content })
 
-  // 用户消息后继续一轮
-  db.query("UPDATE chatroom_sessions SET status = 'active' WHERE id = ?").run(session_id)
-
-  runRound(session_id).catch(err => {
-    console.error("[chatroom] round error:", err)
-    broadcastSSE(session_id, "error", { message: err.message })
-  })
-
-  return c.json({ status: "sent" })
+  if (target === "silent") return c.json({ ok: true })
+  runRound(session_id, target).catch(e => { console.error("[chatroom] send error:", e); broadcast(session_id, "error", { message: String(e) }) })
+  return c.json({ ok: true })
 })
 
-// 结束聊天室
+// Continue (no user message)
+app.post("/chatroom/continue", async (c) => {
+  const { session_id, target = "round" } = await c.req.json()
+  if (target === "silent") return c.json({ ok: true })
+  runRound(session_id, target).catch(e => { console.error("[chatroom] continue error:", e); broadcast(session_id, "error", { message: String(e) }) })
+  return c.json({ ok: true })
+})
+
+// End session
 app.post("/chatroom/end", async (c) => {
   const { session_id } = await c.req.json()
-
-  db.query("UPDATE chatroom_sessions SET status = 'ended', ended_at = datetime('now') WHERE id = ?")
-    .run(session_id)
-
-  broadcastSSE(session_id, "session_ended", { session_id })
-
-  return c.json({ status: "ended" })
+  db.query("UPDATE chatroom_sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = ?").run(session_id)
+  broadcast(session_id, "session_ended", {})
+  return c.json({ ok: true })
 })
 
-// 获取消息历史
-app.get("/chatroom/history/:id", (c) => {
-  const id = c.req.param("id")
-  const messages = db.query(
-    "SELECT id, role, content, model, created_at FROM chatroom_messages WHERE session_id = ? ORDER BY id"
-  ).all(id)
-  return c.json({ messages })
-})
-
-// 列出所有聊天室
-app.get("/chatroom/sessions", (c) => {
-  const sessions = db.query(
-    "SELECT * FROM chatroom_sessions ORDER BY created_at DESC"
-  ).all()
-  return c.json({ sessions })
-})
-
-// 删除聊天室（及其消息）
-app.delete("/chatroom/:id", (c) => {
-  const id = c.req.param("id")
-  db.query("DELETE FROM chatroom_messages WHERE session_id = ?").run(id)
-  db.query("DELETE FROM chatroom_sessions WHERE id = ?").run(id)
-  return c.json({ status: "deleted" })
-})
-
-// SSE 流式订阅
+// SSE stream
 app.get("/chatroom/stream/:id", (c) => {
   const sessionId = c.req.param("id")
-
   const stream = new ReadableStream({
-    start(controller) {
-      const client: SSEClient = { sessionId, controller }
-      sseClients.push(client)
-
-      // 心跳
-      const heartbeat = setInterval(() => {
-        try {
-          controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"))
-        } catch {
-          clearInterval(heartbeat)
-        }
-      }, 15000)
-
-      // 清理
-      c.req.raw.signal.addEventListener("abort", () => {
-        clearInterval(heartbeat)
-        const idx = sseClients.indexOf(client)
-        if (idx !== -1) sseClients.splice(idx, 1)
-      })
+    start(ctrl) {
+      sseClients.push({ sessionId, controller: ctrl })
+      ctrl.enqueue(new TextEncoder().encode(`: connected\n\n`))
+    },
+    cancel() {
+      const i = sseClients.findIndex(c => c.sessionId === sessionId)
+      if (i >= 0) sseClients.splice(i, 1)
     },
   })
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
-  })
+  return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" } })
 })
 
-// ── Start ───────────────────────────────────────────────────
-console.log(`[chatroom] orchestrator listening on port ${PORT}`)
+// List sessions
+app.get("/chatroom/sessions", (c) => {
+  const rows = db.query("SELECT * FROM chatroom_sessions ORDER BY created_at DESC LIMIT 50").all()
+  return c.json(rows)
+})
+
+// Get messages
+app.get("/chatroom/messages/:id", (c) => {
+  const rows = db.query("SELECT * FROM chatroom_messages WHERE session_id = ? ORDER BY id").all(c.req.param("id"))
+  return c.json(rows)
+})
+
+// ── Server ──────────────────────────────────────────────────
 export default { port: PORT, hostname: "127.0.0.1", fetch: app.fetch, idleTimeout: 120 }
