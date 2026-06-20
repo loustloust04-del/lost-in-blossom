@@ -7,6 +7,7 @@ struct CreateChatroomView: View {
     private var service = ChatroomService.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(PresetManager.self) private var presetManager: PresetManager?
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
 
     @State private var topic = ""
     @State private var aiAName = ""
