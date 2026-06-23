@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { getConnInfo } from 'hono/bun';
 import { auth } from './middleware/auth';
 import { forwardDeepSeek } from './providers/deepseek';
+import { forwardClaudeP } from './providers/claude-p';
 import { forwardOpenRouter } from './providers/openrouter';
 import { forwardAnthropicNative } from './providers/anthropic-native';
 import { runToolLoop } from './tools/loop';
@@ -33,6 +34,7 @@ app.get('/health', (c) => c.json({
 app.get('/v1/models', auth, (c) => c.json({
   object: 'list',
   data: [
+    { id: 'claude-code', object: 'model', owned_by: 'local' },
     { id: 'anthropic/claude-opus-4.8', object: 'model', owned_by: 'anthropic' },
     { id: 'anthropic/claude-opus-4.8:thinking', object: 'model', owned_by: 'anthropic' },
     { id: 'anthropic/claude-opus-4.7', object: 'model', owned_by: 'anthropic' },
@@ -227,7 +229,9 @@ app.post('/v1/chat/completions', auth, async (c) => {
   }
   let upstream: Response;
 
-  if (actualModel.includes("deepseek")) {
+  if (actualModel === "claude-code" || actualModel === "claude-p") {
+    upstream = await forwardClaudeP(forwardBody);
+  } else if (actualModel.includes("deepseek")) {
     upstream = await forwardDeepSeek(forwardBody);
   } else if (actualModel.startsWith("tree-chat/")) {
     // TreeGPT 不支持 A社 system 字段，走 OpenAI 格式
