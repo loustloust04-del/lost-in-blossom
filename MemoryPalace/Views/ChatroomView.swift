@@ -35,6 +35,8 @@ struct ChatroomView: View {
         }
         .background(Theme.mainBg)
         .task {
+            // 切换 session 时先清空旧单例状态，避免旧 streamTask 的 defer 把残留内容串进新会话
+            service.prepareForSession()
             try? await service.fetchHistory(sessionId: session.id)
             service.subscribeStream(sessionId: session.id)
         }

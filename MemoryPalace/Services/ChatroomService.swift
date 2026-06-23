@@ -198,10 +198,12 @@ final class ChatroomService {
                         case "ai_done":
                             aiDoneHandled = true
                             let role = obj["role"] as? String ?? ""
+                            // 用服务端权威 content（防止丢 delta 导致截断）；缺失才用累积的
+                            let finalContent = (obj["content"] as? String) ?? self.streamingContent
                             let msg = ChatroomMessage(
                                 id: self.currentMessages.count + 1,
                                 role: role,
-                                content: self.streamingContent,
+                                content: finalContent,
                                 model: obj["model"] as? String,
                                 created_at: ""
                             )
