@@ -568,6 +568,7 @@ app.get('/api/screentime', auth, async (c) => {
 export default {
   port: config.port,
   fetch: app.fetch,
+  idleTimeout: 120,
 };
 
 console.log(`🌸 Lost in Blossom Gateway`);
