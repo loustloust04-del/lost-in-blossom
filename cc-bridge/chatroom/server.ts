@@ -39,6 +39,9 @@ db.run(`CREATE TABLE IF NOT EXISTS chatroom_messages (
   model TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`)
+// 自动migration：补缺失的列
+try { db.run("ALTER TABLE chatroom_sessions ADD COLUMN user_name TEXT DEFAULT NULL") } catch {}
+try { db.run("ALTER TABLE chatroom_sessions ADD COLUMN summary TEXT") } catch {}
 console.log("[chatroom] database ready:", DB_PATH)
 
 // ── SSE ─────────────────────────────────────────────────────
