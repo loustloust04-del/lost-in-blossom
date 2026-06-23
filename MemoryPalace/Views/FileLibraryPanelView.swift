@@ -69,7 +69,7 @@ struct FileLibraryPanelView: View {
             Button { newFileName = ""; showNewFileAlert = true } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: isIOSStyle ? 12 : 11))
+                        .font(.system(size: 12))
                     Text("新建")
                         .font(.system(size: Theme.F.secondary))
                 }
@@ -77,8 +77,8 @@ struct FileLibraryPanelView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, isIOSStyle ? 16 : 12)
-        .padding(.vertical, isIOSStyle ? 10 : 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     // MARK: - List
@@ -199,8 +199,6 @@ struct FileLibraryPanelView: View {
         if days < 30 { return "\(days)天前" }
         return "\(days / 30)月前"
     }
-
-    private var isIOSStyle: Bool { true }
 }
 
 // MARK: - File Editor Sheet

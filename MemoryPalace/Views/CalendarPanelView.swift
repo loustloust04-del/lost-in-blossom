@@ -35,17 +35,17 @@ struct CalendarPanelView: View {
                 calendarGrid
             }
             .background(
-                RoundedRectangle(cornerRadius: isIOSStyle ? 22 : 16, style: .continuous)
-                    .fill(Theme.mainBg.opacity(isIOSStyle ? 0.9 : 0.6))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Theme.mainBg.opacity(0.9))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: isIOSStyle ? 22 : 16, style: .continuous)
-                    .stroke(Theme.accent.opacity(isIOSStyle ? 0.72 : 0), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: isIOSStyle ? 22 : 16, style: .continuous))
-            .padding(.horizontal, isIOSStyle ? 8 : 10)
-            .padding(.top, isIOSStyle ? 0 : 10)
-            .padding(.bottom, isIOSStyle ? 0 : 4)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.horizontal, 8)
+            .padding(.top, 0)
+            .padding(.bottom, 0)
 
             dayConversationSection(conversations)
 
@@ -71,7 +71,7 @@ struct CalendarPanelView: View {
                 shiftMonth(-1)
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: isIOSStyle ? 12 : 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Theme.textSecondary)
             }
             .buttonStyle(.plain)
@@ -100,13 +100,13 @@ struct CalendarPanelView: View {
                 shiftMonth(1)
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: isIOSStyle ? 12 : 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Theme.textSecondary)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, isIOSStyle ? 16 : 14)
-        .padding(.vertical, isIOSStyle ? 12 : 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Grid
@@ -148,13 +148,13 @@ struct CalendarPanelView: View {
                         }
                     } else {
                         Color.clear
-                            .frame(height: isIOSStyle ? 36 : 32)
+                            .frame(height: 36)
                     }
                 }
             }
         }
-        .padding(.horizontal, isIOSStyle ? 12 : 10)
-        .padding(.vertical, isIOSStyle ? 10 : 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Day Conversation List
@@ -168,7 +168,7 @@ struct CalendarPanelView: View {
                 Rectangle()
                     .fill(Theme.accent.opacity(0.65))
                     .frame(height: 1)
-                    .padding(.horizontal, isIOSStyle ? 16 : 14)
+                    .padding(.horizontal, 16)
 
                 VStack(spacing: 8) {
                     Image(systemName: "calendar")
@@ -179,16 +179,16 @@ struct CalendarPanelView: View {
                         .foregroundColor(Theme.textMuted)
                 }
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: isIOSStyle ? 160 : 140)
+                .frame(minHeight: 160)
                 .padding(.top, 6)
-                .padding(.bottom, isIOSStyle ? 10 : 8)
+                .padding(.bottom, 10)
             }
             .background(dayCardBackground)
             .overlay(dayCardStroke)
             .clipShape(dayCardShape)
-            .padding(.horizontal, isIOSStyle ? 8 : 10)
-            .padding(.top, isIOSStyle ? 0 : 2)
-            .padding(.bottom, isIOSStyle ? 0 : 4)
+            .padding(.horizontal, 8)
+            .padding(.top, 0)
+            .padding(.bottom, 0)
         } else {
             VStack(spacing: 0) {
                 dayConversationHeader(count: conversations.count)
@@ -196,7 +196,7 @@ struct CalendarPanelView: View {
                 Rectangle()
                     .fill(Theme.accent.opacity(0.65))
                     .frame(height: 1)
-                    .padding(.horizontal, isIOSStyle ? 16 : 14)
+                    .padding(.horizontal, 16)
 
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -218,9 +218,9 @@ struct CalendarPanelView: View {
             .background(dayCardBackground)
             .overlay(dayCardStroke)
             .clipShape(dayCardShape)
-            .padding(.horizontal, isIOSStyle ? 8 : 10)
-            .padding(.top, isIOSStyle ? 0 : 2)
-            .padding(.bottom, isIOSStyle ? 0 : 4)
+            .padding(.horizontal, 8)
+            .padding(.top, 0)
+            .padding(.bottom, 0)
         }
     }
 
@@ -236,23 +236,23 @@ struct CalendarPanelView: View {
                 .font(.system(size: Theme.F.secondary, weight: .medium))
                 .foregroundColor(Theme.textMuted)
         }
-        .padding(.horizontal, isIOSStyle ? 16 : 14)
-        .padding(.top, isIOSStyle ? 14 : 12)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
         .padding(.bottom, 10)
     }
 
     private var dayCardBackground: some View {
-        RoundedRectangle(cornerRadius: isIOSStyle ? 22 : 16, style: .continuous)
-            .fill(Theme.mainBg.opacity(isIOSStyle ? 0.9 : 0.6))
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Theme.mainBg.opacity(0.9))
     }
 
     private var dayCardStroke: some View {
-        RoundedRectangle(cornerRadius: isIOSStyle ? 22 : 16, style: .continuous)
-            .stroke(Theme.accent.opacity(isIOSStyle ? 0.72 : 0), lineWidth: 1)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
     }
 
     private var dayCardShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: isIOSStyle ? 22 : 16, style: .continuous)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
     }
 
     // MARK: - Data Helpers
@@ -341,10 +341,6 @@ struct CalendarPanelView: View {
 
         return cells
     }
-
-    private var isIOSStyle: Bool {
-        true
-    }
 }
 
 // MARK: - Calendar Cell Model
@@ -370,9 +366,9 @@ private struct DayCell: View {
 
             Circle()
                 .fill(hasConversations ? Theme.branchIndicator : Color.clear)
-                .frame(width: isIOSStyle ? 5 : 4, height: isIOSStyle ? 5 : 4)
+                .frame(width: 5, height: 5)
         }
-        .frame(height: isIOSStyle ? 36 : 32)
+        .frame(height: 36)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 6)
@@ -388,9 +384,5 @@ private struct DayCell: View {
         } else {
             return Color.clear
         }
-    }
-
-    private var isIOSStyle: Bool {
-        true
     }
 }

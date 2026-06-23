@@ -100,9 +100,9 @@ struct MemoryPanelView: View {
         VStack(spacing: 0) {
             // Stats header
             memoryHeader
-                .padding(.horizontal, isIOSStyle ? 16 : 12)
-                .padding(.top, isIOSStyle ? 4 : 8)
-                .padding(.bottom, isIOSStyle ? 12 : 8)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
 
             // Memory list
             ScrollViewReader { proxy in
@@ -146,8 +146,8 @@ struct MemoryPanelView: View {
                         .padding(.top, 40)
                     }
                 }
-                .padding(.horizontal, isIOSStyle ? 14 : 10)
-                .padding(.vertical, isIOSStyle ? 8 : 4)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
             }
             .onAppear { consumeTarget(navigator?.pendingTarget, proxy: proxy) }
             .onChange(of: navigator?.pendingTarget) { _, target in
@@ -168,7 +168,7 @@ struct MemoryPanelView: View {
                     Button(action: { withAnimation(.easeInOut(duration: 0.2)) { showAddInput = true } }) {
                         HStack(spacing: 4) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: isIOSStyle ? 12 : 11))
+                                .font(.system(size: 12))
                             Text("添加记忆")
                                 .font(.system(size: Theme.F.secondary))
                         }
@@ -179,9 +179,9 @@ struct MemoryPanelView: View {
 
                 tokenBudgetBar
             }
-            .padding(.horizontal, isIOSStyle ? 16 : 12)
-            .padding(.top, isIOSStyle ? 10 : 8)
-            .padding(.bottom, isIOSStyle ? 14 : 8)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { refreshMemories() }
@@ -310,7 +310,7 @@ struct MemoryPanelView: View {
             TextField("输入要记住的事...", text: $newMemoryText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: Theme.F.body))
-                .lineLimit(isIOSStyle ? 4 : 3)
+                .lineLimit(4)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
@@ -345,8 +345,8 @@ struct MemoryPanelView: View {
                 .disabled(newMemoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(.horizontal, isIOSStyle ? 16 : 12)
-        .padding(.vertical, isIOSStyle ? 10 : 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background {
             if isIOSStyle {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -361,8 +361,8 @@ struct MemoryPanelView: View {
                     .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
             }
         }
-        .padding(.horizontal, isIOSStyle ? 12 : 0)
-        .padding(.bottom, isIOSStyle ? 1 : 0)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 1)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
@@ -434,10 +434,6 @@ struct MemoryPanelView: View {
         withAnimation { showAddInput = false }
         refreshMemories()
     }
-
-    private var isIOSStyle: Bool {
-        true
-    }
 }
 
 // MARK: - Memory Card
@@ -501,7 +497,7 @@ struct MemoryCardView: View {
                 Text(memory.content)
                     .font(.system(size: Theme.F.body))
                     .foregroundColor(Theme.textPrimary)
-                    .lineLimit(isIOSStyle ? 4 : 3)
+                    .lineLimit(4)
 
                 // 出处行（SC-B2）：有 quote 显示，可点跳源对话（v1 跳对话不定位消息）
                 if let quote = memory.sourceQuote {
@@ -628,10 +624,6 @@ struct MemoryCardView: View {
         if days == 1 { return "昨天" }
         if days < 30 { return "\(days)天前" }
         return "\(days / 30)月前"
-    }
-
-    private var isIOSStyle: Bool {
-        true
     }
 
     /// Simple color blend between two colors

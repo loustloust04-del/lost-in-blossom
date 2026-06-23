@@ -260,7 +260,7 @@ struct SidebarView: View {
             }
 
             // ── 标签列表（iOS 模式，支持 swipe-to-delete）─────────────────
-            if isIOSStyle && !tags.isEmpty {
+            if !tags.isEmpty {
                 List {
                     ForEach(tags) { tag in
                         Button {
@@ -304,9 +304,6 @@ struct SidebarView: View {
             // Chrome-style tab bar + content card
             // iOS 简化模式：隐藏 tab bar，只显示对话列表（固定「全部」视图）
             VStack(spacing: 0) {
-                if !isIOSStyle {
-                    sidebarTabBar
-                }
 
             if isSearchActive {
                 // MARK: - Search Results View
@@ -322,7 +319,7 @@ struct SidebarView: View {
                     .padding(.top, 40)
                 } else {
                     let allEmpty = searchResults.isEmpty && stickerSearchResults.isEmpty && characterCardResults.isEmpty && worldBookEntryResults.isEmpty && memoryResults.isEmpty
-                    if isIOSStyle && allEmpty {
+                    if allEmpty {
                         compactEmptyCard(
                             icon: "magnifyingglass",
                             title: "没有找到结果",
@@ -440,7 +437,7 @@ struct SidebarView: View {
                 Spacer(minLength: 0)
             } else {
                 // MARK: - Normal Conversation List
-                if isIOSStyle && shouldShowCompactListEmptyState {
+                if shouldShowCompactListEmptyState {
                     compactEmptyCard(
                         icon: compactListEmptyStateIcon,
                         title: compactListEmptyStateTitle,
@@ -758,8 +755,8 @@ struct SidebarView: View {
                     Spacer()
                 }
             }
-            .padding(.horizontal, isIOSStyle ? 20 : 16)
-            .padding(.vertical, isIOSStyle ? 6 : 6)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 6)
 
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -871,7 +868,6 @@ struct SidebarView: View {
     }
 
     private var shouldShowCompactListEmptyState: Bool {
-        guard isIOSStyle else { return false }
         if showTrash {
             return conversations.isEmpty && deletedNodes.isEmpty
         }
@@ -1008,10 +1004,6 @@ struct SidebarView: View {
         }
     }
 
-    private var isIOSStyle: Bool {
-        true
-    }
-
     /// 从 UIKit window 读取真实的状态栏 / notch 高度。
     /// SidebarView 所在的 ZStack 使用 .ignoresSafeArea()，SwiftUI 环境里
     /// safeAreaInsets 归零，必须走 UIKit 层获取正确值。
@@ -1138,8 +1130,8 @@ struct SidebarView: View {
                     }
                 }
             }
-            .padding(.leading, isIOSStyle ? 20 : 12)
-            .padding(.trailing, isIOSStyle ? 20 : 12)
+            .padding(.leading, 20)
+            .padding(.trailing, 20)
         } else {
             // 只有内置 tab：平分宽度铺满
             HStack(spacing: 0) {
@@ -1148,7 +1140,7 @@ struct SidebarView: View {
                 }
                 plusButton
             }
-            .padding(.horizontal, isIOSStyle ? 20 : 12)
+            .padding(.horizontal, 20)
         }
     }
 
@@ -1179,8 +1171,8 @@ struct SidebarView: View {
                 .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
                 .lineLimit(1)
                 .if(!fillWidth) { $0.fixedSize() }
-                .padding(.horizontal, isIOSStyle ? 16 : 12)
-                .padding(.vertical, isIOSStyle ? 8 : 6)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .if(fillWidth) { $0.frame(maxWidth: .infinity) }
                 .background(
                     UnevenRoundedRectangle(
@@ -2375,14 +2367,10 @@ struct AdvancedSearchPanel: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, isIOSStyle ? 25 : 17)
-        .padding(.trailing, isIOSStyle ? 20 : 12)
+        .padding(.leading, 25)
+        .padding(.trailing, 20)
         .padding(.top, 8)
         .padding(.bottom, 18)
-    }
-
-    private var isIOSStyle: Bool {
-        true
     }
 
     /// 分类名（时间/角色/排序/类型）

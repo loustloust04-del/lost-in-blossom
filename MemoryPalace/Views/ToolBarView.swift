@@ -29,7 +29,7 @@ struct ToolBarView: View {
                 } label: {
                     HStack(spacing: isSelected ? 5 : 0) {
                         Image(systemName: tool.icon)
-                            .font(.system(size: isIOSStyle ? 14 : 11, weight: .medium))
+                            .font(.system(size: 14, weight: .medium))
 
                         Text(tool.name)
                             .font(.system(size: Theme.F.secondary, weight: .semibold))
@@ -41,7 +41,7 @@ struct ToolBarView: View {
                     }
                     .foregroundColor(isSelected ? Theme.textSecondary : Theme.textMuted)
                     .padding(.horizontal, isSelected ? 14 : 10)
-                    .frame(height: isIOSStyle ? 36 : 28)
+                    .frame(height: 36)
                     .background(
                         Capsule()
                             .fill(Theme.branchIndicator.opacity(isSelected ? 0.14 : 0))
@@ -82,16 +82,16 @@ struct ToolBarView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: isIOSStyle ? 14 : 11, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(showDrawer ? Theme.branchIndicator : Theme.textMuted)
-                    .frame(width: isIOSStyle ? 44 : 32, height: isIOSStyle ? 36 : 28)
+                    .frame(width: 44, height: 36)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
         .animation(springAnim, value: selectedToolId)
-        .padding(isIOSStyle ? 4 : 3)
+        .padding(4)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -100,10 +100,6 @@ struct ToolBarView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-    }
-
-    private var isIOSStyle: Bool {
-        true
     }
 }
 
