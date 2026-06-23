@@ -12,6 +12,131 @@ const HUB_URL = process.env.MP_CC_HUB_URL ?? "ws://127.0.0.1:7890/mcp"
 const HUB_TOKEN = process.env.MP_CC_HUB_TOKEN ?? ""
 const PING_INTERVAL_MS = 15_000
 
+// ── Gateway 工具代理 ──
+// CC 通过这些代理工具调用 Gateway 的内置工具（exec/recall/remember/gmail/vitals/phone），
+// 让 CC 拥有和 /v1 API 一样的全部工具能力。请求转发到 Gateway 的 /internal/tool-call。
+// cc-bridge 与 gateway 同机，默认走 loopback；如设了 GATEWAY_TOKEN 则一并带上做内部认证。
+const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://127.0.0.1:4567"
+const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN ?? ""
+
+const PROXY_TOOLS = [
+  {
+    name: "exec",
+    description: "Run a shell command on the VPS the gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs.",
+    inputSchema: {
+      type: "object",
+      properties: { command: { type: "string", description: "shell command" } },
+      required: ["command"],
+    },
+  },
+  {
+    name: "recall",
+    description: "Search long-term memory and return full entries. exact=true does verbatim full-text search over past messages (needs 3+ chars); otherwise semantic search over memories.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "what to recall" },
+        exact: { type: "boolean", description: "verbatim full-text search instead of semantic" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "remember",
+    description: "Store one piece of information into long-term memory right now. The entry is embedded and persisted; it will surface again via recall.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "要记住的信息，一句完整、可独立理解的话" },
+        category: { type: "string", enum: ["preference", "fact", "relationship", "goal", "context"], description: "分类：偏好 / 事实 / 关系 / 目标 / 上下文" },
+        tier: { type: "number", description: "重要程度 1-4：1核心 2重要 3普通 4碎片（默认 3）" },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "gmail_inbox",
+    description: "List recent emails from inbox. Returns subject, sender, date, snippet for each.",
+    inputSchema: {
+      type: "object",
+      properties: { count: { type: "number", description: "number of emails (default 5, max 20)" } },
+    },
+  },
+  {
+    name: "gmail_read",
+    description: "Read full content of a specific email by message ID.",
+    inputSchema: {
+      type: "object",
+      properties: { messageId: { type: "string", description: "Gmail message ID" } },
+      required: ["messageId"],
+    },
+  },
+  {
+    name: "gmail_send",
+    description: "Send an email.",
+    inputSchema: {
+      type: "object",
+      properties: { to: { type: "string" }, subject: { type: "string" }, body: { type: "string" } },
+      required: ["to", "subject", "body"],
+    },
+  },
+  {
+    name: "gmail_search",
+    description: "Search emails with Gmail query syntax (e.g. \"from:someone subject:hello\").",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Gmail search query" }, count: { type: "number" } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "vitals_water",
+    description: "Record that Bunny drank water. Each call adds 1 cup.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "vitals_food",
+    description: "Record that Bunny ate a meal. Call with what she ate.",
+    inputSchema: {
+      type: "object",
+      properties: { meal: { type: "string", description: "what she ate, e.g. \"早餐：面包牛奶\"" } },
+      required: ["meal"],
+    },
+  },
+  {
+    name: "vitals_meds",
+    description: "Record that Bunny took her medication (右佐匹克隆/扎来普隆).",
+    inputSchema: {
+      type: "object",
+      properties: { name: { type: "string", description: "medication name" } },
+    },
+  },
+  {
+    name: "get_phone_status",
+    description: "Get Bunny's phone status for today — battery level, charging state, timestamps. No parameters needed.",
+    inputSchema: { type: "object", properties: {} },
+  },
+] as const
+
+const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
+
+async function proxyToGateway(name: string, input: any): Promise<string> {
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    if (GATEWAY_TOKEN) headers["Authorization"] = "Bearer " + GATEWAY_TOKEN
+    const res = await fetch(`${GATEWAY_URL}/internal/tool-call`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name, input: input ?? {} }),
+    })
+    if (!res.ok) return `Gateway tool '${name}' failed: HTTP ${res.status}`
+    const data = await res.json() as { result?: string }
+    return data.result ?? "工具未找到或执行失败"
+  } catch (err) {
+    return `Gateway unreachable for '${name}': ${(err as Error)?.message ?? "unknown"}`
+  }
+}
+
 function hubURLWithToken(): string {
   if (!HUB_TOKEN) return HUB_URL
   try {
@@ -96,39 +221,48 @@ const server = new Server(
 )
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [{
-    name: "reply",
-    description: "Send a message to a Memory Palace conversation. Normally used to respond to <channel source=\"memorypalace\"> input (pass its chat_id + message_id). You can ALSO use it proactively at any time to message a conversation without a preceding <channel> — just pass that conversation's chat_id (omit message_id). The message appears as a new message from you.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        chat_id: {
-          type: "string",
-          description: "The chat_id from the <channel> tag",
+  tools: [
+    {
+      name: "reply",
+      description: "Send a message to a Memory Palace conversation. Normally used to respond to <channel source=\"memorypalace\"> input (pass its chat_id + message_id). You can ALSO use it proactively at any time to message a conversation without a preceding <channel> — just pass that conversation's chat_id (omit message_id). The message appears as a new message from you.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          chat_id: {
+            type: "string",
+            description: "The chat_id from the <channel> tag",
+          },
+          message_id: {
+            type: "string",
+            description: "The message_id from the <channel> tag. Pass it back verbatim so the reply is matched to the exact message (prevents stale replies being mis-routed).",
+          },
+          content: {
+            type: "string",
+            description: "Your reply text",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path of a file to send to the user alongside the reply (image or any file, max 10 MB).",
+          },
+          thinking: {
+            type: "string",
+            description: "If you have internal reasoning or a thinking process for this reply, include it here. This will be displayed as a collapsible thinking block in the app.",
+          },
         },
-        message_id: {
-          type: "string",
-          description: "The message_id from the <channel> tag. Pass it back verbatim so the reply is matched to the exact message (prevents stale replies being mis-routed).",
-        },
-        content: {
-          type: "string",
-          description: "Your reply text",
-        },
-        file_path: {
-          type: "string",
-          description: "Absolute path of a file to send to the user alongside the reply (image or any file, max 10 MB).",
-        },
-        thinking: {
-          type: "string",
-          description: "If you have internal reasoning or a thinking process for this reply, include it here. This will be displayed as a collapsible thinking block in the app.",
-        },
+        required: ["chat_id", "content"],
       },
-      required: ["chat_id", "content"],
     },
-  }],
+    ...PROXY_TOOLS,
+  ],
 }))
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
+  if (PROXY_TOOL_NAMES.has(req.params.name)) {
+    const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
+    return { content: [{ type: "text", text }] }
+  }
+
   if (req.params.name !== "reply") {
     throw new Error(`unknown tool: ${req.params.name}`)
   }

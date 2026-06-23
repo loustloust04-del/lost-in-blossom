@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getConnInfo } from 'hono/bun';
 import { auth } from './middleware/auth';
 import { forwardDeepSeek } from './providers/deepseek';
 import { forwardOpenRouter } from './providers/openrouter';
@@ -29,7 +30,7 @@ app.get('/health', (c) => c.json({
 }));
 
 // ============ 模型列表 ============
-app.get('/v1/models', (c) => c.json({
+app.get('/v1/models', auth, (c) => c.json({
   object: 'list',
   data: [
     { id: 'anthropic/claude-opus-4.8', object: 'model', owned_by: 'anthropic' },
@@ -511,6 +512,39 @@ app.post('/api/mcp/call', auth, async (c) => {
   const mcpTools = await getMcpTools();
   const result = await callMcpTool(name, input, mcpTools);
   return c.json({ result, source: 'mcp' });
+});
+
+// ============ 内部工具调用 — CC（cc-bridge MCP 代理）专用 ============
+// CC 通过 cc-bridge/mcp-server.ts 转发到这里执行 Gateway 的内置工具，
+// 让 CC 拥有和 /v1 API 一样的全部工具能力（exec/recall/remember/gmail/vitals/phone）。
+//
+// 安全：此端点只对同机开放。公网无法触达——ufw 未放行 4567，且 nginx 不反代
+// /internal/*（仅反代 /v1 /api /health /phone-data）。放行条件 = loopback 来源，
+// 或携带有效 GATEWAY_TOKEN（cc-bridge 与 gateway 同机，默认走 loopback）。
+function isLoopbackAddr(addr: string): boolean {
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+app.post('/internal/tool-call', async (c) => {
+  let remoteAddr = '';
+  try { remoteAddr = getConnInfo(c).remote.address || ''; } catch {}
+  const h = c.req.header('Authorization') || '';
+  const tok = h.startsWith('Bearer ') ? h.slice(7) : '';
+  const tokenOk = (config.gatewayToken && tok === config.gatewayToken) ||
+                  (config.gatewayTokenAlt && tok === config.gatewayTokenAlt);
+  if (!isLoopbackAddr(remoteAddr) && !tokenOk) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+
+  let payload: any = {};
+  try { payload = await c.req.json(); } catch {}
+  const name: string = payload?.name || '';
+  const input = payload?.input ?? {};
+  if (!name) return c.json({ error: 'name required' }, 400);
+
+  console.log('[internal] tool-call:', name, JSON.stringify(input).slice(0, 120));
+  const result = await callBuiltinTool(name, input);
+  return c.json({ result: result ?? '工具未找到或执行失败' });
 });
 
 vitalsRoutes(app);
