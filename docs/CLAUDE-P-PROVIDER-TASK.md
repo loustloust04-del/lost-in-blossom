@@ -133,3 +133,32 @@ curl http://localhost:4567/v1/chat/completions \
 ## 参考
 - 教程仓库：https://github.com/sanqianzilanyue-commits/claude-p-thinking-stream
 - VPS上已验证命令：`echo "test" | claude -p --output-format stream-json --verbose`
+
+## 补充：省额度方案（来自 claude-p-save-tokens 教程）
+
+### 核心发现
+默认 claude -p 每次吃约 2.7万 token（带全套工具说明书）。纯聊天要扒光：
+- --tools none : 扒光工具（2.7万 -> 一两百 token）
+- --system-prompt "人设" : 替换整张系统提示（不是 append！）
+- --include-partial-messages : 逐字增量必须加
+
+### 参数区别（易错）
+- --system-prompt = 替换整张 OK（工具说明书消失）
+- --append-system-prompt = 追加在臃肿默认后面 BAD（工具还在）
+- --tools none = 扒光工具 OK
+
+### 提示缓存（订阅也能命中）
+- 稳定前缀（人设/世界观）放最前面，逐字不变
+- 会变的东西（时间、对话历史）放末尾
+- 前缀要 >= 1024 token 才触发缓存
+- 5分钟 TTL，持续对话一直命中，省约 9 成
+
+### 对实现的影响
+1. Gateway handleClaudeP 必须用 --tools none + --system-prompt
+2. system prompt 从 messages[0](role=system) 提取
+3. 对话历史拼成用户消息传 stdin（放末尾不影响缓存）
+4. 人设保持稳定不变，利用缓存
+
+### 参考
+- https://github.com/sanqianzilanyue-commits/claude-p-save-tokens
+- https://github.com/sanqianzilanyue-commits/claude-p-thinking-stream
