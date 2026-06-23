@@ -253,15 +253,26 @@ final class ChatroomService {
             struct Resp: Codable { let data: [GatewayModel] }
             let resp = try JSONDecoder().decode(Resp.self, from: data)
             await MainActor.run { self.availableModels = resp.data }
+            // 缓存到UserDefaults
+            if let json = try? JSONEncoder().encode(resp.data) {
+                UserDefaults.standard.set(json, forKey: "cachedChatroomModels")
+            }
         } catch {
             print("[ChatroomService] fetchModels failed: \(error.localizedDescription)")
-            // 失败时用fallback硬编码列表
-            await MainActor.run {
-                self.availableModels = [
-                    GatewayModel(id: "deepseek/deepseek-chat", object: "model", owned_by: "deepseek"),
-                    GatewayModel(id: "anthropic/claude-sonnet-4", object: "model", owned_by: "anthropic"),
-                    GatewayModel(id: "anthropic/claude-opus-4", object: "model", owned_by: "anthropic"),
-                ]
+            // 先读缓存
+            if let cached = UserDefaults.standard.data(forKey: "cachedChatroomModels"),
+               let models = try? JSONDecoder().decode([GatewayModel].self, from: cached) {
+                await MainActor.run { self.availableModels = models }
+                print("[ChatroomService] using cached models (\(models.count))")
+            } else {
+                // 缓存也没有才用硬编码
+                await MainActor.run {
+                    self.availableModels = [
+                        GatewayModel(id: "deepseek/deepseek-chat", object: "model", owned_by: "deepseek"),
+                        GatewayModel(id: "anthropic/claude-sonnet-4", object: "model", owned_by: "anthropic"),
+                        GatewayModel(id: "anthropic/claude-opus-4", object: "model", owned_by: "anthropic"),
+                    ]
+                }
             }
         }
     }
