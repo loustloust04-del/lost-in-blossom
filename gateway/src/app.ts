@@ -331,7 +331,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
           }
         }
       } catch (e: any) {
-        console.error('[thinking-stream] error:', e.message);
+        console.error('[thinking-stream] error:', String(e));
         try { await writer.close(); } catch {}
       }
       // 存消息（只存content不存thinking）
@@ -340,8 +340,8 @@ app.post('/v1/chat/completions', auth, async (c) => {
         saveMessage(sessionId, 'assistant', compressedContent, model).catch(() => {});
         if (userText && fullContent) {
           const recent = [{role: "user", content: userText}, {role: "assistant", content: fullContent}];
-          config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
-          config.brainEnabled && judgeEmotion(recent, model).catch(e => console.error("[emotion] async error:", e.message));
+          config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", String(e)));
+          config.brainEnabled && judgeEmotion(recent, model).catch(e => console.error("[emotion] async error:", String(e)));
         }
       }
       console.log(`[thinking] stream done, content: ${fullContent.length} chars`);
@@ -380,7 +380,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
           }
         }
       } catch (e: any) {
-        console.error('[stream] collect error:', e.message);
+        console.error('[stream] collect error:', String(e));
         try { await writer.close(); } catch {}
       }
       // 流结束，存AI回复
@@ -389,7 +389,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
         // Phase 3: 异步提取记忆
         if (userText && fullContent) {
           const recent = [{role: "user", content: userText}, {role: "assistant", content: fullContent}];
-          config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
+          config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", String(e)));
         }
       }
     })();
@@ -411,7 +411,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
       // Phase 3: 异步提取记忆
       if (userText && assistantContent) {
         const recent = [{role: "user", content: userText}, {role: "assistant", content: assistantContent}];
-        config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", e.message));
+        config.brainEnabled && extractMemoriesIfNeeded(recent, model).catch(e => console.error("[extract] async error:", String(e)));
       }
     }
     return c.json(data);
