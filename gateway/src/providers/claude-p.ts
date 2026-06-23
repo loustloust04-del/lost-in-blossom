@@ -48,6 +48,7 @@ export async function forwardClaudeP(body: any): Promise<Response> {
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
   let inThinking = false
+  let lineBuffer = ""
 
   function send(content: string) {
     const d = JSON.stringify({
@@ -58,7 +59,10 @@ export async function forwardClaudeP(body: any): Promise<Response> {
   }
 
   proc.stdout.on("data", (chunk: Buffer) => {
-    for (const line of chunk.toString().split("\n")) {
+    lineBuffer += chunk.toString()
+    const lines = lineBuffer.split("\n")
+    lineBuffer = lines.pop() || ""  // 最后一个可能不完整，留着
+    for (const line of lines) {
       if (!line.trim()) continue
       try {
         const obj = JSON.parse(line)
