@@ -282,7 +282,7 @@ app.post("/chatroom/start", async (c) => {
   db.query(`INSERT INTO chatroom_sessions
     (id, topic, ai_a_name, ai_a_model, ai_a_system, ai_b_name, ai_b_model, ai_b_system,
      ai_a_preset_slots, ai_b_preset_slots, ai_a_preset_name, ai_b_preset_name, user_name)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, topic, aiAName, aiAModel, aiASystem,
          aiBName, aiBModel, aiBSystem,
          aiASlots ? JSON.stringify(aiASlots) : null,
