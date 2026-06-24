@@ -10,6 +10,8 @@ interface PhoneRecord {
   is_charging: boolean;
   current_time?: string;
   device_name?: string;
+  weather?: string;
+  place?: string;
   received_at: string; // ISO string
 }
 
@@ -64,6 +66,8 @@ export async function callPhoneStatusTool(name: string): Promise<string | null> 
     latest_record_at: latest.received_at.slice(11, 16),
     latest_battery: latest.battery,
     latest_charging: latest.is_charging,
+    latest_weather: latest.weather || null,
+    latest_place: latest.place || null,
     records: data.records.map(r => ({
       time: r.received_at.slice(11, 16),
       battery: r.battery,
@@ -97,11 +101,13 @@ export function phoneStatusRoutes(app: Hono) {
       is_charging: Boolean(body.is_charging),
       current_time: body.current_time || undefined,
       device_name: body.device_name || undefined,
+      weather: body.Weather || body.weather || undefined,
+      place: body.Place || body.place || undefined,
       received_at: beijingNow.toISOString(),
     });
     await save(data);
 
-    console.log(`[phone] 📱 battery=${body.battery}% charging=${body.is_charging} (${data.records.length} records today)`);
+    console.log(`[phone] 📱 battery=${body.battery}% charging=${body.is_charging} place=${body.Place || "?"} weather=${body.Weather || "?"} (${data.records.length} records today)`);
     return c.json({ ok: true });
   });
 
