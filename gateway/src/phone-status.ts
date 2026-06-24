@@ -45,13 +45,32 @@ async function save(data: DayData): Promise<void> {
 
 export const PHONE_STATUS_TOOLS = [
   {
+    type: "function" as const,
+    function: {
+      name: "request_location",
+      description: "向兔兔的手机发送位置查询请求。兔兔的iPhone会自动回报当前位置、天气和电量。当你想知道她现在在哪、但phone_status里的数据太旧时使用。",
+      parameters: { type: "object", properties: { reason: { type: "string", description: "为什么想知道位置（如：好久没回消息了、想关心一下）" } } }
+    }
+  },
+  {
     name: 'get_phone_status',
     description: 'Get Bunny\'s phone status for today — battery level, charging state, timestamps. Returns all records so you can see trends (morning 80% → afternoon 20% → evening charging). No parameters needed.',
     input_schema: { type: 'object' as const, properties: {} },
   },
 ];
 
-export async function callPhoneStatusTool(name: string): Promise<string | null> {
+async function sendLocationRequest(reason?: string) {
+  // 从gmail模块借发送功能
+  const { callGmailTool } = await import("./tools/gmail");
+  const result = await callGmailTool("gmail_send", {
+    to: "caelumbunny@gmail.com",
+    subject: "LOCATION_QUERY",
+    body: reason || "想知道你在哪"
+  });
+  return result ? "已发送位置查询请求，兔兔的手机会在几秒内自动回报位置。稍等一下再用 get_phone_status 查看最新数据。" : "发送失败";
+}
+
+export async function callPhoneStatusTool(name: string, input?: any): Promise<string | null> {
   if (name !== 'get_phone_status') return null;
   const data = await load();
   if (data.records.length === 0) {

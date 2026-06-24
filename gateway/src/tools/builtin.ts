@@ -117,7 +117,7 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (name === 'remember') return runRemember(input);
   const vitalsResult = await callVitalsTool(name, input);
   if (vitalsResult !== null) return vitalsResult;
-  const phoneResult = await callPhoneStatusTool(name);
+  const phoneResult = await callPhoneStatusTool(name, input);
   if (phoneResult !== null) return phoneResult;
   const gmailResult = await callGmailTool(name, input);
   if (gmailResult !== null) return gmailResult;
