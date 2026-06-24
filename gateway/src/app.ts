@@ -35,6 +35,12 @@ app.get('/v1/models', auth, (c) => c.json({
   object: 'list',
   data: [
     { id: 'claude-code', object: 'model', owned_by: 'local' },
+    { id: 'claude-opus-4-8', object: 'model', owned_by: 'local' },
+    { id: 'claude-opus-4-7', object: 'model', owned_by: 'local' },
+    { id: 'claude-opus-4-5', object: 'model', owned_by: 'local' },
+    { id: 'claude-sonnet-4-6', object: 'model', owned_by: 'local' },
+    { id: 'claude-sonnet-4-5', object: 'model', owned_by: 'local' },
+    { id: 'claude-haiku-4-5', object: 'model', owned_by: 'local' },
     { id: 'anthropic/claude-opus-4.8', object: 'model', owned_by: 'anthropic' },
     { id: 'anthropic/claude-opus-4.8:thinking', object: 'model', owned_by: 'anthropic' },
     { id: 'anthropic/claude-opus-4.7', object: 'model', owned_by: 'anthropic' },
@@ -75,6 +81,10 @@ app.get('/v1/models', auth, (c) => c.json({
     { id: 'tree-aws/claude-opus-4-5-20251101', object: 'model', owned_by: 'treegpt-aws' },
     { id: 'tree-aws/claude-sonnet-4-5-20250929', object: 'model', owned_by: 'treegpt-aws' },
     { id: 'tree-aws/claude-haiku-4-5-20251001', object: 'model', owned_by: 'treegpt-aws' },
+    { id: 'relay/claude-opus-4-5-20251101', object: 'model', owned_by: 'relay' },
+    { id: 'relay/claude-opus-4-1-20250805', object: 'model', owned_by: 'relay' },
+    { id: 'relay/claude-sonnet-4-5-20250929', object: 'model', owned_by: 'relay' },
+    { id: 'relay/claude-haiku-4-5-20251001', object: 'model', owned_by: 'relay' },
   ]
 }));
 
@@ -229,7 +239,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
   }
   let upstream: Response;
 
-  if (actualModel === "claude-code" || actualModel === "claude-p") {
+  if (actualModel === "claude-code" || actualModel.match(/^claude-(opus|sonnet|haiku)-/)) {
     upstream = await forwardClaudeP(forwardBody);
   } else if (actualModel.includes("deepseek")) {
     upstream = await forwardDeepSeek(forwardBody);
@@ -244,6 +254,14 @@ app.post('/v1/chat/completions', auth, async (c) => {
     upstream = await forwardAnthropicNative(forwardBody, sessionId, {
       baseUrl: 'https://api.treegpt.cc/v1/messages',
       apiKey: config.treeAwsKey,
+      modelName,
+    });
+  } else if (actualModel.startsWith("relay/")) {
+    // Relay — 朋友的代理，走A社格式
+    const modelName = actualModel.replace('relay/', '');
+    upstream = await forwardAnthropicNative(forwardBody, sessionId, {
+      baseUrl: config.relayBase,
+      apiKey: config.relayKey,
       modelName,
     });
   } else if (actualModel.includes("claude")) {

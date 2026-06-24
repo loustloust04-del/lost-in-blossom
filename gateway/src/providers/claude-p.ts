@@ -3,6 +3,8 @@ import { spawn } from "child_process"
 export async function forwardClaudeP(body: any): Promise<Response> {
   const messages = body.messages || []
   const isStream = body.stream === true
+  const requestedModel = (body.model || "claude-opus-4-6").replace(/^K-/i, "")
+  const model = requestedModel === "claude-code" ? "claude-opus-4-6" : requestedModel
 
   const systemMsgs = messages.filter((m: any) => m.role === "system")
   const systemPrompt = systemMsgs.map((m: any) => typeof m.content === "string" ? m.content : "").join("\n\n")
@@ -14,7 +16,7 @@ export async function forwardClaudeP(body: any): Promise<Response> {
     return m.role === "user" ? `用户: ${content}` : `助手: ${content}`
   }).join("\n\n") + "\n\n请回复最后一条用户消息。"
 
-  const args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "none", "--include-partial-messages"]
+  const args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "none", "--include-partial-messages", "--model", model]
   if (systemPrompt) args.push("--append-system-prompt", systemPrompt)
 
   const proc = spawn("claude", args, {
@@ -37,7 +39,7 @@ export async function forwardClaudeP(body: any): Promise<Response> {
           } catch {}
         }
         resolve(new Response(JSON.stringify({
-          id: "chatcmpl-cp-" + Date.now(), object: "chat.completion", model: "claude-code",
+          id: "chatcmpl-cp-" + Date.now(), object: "chat.completion", model,
           choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
         }), { headers: { "Content-Type": "application/json" } }))
       })
@@ -52,7 +54,7 @@ export async function forwardClaudeP(body: any): Promise<Response> {
 
   function send(content: string) {
     const d = JSON.stringify({
-      id: "chatcmpl-cp-" + Date.now(), object: "chat.completion.chunk", model: "claude-code",
+      id: "chatcmpl-cp-" + Date.now(), object: "chat.completion.chunk", model,
       choices: [{ index: 0, delta: { content }, finish_reason: null }],
     })
     writer.write(encoder.encode(`data: ${d}\n\n`)).catch(() => {})
