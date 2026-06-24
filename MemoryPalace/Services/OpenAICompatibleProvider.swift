@@ -6,6 +6,7 @@ import UIKit
 final class OpenAICompatibleProvider: BaseChatProvider {
     /// DeepSeek reasoning_content 流式 buffer（其他模型为空）
     private var streamingThinking: String = ""
+    private var pendingTagBuffer = ""
     /// Gateway [thinking]...[/thinking] 标记追踪（Claude thinking via OpenAI format）
     private var isInGatewayThinking = false
     /// 流式结束时若有 thinking 内容则调用（构造 MessageSegment 列表）
@@ -330,6 +331,20 @@ final class OpenAICompatibleProvider: BaseChatProvider {
 
         if let content = delta["content"] as? String {
             DispatchQueue.main.async { [self] in
+                // 标签缓冲：拼接后再检测，防止标签被跨chunk切断
+                pendingTagBuffer += content
+                let processContent: String
+                if pendingTagBuffer.contains("[thinking]") || pendingTagBuffer.contains("[/thinking]") {
+                    processContent = pendingTagBuffer
+                    pendingTagBuffer = ""
+                } else if pendingTagBuffer.hasSuffix("[") || pendingTagBuffer.contains("[thinking") || pendingTagBuffer.contains("[/thinking") || pendingTagBuffer.contains("[/") {
+                    // 可能是标签的一部分，继续缓冲
+                    return
+                } else {
+                    processContent = pendingTagBuffer
+                    pendingTagBuffer = ""
+                }
+                let content = processContent
                 // Gateway [thinking]...[/thinking] 标记路由：
                 // thinking 标记之间的 token 走 onThinkingToken，其余走 onToken
                 if content.contains("[thinking]") {
