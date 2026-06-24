@@ -334,10 +334,10 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 // 标签缓冲：拼接后再检测，防止标签被跨chunk切断
                 pendingTagBuffer += content
                 let processContent: String
-                if pendingTagBuffer.contains("[thinking]") || pendingTagBuffer.contains("[/thinking]") {
+                if pendingTagBuffer.contains("[thinking]") || pendingTagBuffer.contains("[/thinking]") || pendingTagBuffer.contains("<thinking>") || pendingTagBuffer.contains("</thinking>") {
                     processContent = pendingTagBuffer
                     pendingTagBuffer = ""
-                } else if pendingTagBuffer.hasSuffix("[") || pendingTagBuffer.contains("[thinking") || pendingTagBuffer.contains("[/thinking") || pendingTagBuffer.contains("[/") {
+                } else if pendingTagBuffer.hasSuffix("[") || pendingTagBuffer.contains("[thinking") || pendingTagBuffer.contains("[/thinking") || pendingTagBuffer.contains("[/") || pendingTagBuffer.contains("<thinking") || pendingTagBuffer.contains("</thinking") || pendingTagBuffer.contains("</") {
                     // 可能是标签的一部分，继续缓冲
                     return
                 } else {
@@ -347,16 +347,16 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 let content = processContent
                 // Gateway [thinking]...[/thinking] 标记路由：
                 // thinking 标记之间的 token 走 onThinkingToken，其余走 onToken
-                if content.contains("[thinking]") {
+                if content.contains("[thinking]") || content.contains("<thinking>") {
                     isInGatewayThinking = true
-                    let after = content.components(separatedBy: "[thinking]").last ?? ""
+                    let after = (content.components(separatedBy: "[thinking]").count > 1 ? content.components(separatedBy: "[thinking]").last : content.components(separatedBy: "<thinking>").last) ?? ""
                     let trimmed = after.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         streamingThinking += trimmed
                         onThinkingToken?(trimmed)
                     }
-                } else if content.contains("[/thinking]") {
-                    let parts = content.components(separatedBy: "[/thinking]")
+                } else if content.contains("[/thinking]") || content.contains("</thinking>") {
+                    let parts = content.contains("[/thinking]") ? content.components(separatedBy: "[/thinking]") : content.components(separatedBy: "</thinking>")
                     let before = (parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     if !before.isEmpty {
                         streamingThinking += before
