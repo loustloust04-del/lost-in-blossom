@@ -55,11 +55,7 @@ struct CalendarPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
-            if isIOSStyle {
-                Theme.sidebarBg.ignoresSafeArea()
-            } else {
-                Theme.sidebarBg
-            }
+            Theme.sidebarBg.ignoresSafeArea()
         }
     }
 

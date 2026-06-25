@@ -761,30 +761,24 @@ struct SidebarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) {
-            if isIOSStyle {
-                Button { createNewConversation() } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("New chat")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 11)
-                    .background(Capsule().fill(Color.black))
+            Button { createNewConversation() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("New chat")
+                        .font(.system(size: 15, weight: .semibold))
                 }
-                .padding(.trailing, 20)
-                .padding(.bottom, 32)
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 11)
+                .background(Capsule().fill(Color.black))
             }
+            .padding(.trailing, 20)
+            .padding(.bottom, 32)
         }
 
         .background {
-            if isIOSStyle {
-                Theme.sidebarBg.ignoresSafeArea()
-            } else {
-                Theme.sidebarBg
-            }
+            Theme.sidebarBg.ignoresSafeArea()
         }
         .onAppear { refreshList() }
         // 路线 B 下 ContentView.id(profileId) 已经让 SidebarView 在 profile 切换时

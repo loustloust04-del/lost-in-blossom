@@ -348,18 +348,12 @@ struct MemoryPanelView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background {
-            if isIOSStyle {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Theme.mainBg.opacity(0.92))
-            } else {
-                Theme.sidebarBg
-            }
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Theme.mainBg.opacity(0.92))
         }
         .overlay {
-            if isIOSStyle {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 1)
