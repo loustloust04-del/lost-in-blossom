@@ -21,7 +21,7 @@ export async function forwardClaudeP(body: any): Promise<Response> {
 
   const proc = spawn("claude", args, {
     cwd: "/root/projects/BunnyPalace",
-    env: { ...process.env, PATH: `/root/.local/bin:/usr/local/bin:${process.env.PATH}` },
+    env: { ...process.env, PATH: `/root/.local/bin:/usr/local/bin:${process.env.PATH}`, NO_PROXY: "*", no_proxy: "*", ALL_PROXY: "", HTTPS_PROXY: "", HTTP_PROXY: "", all_proxy: "", https_proxy: "", http_proxy: "" },
   })
   proc.stdin.write(prompt)
   proc.stdin.end()
