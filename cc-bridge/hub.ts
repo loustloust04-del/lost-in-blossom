@@ -32,12 +32,12 @@ export interface ChatMessage {
 export function buildChannelTag(msg: ChatMessage, ts: string, attachments: string[] = []): string {
   let safe = msg.content.replace(/\n/g, " ")
   // 防御：超长 content 让 tmux send-keys -l 失败。截断到安全长度。
-  if (safe.length > 4000) safe = safe.slice(0, 4000) + " …[截断]"
+  if (safe.length > 12000) safe = safe.slice(0, 12000) + " …[截断]"
   // CC↔API 上下文共享（可通过环境变量 CC_INJECT_SUMMARY=0 关闭）
   const injectSummary = (process.env.CC_INJECT_SUMMARY ?? "1") !== "0"
   if (injectSummary && typeof msg.context === "string" && msg.context.trim().length > 0) {
     let ctx = msg.context.replace(/\n/g, " ")
-    if (ctx.length > 3000) ctx = ctx.slice(0, 3000) + " …[截断]"
+    if (ctx.length > 8000) ctx = ctx.slice(0, 8000) + " …[截断]"
     safe = `〔最近对话〕${ctx}〔/最近对话〕 ${safe}`
   }
   if (attachments.length > 0) {
@@ -119,7 +119,10 @@ export interface TerminalAttachment {
   fifoPath: string
   catProc: ChildProcessWithoutNullStreams
   mpClients: Set<WebSocket>
+  teardownTimer?: ReturnType<typeof setTimeout>
 }
+
+const TERMINAL_GRACE_MS = 30_000  // keep pipe alive 30s after last client disconnects
 
 const terminalAttachments = new Map<string, TerminalAttachment>()
 const resizeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
@@ -321,17 +324,13 @@ function stageOutboundFile(chatId: string, srcPath: string): StagedFile | null {
   }
 }
 
-function createTerminalAttachment(sessionName: string): TerminalAttachment {
-  const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
-  const fifoPath = join(fifoDir, "pane.pipe")
-  execFileSync("mkfifo", [fifoPath])
-  execFileSync("tmux", ["pipe-pane", "-t", sessionName, "-o", `cat > ${fifoPath}`])
-  const catProc = spawn("cat", [fifoPath])
-  const att: TerminalAttachment = { sessionName, fifoPath, catProc, mpClients: new Set() }
+function spawnCatForAttachment(att: TerminalAttachment): void {
+  const catProc = spawn("cat", [att.fifoPath])
+  att.catProc = catProc
   catProc.stdout.on("data", (chunk: Buffer) => {
     const payload = JSON.stringify({
       type: "terminal_chunk",
-      session_name: sessionName,
+      session_name: att.sessionName,
       bytes: chunk.toString("base64"),
     })
     for (const c of att.mpClients) {
@@ -340,21 +339,66 @@ function createTerminalAttachment(sessionName: string): TerminalAttachment {
       }
     }
   })
-  catProc.on("exit", () => {
-    console.log(`[hub] terminal cat exited for ${sessionName}`)
-    closeTerminalAttachment(sessionName)
+  catProc.on("exit", (code) => {
+    // Auto-restart cat if the attachment still exists (i.e. not intentionally torn down)
+    const current = terminalAttachments.get(att.sessionName)
+    if (!current || current !== att) return  // attachment was torn down, do nothing
+    console.log(`[hub] terminal cat exited (code=${code}) for ${att.sessionName}, auto-restarting`)
+    try {
+      // Re-wire tmux pipe-pane in case it dropped, then restart cat
+      try { execFileSync("tmux", ["pipe-pane", "-t", att.sessionName, "-o", `cat > ${att.fifoPath}`]) } catch {}
+      spawnCatForAttachment(att)
+    } catch (err: any) {
+      console.error(`[hub] cat restart failed for ${att.sessionName}: ${err?.message}`)
+    }
   })
+}
+
+function createTerminalAttachment(sessionName: string): TerminalAttachment {
+  const fifoDir = mkdtempSync(join(tmpdir(), "cc-bridge-"))
+  const fifoPath = join(fifoDir, "pane.pipe")
+  execFileSync("mkfifo", [fifoPath])
+  execFileSync("tmux", ["pipe-pane", "-t", sessionName, "-o", `cat > ${fifoPath}`])
+  const att: TerminalAttachment = { sessionName, fifoPath, catProc: null as any, mpClients: new Set() }
+  spawnCatForAttachment(att)
   terminalAttachments.set(sessionName, att)
   return att
 }
 
-function closeTerminalAttachment(sessionName: string): void {
+function teardownTerminalAttachment(sessionName: string): void {
   const att = terminalAttachments.get(sessionName)
   if (!att) return
+  if (att.teardownTimer) { clearTimeout(att.teardownTimer); att.teardownTimer = undefined }
+  terminalAttachments.delete(sessionName)
   try { execFileSync("tmux", ["pipe-pane", "-t", sessionName]) } catch {}
   try { att.catProc.kill() } catch {}
   try { unlinkSync(att.fifoPath) } catch {}
-  terminalAttachments.delete(sessionName)
+  console.log(`[hub] terminal attachment torn down for ${sessionName}`)
+}
+
+/** Schedule teardown after grace period; cancelled if a client re-attaches in time. */
+function scheduleTerminalTeardown(sessionName: string): void {
+  const att = terminalAttachments.get(sessionName)
+  if (!att) return
+  if (att.mpClients.size > 0) return  // still has clients, don't schedule
+  if (att.teardownTimer) return        // already scheduled
+  console.log(`[hub] scheduling terminal teardown for ${sessionName} in ${TERMINAL_GRACE_MS / 1000}s`)
+  att.teardownTimer = setTimeout(() => {
+    att.teardownTimer = undefined
+    if (att.mpClients.size === 0) {
+      teardownTerminalAttachment(sessionName)
+    }
+  }, TERMINAL_GRACE_MS)
+}
+
+/** Cancel a pending teardown (called when a client re-attaches). */
+function cancelTerminalTeardown(sessionName: string): void {
+  const att = terminalAttachments.get(sessionName)
+  if (att?.teardownTimer) {
+    clearTimeout(att.teardownTimer)
+    att.teardownTimer = undefined
+    console.log(`[hub] cancelled pending teardown for ${sessionName} (client reconnected)`)
+  }
 }
 
 function pruneReplyBuffer(): void {
@@ -432,6 +476,7 @@ export function startHub(): WebSocketServer {
 
       // Replay recent replies so reconnecting clients don't miss anything
       pruneReplyBuffer()
+      const replayedIds = new Set<string>()
       for (const r of recentReplies) {
         try {
           ws.send(JSON.stringify({
@@ -441,11 +486,12 @@ export function startHub(): WebSocketServer {
             content: r.content,
             reply_id: r.reply_id,
           }))
-        }
- catch { /* dead socket, will get cleaned up on close */ }
+          replayedIds.add(r.reply_id)
+        } catch { /* dead socket, will get cleaned up on close */ }
       }
 
       // Replay offline messages persisted while no clients were connected
+      // (skip any already delivered via the reply buffer to avoid duplicates)
       try {
         if (existsSync(OFFLINE_DIR)) {
           const files = readdirSync(OFFLINE_DIR).filter(f => f.endsWith(".json"))
@@ -454,6 +500,7 @@ export function startHub(): WebSocketServer {
             const messages = loadOffline(chatId)
             let delivered = 0
             for (const m of messages) {
+              if (replayedIds.has(m.reply_id)) continue
               try {
                 ws.send(JSON.stringify({
                   type: "reply",
@@ -465,9 +512,9 @@ export function startHub(): WebSocketServer {
                 delivered++
               } catch { break }
             }
-            if (delivered > 0) {
+            if (delivered >= 0) {
               clearOffline(chatId)
-              console.log(`[hub] offline replay: ${delivered} messages for chat_id=${chatId.slice(0, 8)}`)
+              if (delivered > 0) console.log(`[hub] offline replay: ${delivered} messages for chat_id=${chatId.slice(0, 8)}`)
             }
           }
         }
@@ -552,7 +599,10 @@ export function startHub(): WebSocketServer {
         else if (msg.type === "terminal_attach") {
           const sessionName = typeof msg.session_name === "string" ? msg.session_name : TMUX_SESSION
           let att = terminalAttachments.get(sessionName)
-          if (!att) {
+          if (att) {
+            // Reuse existing attachment — cancel any pending teardown
+            cancelTerminalTeardown(sessionName)
+          } else {
             try {
               att = createTerminalAttachment(sessionName)
             } catch (err: any) {
@@ -561,7 +611,7 @@ export function startHub(): WebSocketServer {
             }
           }
           att.mpClients.add(ws)
-          // Send current screen snapshot to the newly attached client
+          // Always send a fresh screen snapshot so the client sees current state immediately
           try {
             const snapshot = execFileSync("tmux", ["capture-pane", "-p", "-e", "-t", sessionName], { encoding: "utf-8" })
             ws.send(JSON.stringify({ type: "terminal_init", session_name: sessionName, snapshot }))
@@ -576,7 +626,7 @@ export function startHub(): WebSocketServer {
               att.mpClients.delete(ws)
               console.log(`[hub] terminal_detach session=${sessionName} clients=${att.mpClients.size}`)
               if (att.mpClients.size === 0) {
-                closeTerminalAttachment(sessionName)
+                scheduleTerminalTeardown(sessionName)
               }
             }
           }
@@ -663,12 +713,12 @@ export function startHub(): WebSocketServer {
         focusByClient.delete(ws)
         deviceTokenByClient.delete(ws)
         console.log(`[hub] App disconnected (total ${appClients.size}) code=${code}`)
-        // Clean up terminal attachments for this client
+        // Clean up terminal attachments for this client (grace period before teardown)
         for (const [sessionName, att] of terminalAttachments) {
           if (att.mpClients.has(ws)) {
             att.mpClients.delete(ws)
             if (att.mpClients.size === 0) {
-              closeTerminalAttachment(sessionName)
+              scheduleTerminalTeardown(sessionName)
             }
           }
         }
@@ -729,6 +779,8 @@ export function startHub(): WebSocketServer {
             reply_id,
             ts: Date.now(),
           })
+          // Focus check (computed early so offline-queue can use it)
+          const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
           // Broadcast to all connected App clients
           let count = 0
           let activeCount = 0
@@ -738,8 +790,11 @@ export function startHub(): WebSocketServer {
               if (!backgroundedClients.has(app)) activeCount++
             }
           }
-          // If no ACTIVE (foreground) App clients, persist for later delivery
-          if (activeCount === 0) {
+          // Persist for later delivery when no foreground client is focused on
+          // this chat. iOS kills WebSocket connections on background, so the
+          // broadcast above may silently fail; the offline queue guarantees
+          // the message survives for replay on reconnect.
+          if (activeCount === 0 || !isFocused) {
             appendOffline(msg.chat_id, {
               content: msg.content,
               message_id: msg.message_id,
@@ -748,8 +803,6 @@ export function startHub(): WebSocketServer {
             })
             console.log(`[hub] reply offline-queued chat_id=${String(msg.chat_id).slice(0, 8)}`)
           }
-          // Focus check: if no client is watching this chat → push notification needed
-          const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
           // Push to all known devices. Tokens outlive the WebSocket (iOS kills the
           // socket on background — exactly when push is needed), so iterate the
