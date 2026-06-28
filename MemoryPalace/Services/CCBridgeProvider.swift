@@ -162,6 +162,9 @@ final class CCBridgeProvider: BaseChatProvider {
         if !images.isEmpty {
             payload["images"] = images
         }
+        if !files.isEmpty {
+            payload["files"] = files
+        }
         if let ccSession, !ccSession.isEmpty {
             payload["session_name"] = ccSession
         }
