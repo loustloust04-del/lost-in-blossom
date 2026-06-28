@@ -32,12 +32,12 @@ export interface ChatMessage {
 export function buildChannelTag(msg: ChatMessage, ts: string, attachments: string[] = []): string {
   let safe = msg.content.replace(/\n/g, " ")
   // 防御：超长 content 让 tmux send-keys -l 失败。截断到安全长度。
-  if (safe.length > 12000) safe = safe.slice(0, 12000) + " …[截断]"
+  if (safe.length > 6000) safe = safe.slice(0, 6000) + " …[截断]"
   // CC↔API 上下文共享（可通过环境变量 CC_INJECT_SUMMARY=0 关闭）
   const injectSummary = (process.env.CC_INJECT_SUMMARY ?? "1") !== "0"
   if (injectSummary && typeof msg.context === "string" && msg.context.trim().length > 0) {
     let ctx = msg.context.replace(/\n/g, " ")
-    if (ctx.length > 8000) ctx = ctx.slice(0, 8000) + " …[截断]"
+    if (ctx.length > 4000) ctx = ctx.slice(0, 4000) + " …[截断]"
     safe = `〔最近对话〕${ctx}〔/最近对话〕 ${safe}`
   }
   if (attachments.length > 0) {
