@@ -102,6 +102,11 @@ enum AttachmentTextExtractor {
         if let string = String(data: data, encoding: .utf8) {
             return string
         }
+        // GBK/GB18030（中文txt常用编码）
+        let gbkEncoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+        if let string = String(data: data, encoding: gbkEncoding) {
+            return string
+        }
         if let string = String(data: data, encoding: .utf16) {
             return string
         }
