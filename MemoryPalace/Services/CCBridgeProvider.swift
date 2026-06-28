@@ -132,6 +132,7 @@ final class CCBridgeProvider: BaseChatProvider {
         // 提取图片：如果content是multimodal JSON，提取纯文本和图片数据
         var textContent = lastUser.content
         var images: [[String: String]] = []
+        var files: [[String: String]] = []
         if let data = lastUser.content.data(using: .utf8),
            let blocks = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             var textParts: [String] = []
