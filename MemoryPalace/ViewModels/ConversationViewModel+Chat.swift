@@ -320,7 +320,16 @@ extension ConversationViewModel {
                     let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
                     return (json, "multimodal_text")
                 } else if textExts.contains(ext) {
-                    let fileContent = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) ?? "[无法解码文件内容]"
+                    let fileContent: String = {
+                        if let s = String(data: data, encoding: .utf8) { return s }
+                        if let s = String(data: data, encoding: .ascii) { return s }
+                        // 尝试GBK/GB18030编码（中文文件常见）
+                        let gb18030 = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue))
+                        if let s = String(data: data, encoding: String.Encoding(rawValue: gb18030)) { return s }
+                        let gbk = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GBK_95.rawValue))
+                        if let s = String(data: data, encoding: String.Encoding(rawValue: gbk)) { return s }
+                        return "[无法解码文件内容]"
+                    }()
                     let maxChars = 100_000
                     let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断至前 100K 字符]" : fileContent
                     let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
