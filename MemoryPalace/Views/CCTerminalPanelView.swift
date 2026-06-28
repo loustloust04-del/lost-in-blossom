@@ -439,6 +439,7 @@ private struct CCTerminalSessionView: View {
                 .padding(.bottom, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.keyboard)
         .background(Theme.sidebarBg)
         .onAppear {
             CCBridgeWebSocketClient.shared.spawnSession(sessionName) { _ in }
