@@ -259,7 +259,22 @@ function saveInboundImages(chatId: string, images: any[]): string[] {
     const buf = Buffer.from(img.b64, "base64")
     if (buf.length === 0 || buf.length > MAX_FILE_BYTES) continue
     const p = join(dir, `${Date.now()}_${i}.${mimeToExt(img.mime)}`)
-    try { writeFileSync(p, buf); paths.push(p); i++ }
+    try {
+      writeFileSync(p, buf)
+      // txt文件自动转UTF-8（处理GBK等编码）
+      if (safeName.endsWith('.txt') || safeName.endsWith('.md')) {
+        try {
+          const text = buf.toString('utf-8')
+          if (text.includes('�')) {
+            // 有乱码，尝试用iconv转码
+            const { execSync } = require('child_process')
+            execSync(`iconv -f GBK -t UTF-8 '${p}' -o '${p}.utf8' && mv '${p}.utf8' '${p}'`)
+            console.log('[hub] converted', safeName, 'from GBK to UTF-8')
+          }
+        } catch {}
+      }
+      paths.push(p); i++
+    }
     catch (e: any) { console.warn(`[hub] saveInboundImage fail: ${e.message}`) }
   }
   return paths
@@ -277,7 +292,22 @@ function saveInboundFiles(chatId: string, files: any[]): string[] {
     const rawName = typeof f.name === "string" && f.name ? f.name : `file_${i}`
     const safeName = rawName.replace(/[/\\'"]/g, "_")
     const p = join(dir, `${Date.now()}_${i}_${safeName}`)
-    try { writeFileSync(p, buf); paths.push(p); i++ }
+    try {
+      writeFileSync(p, buf)
+      // txt文件自动转UTF-8（处理GBK等编码）
+      if (safeName.endsWith('.txt') || safeName.endsWith('.md')) {
+        try {
+          const text = buf.toString('utf-8')
+          if (text.includes('�')) {
+            // 有乱码，尝试用iconv转码
+            const { execSync } = require('child_process')
+            execSync(`iconv -f GBK -t UTF-8 '${p}' -o '${p}.utf8' && mv '${p}.utf8' '${p}'`)
+            console.log('[hub] converted', safeName, 'from GBK to UTF-8')
+          }
+        } catch {}
+      }
+      paths.push(p); i++
+    }
     catch (e: any) { console.warn(`[hub] saveInboundFile fail: ${e.message}`) }
   }
   return paths
