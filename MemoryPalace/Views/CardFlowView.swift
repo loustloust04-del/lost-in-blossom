@@ -377,6 +377,10 @@ struct CardFlowView: View {
             .onChange(of: viewModel.selectedConversation?.id) { _, convId in
                 loadStickersForConversation(convId)
                 isAtBottom = true   // 避免上一对话的 false 泄漏到新对话（会让 safeAreaInset 错位）
+                // 清除上一对话残留的附件
+                pendingFileData = nil
+                pendingFileName = nil
+                pendingImageData = nil
             }
             .onAppear {
                 loadStickersForConversation(viewModel.selectedConversation?.id)
