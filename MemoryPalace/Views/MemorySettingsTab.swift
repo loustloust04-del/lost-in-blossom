@@ -17,6 +17,8 @@ struct IOSMemoryPage: View {
     @AppStorage("memoryExtractModelId") private var memoryExtractModelId = ""
     @AppStorage("customMemoryExtractionPrompt") private var customMemoryPrompt = ""
     @State private var isEditingPrompt = false
+    @State private var isSweeping = false
+    @State private var sweepResult: String? = nil
 
     var body: some View {
         let profileId = profileManager?.currentProfile.id ?? ""
@@ -208,6 +210,29 @@ struct IOSMemoryPage: View {
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
+            // 记忆卫生工具
+            Section {
+                Button {
+                    Task { await runHygieneSweep() }
+                } label: {
+                    HStack {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundColor(Theme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("整理记忆")
+                                .font(.system(size: Theme.F.body, weight: .medium))
+                            Text("配对去重：相似度 > 75% 的记忆保新去旧")
+                                .font(.system(size: Theme.F.caption))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        Spacer()
+                        if isSweeping {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isSweeping)
+            }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)

@@ -51,6 +51,12 @@ extension ConversationViewModel {
             ? CrossWindowMemory.injectionText(excluding: selectedConversation?.id)
             : nil
 
+        // 写作风格
+        let styleContent: String? = {
+            guard let styleId = selectedConversation?.currentStyleId, !styleId.isEmpty else { return nil }
+            return StyleManager.shared.find(styleId)?.content
+        }()
+
         let result = PromptAssembler.assemble(
             preset: preset,
             profile: profile,
@@ -60,7 +66,8 @@ extension ConversationViewModel {
             globalEntries: globalEntries,
             contextSummary: contextSummary,
             crossWindowSummaries: crossWindow,
-            projectInstructions: projectInstructions
+            projectInstructions: projectInstructions,
+            styleContent: styleContent
         )
 
         // ── 分层 + 宏移出缓存前缀 ──

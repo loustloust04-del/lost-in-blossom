@@ -54,7 +54,8 @@ struct PromptAssembler {
         globalEntries: [WorldBookEntry] = [],
         contextSummary: String? = nil,
         crossWindowSummaries: String? = nil,
-        projectInstructions: String? = nil
+        projectInstructions: String? = nil,
+        styleContent: String? = nil
     ) -> (systemPrompt: String?, systemParts: [(tag: String, content: String)], messages: [(role: String, content: String)]) {
 
         let contextDepth = preset.sampling.contextDepth

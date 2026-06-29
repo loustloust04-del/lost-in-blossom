@@ -48,6 +48,9 @@ final class Conversation {
     /// CC Bridge session 绑定（nil = 用默认 mp-cc 会话）
     var ccBridgeSessionName: String? = nil
 
+    /// 写作风格 ID（空 = 不启用）
+    var currentStyleId: String = ""
+
     /// 群聊 V2："single" = 单聊（默认），"group" = 多角色群聊。
     var kind: String = "single"
     /// 群聊参与者（JSON 编码的 [GroupParticipant]）。单聊为 nil。
