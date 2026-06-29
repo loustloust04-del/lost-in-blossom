@@ -55,6 +55,7 @@ struct CardFlowView: View {
             hasBranches: info != nil,
             branchInfo: info,
             isStreaming: isNodeStreaming,
+            streamingContentText: isNodeStreaming ? viewModel.streamingText : "",
             isThinking: isThinkingNow,
             streamingThinkingText: streamingThinkingForNode,
             thinkingSummary: thinkingSummaryForNode,
@@ -1268,6 +1269,8 @@ struct BubbleView: View {
     let hasBranches: Bool
     let branchInfo: BranchInfo?
     var isStreaming: Bool = false
+    /// 流式时的实时文本——直接读 viewModel.streamingText，不经过 SwiftData
+    var streamingContentText: String = ""
     /// True while the model is still generating reasoning_content (thinking phase)
     var isThinking: Bool = false
     /// Live reasoning tokens from ViewModel — only populated for the currently streaming node
@@ -1351,7 +1354,9 @@ struct BubbleView: View {
 
             // Bubble
             VStack(alignment: .leading, spacing: 6) {
-                let rawCleaned = ContentCleaner.clean(node.content, cacheKey: "\(node.id)_\(node.content.count)")
+                // 流式优化：streaming 时直接读 streamingContentText（绕过 SwiftData），完成后读 node.content
+                let sourceText = isStreaming && !streamingContentText.isEmpty ? streamingContentText : node.content
+                let rawCleaned = ContentCleaner.clean(sourceText, cacheKey: "\(node.id)_\(sourceText.count)")
                 let thinkingResult = isUser ? nil : ContentCleaner.extractThinking(from: rawCleaned)
                 let cleaned = thinkingResult?.content ?? rawCleaned
                 // CC 思考链：content 已嵌入 [thinking]…[/thinking] 时由下方 ThinkingBlockView 渲染；

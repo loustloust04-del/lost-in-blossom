@@ -502,7 +502,8 @@ extension ConversationViewModel {
                     }
                 }
                 streamingText += token
-                assistantNode.content = streamingText
+                // [streaming-perf] 切断 per-token SwiftData 写，view 直接读 streamingText
+                // assistantNode.content = streamingText
             },
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
@@ -587,6 +588,9 @@ extension ConversationViewModel {
                 guard let self else { return }
                 if streamingText.isEmpty {
                     assistantNode.content = "⚠️ \(error)"
+                } else {
+                    // [streaming-perf] error 时保存 partial 内容
+                    assistantNode.content = streamingText
                 }
                 streamingText = ""
                 streamingThinkingText = ""
@@ -936,7 +940,8 @@ extension ConversationViewModel {
                     }
                 }
                 streamingText += token
-                newNode.content = streamingText
+                // [streaming-perf] 切断 per-token SwiftData 写
+                // newNode.content = streamingText
             },
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
@@ -960,6 +965,9 @@ extension ConversationViewModel {
                 guard let self else { return }
                 if streamingText.isEmpty {
                     newNode.content = "⚠️ \(error)"
+                } else {
+                    // [streaming-perf] error 时保存 partial 内容
+                    newNode.content = streamingText
                 }
                 streamingText = ""
                 streamingThinkingText = ""
@@ -1076,7 +1084,8 @@ extension ConversationViewModel {
                     }
                 }
                 streamingText += token
-                newAssistantNode.content = streamingText
+                // [streaming-perf] 切断 per-token SwiftData 写
+                // newAssistantNode.content = streamingText
             },
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
@@ -1100,6 +1109,9 @@ extension ConversationViewModel {
                 guard let self else { return }
                 if streamingText.isEmpty {
                     newAssistantNode.content = "⚠️ \(error)"
+                } else {
+                    // [streaming-perf] error 时保存 partial 内容
+                    newAssistantNode.content = streamingText
                 }
                 streamingText = ""
                 streamingThinkingText = ""
