@@ -570,6 +570,8 @@ extension ConversationViewModel {
     /// 在 loadConversation 和 sendMessage 时都会（重新）注册，保证 handler
     /// 持有的 context 始终是当前楼层的。
     func installCCFollowUpHandler(context: ModelContext, providerManager: ProviderManager? = nil) {
+        // 记住最近一次可用的 providerManager（loadConversation 注册时为 nil，别覆盖已存的）
+        if let providerManager { self.ccProviderManager = providerManager }
         // proactive 附件 fallback：CC主动发的文件走这里
         CCBridgeWebSocketClient.shared.unhandledAttachmentHandler = { [weak self] chatId, att in
             guard let self else { return }
@@ -601,12 +603,20 @@ extension ConversationViewModel {
                 fullContent = content
             }
             self.appendCCMessage(chatId: chatId, content: fullContent, context: context)
-            // CC→记忆（反向共享）：CC回复也触发记忆提取
+            // CC→记忆（反向共享）：CC回复也触发记忆提取。用存下来的 ccProviderManager，
+            // 这样 proactive 回复（只走 loadConversation 注册、没带 pm）也能提取。
             if let conversation = self.selectedConversation, conversation.id == chatId,
-               let pm = providerManager {
+               let pm = self.ccProviderManager {
                 let profileId = conversation.profileId
                 let fallbackModel = pm.availableModels.first ?? ProviderModel(providerId: "deepseek", modelId: "deepseek-chat", name: "DeepSeek Chat")
+                #if DEBUG
+                print("[CC→Memory] extracting from CC reply: \(chatId)")
+                #endif
                 self.extractMemoriesIfNeeded(profileId: profileId, conversationId: chatId, model: fallbackModel, providerManager: pm, context: context)
+            } else {
+                #if DEBUG
+                print("[CC→Memory] skip extract (no providerManager or conversation mismatch): \(chatId)")
+                #endif
             }
         }
     }
