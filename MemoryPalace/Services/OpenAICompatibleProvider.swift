@@ -60,8 +60,15 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         isInGatewayThinking = false
 
         var apiMessages: [[String: Any]] = []
-        if let sys = systemPrompt, !sys.isEmpty {
-            apiMessages.append(["role": "system", "content": sys])
+        var systemText = systemPrompt ?? ""
+        // 联网搜索：非 Anthropic 走 client function，需在 system 里教模型先搜后读（常量串，缓存稳定）
+        if WebSearchSettings.isSearchEnabledFlag {
+            let asst = UserDefaults.standard.string(forKey: "assistantName") ?? "Caelum"
+            let sp = WebSearchToolService.systemPrompt(assistantName: asst)
+            systemText = systemText.isEmpty ? sp : systemText + "\n\n" + sp
+        }
+        if !systemText.isEmpty {
+            apiMessages.append(["role": "system", "content": systemText])
         }
         for msg in messages {
             // Detect multimodal content and convert to OpenAI vision format
@@ -139,8 +146,14 @@ final class OpenAICompatibleProvider: BaseChatProvider {
             request.setValue(value, forHTTPHeaderField: key)
         }
         // PR-3: bridge 工具（OpenAI function 格式）。工具定义写死保证缓存稳定。
-        if !bridgeTools.isEmpty {
-            body["tools"] = ToolCallLoop.openAITools(bridgeTools)
+        var oaiTools: [[String: Any]] = bridgeTools.isEmpty ? [] : ToolCallLoop.openAITools(bridgeTools)
+        // 联网搜索：client function（search_web + browse_url），放 MCP 工具之后保证缓存前缀稳定
+        if WebSearchSettings.isSearchEnabledFlag {
+            oaiTools.append(WebSearchToolService.openAITool())
+            oaiTools.append(BrowseURLTool.openAITool())
+        }
+        if !oaiTools.isEmpty {
+            body["tools"] = oaiTools
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
@@ -285,7 +298,11 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                     // PR-3: function calling 多轮 —— 本轮要求调工具则客户端执行后再发一轮
                     let calls = pendingToolCalls.sorted { $0.key < $1.key }.compactMap { (_, v) -> ToolCallLoop.ToolCall? in
                         let name = v["name"] as? String ?? ""
-                        guard !name.isEmpty, bridgeTools.contains(where: { $0.name == name }) else { return nil }
+                        guard !name.isEmpty,
+                              bridgeTools.contains(where: { $0.name == name })
+                                  || name == WebSearchToolService.toolName
+                                  || name == BrowseURLTool.toolName
+                        else { return nil }
                         return ToolCallLoop.ToolCall(id: v["id"] as? String ?? "",
                                                      name: name,
                                                      argumentsJSON: (v["arguments"] as? String).flatMap { $0.isEmpty ? "{}" : $0 } ?? "{}")

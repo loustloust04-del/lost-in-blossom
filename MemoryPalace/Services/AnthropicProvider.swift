@@ -141,8 +141,13 @@ final class AnthropicProvider: BaseChatProvider {
             request.setValue("mcp-client-0.1", forHTTPHeaderField: "anthropic-beta")
         }
         // PR-2: bridge 工具（客户端执行；Anthropic 只返回 tool_use 并停）。工具定义写死保证缓存稳定。
-        if !bridgeTools.isEmpty {
-            body["tools"] = ToolCallLoop.anthropicTools(bridgeTools)
+        var antTools: [[String: Any]] = bridgeTools.isEmpty ? [] : ToolCallLoop.anthropicTools(bridgeTools)
+        // 联网搜索：Anthropic 直连用 server tool（Claude 后端自执行搜索），放 MCP 工具之后
+        if WebSearchSettings.isSearchEnabledFlag {
+            antTools.append(WebSearchToolService.anthropicServerTool())
+        }
+        if !antTools.isEmpty {
+            body["tools"] = antTools
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

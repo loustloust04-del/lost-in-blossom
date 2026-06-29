@@ -46,6 +46,19 @@ enum ToolCallLoop {
     static func execute(_ calls: [ToolCall], bridgeTools: [MCPToolDescriptor]) async -> [ToolOutcome] {
         var outcomes: [ToolOutcome] = []
         for call in calls {
+            // ── 本地工具：联网搜索 / 读网页（在 MCP 查找之前拦截）──
+            if call.name == WebSearchToolService.toolName {
+                let result = await WebSearchToolService.execute(inputJSON: call.argumentsJSON)
+                outcomes.append(ToolOutcome(id: call.id, name: call.name,
+                                            text: result.text, isError: result.isError))
+                continue
+            }
+            if call.name == BrowseURLTool.toolName {
+                let result = await BrowseURLTool.execute(inputJSON: call.argumentsJSON)
+                outcomes.append(ToolOutcome(id: call.id, name: call.name,
+                                            text: result.text, isError: result.isError))
+                continue
+            }
             guard let server = bridgeTools.first(where: { $0.name == call.name })?.server else {
                 outcomes.append(ToolOutcome(id: call.id, name: call.name,
                                             text: "未知工具: \(call.name)", isError: true))

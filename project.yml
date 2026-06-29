@@ -17,6 +17,9 @@ packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     from: "1.13.0"
+  SwiftSoup:
+    url: https://github.com/scinfu/SwiftSoup
+    from: "2.7.0"
 
 settings:
   base:
@@ -35,11 +38,15 @@ targets:
       # （Bundle.main.url(forResource:"message-renderer") 运行时必须能找到）。
       - path: MemoryPalace/Resources/message-renderer.html
         buildPhase: resources
+      # 联网搜索 browse_url：离屏 WKWebView 注入的正文抽取脚本，必须进 Copy Bundle Resources
+      - path: MemoryPalace/Resources/ReaderScripts
+        buildPhase: resources
     dependencies:
       - package: MarkdownUI
       - package: VariableBlur
       - package: ZIPFoundation
       - package: SwiftTerm
+      - package: SwiftSoup
     entitlements:
       path: MemoryPalace/MemoryPalaceIOS.entitlements
       properties:

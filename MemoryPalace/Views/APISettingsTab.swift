@@ -96,6 +96,12 @@ struct APISettingsTab: View {
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
 
+                Section("联网搜索") {
+                    WebSearchQuickSettings()
+                }
+                .listRowBackground(Theme.mainBg)
+                .listRowSeparator(.hidden)
+
                 if let pm = providerManager, !pm.savedAPIProviders.isEmpty {
                     Section("当前使用的 API") {
                         activeAPIPickerContent
