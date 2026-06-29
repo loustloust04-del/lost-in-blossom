@@ -22,6 +22,7 @@ struct SettingsView: View {
         case mcp = "MCP 工具"
         case persona = "Prompt"
         case regex = "正则"
+        case style = "写作风格"
         case rightPanel = "右栏"
         case memory = "记忆"
         case tokenStats = "Token 统计"
@@ -61,6 +62,7 @@ struct SettingsView: View {
                     settingsButton(icon: "wrench.and.screwdriver", title: "MCP 工具", color: Theme.textSecondary, tab: .mcp)
                     settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
                     settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
+                    settingsButton(icon: "sparkles", title: "写作风格", color: Theme.branchIndicator, tab: .style)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
                     settingsButton(icon: "chart.bar", title: "Token 统计", color: Theme.textSecondary, tab: .tokenStats)
                 } header: {
@@ -112,6 +114,7 @@ struct SettingsView: View {
                 case .memory: IOSMemoryPage()
                 case .tokenStats: TokenStatsView()
                 case .regex: IOSRegexPage()
+                case .style: StyleManagerView(viewModel: viewModel, manager: StyleManager.shared)
                 case .sticker:
                     IOSStickerPage()
                 case .rightPanel:
