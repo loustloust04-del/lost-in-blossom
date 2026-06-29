@@ -961,6 +961,26 @@ extension ConversationViewModel {
                 scrollToNodeId = newAssistantId
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
 
+                // Token 统计
+                if let usage = usage {
+                    let cost = providerManager.provider(for: model).map {
+                        BudgetCalculator.actualCost(provider: $0, modelId: model.modelId, usage: usage)
+                    } ?? 0
+                    let rt = self.turnStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                    TokenStatsStore.append(TokenRecord(
+                        date: Date(),
+                        model: model.name,
+                        conversationId: conversation.id,
+                        conversationTitle: conversation.title,
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        cacheReadTokens: usage.cacheReadInputTokens,
+                        cacheWriteTokens: usage.cacheCreationInputTokens,
+                        cost: cost,
+                        responseTime: rt
+                    ))
+                }
+
                 // 上下文总结
                 self.triggerContextSummaryIfNeeded(
                     conversationId: conversation.id,
@@ -1104,6 +1124,26 @@ extension ConversationViewModel {
                 try? context.save()
                 scrollToNodeId = newAssistantId
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
+
+                // Token 统计
+                if let usage = usage {
+                    let cost = providerManager.provider(for: model).map {
+                        BudgetCalculator.actualCost(provider: $0, modelId: model.modelId, usage: usage)
+                    } ?? 0
+                    let rt = self.turnStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                    TokenStatsStore.append(TokenRecord(
+                        date: Date(),
+                        model: model.name,
+                        conversationId: conversation.id,
+                        conversationTitle: conversation.title,
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        cacheReadTokens: usage.cacheReadInputTokens,
+                        cacheWriteTokens: usage.cacheCreationInputTokens,
+                        cost: cost,
+                        responseTime: rt
+                    ))
+                }
 
                 // 上下文总结
                 self.triggerContextSummaryIfNeeded(

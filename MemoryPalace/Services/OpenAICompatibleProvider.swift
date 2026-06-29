@@ -271,7 +271,16 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         if let u = obj["usage"] as? [String: Any],
            let pt = u["prompt_tokens"] as? Int,
            let ct = u["completion_tokens"] as? Int {
-            usage = TokenUsage(inputTokens: pt, outputTokens: ct)
+            // OpenRouter/DeepSeek 缓存 token 解析
+            // Anthropic 透传：cache_read_input_tokens / cache_creation_input_tokens
+            // OAI 系：prompt_tokens_details.cached_tokens
+            let cacheRead = (u["cache_read_input_tokens"] as? Int)
+                ?? ((u["prompt_tokens_details"] as? [String: Any])?["cached_tokens"] as? Int)
+                ?? 0
+            let cacheWrite = u["cache_creation_input_tokens"] as? Int ?? 0
+            usage = TokenUsage(inputTokens: pt, outputTokens: ct,
+                              cacheReadInputTokens: cacheRead,
+                              cacheCreationInputTokens: cacheWrite)
         }
 
         return (content, usage)
@@ -339,6 +348,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         if let u = obj["usage"] as? [String: Any],
            let pt = u["prompt_tokens"] as? Int,
            let ct = u["completion_tokens"] as? Int {
+            // 缓存 token（流式 chunk）
+            let cr = (u["cache_read_input_tokens"] as? Int)
+                ?? ((u["prompt_tokens_details"] as? [String: Any])?["cached_tokens"] as? Int)
+                ?? 0
+            let cw = u["cache_creation_input_tokens"] as? Int ?? 0
+            accumulatedCacheReadTokens = cr; accumulatedCacheWriteTokens = cw
             accumulatedInputTokens = pt
             accumulatedOutputTokens = ct
             gotUsage = true
