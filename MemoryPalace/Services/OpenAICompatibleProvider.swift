@@ -24,6 +24,24 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     private var loopApiKey = ""
     private var loopHeaders: [String: String] = [:]
     private var accumulatedToolSegments: [MessageSegment] = []
+    /// OpenRouter 上的 Claude 系模型：cacheFriendly 时显式 per-block 挂 cache_control（system + 末 assistant），
+    /// 动态段（[动态上下文] 伪 user）留在断点外。其他上游自动缓存，不需要它。
+    static func wantsORCacheControl(baseURL: String, model: String, samplingParams: SamplingParams?) -> Bool {
+        guard samplingParams?.cacheFriendly == true else { return false }
+        let m = model.lowercased()
+        return baseURL.lowercased().contains("openrouter")
+            && (m.hasPrefix("anthropic/") || m.contains("claude"))
+    }
+
+    /// cacheFriendly 时给 OR 指定上游 provider 优先（缓存支持最好的官方上游）。只映射已知系列。
+    static func orPreferredProviderOrder(baseURL: String, model: String, samplingParams: SamplingParams?) -> [String]? {
+        guard samplingParams?.cacheFriendly == true, baseURL.lowercased().contains("openrouter") else { return nil }
+        let m = model.lowercased()
+        if m.hasPrefix("deepseek/") { return ["DeepSeek"] }
+        if m.hasPrefix("anthropic/") || m.contains("claude") { return ["Anthropic"] }
+        return nil
+    }
+
     override func sendStreaming(
         messages: [(role: String, content: String)],
         model: String,
@@ -86,6 +104,25 @@ final class OpenAICompatibleProvider: BaseChatProvider {
             if p.seed >= 0 { body["seed"] = p.seed }
             if p.reasoningEffort != "auto" { body["reasoning_effort"] = p.reasoningEffort }
             body["stream"] = p.streaming
+        }
+
+        // ── cacheFriendly：OpenRouter + Claude 显式 per-block 挂 cache_control + 钉官方上游 ──
+        if Self.wantsORCacheControl(baseURL: baseURL, model: model, samplingParams: samplingParams) {
+            let mark: [String: Any] = ["type": "ephemeral"]
+            // system 块挂标（缓存前缀）
+            if let idx = apiMessages.firstIndex(where: { ($0["role"] as? String) == "system" }),
+               let sys = apiMessages[idx]["content"] as? String {
+                apiMessages[idx]["content"] = [["type": "text", "text": sys, "cache_control": mark] as [String: Any]]
+            }
+            // 末条 assistant 块挂标（滚动断点），不挂 [动态上下文] 伪 user 段
+            if let idx = apiMessages.lastIndex(where: { ($0["role"] as? String) == "assistant" }),
+               let text = apiMessages[idx]["content"] as? String {
+                apiMessages[idx]["content"] = [["type": "text", "text": text, "cache_control": mark] as [String: Any]]
+            }
+            body["messages"] = apiMessages
+        }
+        if let order = Self.orPreferredProviderOrder(baseURL: baseURL, model: model, samplingParams: samplingParams) {
+            body["provider"] = ["order": order, "allow_fallbacks": true]
         }
 
         guard let url = URL(string: "\(baseURL)/chat/completions") else {

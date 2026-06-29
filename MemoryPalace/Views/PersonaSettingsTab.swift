@@ -396,6 +396,14 @@ struct PersonaSettingsTab: View {
                 psm.save(p)
             }
         )
+        let cacheFriendlyBinding = Binding<Bool>(
+            get: { preset.sampling.cacheFriendly },
+            set: { val in
+                var p = preset
+                p.sampling.cacheFriendly = val
+                psm.save(p)
+            }
+        )
 
         return VStack(alignment: .leading, spacing: 10) {
             Text("采样参数")
@@ -486,6 +494,12 @@ struct PersonaSettingsTab: View {
 
                 Toggle(isOn: continuePrefillBinding) {
                     Text("续写 Prefill")
+                        .font(.system(size: Theme.SettingsFont.body))
+                        .foregroundColor(Theme.textMuted)
+                }
+
+                Toggle(isOn: cacheFriendlyBinding) {
+                    Text("缓存优化（易变内容下沉）")
                         .font(.system(size: Theme.SettingsFont.body))
                         .foregroundColor(Theme.textMuted)
                 }

@@ -48,6 +48,9 @@ struct SamplingParams: Codable, Hashable {
     var continuePostfix: String = " "
     /// Anthropic mcp_servers beta 是否启用. true = 注入 provider 的 mcpServers（默认开启）.
     var mcpEnabled: Bool = true
+    /// 缓存命中优化：易变内容（记忆/世界书命中 + 日期时间健康）下沉成伪 user 消息，
+    /// system 只留稳定前缀；OpenRouter+Claude 额外 per-block 挂 cache_control 并钉上游。默认关。
+    var cacheFriendly: Bool = false
 }
 
 // MARK: - Preset

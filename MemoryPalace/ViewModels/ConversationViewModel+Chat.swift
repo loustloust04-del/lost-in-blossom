@@ -137,6 +137,26 @@ extension ConversationViewModel {
         let cleanSemi = stripVolatileMacros(semiWithoutSummary.isEmpty ? semiStable : semiWithoutSummary)
 
         let layers = SystemPromptLayers(stableCore: stableCore, summaryLayer: summaryContent, semiStable: cleanSemi, volatile: volatileLayer)
+
+        // cacheFriendly：易变内容（记忆/世界书命中 + 日期时间健康）下沉成一条伪 user 消息，
+        // 插在当前用户消息之前；system 只留稳定前缀（stableCore + summaryLayer），保护缓存前缀字节不变。
+        if preset.sampling.cacheFriendly {
+            let stableLayers = SystemPromptLayers(stableCore: stableCore, summaryLayer: summaryContent, semiStable: "", volatile: "")
+            let stableSystem = stableLayers.combined
+            let volatileBody = [cleanSemi, volatileLayer].filter { !$0.isEmpty }.joined(separator: "\n\n")
+            var msgs = result.messages
+            if !volatileBody.isEmpty {
+                let insertAt = max(0, msgs.count - 1)  // 倒数第二位（当前 user 之前）
+                msgs.insert((role: "user", content: "[动态上下文｜仅供参考，不要复述]\n" + volatileBody), at: insertAt)
+            }
+            return (
+                systemPrompt: stableSystem.isEmpty ? nil : stableSystem,
+                systemLayers: stableLayers.isEmpty ? nil : stableLayers,
+                messages: msgs,
+                sampling: preset.sampling
+            )
+        }
+
         let combined = layers.combined
         return (
             systemPrompt: combined.isEmpty ? nil : combined,
@@ -165,7 +185,15 @@ extension ConversationViewModel {
     ) {
         guard let provider = providerManager.provider(for: model),
               provider.type == .ccBridge else {
-            return (assembled.messages, assembled.systemPrompt, assembled.systemLayers, assembled.sampling, [:])
+            // 非 ccBridge：默认无额外 header。cacheFriendly + OpenRouter 时钉 x-session-id（=对话UUID），
+            // 把请求固定到同一上游 provider，保证 prompt cache 命中。
+            var headers: [String: String] = [:]
+            if assembled.sampling.cacheFriendly,
+               let p = providerManager.provider(for: model),
+               p.baseURL.lowercased().contains("openrouter") {
+                headers["x-session-id"] = conversation.id
+            }
+            return (assembled.messages, assembled.systemPrompt, assembled.systemLayers, assembled.sampling, headers)
         }
         // ccBridge：只取最后一条 user 的 raw 文字，丢掉 system prompt 和历史
         let lastUser = assembled.messages.last(where: { $0.role == "user" })?.content ?? ""
