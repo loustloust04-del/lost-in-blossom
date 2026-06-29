@@ -497,6 +497,13 @@ extension ConversationViewModel {
                         markConversationDirty()
                     }
                 }
+                // PR(usage): 把本轮 usage 快照写到节点，供气泡 footer 显示缓存命中
+                if let usage {
+                    assistantNode.usageInputTokens = usage.inputTokens
+                    assistantNode.usageCacheReadTokens = usage.cacheReadInputTokens
+                    assistantNode.usageCacheCreationTokens = usage.cacheCreationInputTokens
+                    assistantNode.usageOutputTokens = usage.outputTokens
+                }
                 try? context.save()
                 scrollToNodeId = assistantNodeId
 

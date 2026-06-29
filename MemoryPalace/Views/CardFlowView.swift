@@ -1600,6 +1600,24 @@ struct BubbleView: View {
                         onSwitchBranch: onSwitchBranch
                     )
                 }
+
+                // PR(usage): 气泡底部 token 用量 + 缓存命中（assistant only；旧消息无 usage 不显示）
+                if !isUser, let input = node.usageInputTokens, input > 0 {
+                    HStack(spacing: 4) {
+                        let cacheRead = node.usageCacheReadTokens ?? 0
+                        let total = input + (node.usageOutputTokens ?? 0)
+                        Text("\(total)t")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        if cacheRead > 0 {
+                            let pct = Int(Double(cacheRead) / Double(input) * 100)
+                            Text("缓存\(pct)%")
+                                .font(.system(size: 10))
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
             .padding(.horizontal, bubblePaddingH)
             .padding(.vertical, bubblePaddingV)

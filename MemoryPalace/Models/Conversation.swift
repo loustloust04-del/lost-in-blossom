@@ -114,6 +114,13 @@ final class MessageNode {
     var ccThinking: String? = nil
     @Attribute(.externalStorage) var imageDescsData: Data? = nil
 
+    /// PR(usage): 每条 AI 回复的 token 用量快照（气泡 footer 显示）。
+    /// 可选字段，旧数据自动 nil，SwiftData 不需要 migration。
+    var usageInputTokens: Int? = nil
+    var usageCacheReadTokens: Int? = nil
+    var usageCacheCreationTokens: Int? = nil
+    var usageOutputTokens: Int? = nil
+
     // Computed: has branches (more than 1 child)
     var hasBranches: Bool {
         childrenIds.count > 1
