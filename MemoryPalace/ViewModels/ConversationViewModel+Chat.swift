@@ -1008,6 +1008,7 @@ extension ConversationViewModel {
 
     /// Edit a user message: create a new branch from the original message's parent with new text, then get a response
     func editAndResend(_ originalNodeId: String, newText: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
+        BreadcrumbLog.shared.add("✏️", "editAndResend: \(newText.prefix(30))...")
         guard preCheckBudget(text: newText, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
         guard let conversation = selectedConversation,
               let originalNode = nodeMap[originalNodeId],
