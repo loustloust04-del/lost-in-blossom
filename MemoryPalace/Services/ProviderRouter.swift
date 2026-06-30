@@ -64,6 +64,11 @@ final class ProviderRouter {
             openAIProvider.onThinkingToken = onThinkingToken
             // PR-3: REST bridge 客户端工具（function calling）
             openAIProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
+            // 联网搜索工具注入
+            if WebSearchSettings.shared.searchEnabled {
+                openAIProvider.bridgeTools.append(WebSearchToolService.openAITool())
+                openAIProvider.bridgeTools.append(BrowseURLTool.openAITool())
+            }
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = openAIProvider
         case .anthropic:
@@ -73,6 +78,11 @@ final class ProviderRouter {
             anthropicProvider.onSegmentsCallback = onSegments
             // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
             anthropicProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
+            // 联网搜索工具注入
+            if WebSearchSettings.shared.searchEnabled {
+                anthropicProvider.bridgeTools.append(WebSearchToolService.anthropicTool())
+                anthropicProvider.bridgeTools.append(BrowseURLTool.anthropicTool())
+            }
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = anthropicProvider
         case .ccBridge:
