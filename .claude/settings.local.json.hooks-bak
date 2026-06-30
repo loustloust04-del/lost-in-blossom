@@ -1,0 +1,24 @@
+{
+  "Notification": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash /root/projects/BunnyBridge/hooks/thinking-reminder.sh"
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash /root/projects/BunnyPalace/cc-bridge/hooks/extract-thinking-debug.sh"
+        }
+      ]
+    }
+  ]
+}

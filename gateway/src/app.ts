@@ -36,7 +36,9 @@ app.get('/v1/models', auth, (c) => c.json({
   data: [
     { id: 'claude-code', object: 'model', owned_by: 'local' },
     { id: 'claude-opus-4-8', object: 'model', owned_by: 'local' },
+    { id: 'claude-opus-4-8:thinking', object: 'model', owned_by: 'local' },
     { id: 'claude-opus-4-7', object: 'model', owned_by: 'local' },
+    { id: 'claude-opus-4-7:thinking', object: 'model', owned_by: 'local' },
     { id: 'claude-opus-4-5', object: 'model', owned_by: 'local' },
     { id: 'claude-sonnet-4-6', object: 'model', owned_by: 'local' },
     { id: 'claude-sonnet-4-5', object: 'model', owned_by: 'local' },

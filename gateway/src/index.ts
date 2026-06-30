@@ -9,6 +9,7 @@ import { keepCacheAlive } from './memory/keepalive';
 const server = Bun.serve({
   port: config.port,
   fetch: app.fetch,
+  idleTimeout: 120, // 2分钟，给 Opus 4.7/4.8 足够的首 token 时间
 });
 
 console.log(`🌸 Lost in Blossom Gateway`);

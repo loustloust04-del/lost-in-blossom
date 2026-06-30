@@ -7,7 +7,7 @@ import UserNotifications
 // 用本地通知展示。念头是欲望系统主动生成的（存在 gateway session_id=desire），
 // 没有对应的本地会话，因此点击通知只打开 App（落到当前会话）。
 //
-// 网关地址 / token 复用 ChatroomService 的约定：
+// 网关地址 / token：
 //   UserDefaults "gatewayBaseURL" / "gatewayAuthToken"
 //
 // 增量拉取：记录 lastSeen（epoch 毫秒）到 UserDefaults，下次只取更新的念头。

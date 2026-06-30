@@ -429,7 +429,7 @@ struct SidebarView: View {
                 }
             } else if showChatroomPage {
                 // MARK: - Chatroom (群聊)
-                ChatroomListView()
+                // ChatroomListView 已移除（群聊统一走本地 V5 编排）
                 Spacer(minLength: 0)
             } else if showProjectsPage {
                 // MARK: - Projects

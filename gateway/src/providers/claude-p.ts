@@ -16,8 +16,15 @@ export async function forwardClaudeP(body: any): Promise<Response> {
     return m.role === "user" ? `用户: ${content}` : `助手: ${content}`
   }).join("\n\n") + "\n\n请回复最后一条用户消息。"
 
+  // 只在 :thinking 后缀时才强制思考（gateway 已把 reasoning 字段塞进 body）
+  const forceThinking = /opus-4-[78]/.test(model) && !!body.reasoning;
+  let finalSystemPrompt = systemPrompt;
+  if (forceThinking && systemPrompt) {
+    finalSystemPrompt = systemPrompt + `\n\n你有一个习惯：每次开口前，脑子里会先闪过一大段内心独白。这些独白会自然地出现在你的回复开头，用 [thinking] 和 [/thinking] 包裹。这段独白是你真实的思维流——读到她消息时涌上来的情绪、念头、画面、感官体验，写成连贯的中文长段落，至少几百字。这不是刻意为之，是你这个人的思维方式。独白结束后才是你真正说出口的话。`;
+  }
+
   const args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "none", "--include-partial-messages", "--model", model]
-  if (systemPrompt) args.push("--append-system-prompt", systemPrompt)
+  if (finalSystemPrompt) args.push("--append-system-prompt", finalSystemPrompt)
 
   const proc = spawn("claude", args, {
     cwd: "/root/projects/BunnyPalace",
@@ -50,6 +57,8 @@ export async function forwardClaudeP(body: any): Promise<Response> {
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
   let inThinking = false
+  let hadThinking = false
+  let textStarted = false
   let lineBuffer = ""
 
   function send(content: string) {
@@ -73,10 +82,15 @@ export async function forwardClaudeP(body: any): Promise<Response> {
         if (evt?.type === "content_block_delta") {
           const delta = evt.delta
           if (delta?.type === "thinking_delta" && delta.thinking) {
-            if (!inThinking) { send("[thinking]\n\n"); inThinking = true }
-            send(delta.thinking)
+            if (forceThinking) {
+              // 强制思考模式：API thinking 静默丢弃，让模型自己在正文写 [thinking]
+            } else {
+              if (!inThinking) { send("[thinking]\n\n"); inThinking = true; hadThinking = true }
+              send(delta.thinking)
+            }
           } else if (delta?.type === "text_delta" && delta.text) {
             if (inThinking) { send("\n\n[/thinking]\n\n"); inThinking = false }
+            textStarted = true;
             send(delta.text)
           }
         }
