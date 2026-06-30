@@ -644,7 +644,11 @@ struct ChatInputBar: View {
             onSend: { text in send(text) },
             onCancelStream: { viewModel.providerRouter.cancel() },
             onStickerTap: onStickerTap,
-            onModelTap: { showModelPicker.toggle() }
+            onModelTap: { showModelPicker.toggle() },
+            currentStyleId: viewModel.selectedConversation?.currentStyleId,
+            onStyleChange: { styleId in
+                viewModel.selectedConversation?.currentStyleId = styleId
+            }
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -790,6 +794,8 @@ private struct InputFieldContainer: View {
     let onCancelStream: () -> Void
     let onStickerTap: (() -> Void)?
     let onModelTap: () -> Void
+    var currentStyleId: String? = nil
+    var onStyleChange: ((String) -> Void)? = nil
 
     private var canSend: Bool {
         isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
@@ -933,6 +939,33 @@ private struct InputFieldContainer: View {
                     .background(Capsule().fill(Theme.textMuted.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
+
+                // 风格快捷切换
+                Menu {
+                    Button("无风格") {
+                        onStyleChange?("")
+                    }
+                    ForEach(StyleManager.shared.styles) { style in
+                        Button(style.name) {
+                            onStyleChange?(style.id)
+                        }
+                    }
+                } label: {
+                    let hasStyle = !(currentStyleId?.isEmpty ?? true)
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10))
+                        if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
+                            Text(name)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                    }
+                    .foregroundColor(hasStyle ? Theme.accent : Theme.textMuted.opacity(0.5))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(hasStyle ? Theme.accent.opacity(0.1) : Theme.textMuted.opacity(0.05)))
+                }
 
                 Spacer()
 
