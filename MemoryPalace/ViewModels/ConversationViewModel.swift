@@ -22,6 +22,12 @@ final class ConversationViewModel {
     var currentPath: [MessageNode] = []   // The currently displayed path of cards
     var branchChoices: [String: Int] = [:] // nodeId -> chosen child index
     var isLoading: Bool = false
+
+    /// 当前选中对话是否正在加载。isLoading 全局单值，切对话时会泄漏到别的对话。
+    /// UI 用这个 computed property 隔离。
+    var isCurrentConvLoading: Bool {
+        isLoading && selectedConversation != nil
+    }
     var scrollToNodeId: String? = nil
     var pendingScrollNodeId: String? = nil
     var highlightedNodeId: String? = nil
