@@ -23,6 +23,7 @@ struct SettingsView: View {
         case persona = "Prompt"
         case regex = "正则"
         case style = "写作风格"
+        case browser = "浏览器"
         case rightPanel = "右栏"
         case memory = "记忆"
         case tokenStats = "Token 统计"
@@ -63,6 +64,7 @@ struct SettingsView: View {
                     settingsButton(icon: "text.bubble", title: "Prompt", color: Theme.branchIndicator, tab: .persona)
                     settingsButton(icon: "textformat.abc", title: "正则", color: Theme.textSecondary, tab: .regex)
                     settingsButton(icon: "sparkles", title: "写作风格", color: Theme.branchIndicator, tab: .style)
+                    settingsButton(icon: "safari", title: "浏览器", color: Theme.accent, tab: .browser)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
                     settingsButton(icon: "chart.bar", title: "Token 统计", color: Theme.textSecondary, tab: .tokenStats)
                 } header: {
@@ -115,6 +117,7 @@ struct SettingsView: View {
                 case .tokenStats: TokenStatsView()
                 case .regex: IOSRegexPage()
                 case .style: StyleManagerView(viewModel: nil, manager: StyleManager.shared)
+                case .browser: BrowserView()
                 case .sticker:
                     IOSStickerPage()
                 case .rightPanel:
