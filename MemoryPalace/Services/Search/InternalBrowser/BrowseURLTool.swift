@@ -5,7 +5,7 @@ import Foundation
 enum BrowseURLTool {
     static let toolName = "browse_url"
 
-    private static let toolDescription = """
+    static let toolDescription = """
     读取一个网页 URL 的正文，返回 Markdown 格式。**联网搜索的"读"工具**。
 
     ### 何时调用

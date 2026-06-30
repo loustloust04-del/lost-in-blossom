@@ -114,7 +114,7 @@ final class MiniBrowserController: NSObject, ObservableObject, WKNavigationDeleg
             return
         }
         // mailto/tel 等交给系统
-        openExternalWebViewLink(url.absoluteString)
+        UIApplication.shared.open(url.absoluteString)
         decisionHandler(.cancel)
     }
 
@@ -228,7 +228,7 @@ struct MiniBrowserView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .capsule)
+                    .background(.ultraThinMaterial)).interactive(), in: .capsule)
 
                     Spacer(minLength: 4)
 
@@ -240,7 +240,7 @@ struct MiniBrowserView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(width: 38, height: 38)
-                            .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                            .background(.ultraThinMaterial)).interactive(), in: .circle)
                     }
                 }
                 .compositingGroup()
@@ -303,7 +303,7 @@ struct MiniBrowserView: View {
         }
         Button {
             if let url = controller.webView?.url {
-                openExternalWebViewLink(url.absoluteString)
+                UIApplication.shared.open(url.absoluteString)
             }
         } label: {
             Label("在浏览器打开", systemImage: "safari")
@@ -329,7 +329,7 @@ struct MiniBrowserView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.white.opacity(disabled ? 0.35 : 1))
                 .frame(width: 38, height: 38)
-                .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                .background(.ultraThinMaterial)).interactive(), in: .circle)
         }
         .disabled(disabled)
     }

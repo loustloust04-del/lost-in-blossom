@@ -65,9 +65,18 @@ final class ProviderRouter {
             // PR-3: REST bridge 客户端工具（function calling）
             openAIProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
             // 联网搜索工具注入
-            if WebSearchSettings.shared.searchEnabled {
-                openAIProvider.bridgeTools.append(WebSearchToolService.openAITool())
-                openAIProvider.bridgeTools.append(BrowseURLTool.openAITool())
+            let _searchOn = WebSearchSettings.shared.searchEnabled
+            if _searchOn {
+                let searchSchema = (try? JSONSerialization.data(withJSONObject: WebSearchToolService.openAITool()["parameters"] ?? [:]))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                openAIProvider.bridgeTools.append(MCPToolDescriptor(
+                    server: "local", name: WebSearchToolService.toolName,
+                    description: WebSearchToolService.toolDescription, inputSchemaJSON: searchSchema))
+                let browseSchema = (try? JSONSerialization.data(withJSONObject: BrowseURLTool.openAITool()["parameters"] ?? [:]))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                openAIProvider.bridgeTools.append(MCPToolDescriptor(
+                    server: "local", name: BrowseURLTool.toolName,
+                    description: BrowseURLTool.toolDescription, inputSchemaJSON: browseSchema))
             }
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = openAIProvider
@@ -79,9 +88,17 @@ final class ProviderRouter {
             // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
             anthropicProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
             // 联网搜索工具注入
-            if WebSearchSettings.shared.searchEnabled {
-                anthropicProvider.bridgeTools.append(WebSearchToolService.anthropicTool())
-                anthropicProvider.bridgeTools.append(BrowseURLTool.anthropicTool())
+            if _searchOn {
+                let searchSchema = (try? JSONSerialization.data(withJSONObject: WebSearchToolService.anthropicTool()["input_schema"] ?? [:]))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                anthropicProvider.bridgeTools.append(MCPToolDescriptor(
+                    server: "local", name: WebSearchToolService.toolName,
+                    description: WebSearchToolService.toolDescription, inputSchemaJSON: searchSchema))
+                let browseSchema = (try? JSONSerialization.data(withJSONObject: BrowseURLTool.anthropicTool()["input_schema"] ?? [:]))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                anthropicProvider.bridgeTools.append(MCPToolDescriptor(
+                    server: "local", name: BrowseURLTool.toolName,
+                    description: BrowseURLTool.toolDescription, inputSchemaJSON: browseSchema))
             }
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = anthropicProvider

@@ -37,7 +37,7 @@ final class WebSearchSettings: ObservableObject {
 
     // MARK: - 标量（直接读 UserDefaults，UI 用 @AppStorage 同 key 即可）
 
-    var searchEnabled: Bool {
+    nonisolated var searchEnabled: Bool {
         get { (UserDefaults.standard.object(forKey: Self.kEnabled) as? Bool) ?? false }
         set { UserDefaults.standard.set(newValue, forKey: Self.kEnabled); objectWillChange.send() }
     }

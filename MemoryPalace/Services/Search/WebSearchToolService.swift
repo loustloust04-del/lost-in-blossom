@@ -7,7 +7,7 @@ enum WebSearchToolService {
 
     // MARK: - 双轨工具定义
 
-    private static let toolDescription = """
+    static let toolDescription = """
     联网搜索——你**唯一**的联网通道。\
     用户问任何涉及实时信息（天气/新闻/今天/最近/最新/价格/赛事/演出/股价/汇率/版本号/上映时间…）\
     或你不确定的事实，**必须先调这个工具再回答**。\
