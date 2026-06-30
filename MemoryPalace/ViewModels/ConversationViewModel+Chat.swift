@@ -865,6 +865,7 @@ extension ConversationViewModel {
 
     /// Regenerate: create a new assistant response as a sibling branch of the existing one
     func regenerate(assistantNodeId: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
+        BreadcrumbLog.shared.add("🔄", "regenerate: node=\(assistantNodeId.prefix(8))")
         guard preCheckBudget(text: "", model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
         guard let conversation = selectedConversation,
               let oldNode = nodeMap[assistantNodeId],
