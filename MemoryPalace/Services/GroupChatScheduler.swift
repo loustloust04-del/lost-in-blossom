@@ -1,12 +1,16 @@
 import Foundation
 
-/// 群聊 V4 调度：门控 + 镜像 prompt + system prompt 组装。
+/// 群聊 V5 调度引擎。
 ///
-/// 三个关键词：门控（每个角色先判断要不要说话）、串行（一个说完下一个才想）、
-/// 镜像（每个角色看到自己之前说的是 assistant、别人说的是 user）。
+/// V4 的问题：N 个角色 × 1 次门控调用 = N 次额外 LLM 请求，慢且贵。
+/// V5 改为：1 次 LLM 调用选出下一个说话者（或"无人"），循环直到没人想说。
+///
+/// 三个核心机制：
+/// - **选人**：单次 LLM 调用，从所有角色中选出最该说话的那个
+/// - **镜像**：每个角色看到自己的历史是 assistant，别人是 user + [名字]
+/// - **互感**：system prompt 注入完整成员列表 + 角色关系描述
 enum GroupChatScheduler {
 
-    /// 历史消息最小视图。
     struct HistoryItem {
         let role: String          // "user" / "assistant"
         let senderId: String?
@@ -14,179 +18,170 @@ enum GroupChatScheduler {
         let content: String
     }
 
-    // MARK: - 镜像 prompt
+    // MARK: - 选人（替代 N 次门控）
 
-    /// 站在 speaker 视角重建 messages：
-    /// - speaker 自己之前说的 → role=assistant
-    /// - 其他所有人 → role=user，正文加 [名字]: 前缀
-    static func buildMirrorMessages(
-        for speaker: GroupParticipant,
-        history: [HistoryItem]
-    ) -> [(role: String, content: String)] {
-        var out: [(role: String, content: String)] = []
-        for m in history where !m.content.isEmpty {
-            if m.senderId == speaker.id {
-                // 自己说的 → assistant
-                out.append((role: "assistant", content: m.content))
-            } else {
-                // 别人说的（包括用户和其他角色）→ user + 标注
-                let name = m.senderName ?? (m.role == "user" ? "用户" : "AI")
-                out.append((role: "user", content: "[\(name)]: \(m.content)"))
+    /// 单次 LLM 调用选出下一个说话者。返回 participant.id 或 nil（无人想说话）。
+    static func selectNextSpeaker(
+        participants: [GroupParticipant],
+        history: [HistoryItem],
+        lastSpeakerId: String?,
+        providerManager: ProviderManager
+    ) async -> GroupParticipant? {
+        // @ 提及优先：如果最后一条消息里提到了某个角色名
+        if let lastMsg = history.last {
+            for p in participants {
+                if lastMsg.content.contains("@\(p.name)") || lastMsg.content.contains(p.name) {
+                    // 被提及 + 不是自己刚说完的 → 直接选中
+                    if p.id != lastSpeakerId {
+                        print("[GroupV5] @提及命中: \(p.name)")
+                        return p
+                    }
+                }
             }
         }
-        print("[GroupChat] 镜像 messages for \(speaker.name): \(out.count) 条")
-        return out
+
+        // 候选人过滤：排除刚说完话的（防连续发言）
+        let candidates = participants.filter { $0.id != lastSpeakerId }
+        guard !candidates.isEmpty else { return nil }
+
+        // talkativeness 概率过滤
+        let interested = candidates.filter { Double.random(in: 0...1) < $0.talkativeness }
+        let pool = interested.isEmpty ? candidates : interested
+
+        // 构造选人 prompt
+        let roster = pool.enumerated().map { (i, p) in
+            "\(i+1). \(p.name) — \(p.systemPrompt.prefix(80))"
+        }.joined(separator: "\n")
+
+        let recentChat = history.suffix(6).map { m in
+            let name = m.senderName ?? (m.role == "user" ? "用户" : "AI")
+            return "[\(name)]: \(m.content.prefix(100))"
+        }.joined(separator: "\n")
+
+        let selectionPrompt = """
+        你是群聊主持人。根据最近的对话，从这些角色中选出下一个最该说话的人：
+        \(roster)
+
+        最近的对话：
+        \(recentChat)
+
+        规则：
+        - 选最适合回应当前话题的角色
+        - 如果没人特别适合或对话已自然结束，输出"无"
+        - 只输出一个角色名或"无"
+        """
+
+        // 用第一个候选人的模型来做选人（便宜快速）
+        guard let model = providerManager.model(byId: pool[0].model) else {
+            // fallback: 随机选一个
+            return pool.randomElement()
+        }
+
+        let result = await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
+            var text = ""
+            var done = false
+            ProviderRouter().sendStreaming(
+                model: model,
+                messages: [(role: "user", content: selectionPrompt)],
+                systemPrompt: "你是群聊选人助手。只输出一个角色名或'无'，不要其他内容。",
+                providerManager: providerManager,
+                samplingParams: SamplingParams(maxTokens: 20, temperature: 0.3),
+                onToken: { token in text += token },
+                onComplete: { full, _ in if !done { done = true; cont.resume(returning: full) } },
+                onError: { _ in if !done { done = true; cont.resume(returning: "") } }
+            )
+        }
+
+        let answer = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[GroupV5] 选人结果: \"\(answer)\"")
+
+        if answer == "无" || answer.isEmpty { return nil }
+
+        // 模糊匹配角色名
+        return pool.first { answer.contains($0.name) } ?? pool.randomElement()
     }
 
-    // MARK: - System Prompt
+    // MARK: - 镜像 Prompt（增强版）
 
-    /// 组装 system prompt。优先级：
-    /// 1. 群聊角色指令（固定）
-    /// 2. participant.systemPrompt（用户在创建页输入的）
-    /// 3. 角色卡内容（如果绑定了角色卡）
-    /// 4. preset 内容（如果选了 preset）
+    /// 站在 speaker 视角重建 messages，加角色关系标注。
+    static func buildMirrorMessages(
+        for speaker: GroupParticipant,
+        history: [HistoryItem],
+        participants: [GroupParticipant]
+    ) -> [(role: String, content: String)] {
+        // 最多保留最近 20 条，防上下文爆
+        let recent = history.suffix(20)
+        return recent.compactMap { m -> (role: String, content: String)? in
+            guard !m.content.isEmpty else { return nil }
+            if m.senderId == speaker.id {
+                return (role: "assistant", content: m.content)
+            } else {
+                let name = m.senderName ?? (m.role == "user" ? "用户" : "AI")
+                return (role: "user", content: "[\(name)]: \(m.content)")
+            }
+        }
+    }
+
+    // MARK: - System Prompt（增强互感）
+
+    /// 组装 system prompt：群聊规则 + 成员列表 + 角色卡 + 长度约束。
     static func buildSystemPrompt(
         for participant: GroupParticipant,
+        allParticipants: [GroupParticipant],
+        userName: String,
         card: CharacterCard? = nil,
         preset: Preset? = nil
     ) -> String {
         var parts: [String] = []
 
-        // 固定群聊指令
-        parts.append(
-            "你正在一个多人群聊里，只扮演「\(participant.name)」这一个角色。"
-            + "其他参与者的消息会用 [名字]: 前缀标注。"
-            + "规则：只以「\(participant.name)」的身份回复；不替别人发言；"
-            + "回复正文不加 [名字]: 前缀；像真人群聊一样自然简洁。"
-        )
+        // 群聊核心规则
+        parts.append("""
+        你正在一个多人群聊里，你是「\(participant.name)」。
+        回复规则：
+        - 只以「\(participant.name)」的身份说话，不替别人发言
+        - 回复不要加 [\(participant.name)]: 前缀
+        - 像微信群聊一样自然简短，通常 1-3 句话
+        - 可以用 @名字 来叫其他人说话
+        - 如果觉得不需要回复，可以保持沉默
+        """)
 
-        // 用户自定义 system prompt（创建页填写的）
-        if !participant.systemPrompt.isEmpty {
-            parts.append(participant.systemPrompt)
+        // 群聊成员列表（增强互感）
+        var roster = "## 群聊成员\n"
+        roster += "- \(userName)（用户）\n"
+        for p in allParticipants {
+            let desc = p.systemPrompt.prefix(60)
+            let isMe = p.id == participant.id ? " ← 这是你" : ""
+            roster += "- \(p.name)\(isMe)：\(desc)\n"
         }
+        parts.append(roster)
 
-        // 角色卡（如果有绑定）
+        // 角色卡
         if let card {
             if !card.systemPrompt.isEmpty { parts.append(card.systemPrompt) }
             if !card.description.isEmpty { parts.append("【角色设定】\n\(card.description)") }
             if !card.personality.isEmpty { parts.append("【性格】\n\(card.personality)") }
-            if !card.scenario.isEmpty { parts.append("【场景】\n\(card.scenario)") }
+        }
+
+        // 用户自定义 system prompt
+        if !participant.systemPrompt.isEmpty {
+            parts.append(participant.systemPrompt)
         }
 
         // preset
         if let preset {
-            let presetSys = preset.prompts
+            let presetParts = preset.prompts
                 .filter { $0.isSystemPrompt && !$0.isMarker && !$0.content.isEmpty }
                 .map(\.content)
-                .joined(separator: "\n")
-            if !presetSys.isEmpty { parts.append(presetSys) }
+            if !presetParts.isEmpty { parts.append(presetParts.joined(separator: "\n")) }
         }
 
-        let result = parts.joined(separator: "\n\n")
-        print("[GroupChat] system prompt for \(participant.name): \(result.count) chars")
-        return result
+        return parts.joined(separator: "\n\n")
     }
 
-    // MARK: - 门控
+    // MARK: - @ 提及解析
 
-    static func buildGatePrompt(
-        participant: GroupParticipant,
-        recentHistory: [HistoryItem],
-        newMessage: HistoryItem
-    ) -> String {
-        let desc = String(participant.systemPrompt.prefix(200))
-        let recent = recentHistory.suffix(5).map { h -> String in
-            let name = h.senderName ?? (h.role == "user" ? "用户" : "AI")
-            return "[\(name)]: \(String(h.content.prefix(100)))"
-        }.joined(separator: "\n")
-        let newName = newMessage.senderName ?? "用户"
-        return """
-        你是群聊中的「\(participant.name)」。
-        简述：\(desc.isEmpty ? "无" : desc)
-
-        最近消息：
-        \(recent.isEmpty ? "（无）" : recent)
-
-        最新：[\(newName)]: \(String(newMessage.content.prefix(200)))
-
-        你需要回复吗？
-        - @你的名字 → YES
-        - 话题相关 → YES
-        - 已有充分回应 → NO
-        - 连续说了2条以上 → NO
-
-        只输出 YES 或 NO。
-        """
-    }
-
-    static func parseGate(_ response: String) -> Bool {
-        let up = response.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if up.hasPrefix("YES") || up == "Y" { return true }
-        if up.hasPrefix("NO") || up == "N" { return false }
-        print("[GroupChat] ⚠️ 门控返回无法解析: \(response)")
-        return true  // 模糊时让它说话
-    }
-
-    /// 廉价门控模型：优先 deepseek-chat，其次任意 deepseek，最后角色自己的模型。
-    static func cheapGateModel(providerManager: ProviderManager, fallbackModelId: String) -> ProviderModel? {
-        let available = providerManager.availableModels
-        if let ds = available.first(where: { $0.providerId == "deepseek" && $0.modelId.contains("chat") }) {
-            return ds
-        }
-        if let ds = available.first(where: { $0.providerId == "deepseek" }) { return ds }
-        return providerManager.model(byId: fallbackModelId)
-    }
-
-    /// 门控判断：用廉价模型跑 YES/NO。
-    static func gateCheck(
-        participant: GroupParticipant,
-        recentHistory: [HistoryItem],
-        newMessage: HistoryItem,
-        providerManager: ProviderManager
-    ) async -> Bool {
-        // @点名 → 直接 YES
-        if newMessage.content.contains("@\(participant.name)") {
-            print("[GroupChat] 门控: \(participant.name) → YES (@点名)")
-            return true
-        }
-        // CC → 跳过门控
-        if participant.model.hasPrefix("cc-bridge") {
-            print("[GroupChat] 门控: \(participant.name) → YES (CC)")
-            return true
-        }
-
-        guard let gateModel = cheapGateModel(providerManager: providerManager,
-                                             fallbackModelId: participant.model) else {
-            print("[GroupChat] ⚠️ 门控: \(participant.name) 找不到模型，默认 YES")
-            return true
-        }
-
-        let prompt = buildGatePrompt(participant: participant,
-                                     recentHistory: recentHistory,
-                                     newMessage: newMessage)
-        do {
-            let router = ProviderRouter()
-            let (resp, _) = try await router.sendNonStreaming(
-                model: gateModel,
-                messages: [(role: "user", content: prompt)],
-                systemPrompt: nil,
-                providerManager: providerManager
-            )
-            let result = parseGate(resp)
-            print("[GroupChat] 门控: \(participant.name) → \(result ? "YES" : "NO") (model: \(gateModel.name), raw: \(resp.prefix(20)))")
-            return result
-        } catch {
-            print("[GroupChat] ⚠️ 门控调用失败: \(participant.name) error=\(error.localizedDescription)，默认 YES")
-            return true
-        }
-    }
-
-    /// @点名解析。
-    static func mentioned(in input: String, participants: [GroupParticipant]) -> GroupParticipant? {
-        for p in participants.sorted(by: { $0.name.count > $1.name.count })
-        where input.contains("@\(p.name)") {
-            return p
-        }
-        return nil
+    /// 从消息内容中提取被 @ 的角色名。
+    static func extractMentions(from text: String, participants: [GroupParticipant]) -> [GroupParticipant] {
+        participants.filter { text.contains("@\($0.name)") }
     }
 }
