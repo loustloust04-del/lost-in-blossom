@@ -1348,6 +1348,7 @@ struct BubbleView: View {
                             .font(.caption2)
                             .foregroundColor(Theme.textMuted.opacity(0.6))
                     }
+                    if isUser { StyleChip(styleId: node.styleIdSnapshot) }
                 }
                 .padding(.horizontal, 4)
             }

@@ -88,7 +88,7 @@ final class ProviderRouter {
             // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
             anthropicProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
             // 联网搜索工具注入
-            if _searchOn {
+            if WebSearchSettings.shared.searchEnabled {
                 let searchSchema = (try? JSONSerialization.data(withJSONObject: WebSearchToolService.anthropicTool()["input_schema"] ?? [:]))
                     .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
                 anthropicProvider.bridgeTools.append(MCPToolDescriptor(
