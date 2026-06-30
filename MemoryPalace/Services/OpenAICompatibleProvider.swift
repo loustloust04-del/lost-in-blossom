@@ -353,7 +353,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 ?? ((u["prompt_tokens_details"] as? [String: Any])?["cached_tokens"] as? Int)
                 ?? 0
             let cw = u["cache_creation_input_tokens"] as? Int ?? 0
-            accumulatedCacheReadTokens = cr; accumulatedCacheWriteTokens = cw
+            accumulatedCacheReadTokens = cr; accumulatedCacheCreationTokens = cw
             accumulatedInputTokens = pt
             accumulatedOutputTokens = ct
             gotUsage = true

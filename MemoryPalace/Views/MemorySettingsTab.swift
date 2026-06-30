@@ -360,6 +360,19 @@ struct IOSMemoryPage: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.assistantBubble))
     }
 
+    private func runHygieneSweep() async {
+        guard let profileId = profileManager?.currentProfile.id else { return }
+        isSweeping = true
+        defer { isSweeping = false }
+        do {
+            let report = try await MemoryHygiene.sweep(profileId: profileId, context: modelContext)
+            sweepResult = "完成：去重 \(report.merged) 条，剩余 \(report.remaining) 条"
+            refreshMemories()
+        } catch {
+            sweepResult = "失败：\(error.localizedDescription)"
+        }
+    }
+
     private func refreshMemories() {
         let profileId = profileManager?.currentProfile.id ?? ""
         let store = SwiftDataMemoryStore()

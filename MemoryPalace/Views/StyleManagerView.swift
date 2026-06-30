@@ -5,14 +5,14 @@ import SwiftUI
 /// tap 整行 → push 进编辑器。Toggle 全关 = 无风格。
 /// 从 iOS StickerKeyboardPanel 的 sparkles 直接弹出,没有"选择 vs 管理"两层。
 struct StyleManagerView: View {
-    var viewModel: ConversationViewModel
+    var viewModel: ConversationViewModel?
     @Bindable var manager: StyleManager
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var editing: WritingStyle? = nil
 
     private var currentStyleId: String {
-        viewModel.selectedConversation?.currentStyleId ?? ""
+        viewModel?.selectedConversation?.currentStyleId ?? ""
     }
 
     private var builtins: [WritingStyle] { manager.styles.filter(\.isBuiltin) }
@@ -31,7 +31,7 @@ struct StyleManagerView: View {
                                 Button(role: .destructive) {
                                     // 删的是当前选中的 → 同时清掉对话的 currentStyleId
                                     if style.id == currentStyleId {
-                                        viewModel.selectedConversation?.currentStyleId = ""
+                                        viewModel?.selectedConversation?.currentStyleId = ""
                                         try? modelContext.save()
                                     }
                                     manager.delete(style)
@@ -75,7 +75,7 @@ struct StyleManagerView: View {
             Toggle("", isOn: Binding(
                 get: { isOn },
                 set: { val in
-                    guard let conv = viewModel.selectedConversation else { return }
+                    guard let conv = viewModel?.selectedConversation else { return }
                     conv.currentStyleId = val ? style.id : ""
                     try? modelContext.save()
                 }

@@ -114,7 +114,7 @@ struct SettingsView: View {
                 case .memory: IOSMemoryPage()
                 case .tokenStats: TokenStatsView()
                 case .regex: IOSRegexPage()
-                case .style: StyleManagerView(viewModel: viewModel, manager: StyleManager.shared)
+                case .style: StyleManagerView(viewModel: nil, manager: StyleManager.shared)
                 case .sticker:
                     IOSStickerPage()
                 case .rightPanel:

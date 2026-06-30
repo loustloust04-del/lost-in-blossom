@@ -2,8 +2,6 @@ import Foundation
 import SwiftData
 
 // MARK: - 记忆卫生工具（简化版，仅 pair 配对去重）
-// 原版（粟粟）还有 DreamConsolidator 做梦合并 + 碎片毕业，
-// 我们暂缺 DreamConsolidator，先做最有效的 pair 去重。
 
 enum MemoryHygiene {
 
@@ -11,8 +9,8 @@ enum MemoryHygiene {
     static let maxScanCount = 10000
 
     struct Report {
-        let merged: Int        // pair 配对合并对数
-        let remaining: Int     // 流程结束后总数
+        let merged: Int
+        let remaining: Int
     }
 
     enum Failure: Error, LocalizedError {
@@ -33,48 +31,50 @@ enum MemoryHygiene {
         profileId: String,
         context: ModelContext
     ) async throws -> Report {
-        // 1. 拉全量记忆
         let pid = profileId
         var desc = FetchDescriptor<Memory>(predicate: #Predicate<Memory> { $0.profileId == pid })
-        desc.sortBy = [SortDescriptor(\Memory.updateTime, order: .reverse)]
+        desc.sortBy = [SortDescriptor(\Memory.createdAt, order: .reverse)]
         let all = (try? context.fetch(desc)) ?? []
 
         guard !all.isEmpty else { throw Failure.noMemories }
         guard all.count <= maxScanCount else { throw Failure.tooManyMemories(all.count) }
 
-        // 2. pair 配对去重：O(n²)，按 updateTime 倒序，保新去旧
-        var toDelete: Set<String> = []
+        // 解码向量缓存
+        let vectors: [UUID: [Float]] = {
+            var map = [UUID: [Float]]()
+            for m in all {
+                if let data = m.embeddingData {
+                    let floats = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+                    if !floats.isEmpty { map[m.id] = floats }
+                }
+            }
+            return map
+        }()
+
+        // pair 配对去重：O(n²)，按 createdAt 倒序，保新去旧
+        var toDelete: Set<UUID> = []
         for i in 0..<all.count {
             let a = all[i]
             guard !toDelete.contains(a.id) else { continue }
-            guard let vecA = a.embedding, !vecA.isEmpty else { continue }
+            guard let vecA = vectors[a.id] else { continue }
             for j in (i+1)..<all.count {
                 let b = all[j]
                 guard !toDelete.contains(b.id) else { continue }
-                guard let vecB = b.embedding, !vecB.isEmpty else { continue }
+                guard let vecB = vectors[b.id] else { continue }
                 let sim = cosineSimilarity(vecA, vecB)
                 if sim > pairThreshold {
-                    // 保 a（更新）删 b（更旧）
                     toDelete.insert(b.id)
                 }
             }
         }
 
-        // 3. 执行删除
-        for id in toDelete {
-            if let m = all.first(where: { $0.id == id }) {
-                context.delete(m)
-            }
+        for m in all where toDelete.contains(m.id) {
+            context.delete(m)
         }
-        if !toDelete.isEmpty {
-            try? context.save()
-        }
+        if !toDelete.isEmpty { try? context.save() }
 
-        let remaining = all.count - toDelete.count
-        return Report(merged: toDelete.count, remaining: remaining)
+        return Report(merged: toDelete.count, remaining: all.count - toDelete.count)
     }
-
-    // MARK: - 向量工具
 
     private static func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
         guard a.count == b.count, !a.isEmpty else { return 0 }
