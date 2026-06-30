@@ -124,6 +124,9 @@ final class MessageNode {
     var usageCacheCreationTokens: Int? = nil
     var usageOutputTokens: Int? = nil
 
+    /// 发送时的写作风格快照（保真：不随 currentStyleId 切换变）
+    var styleIdSnapshot: String? = nil
+
     // Computed: has branches (more than 1 child)
     var hasBranches: Bool {
         childrenIds.count > 1
