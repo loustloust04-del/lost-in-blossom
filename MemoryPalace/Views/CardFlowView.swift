@@ -1314,6 +1314,91 @@ struct BubbleView: View {
     var isSearchMatch: Bool = false
     /// 当前对话路径的最后一条 assistant 消息。CC 思考链（latestThinking）只挂在这条气泡上。
     var isLastAssistant: Bool = false
+    /// 思考链预览（时钟 + 可展开）。segments / 纯文本两条渲染分支共用。
+    /// 修复：带 segments 的消息（CC 标记式 / API 流式）此前完全不渲染 thinking。
+    @ViewBuilder
+    private func thinkingPreview(staticThinking: String) -> some View {
+                    let liveThinking = isStreaming && !streamingThinkingText.isEmpty
+                    let hasThinkingContent = liveThinking || !staticThinking.isEmpty
+                    if hasThinkingContent && thinkingPreviewMode != "hidden" {
+                        let displayThinking = liveThinking ? streamingThinkingText : staticThinking
+                        let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
+                        let previewStr = thinkingPreviewMode == "prefix" ? rawPreview : (thinkingSummary.isEmpty ? rawPreview : thinkingSummary)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                thinkingExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 11))
+                                if liveThinking && isThinking {
+                                    ThinkingBreathLabel()
+                                } else {
+                                    Text(previewStr)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                                Spacer()
+                                Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 9))
+                            }
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(red: 155/255.0, green: 142/255.0, blue: 126/255.0))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        // 内联展开区域（替代原 ThinkingPanelView sheet）
+                        // 空白框 bug 修复：thinking 为空（trim 后）不渲染任何内容
+                        if thinkingExpanded {
+                            let thinkingText = liveThinking ? streamingThinkingText : staticThinking
+                            if !thinkingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Rectangle()
+                                        .fill(Theme.textMuted.opacity(0.2))
+                                        .frame(width: 2)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        let display = thinkingShowFull ? thinkingText : String(thinkingText.prefix(300))
+                                        Text(display)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Theme.textMuted)
+                                            .textSelection(.enabled)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        // 超过 300 字 → 渐变淡出 + Show more / Show less
+                                        if thinkingText.count > 300 {
+                                            Button(thinkingShowFull ? "Show less" : "Show more") {
+                                                withAnimation(.easeInOut(duration: 0.15)) {
+                                                    thinkingShowFull.toggle()
+                                                }
+                                            }
+                                            .font(.system(size: 11))
+                                            .foregroundColor(Theme.branchIndicator)
+                                            .buttonStyle(.plain)
+                                        }
+
+                                        // Done 标记（非流式时）
+                                        if !isThinking {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "checkmark.circle")
+                                                    .font(.system(size: 11))
+                                                Text("Done")
+                                                    .font(.system(size: 11))
+                                            }
+                                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                                        }
+                                    }
+                                }
+                                .padding(.leading, 4)
+                                .padding(.top, 4)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                    }
+    }
+
     /// 当前选中的 provider 是否为 CC Bridge——只有此条件为 true 时才展示 CCThinkingView。
     var isCCBridgeProvider: Bool = false
     let onToggleFavorite: () -> Void
@@ -1464,6 +1549,14 @@ struct BubbleView: View {
                             .lineSpacing(4 * (fontScale > 0 ? fontScale : 1.0) * lineSpacingScale)
                     }
                 } else if let segs = node.segments, !segs.isEmpty {
+                    // 思考链兜底：segments 里没有 .thinking 段时（CC 标记式 / deepseek 流式），
+                    // 用共用预览补渲染，否则思考链整体丢失。
+                    let segsHaveThinking = segs.contains { seg in
+                        if case .thinking = seg { return true } else { return false }
+                    }
+                    if !segsHaveThinking {
+                        thinkingPreview(staticThinking: thinkingResult?.thinking ?? "")
+                    }
                     // Claude v2 导入：按段渲染（每段独立折叠，顺序严格）
                     MessageSegmentsView(
                         segments: segs,
@@ -1474,87 +1567,7 @@ struct BubbleView: View {
                         regexScripts: regexScripts
                     )
                 } else {
-                    // Thinking block — Claude App 风格小字预览 + 点击弹底部 sheet
-                    let liveThinking = isStreaming && !streamingThinkingText.isEmpty
-                    let staticThinking = thinkingResult?.thinking ?? ""
-                    let hasThinkingContent = liveThinking || !staticThinking.isEmpty
-                    if hasThinkingContent && thinkingPreviewMode != "hidden" {
-                        let displayThinking = liveThinking ? streamingThinkingText : staticThinking
-                        let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
-                        let previewStr = thinkingPreviewMode == "prefix" ? rawPreview : (thinkingSummary.isEmpty ? rawPreview : thinkingSummary)
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                thinkingExpanded.toggle()
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 11))
-                                if liveThinking && isThinking {
-                                    ThinkingBreathLabel()
-                                } else {
-                                    Text(previewStr)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                }
-                                Spacer()
-                                Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 9))
-                            }
-                            .font(.system(size: 13))
-                            .foregroundColor(Color(red: 155/255.0, green: 142/255.0, blue: 126/255.0))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        // 内联展开区域（替代原 ThinkingPanelView sheet）
-                        // 空白框 bug 修复：thinking 为空（trim 后）不渲染任何内容
-                        if thinkingExpanded {
-                            let thinkingText = liveThinking ? streamingThinkingText : staticThinking
-                            if !thinkingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                HStack(alignment: .top, spacing: 8) {
-                                    Rectangle()
-                                        .fill(Theme.textMuted.opacity(0.2))
-                                        .frame(width: 2)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        let display = thinkingShowFull ? thinkingText : String(thinkingText.prefix(300))
-                                        Text(display)
-                                            .font(.system(size: 12))
-                                            .foregroundColor(Theme.textMuted)
-                                            .textSelection(.enabled)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        // 超过 300 字 → 渐变淡出 + Show more / Show less
-                                        if thinkingText.count > 300 {
-                                            Button(thinkingShowFull ? "Show less" : "Show more") {
-                                                withAnimation(.easeInOut(duration: 0.15)) {
-                                                    thinkingShowFull.toggle()
-                                                }
-                                            }
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Theme.branchIndicator)
-                                            .buttonStyle(.plain)
-                                        }
-
-                                        // Done 标记（非流式时）
-                                        if !isThinking {
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "checkmark.circle")
-                                                    .font(.system(size: 11))
-                                                Text("Done")
-                                                    .font(.system(size: 11))
-                                            }
-                                            .foregroundColor(Theme.textMuted.opacity(0.5))
-                                        }
-                                    }
-                                }
-                                .padding(.leading, 4)
-                                .padding(.top, 4)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
-                        }
-                    }
+                    thinkingPreview(staticThinking: thinkingResult?.thinking ?? "")
 
                     // Assistant content — 正则脚本渲染替换
                     let artifactForCard: ArtifactContent? = (!isUser && !isStreaming) ? ArtifactDetector.find(in: cleaned) : nil
