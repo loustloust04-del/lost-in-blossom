@@ -151,7 +151,7 @@ struct CardFlowView: View {
     }
 
     var body: some View {
-        if viewModel.isLoading {
+        if viewModel.isCurrentConvLoading {
             VStack {
                 Spacer()
                 ProgressView("加载中...")
@@ -257,7 +257,7 @@ struct CardFlowView: View {
                     } action: { _, atBottom in
                         isAtBottom = atBottom
                     }
-                    .onChange(of: viewModel.isLoading) { _, loading in
+                    .onChange(of: viewModel.isCurrentConvLoading) { _, loading in
                         // 对话加载完成 → 滚到最后一条（applyTreeData 只在搜索跳转时设 scrollToNodeId，
                         // 普通切对话不会自动滚，ScrollView 保留上一对话的 offset，所以要在这里兜底）
                         if !loading, !viewModel.currentPath.isEmpty {
