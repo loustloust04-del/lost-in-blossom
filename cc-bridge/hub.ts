@@ -32,7 +32,16 @@ export interface ChatMessage {
 export function buildChannelTag(msg: ChatMessage, ts: string, attachments: string[] = []): string {
   let safe = msg.content.replace(/\n/g, " ")
   // 防御：超长 content 让 tmux send-keys -l 失败。截断到安全长度。
-  if (safe.length > 6000) safe = safe.slice(0, 6000) + " …[截断]"
+  // 长消息用 tmux load-buffer + paste-buffer 绕过 send-keys 长度限制
+  if (tag.length > 1500) {
+    const tmpFile = "/tmp/cc-msg-" + Date.now() + ".txt"
+    require("fs").writeFileSync(tmpFile, tag)
+    execFileSync("tmux", ["load-buffer", tmpFile])
+    execFileSync("tmux", ["paste-buffer", "-t", sessionName])
+    execFileSync("tmux", ["send-keys", "-t", sessionName, "Enter"])
+    try { require("fs").unlinkSync(tmpFile) } catch {}
+    return
+  }
   // CC↔API 上下文共享（可通过环境变量 CC_INJECT_SUMMARY=0 关闭）
   const injectSummary = (process.env.CC_INJECT_SUMMARY ?? "1") !== "0"
   if (injectSummary && typeof msg.context === "string" && msg.context.trim().length > 0) {
