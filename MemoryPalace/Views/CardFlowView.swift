@@ -183,10 +183,12 @@ struct CardFlowView: View {
                         // 详见 docs/plan-sticker-pan-relationship-fix-2026-04-25.md 方案 2 v2。
                         ZStack(alignment: .topLeading) {
                             LazyVStack(spacing: bubbleSpacing) {
-                                ForEach(viewModel.currentPath, id: \.id) { node in
+                                // 反转列表：ForEach 倒序（最新在前 = 物理顶 = 翻转后视觉底）+ 每个 cell 翻回正
+                                ForEach(viewModel.currentPath.reversed(), id: \.id) { node in
                                     makeBubbleView(for: node)
                                         .id(node.id)
-                                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                        // 反转后物理 top = 视觉底：新消息入场从视觉底部滑入
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
                                         .background(
                                             GeometryReader { geo in
                                                 Color.clear.task(id: geo.frame(in: .named("scrollContent")).midY) {
@@ -194,6 +196,7 @@ struct CardFlowView: View {
                                                 }
                                             }
                                         )
+                                        .flippedUpsideDown()  // 反转列表：cell 翻回正
                                 }
                                 // 底部哨兵：scrollToLastMessage 精准回底 target
                                 Color.clear
@@ -216,7 +219,15 @@ struct CardFlowView: View {
                             handleStickerDrop(providers: providers, location: location)
                         }
                     }
-                    .contentMargins(.top, 50, for: .scrollContent)
+                    .flippedUpsideDown()  // 反转列表：ScrollView 整体翻
+                    .clipped()            // 学 Stream：翻转后子 view frame 可能溢出 bounds
+                    // [blur 修] 反转后 SwiftUI safe area 按物理 top 算 → 视觉顶背后没 content → blur 采样实色。
+                    // 解：ignoresSafeArea 让 ScrollView frame 跨 status bar + home indicator。
+                    .ignoresSafeArea(.container, edges: [.top, .bottom])
+                    // contentMargins.top = 物理顶 = 反转后视觉底 = 最新消息位置；留 100pt 给输入框避免被挡
+                    .contentMargins(.top, 100, for: .scrollContent)
+                    // contentMargins.bottom = 物理底 = 反转后视觉顶 = 给 nav/blur 区留空间
+                    .contentMargins(.bottom, 50, for: .scrollContent)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
                     .overlay(alignment: .top) {
