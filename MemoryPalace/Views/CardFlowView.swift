@@ -234,10 +234,9 @@ struct CardFlowView: View {
                     }
 
                     .onScrollGeometryChange(for: Bool.self) { geometry in
-                        // tolerance 200pt：content 下方有 padding + 哨兵 + sticker canvas
-                        // 大约这么多 pt，用户视觉"到底"时 offset 距离数学 size 还有 100-200pt
-                        geometry.contentOffset.y + geometry.containerSize.height
-                            >= geometry.contentSize.height - 200
+                        // 反转列表：offset≈0 = 物理顶 = 翻转后视觉底 = 在最新消息。
+                        // abs()：contentMargins / 橡皮绳回弹会让静止 offset 略负。
+                        abs(geometry.contentOffset.y) < 200
                     } action: { _, atBottom in
                         isAtBottom = atBottom
                     }
