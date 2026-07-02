@@ -63,7 +63,7 @@ final class ProviderRouter {
             openAIProvider.onSegmentsCallback = onSegments
             openAIProvider.onThinkingToken = onThinkingToken
             // PR-3: REST bridge 客户端工具（function calling）
-            openAIProvider.bridgeTools = mergedBridgeTools(anthropicFormat: false)
+            openAIProvider.bridgeTools = sanitizedBridgeTools()
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = openAIProvider
         case .anthropic:
@@ -72,7 +72,7 @@ final class ProviderRouter {
             anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
             anthropicProvider.onSegmentsCallback = onSegments
             // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
-            anthropicProvider.bridgeTools = mergedBridgeTools(anthropicFormat: true)
+            anthropicProvider.bridgeTools = sanitizedBridgeTools()
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = anthropicProvider
         case .ccBridge:
@@ -99,40 +99,18 @@ final class ProviderRouter {
         )
     }
 
-    /// 桥工具 + 本地搜索/浏览工具合并。
-    /// 桥上与本地同名的 search_web / browse_url 一律剔除（本地版由 App 执行、受搜索开关控制），
-    /// 否则 OpenAI 兼容端会报 "Tool names must be unique"；最后按名字兜底去重。
-    private func mergedBridgeTools(anthropicFormat: Bool) -> [MCPToolDescriptor] {
+    /// 桥工具净化：剔除与本地同名的 search_web / browse_url，并按名字兜底去重。
+    /// ⚠️ 搜索/浏览工具由各 Provider 内部原生注入（OpenAICompatibleProvider 与
+    /// AnthropicProvider 各自的 isSearchEnabledFlag 分支），Router 层【不要】再注入——
+    /// 此前两层双注入导致 OpenAI 兼容端报 "Tool names must be unique"。
+    private func sanitizedBridgeTools() -> [MCPToolDescriptor] {
         let reserved: Set<String> = [WebSearchToolService.toolName, BrowseURLTool.toolName]
-        var tools = (MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : [])
+        let tools = (MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : [])
             .filter { !reserved.contains($0.name) }
-        tools += localSearchToolDescriptors(anthropicFormat: anthropicFormat)
         var seen = Set<String>()
         return tools.filter { seen.insert($0.name).inserted }
     }
 
-    /// 联网搜索 + 网页浏览两个本地工具的注入描述符。
-    /// openAI 取 tool["parameters"]，anthropic 取 tool["input_schema"]，其余完全一致。
-    private func localSearchToolDescriptors(anthropicFormat: Bool) -> [MCPToolDescriptor] {
-        guard WebSearchSettings.shared.searchEnabled else { return [] }
-        func schemaJSON(_ tool: [String: Any]) -> String {
-            let key = anthropicFormat ? "input_schema" : "parameters"
-            // openAI 格式的 parameters 嵌套在 function 里；anthropic 是平铺。两种都兜住。
-            let schema = tool[key] ?? (tool["function"] as? [String: Any])?[key]
-            let fallback: [String: Any] = ["type": "object", "properties": [String: Any]()]
-            return (try? JSONSerialization.data(withJSONObject: schema ?? fallback))
-                .flatMap { String(data: $0, encoding: .utf8) }
-                ?? #"{"type":"object","properties":{}}"#
-        }
-        let searchTool = anthropicFormat ? WebSearchToolService.anthropicTool() : WebSearchToolService.openAITool()
-        let browseTool = anthropicFormat ? BrowseURLTool.anthropicTool() : BrowseURLTool.openAITool()
-        return [
-            MCPToolDescriptor(server: "local", name: WebSearchToolService.toolName,
-                              description: WebSearchToolService.toolDescription, inputSchemaJSON: schemaJSON(searchTool)),
-            MCPToolDescriptor(server: "local", name: BrowseURLTool.toolName,
-                              description: BrowseURLTool.toolDescription, inputSchemaJSON: schemaJSON(browseTool))
-        ]
-    }
 
     private func modelSupportsVision(model: ProviderModel, provider: APIProvider) -> Bool {
         switch provider.type {
