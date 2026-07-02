@@ -11,6 +11,10 @@ struct StyleManagerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editing: WritingStyle? = nil
 
+    private var currentStyleId: String {
+        viewModel?.selectedConversation?.currentStyleId ?? ""
+    }
+
     private var builtins: [WritingStyle] { manager.styles.filter(\.isBuiltin) }
     private var customs: [WritingStyle] { manager.styles.filter { !$0.isBuiltin } }
 
