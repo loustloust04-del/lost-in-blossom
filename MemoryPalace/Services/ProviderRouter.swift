@@ -109,8 +109,12 @@ final class ProviderRouter {
         guard WebSearchSettings.shared.searchEnabled else { return [] }
         func schemaJSON(_ tool: [String: Any]) -> String {
             let key = anthropicFormat ? "input_schema" : "parameters"
-            return (try? JSONSerialization.data(withJSONObject: tool[key] ?? [:]))
-                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            // openAI 格式的 parameters 嵌套在 function 里；anthropic 是平铺。两种都兜住。
+            let schema = tool[key] ?? (tool["function"] as? [String: Any])?[key]
+            let fallback: [String: Any] = ["type": "object", "properties": [String: Any]()]
+            return (try? JSONSerialization.data(withJSONObject: schema ?? fallback))
+                .flatMap { String(data: $0, encoding: .utf8) }
+                ?? #"{"type":"object","properties":{}}"#
         }
         let searchTool = anthropicFormat ? WebSearchToolService.anthropicTool() : WebSearchToolService.openAITool()
         let browseTool = anthropicFormat ? BrowseURLTool.anthropicTool() : BrowseURLTool.openAITool()
