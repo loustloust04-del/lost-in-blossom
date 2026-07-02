@@ -919,7 +919,12 @@ extension ConversationViewModel {
             onComplete: { [weak self] fullText, usage in
                 guard let self else { return }
                 HapticService.shared.streamingComplete()
-                node.content = fullText
+                // 思考链持久化：把本轮 streamingThinkingText 嵌入 content，
+                // 让历史消息也能渲染思考块（和 CC Bridge 的格式一致）。
+                let capturedThink = streamingThinkingText
+                node.content = capturedThink.isEmpty
+                    ? fullText
+                    : "[thinking]\(capturedThink)[/thinking]\(fullText)"
                 streamingText = ""
                 streamingThinkingText = ""
                 isThinking = false
