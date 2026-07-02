@@ -11,40 +11,6 @@ private struct TextSelectItem: Identifiable {
     let thinkingText: String?
 }
 
-/// 反转列表 modifier（学 Stream Chat SwiftUI）。
-/// rotation + scaleEffect 组合 = 净效果 Y 轴颠倒；走 CALayer transform3D 不影响 subpixel 抗锯齿。
-/// ScrollView 整体翻 + 每个 cell 翻回正 + ForEach 数据 reversed →
-/// ScrollView offset=0 = 物理顶 = 翻转后视觉底 = 最新消息（不需要 scrollTo 回底）。
-struct FlippedUpsideDown: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .rotationEffect(.radians(Double.pi))
-            .scaleEffect(x: -1, y: 1, anchor: .center)
-    }
-}
-extension View {
-    func flippedUpsideDown() -> some View { modifier(FlippedUpsideDown()) }
-}
-
-/// 反转列表副作用（学 Exyte UIList `tableView.scrollsToTop = false`）：
-/// iOS 默认点状态栏 → UIScrollView 滚到物理顶 (0,0) = 翻转后视觉底（最新消息），
-/// 与用户预期（回顶）相反 → 关掉系统默认 scrollsToTop。
-struct ScrollsToTopDisabler: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
-        let v = UIView(frame: .zero)
-        v.isHidden = true
-        DispatchQueue.main.async {
-            var node: UIView? = v.superview
-            while let cur = node {
-                if let sv = cur as? UIScrollView { sv.scrollsToTop = false; break }
-                node = cur.superview
-            }
-        }
-        return v
-    }
-    func updateUIView(_ uiView: UIView, context: Context) {}
-}
-
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
@@ -67,6 +33,7 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
+    @State private var lastStreamingScrollTime: Date = .distantPast
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -135,18 +102,35 @@ struct CardFlowView: View {
 
     // Pin Bar handlers：iOS 版已挪到 ContentView；macOS 版保留（PinBar 仍在 CardFlowView）
 
-    /// 回底（反转列表版）：反转后 anchor .top = 视觉底；最新消息(lastId)本来就在
-    /// 物理顶（reversed 第一个），单步 scrollTo 即到，不再需要旧的哨兵三步走。
-    /// force=false（默认）：只在用户已经在底部时才滚，避免弹跳
-    /// force=true：强制滚底（切换对话、用户点回底按钮）
+    /// 三步回底（滚到底部哨兵 = content 真正的底）：
+    /// 1. 先无动画滚到 lastId（让 LazyVStack 载入长 bubble，此时哨兵可能还没 mount）
+    /// 2. withAnimation 0.3s 滚到哨兵（精准到真正底）
+    /// 3. 0.5s 后无动画再滚哨兵一次（MarkdownUI async 撑大 lastId 后补位）
+    ///
+    /// 之前 scrollTo(lastId, anchor: .bottom) 只让 lastId 底对齐可视底，但 lastId 下方
+    /// 还有 spacing 22 + 哨兵 1 + padding 16 + sticker canvas ≈ 几十到几百 pt，导致
+    /// 滚不到真正的底（log 显示 offY=3116 size=3876 差 200 pt）
+    /// force=false（默认）：只在用户已经在底部时才滚，避免流式时弹跳
+    /// force=true：强制滚底（切换对话、消息完成、用户点回底按钮）
     private func scrollToLastMessage(proxy: ScrollViewProxy, force: Bool = false) {
         guard force || isAtBottom else { return }
         guard let lastId = viewModel.currentPath.last?.id else { return }
-        // 禁动画：避免 scrollTo 与 WebView 高度变化同帧竞争导致白屏
+        // 统一禁动画：避免 scrollTo 与 WebView 高度变化同帧竞争导致白屏
         var tx = Transaction()
         tx.disablesAnimations = true
         withTransaction(tx) {
-            proxy.scrollTo(lastId, anchor: .top)
+            proxy.scrollTo(lastId, anchor: .bottom)
+        }
+        // 延迟滚到哨兵（content 真正的底），同样禁动画
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            var tx2 = Transaction()
+            tx2.disablesAnimations = true
+            withTransaction(tx2) {
+                proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
         }
     }
 
@@ -184,12 +168,10 @@ struct CardFlowView: View {
                         // 详见 docs/plan-sticker-pan-relationship-fix-2026-04-25.md 方案 2 v2。
                         ZStack(alignment: .topLeading) {
                             LazyVStack(spacing: bubbleSpacing) {
-                                // 反转列表：ForEach 倒序（最新在前 = 物理顶 = 翻转后视觉底）+ 每个 cell 翻回正
-                                ForEach(viewModel.currentPath.reversed(), id: \.id) { node in
+                                ForEach(viewModel.currentPath, id: \.id) { node in
                                     makeBubbleView(for: node)
                                         .id(node.id)
-                                        // 反转后物理 top = 视觉底：新消息入场从视觉底部滑入
-                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                                         .background(
                                             GeometryReader { geo in
                                                 Color.clear.task(id: geo.frame(in: .named("scrollContent")).midY) {
@@ -197,8 +179,11 @@ struct CardFlowView: View {
                                                 }
                                             }
                                         )
-                                        .flippedUpsideDown()  // 反转列表：cell 翻回正
                                 }
+                                // 底部哨兵：scrollToLastMessage 精准回底 target
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("__bottom_sentinel__")
                             }
                             // 新消息入场动画：路径长度变化时触发 ForEach item transition
                             .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
@@ -215,18 +200,8 @@ struct CardFlowView: View {
                         .onDrop(of: [UTType.plainText], isTargeted: nil) { providers, location in
                             handleStickerDrop(providers: providers, location: location)
                         }
-                        // 反转列表副作用：点状态栏默认滚到物理顶 = 视觉底，关掉
-                        .background(ScrollsToTopDisabler().frame(width: 0, height: 0))
                     }
-                    .flippedUpsideDown()  // 反转列表：ScrollView 整体翻
-                    .clipped()            // 学 Stream：翻转后子 view frame 可能溢出 bounds
-                    // [blur 修] 反转后 SwiftUI safe area 按物理 top 算 → 视觉顶背后没 content → blur 采样实色。
-                    // 解：ignoresSafeArea 让 ScrollView frame 跨 status bar + home indicator。
-                    .ignoresSafeArea(.container, edges: [.top, .bottom])
-                    // contentMargins.top = 物理顶 = 反转后视觉底 = 最新消息位置；留 100pt 给输入框避免被挡
-                    .contentMargins(.top, 100, for: .scrollContent)
-                    // contentMargins.bottom = 物理底 = 反转后视觉顶 = 给 nav/blur 区留空间
-                    .contentMargins(.bottom, 50, for: .scrollContent)
+                    .contentMargins(.top, 50, for: .scrollContent)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
                     .overlay(alignment: .top) {
@@ -251,9 +226,10 @@ struct CardFlowView: View {
                     }
 
                     .onScrollGeometryChange(for: Bool.self) { geometry in
-                        // 反转列表：offset≈0 = 物理顶 = 翻转后视觉底 = 在最新消息。
-                        // abs()：contentMargins / 橡皮绳回弹会让静止 offset 略负。
-                        abs(geometry.contentOffset.y) < 200
+                        // tolerance 200pt：content 下方有 padding + 哨兵 + sticker canvas
+                        // 大约这么多 pt，用户视觉"到底"时 offset 距离数学 size 还有 100-200pt
+                        geometry.contentOffset.y + geometry.containerSize.height
+                            >= geometry.contentSize.height - 200
                     } action: { _, atBottom in
                         isAtBottom = atBottom
                     }
@@ -275,21 +251,41 @@ struct CardFlowView: View {
                         stickerVM.currentPathCount = n
                     }
                     .onChange(of: viewModel.scrollToNodeId) { _, nodeId in
-                        // 反转列表：anchor .center 不受翻转影响（rotation 相对 view 自身）。
-                        // 旧两步走（无动画跳 + 50ms 后动画微调）反转后不需要 → 单步。
                         if let nodeId {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo(nodeId, anchor: .center)
+                            // 先无动画跳（让 LazyVStack 加载目标），再动画微调
+                            proxy.scrollTo(nodeId, anchor: .center)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    proxy.scrollTo(nodeId, anchor: .center)
+                                }
+                                viewModel.scrollToNodeId = nil
                             }
-                            viewModel.scrollToNodeId = nil
                         }
                     }
-                    // 反转列表：流式自动跟随删除——最新消息钉在 offset=0（视觉底），
-                    // bubble 增长时 content 向物理下方扩展，视口自然钉底，无需任何 scrollTo。
+                    .onChange(of: viewModel.streamingText) { oldText, newText in
+                        if newText.isEmpty && !oldText.isEmpty {
+                            lastStreamingScrollTime = .distantPast
+                            scrollToLastMessage(proxy: proxy, force: true)
+                            return
+                        }
+                        guard !newText.isEmpty else { return }
+                        // 用户手动上滑时暂停自动滚底，避免弹跳
+                        guard isAtBottom else { return }
+                        let now = Date()
+                        guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
+                        lastStreamingScrollTime = now
+                        // 不带动画滚底：避免 withAnimation 与 WebView 高度变化同帧竞争导致白屏
+                        var tx = Transaction()
+                        tx.disablesAnimations = true
+                        withTransaction(tx) {
+                            if let lastId = viewModel.currentPath.last?.id {
+                                proxy.scrollTo(lastId, anchor: .bottom)
+                            }
+                        }
+                    }
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
-                    // 反转列表：.interactively 键盘跟手（物理手势方向不受渲染翻转影响）
-                    .scrollDismissesKeyboard(.interactively)
+                    .scrollDismissesKeyboard(.immediately)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if showStickerPanel {
                             // 透明占位：把滚动内容推上去，真正的面板在外层 overlay
@@ -1361,66 +1357,6 @@ struct BubbleView: View {
 
     var isUser: Bool { node.role == "user" }
 
-    @ViewBuilder
-    private func nodeContextMenuItems() -> some View {
-        if isUser, onEdit != nil {
-            Button(action: {
-                editText = node.content
-                isEditing = true
-            }) {
-                Label("编辑", systemImage: "pencil")
-            }
-            Divider()
-        }
-        if !isUser, let onRegenerate, !isStreaming {
-            Button(action: onRegenerate) {
-                Label("重新生成", systemImage: "arrow.counterclockwise")
-            }
-            Divider()
-        }
-        Button(action: onToggleFavorite) {
-            Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
-        }
-        Button(action: { showFolderPicker = true }) {
-            Label("收藏到文件夹...", systemImage: "folder.badge.plus")
-        }
-        Button(action: onTogglePin) {
-            Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
-        }
-        Divider()
-        Button(action: {
-            UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
-        }) {
-            Label("复制文本", systemImage: "doc.on.doc")
-        }
-        Button(action: { isSelectingText = true }) {
-            Label("选取文本", systemImage: "text.cursor")
-        }
-        Divider()
-        Button(role: .destructive, action: onSoftDelete) {
-            Label("删除", systemImage: "trash")
-        }
-    }
-
-    /// 反转列表：contextMenu lift preview 简化纯文本版（不渲 Markdown）。
-    /// 不带 .flippedUpsideDown() —— SwiftUI preview: 闭包会替换 UITargetedPreview
-    /// source target，绕开 cell 上的 transform → lift 动画干净、预览方向正。
-    @ViewBuilder
-    private func liftPreview() -> some View {
-        Text(ContentCleaner.clean(node.content, cacheKey: node.id))
-            .font(.system(size: 15))
-            .foregroundColor(Theme.textPrimary)
-            .lineLimit(20)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal, bubblePaddingH)
-            .padding(.vertical, bubblePaddingV)
-            .background(
-                RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                    .fill(isUser ? Theme.userBubble : Theme.assistantBubble)
-            )
-            .frame(maxWidth: 360, alignment: isUser ? .trailing : .leading)
-    }
-
     /// 群聊 V2：按发言者 id 稳定取色（确定性哈希，跨启动不变）。
     static func speakerColor(_ id: String?) -> Color {
         let palette: [Color] = [.blue, .orange, .green, .purple]
@@ -1779,9 +1715,45 @@ struct BubbleView: View {
             .if(isUser) { view in
                 view.frame(maxWidth: 500, alignment: .trailing)
             }
-            // 反转列表：lift preview 会带上 cell 的 flip transform → 预览颠倒。
-            // 自定义 preview 闭包替换 UITargetedPreview source（不带 flip）绕开。
-            .contextMenu(menuItems: { nodeContextMenuItems() }, preview: { liftPreview() })
+            .contextMenu {
+                if isUser, onEdit != nil {
+                    Button(action: {
+                        editText = node.content
+                        isEditing = true
+                    }) {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    Divider()
+                }
+                if !isUser, let onRegenerate, !isStreaming {
+                    Button(action: onRegenerate) {
+                        Label("重新生成", systemImage: "arrow.counterclockwise")
+                    }
+                    Divider()
+                }
+                Button(action: onToggleFavorite) {
+                    Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
+                }
+                Button(action: { showFolderPicker = true }) {
+                    Label("收藏到文件夹...", systemImage: "folder.badge.plus")
+                }
+                Button(action: onTogglePin) {
+                    Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
+                }
+                Divider()
+                Button(action: {
+                    UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+                }) {
+                    Label("复制文本", systemImage: "doc.on.doc")
+                }
+                Button(action: { isSelectingText = true }) {
+                    Label("选取文本", systemImage: "text.cursor")
+                }
+                Divider()
+                Button(role: .destructive, action: onSoftDelete) {
+                    Label("删除", systemImage: "trash")
+                }
+            }
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
 
