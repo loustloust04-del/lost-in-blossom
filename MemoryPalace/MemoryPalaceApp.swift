@@ -353,6 +353,8 @@ struct MemoryPalaceApp: App {
         let t0 = CFAbsoluteTimeGetCurrent()
         // Phase 3.1: 尽早初始化通知 delegate（须在 willFinishLaunchingWithOptions 前完成）
         _ = LocalNotificationService.shared
+        // Phase 3.2: BGTask 注册必须早于 didFinishLaunching
+        PushAgentService.registerBackgroundTask()
         FontManager.registerBundledFonts()
         FontManager.registerImportedFonts()
         let tFont = CFAbsoluteTimeGetCurrent()
@@ -443,6 +445,7 @@ struct MemoryPalaceApp: App {
                 .environment(themeManager)
                 .environment(profileManager)
                 .environment(providerManager)
+                .task { PushAgentService.shared.start(profileManager: profileManager, providerManager: providerManager) }
                 .environment(presetManager)
                 .environment(cardManager)
                 .environment(toolManager)

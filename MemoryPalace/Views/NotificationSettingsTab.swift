@@ -110,29 +110,29 @@ struct IOSNotificationPage: View {
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
 
-                // 主动消息（Phase 3.2 占位，暂时禁用）
+                // 主动消息（Phase 3.2）
                 Section {
-                    Toggle(isOn: .constant(false)) {
+                    Toggle(isOn: Binding(
+                        get: { service.preferences.proactiveEnabled },
+                        set: { newVal in
+                            service.preferences.proactiveEnabled = newVal
+                            Task { await service.rescheduleAll() }
+                        }
+                    )) {
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("主动消息")
-                                    .font(.system(size: Theme.F.body))
-                                    .foregroundColor(Theme.textSecondary)
-                                Text("即将推出 · Phase 3.2")
-                                    .font(.system(size: Theme.F.secondary))
-                                    .foregroundColor(Theme.textMuted)
-                            }
+                            Text("主动消息")
+                                .font(.system(size: Theme.F.body))
+                                .foregroundColor(Theme.textPrimary)
                         } icon: {
                             Image(systemName: "waveform.path.ecg")
-                                .foregroundColor(Theme.textMuted)
+                                .foregroundColor(Theme.branchIndicator)
                         }
                     }
                     .tint(Theme.branchIndicator)
-                    .disabled(true)
                 } header: {
                     Text("主动消息")
                 } footer: {
-                    Text("Caelum 根据记忆和当前上下文主动发来消息。需要 Push Agent（Phase 3.2）。")
+                    Text("Caelum 会结合记忆，隔一段时间主动发来一句话（23:00–09:00 静默）。实际触发时机由 iOS 后台调度决定。")
                         .font(.system(size: Theme.F.caption))
                         .foregroundColor(Theme.textMuted)
                 }

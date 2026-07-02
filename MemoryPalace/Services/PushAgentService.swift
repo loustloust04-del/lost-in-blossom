@@ -1,123 +1,172 @@
 import Foundation
+import BackgroundTasks
+import SwiftData
 
-// MARK: - Push Agent Service（Phase 3.2 框架）
+// MARK: - Push Agent Service（Phase 3.2 实现）
 //
-// 定位：基于 AI 驱动的主动消息生成与排期。
-// 当前状态：骨架占位，所有 TODO 标注的逻辑在 Phase 3.2 实现。
+// 主动消息：BGProcessingTask 定期唤醒 → 取当前楼层热记忆 → AI 生成一句主动消息 → 本地通知。
+// 链路：
+//   App.init → registerBackgroundTask()（必须早于 didFinishLaunching）
+//   首屏 .task → start() → 提交首个 BGProcessingTask
+//   iOS 择机唤醒 → handle() → scheduleNext() → generateProactiveMessage() → LocalNotificationService
+//   设置页开关变化 → LocalNotificationService.rescheduleAll → requestImmediateScheduling()
 //
-// 架构思路：
-//   App 启动 → PushAgentService.start()
-//     → 注册 BGProcessingTask（com.bunny.lostinblossom.push-agent）
-//   BGTask 触发 → handleBackgroundTask()
-//     → scheduleNext(for: profile)
-//       → generateProactiveMessage()    ← AI 生成
-//       → LocalNotificationService.scheduleProactiveMessage()
-//   用户点击通知 → notificationNavigationRequested → 打开对话
-//
-// Phase 3.2 里还需要：
-//   - Info-iOS.plist 添加 BGTaskSchedulerPermittedIdentifiers
-//   - 在 App 里注册 BGTaskScheduler handler（必须在 applicationDidFinishLaunching 之前）
+// 注意：BGTask 实际触发时机由系统决定（6h 只是 earliestBeginDate 下限），效果以真机为准。
 
 @Observable
 final class PushAgentService {
     static let shared = PushAgentService()
+    static let taskIdentifier = "com.bunny.lostinblossom.push-agent"
     private init() {}
 
     // MARK: - 状态
 
     private(set) var isRunning: Bool = false
+    private var profileManager: ProfileManager?
+    private var providerManager: ProviderManager?
+    private let memoryStore: MemoryStore = SwiftDataMemoryStore()
+
+    private static let lastScheduledKey = "pushAgent.lastScheduledFireDate"
+    private static let minInterval: TimeInterval = 6 * 60 * 60   // 两条主动消息最小间隔
+    private static let quietStartHour = 23                        // 静默 23:00–09:00
+    private static let quietEndHour = 9
+
+    // MARK: - BGTask 注册（App.init 调用，必须早于 didFinishLaunching）
+
+    static func registerBackgroundTask() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
+            guard let processing = task as? BGProcessingTask else {
+                task.setTaskCompleted(success: false); return
+            }
+            PushAgentService.shared.handle(processing)
+        }
+    }
 
     // MARK: - 启动 / 停止
 
-    /// App 启动后调用（在 LocalNotificationService 初始化之后）。
-    /// TODO: Phase 3.2 — 注册 BGProcessingTask，设置调度策略。
+    /// 首屏 .task 调用（profileManager / providerManager 就绪之后）。
     func start(profileManager: ProfileManager, providerManager: ProviderManager) {
+        self.profileManager = profileManager
+        self.providerManager = providerManager
         guard !isRunning else { return }
         isRunning = true
-        // TODO: Phase 3.2 —— 在 App(@main) 的 init() 里，用 BGTaskScheduler.shared.register
-        //   forTaskWithIdentifier: "com.bunny.lostinblossom.push-agent"
-        //   using: nil
-        //   launchHandler: { task in Task { await self.handleBackgroundTask(...) } }
-        //
-        // scheduleBackgroundTask()
+        scheduleBackgroundTask()
     }
 
     func stop() {
         isRunning = false
-        // TODO: Phase 3.2 — 取消已注册的 BGTask
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskIdentifier)
+    }
+
+    /// 设置页开关打开 / rescheduleAll 时调用：用已注入的依赖立即生成并排期一条。
+    func requestImmediateScheduling() {
+        guard let pm = profileManager, let prov = providerManager else { return }
+        Task { await scheduleNext(for: pm.currentProfile, providerManager: prov) }
     }
 
     // MARK: - 消息生成
 
-    /// 为指定楼层生成一条主动消息文本。
-    ///
-    /// TODO: Phase 3.2 实现步骤：
-    ///   1. 调用 imprint-memory MCP SSE 拉取最近记忆（memory_search / memory_list）
-    ///   2. 拼 prompt：
-    ///      "你是 Caelum，天奕的 AI 伴侣。结合以下记忆，写一句主动发起聊天的消息，不超过 20 字，
-    ///       自然口语，第一人称，不带感叹号。记忆：{memories}"
-    ///   3. 调 ProviderRouter.sendNonStreaming（用当前楼层 preferredModel）
-    ///   4. 解析返回，去掉首尾引号/换行
+    /// 取楼层热记忆 → sendNonStreaming 生成一句 ≤20 字的主动消息。
     func generateProactiveMessage(
         for profile: Profile,
         providerManager: ProviderManager
     ) async -> String? {
-        // TODO: Phase 3.2
-        return nil
+        guard let container = profileManager?.container else { return nil }
+        guard let model = providerManager.model(byId: profile.preferredModel) ?? providerManager.allModels.first else { return nil }
+
+        let context = ModelContext(container)
+        let memories = memoryStore.listHot(profileId: profile.id, context: context).prefix(8)
+        let memoryText = memories.isEmpty
+            ? "（暂无记忆，随便打个招呼就好）"
+            : memories.map { "- \($0.content)" }.joined(separator: "\n")
+
+        let userName = profile.userName.isEmpty ? "她" : profile.userName
+        let assistantName = profile.assistantName.isEmpty ? "Caelum" : profile.assistantName
+        let system = "你是 \(assistantName)，\(userName)的 AI 伴侣。"
+        let prompt = """
+        结合以下记忆，写一句主动发起聊天的消息，不超过 20 字，自然口语，第一人称，不带感叹号。\
+        只输出这句话本身，不要引号和任何解释。
+
+        记忆：
+        \(memoryText)
+        """
+
+        guard let (raw, _) = try? await ProviderRouter().sendNonStreaming(
+            model: model,
+            messages: [(role: "user", content: prompt)],
+            systemPrompt: system,
+            providerManager: providerManager
+        ) else { return nil }
+
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = text.trimmingCharacters(in: CharacterSet(charactersIn: "\"“”「」『』'"))
+        text = text.components(separatedBy: .newlines).first ?? text
+        return text.isEmpty ? nil : text
     }
 
     // MARK: - 排期下一条
 
     /// 生成并排期下一条主动消息通知。
-    ///
-    /// TODO: Phase 3.2 实现步骤：
-    ///   1. 计算最佳发送时刻（查 UserDefaults 里的历史活跃时段，避开睡眠时间）
-    ///   2. 调 generateProactiveMessage
-    ///   3. 调 LocalNotificationService.shared.scheduleProactiveMessage
     func scheduleNext(
         for profile: Profile,
         providerManager: ProviderManager,
         conversationId: String? = nil
     ) async {
-        let text = await generateProactiveMessage(for: profile, providerManager: providerManager)
-        guard let text, !text.isEmpty else { return }
+        guard LocalNotificationService.shared.preferences.proactiveEnabled else { return }
+        guard let text = await generateProactiveMessage(for: profile, providerManager: providerManager),
+              !text.isEmpty else { return }
 
-        // TODO: Phase 3.2 — 智能计算 delay（活跃时段 + 间隔策略），现在是 stub
-        let delay: TimeInterval = 6 * 60 * 60 // 6 小时占位
-        LocalNotificationService.shared.scheduleProactiveMessage(
-            text,
-            in: delay,
-            conversationId: conversationId
+        let delay = nextFireDelay()
+        LocalNotificationService.shared.scheduleProactiveMessage(text, in: delay, conversationId: conversationId)
+        UserDefaults.standard.set(
+            Date().addingTimeInterval(delay).timeIntervalSince1970,
+            forKey: Self.lastScheduledKey
         )
     }
 
-    // MARK: - Background Task Handler
-
-    /// BGProcessingTask handler，在 App 注册的 launchHandler 里调用。
-    ///
-    /// TODO: Phase 3.2 实现步骤：
-    ///   1. 设置 task.expirationHandler（超时清理）
-    ///   2. 遍历所有楼层，调 scheduleNext(for:)
-    ///   3. task.setTaskCompleted(success: true)
-    ///   4. 调 scheduleBackgroundTask() 安排下次
-    func handleBackgroundTask(
-        profileManager: ProfileManager,
-        providerManager: ProviderManager
-    ) async {
-        // TODO: Phase 3.2
+    /// 随机抖动 + 最小间隔 + 静默时段（23:00–09:00 顺延到次日早晨）。
+    private func nextFireDelay() -> TimeInterval {
+        var fire = Date().addingTimeInterval(TimeInterval(Int.random(in: 20 * 60 ..< 3 * 3600)))
+        if let last = UserDefaults.standard.object(forKey: Self.lastScheduledKey) as? TimeInterval {
+            let minNext = Date(timeIntervalSince1970: last).addingTimeInterval(Self.minInterval)
+            if fire < minNext { fire = minNext }
+        }
+        let cal = Calendar.current
+        let hour = cal.component(.hour, from: fire)
+        if hour >= Self.quietStartHour || hour < Self.quietEndHour {
+            var comps = cal.dateComponents([.year, .month, .day], from: fire)
+            comps.hour = Self.quietEndHour
+            comps.minute = Int.random(in: 0 ..< 45)
+            var morning = cal.date(from: comps) ?? fire
+            if morning <= fire {
+                morning = cal.date(byAdding: .day, value: 1, to: morning) ?? morning
+            }
+            fire = morning
+        }
+        return max(60, fire.timeIntervalSinceNow)
     }
 
-    // MARK: - BGTask 调度
+    // MARK: - Background Task
 
-    /// 注册下次 BGTask 触发时间（建议 6–12 小时后，避免频繁唤醒）。
-    ///
-    /// TODO: Phase 3.2 实现：
-    ///   import BackgroundTasks
-    ///   let request = BGProcessingTaskRequest(identifier: "com.bunny.lostinblossom.push-agent")
-    ///   request.earliestBeginDate = Date(timeIntervalSinceNow: 6 * 60 * 60)
-    ///   request.requiresNetworkConnectivity = true
-    ///   try? BGTaskScheduler.shared.submit(request)
+    private func handle(_ task: BGProcessingTask) {
+        scheduleBackgroundTask()   // 先排下一次，防断链
+        let work = Task { [weak self] in
+            guard let self, let pm = self.profileManager, let prov = self.providerManager else {
+                task.setTaskCompleted(success: false); return
+            }
+            // v1 只为当前楼层生成（全楼层遍历一轮会弹多条通知，先克制）
+            await self.scheduleNext(for: pm.currentProfile, providerManager: prov)
+            task.setTaskCompleted(success: !Task.isCancelled)
+        }
+        task.expirationHandler = { work.cancel() }
+    }
+
+    /// 注册下次 BGTask（earliestBeginDate 6h 后，需要网络）。
     private func scheduleBackgroundTask() {
-        // TODO: Phase 3.2
+        let request = BGProcessingTaskRequest(identifier: Self.taskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 6 * 60 * 60)
+        request.requiresNetworkConnectivity = true
+        request.requiresExternalPower = false
+        try? BGTaskScheduler.shared.submit(request)
     }
 }

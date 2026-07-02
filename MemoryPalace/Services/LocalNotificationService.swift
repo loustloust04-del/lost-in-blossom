@@ -98,7 +98,9 @@ final class LocalNotificationService: NSObject {
         if preferences.dailyCheckInEnabled {
             scheduleDailyCheckIn()
         }
-        // TODO: Phase 3.2 — 若 proactiveEnabled，调用 PushAgentService.shared.scheduleNext()
+        if preferences.proactiveEnabled {
+            PushAgentService.shared.requestImmediateScheduling()
+        }
     }
 
     /// 排期每日问候（重复型 CalendarTrigger）
