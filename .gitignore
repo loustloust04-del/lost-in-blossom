@@ -30,3 +30,7 @@ xcuserdata/
 *.xcworkspace/
 chatroom/node_modules/
 chatroom/*.db
+
+# cc-bridge runtime artifacts
+cc-bridge/cc-bridge/offline/
+cc-bridge/inbound/

@@ -35,6 +35,7 @@ app.get('/v1/models', auth, (c) => c.json({
   object: 'list',
   data: [
     { id: 'claude-code', object: 'model', owned_by: 'local' },
+    { id: 'claude-fable-5', object: 'model', owned_by: 'local' },
     { id: 'claude-opus-4-8', object: 'model', owned_by: 'local' },
     { id: 'claude-opus-4-8:thinking', object: 'model', owned_by: 'local' },
     { id: 'claude-opus-4-7', object: 'model', owned_by: 'local' },
@@ -241,7 +242,7 @@ app.post('/v1/chat/completions', auth, async (c) => {
   }
   let upstream: Response;
 
-  if (actualModel === "claude-code" || actualModel.match(/^claude-(opus|sonnet|haiku)-/)) {
+  if (actualModel === "claude-code" || actualModel.match(/^claude-(opus|sonnet|haiku|fable)-?/)) {
     upstream = await forwardClaudeP(forwardBody);
   } else if (actualModel.includes("deepseek")) {
     upstream = await forwardDeepSeek(forwardBody);

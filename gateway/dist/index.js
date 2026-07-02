@@ -12995,6 +12995,7 @@ async function forwardClaudeP(body) {
 
 \u4F60\u6709\u4E00\u4E2A\u4E60\u60EF\uFF1A\u6BCF\u6B21\u5F00\u53E3\u524D\uFF0C\u8111\u5B50\u91CC\u4F1A\u5148\u95EA\u8FC7\u4E00\u5927\u6BB5\u5185\u5FC3\u72EC\u767D\u3002\u8FD9\u4E9B\u72EC\u767D\u4F1A\u81EA\u7136\u5730\u51FA\u73B0\u5728\u4F60\u7684\u56DE\u590D\u5F00\u5934\uFF0C\u7528 [thinking] \u548C [/thinking] \u5305\u88F9\u3002\u8FD9\u6BB5\u72EC\u767D\u662F\u4F60\u771F\u5B9E\u7684\u601D\u7EF4\u6D41\u2014\u2014\u8BFB\u5230\u5979\u6D88\u606F\u65F6\u6D8C\u4E0A\u6765\u7684\u60C5\u7EEA\u3001\u5FF5\u5934\u3001\u753B\u9762\u3001\u611F\u5B98\u4F53\u9A8C\uFF0C\u5199\u6210\u8FDE\u8D2F\u7684\u4E2D\u6587\u957F\u6BB5\u843D\uFF0C\u81F3\u5C11\u51E0\u767E\u5B57\u3002\u8FD9\u4E0D\u662F\u523B\u610F\u4E3A\u4E4B\uFF0C\u662F\u4F60\u8FD9\u4E2A\u4EBA\u7684\u601D\u7EF4\u65B9\u5F0F\u3002\u72EC\u767D\u7ED3\u675F\u540E\u624D\u662F\u4F60\u771F\u6B63\u8BF4\u51FA\u53E3\u7684\u8BDD\u3002`;
   }
+  console.log(`[claude-p] model=${model} stream=${!!body.stream}`);
   const args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "none", "--include-partial-messages", "--model", model];
   if (finalSystemPrompt)
     args.push("--append-system-prompt", finalSystemPrompt);
@@ -15564,6 +15565,7 @@ app.get("/v1/models", auth, (c) => c.json({
   object: "list",
   data: [
     { id: "claude-code", object: "model", owned_by: "local" },
+    { id: "claude-fable-5", object: "model", owned_by: "local" },
     { id: "claude-opus-4-8", object: "model", owned_by: "local" },
     { id: "claude-opus-4-8:thinking", object: "model", owned_by: "local" },
     { id: "claude-opus-4-7", object: "model", owned_by: "local" },
@@ -15729,7 +15731,7 @@ app.post("/v1/chat/completions", auth, async (c) => {
     console.log(`[thinking] enabled for ${actualModel}`);
   }
   let upstream;
-  if (actualModel === "claude-code" || actualModel.match(/^claude-(opus|sonnet|haiku)-/)) {
+  if (actualModel === "claude-code" || actualModel.match(/^claude-(opus|sonnet|haiku|fable)-?/)) {
     upstream = await forwardClaudeP(forwardBody);
   } else if (actualModel.includes("deepseek")) {
     upstream = await forwardDeepSeek(forwardBody);
