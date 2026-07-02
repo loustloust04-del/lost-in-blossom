@@ -127,6 +127,9 @@ struct StickerCanvasLayer: View {
             }
         )
         // 右键菜单（仅 macOS；iOS 由编辑模式的 UIContextMenuInteraction 处理）
+        // [反转列表] StickerCanvasLayer 整体不翻（保 positionY 物理坐标系跟 bubblePositions
+        // 一致），每个 sticker 自己翻回正；.position 在翻转外层 = positionY 仍是物理 y。
+        .flippedUpsideDown()
         .position(x: sticker.positionX, y: sticker.positionY)
         .zIndex(Double(sticker.zIndex))
         // 长按进入编辑模式 + 选中（0.3s，比默认 0.5s 快）
@@ -340,6 +343,8 @@ struct StickerSelectionOverlay: View {
                 }
             }
             .rotationEffect(.degrees(sticker.rotation))
+            // [反转列表] 编辑模式贴纸同样翻回正（flip∘flip=identity，内层 rotation 不受影响）
+            .flippedUpsideDown()
             .position(x: sticker.positionX, y: sticker.positionY)
     }
 

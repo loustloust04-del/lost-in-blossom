@@ -26,6 +26,25 @@ extension View {
     func flippedUpsideDown() -> some View { modifier(FlippedUpsideDown()) }
 }
 
+/// 反转列表副作用（学 Exyte UIList `tableView.scrollsToTop = false`）：
+/// iOS 默认点状态栏 → UIScrollView 滚到物理顶 (0,0) = 翻转后视觉底（最新消息），
+/// 与用户预期（回顶）相反 → 关掉系统默认 scrollsToTop。
+struct ScrollsToTopDisabler: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView(frame: .zero)
+        v.isHidden = true
+        DispatchQueue.main.async {
+            var node: UIView? = v.superview
+            while let cur = node {
+                if let sv = cur as? UIScrollView { sv.scrollsToTop = false; break }
+                node = cur.superview
+            }
+        }
+        return v
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
@@ -180,10 +199,6 @@ struct CardFlowView: View {
                                         )
                                         .flippedUpsideDown()  // 反转列表：cell 翻回正
                                 }
-                                // 底部哨兵：scrollToLastMessage 精准回底 target
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id("__bottom_sentinel__")
                             }
                             // 新消息入场动画：路径长度变化时触发 ForEach item transition
                             .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
@@ -200,6 +215,8 @@ struct CardFlowView: View {
                         .onDrop(of: [UTType.plainText], isTargeted: nil) { providers, location in
                             handleStickerDrop(providers: providers, location: location)
                         }
+                        // 反转列表副作用：点状态栏默认滚到物理顶 = 视觉底，关掉
+                        .background(ScrollsToTopDisabler().frame(width: 0, height: 0))
                     }
                     .flippedUpsideDown()  // 反转列表：ScrollView 整体翻
                     .clipped()            // 学 Stream：翻转后子 view frame 可能溢出 bounds
@@ -271,7 +288,8 @@ struct CardFlowView: View {
                     // bubble 增长时 content 向物理下方扩展，视口自然钉底，无需任何 scrollTo。
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
-                    .scrollDismissesKeyboard(.immediately)
+                    // 反转列表：.interactively 键盘跟手（物理手势方向不受渲染翻转影响）
+                    .scrollDismissesKeyboard(.interactively)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if showStickerPanel {
                             // 透明占位：把滚动内容推上去，真正的面板在外层 overlay
@@ -1343,6 +1361,66 @@ struct BubbleView: View {
 
     var isUser: Bool { node.role == "user" }
 
+    @ViewBuilder
+    private func nodeContextMenuItems() -> some View {
+        if isUser, onEdit != nil {
+            Button(action: {
+                editText = node.content
+                isEditing = true
+            }) {
+                Label("编辑", systemImage: "pencil")
+            }
+            Divider()
+        }
+        if !isUser, let onRegenerate, !isStreaming {
+            Button(action: onRegenerate) {
+                Label("重新生成", systemImage: "arrow.counterclockwise")
+            }
+            Divider()
+        }
+        Button(action: onToggleFavorite) {
+            Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
+        }
+        Button(action: { showFolderPicker = true }) {
+            Label("收藏到文件夹...", systemImage: "folder.badge.plus")
+        }
+        Button(action: onTogglePin) {
+            Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
+        }
+        Divider()
+        Button(action: {
+            UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+        }) {
+            Label("复制文本", systemImage: "doc.on.doc")
+        }
+        Button(action: { isSelectingText = true }) {
+            Label("选取文本", systemImage: "text.cursor")
+        }
+        Divider()
+        Button(role: .destructive, action: onSoftDelete) {
+            Label("删除", systemImage: "trash")
+        }
+    }
+
+    /// 反转列表：contextMenu lift preview 简化纯文本版（不渲 Markdown）。
+    /// 不带 .flippedUpsideDown() —— SwiftUI preview: 闭包会替换 UITargetedPreview
+    /// source target，绕开 cell 上的 transform → lift 动画干净、预览方向正。
+    @ViewBuilder
+    private func liftPreview() -> some View {
+        Text(ContentCleaner.clean(node.content, cacheKey: node.id))
+            .font(.system(size: 15))
+            .foregroundColor(Theme.textPrimary)
+            .lineLimit(20)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, bubblePaddingH)
+            .padding(.vertical, bubblePaddingV)
+            .background(
+                RoundedRectangle(cornerRadius: bubbleCornerRadius)
+                    .fill(isUser ? Theme.userBubble : Theme.assistantBubble)
+            )
+            .frame(maxWidth: 360, alignment: isUser ? .trailing : .leading)
+    }
+
     /// 群聊 V2：按发言者 id 稳定取色（确定性哈希，跨启动不变）。
     static func speakerColor(_ id: String?) -> Color {
         let palette: [Color] = [.blue, .orange, .green, .purple]
@@ -1701,45 +1779,9 @@ struct BubbleView: View {
             .if(isUser) { view in
                 view.frame(maxWidth: 500, alignment: .trailing)
             }
-            .contextMenu {
-                if isUser, onEdit != nil {
-                    Button(action: {
-                        editText = node.content
-                        isEditing = true
-                    }) {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    Divider()
-                }
-                if !isUser, let onRegenerate, !isStreaming {
-                    Button(action: onRegenerate) {
-                        Label("重新生成", systemImage: "arrow.counterclockwise")
-                    }
-                    Divider()
-                }
-                Button(action: onToggleFavorite) {
-                    Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
-                }
-                Button(action: { showFolderPicker = true }) {
-                    Label("收藏到文件夹...", systemImage: "folder.badge.plus")
-                }
-                Button(action: onTogglePin) {
-                    Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
-                }
-                Divider()
-                Button(action: {
-                    UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
-                }) {
-                    Label("复制文本", systemImage: "doc.on.doc")
-                }
-                Button(action: { isSelectingText = true }) {
-                    Label("选取文本", systemImage: "text.cursor")
-                }
-                Divider()
-                Button(role: .destructive, action: onSoftDelete) {
-                    Label("删除", systemImage: "trash")
-                }
-            }
+            // 反转列表：lift preview 会带上 cell 的 flip transform → 预览颠倒。
+            // 自定义 preview 闭包替换 UITargetedPreview source（不带 flip）绕开。
+            .contextMenu(menuItems: { nodeContextMenuItems() }, preview: { liftPreview() })
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
 
