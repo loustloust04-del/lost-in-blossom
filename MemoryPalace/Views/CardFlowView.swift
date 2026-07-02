@@ -11,6 +11,21 @@ private struct TextSelectItem: Identifiable {
     let thinkingText: String?
 }
 
+/// 反转列表 modifier（学 Stream Chat SwiftUI）。
+/// rotation + scaleEffect 组合 = 净效果 Y 轴颠倒；走 CALayer transform3D 不影响 subpixel 抗锯齿。
+/// ScrollView 整体翻 + 每个 cell 翻回正 + ForEach 数据 reversed →
+/// ScrollView offset=0 = 物理顶 = 翻转后视觉底 = 最新消息（不需要 scrollTo 回底）。
+struct FlippedUpsideDown: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.radians(Double.pi))
+            .scaleEffect(x: -1, y: 1, anchor: .center)
+    }
+}
+extension View {
+    func flippedUpsideDown() -> some View { modifier(FlippedUpsideDown()) }
+}
+
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
