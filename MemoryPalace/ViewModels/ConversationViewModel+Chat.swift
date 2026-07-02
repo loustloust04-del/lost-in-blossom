@@ -863,6 +863,110 @@ extension ConversationViewModel {
         try? memoryStore.applyDecay(profileId: profileId, context: context)
     }
 
+    /// regenerate / editAndResend 共用尾段：重置流式状态 → 组装 prompt → 发起流式请求。
+    /// 回调行为与抽取前逐字符一致（haptics / thinking 摘要 / Token 统计 / 上下文总结 / error 存 partial）。
+    private func startAssistantStream(into node: MessageNode, assistantNodeId: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, conversation: Conversation, context: ModelContext) {
+        conversation.currentNodeId = assistantNodeId
+        conversation.updateTime = Date()
+        markConversationDirty()
+        streamingText = ""
+        streamingThinkingText = ""
+        isThinking = false
+        thinkingSummary = ""
+
+        let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
+        let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)
+
+        providerRouter.sendStreaming(
+            model: model,
+            messages: payload.messages,
+            systemPrompt: payload.systemPrompt,
+            systemLayers: payload.systemLayers,
+            providerManager: providerManager,
+            samplingParams: payload.sampling,
+            additionalHeaders: payload.additionalHeaders,
+            onSegments: { [weak node] segments in
+                node?.setSegments(segments)
+            },
+            onThinkingToken: { [weak self] token in
+                guard let self else { return }
+                streamingThinkingText += token
+                if !isThinking { isThinking = true }
+            },
+            onToken: { [weak self] token in
+                guard let self else { return }
+                HapticService.shared.streamingTick()
+                if isThinking {
+                    isThinking = false
+                    let capturedThinking = streamingThinkingText
+                    let capturedModel = model
+                    let capturedProvider = providerManager
+                    Task { [weak self] in
+                        guard let self else { return }
+                        let summary = await self.providerRouter.summarizeThinking(
+                            thinkingText: capturedThinking,
+                            model: capturedModel,
+                            providerManager: capturedProvider
+                        )
+                        if let s = summary { self.thinkingSummary = s }
+                    }
+                }
+                streamingText += token
+                // [streaming-perf] 切断 per-token SwiftData 写，view 直接读 streamingText
+            },
+            onComplete: { [weak self] fullText, usage in
+                guard let self else { return }
+                HapticService.shared.streamingComplete()
+                node.content = fullText
+                streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
+                try? context.save()
+                scrollToNodeId = assistantNodeId
+                self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
+
+                // Token 统计
+                if let usage = usage {
+                    let cost = providerManager.provider(for: model).map {
+                        BudgetCalculator.actualCost(provider: $0, modelId: model.modelId, usage: usage)
+                    } ?? 0
+                    let rt = self.turnStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                    TokenStatsStore.append(TokenRecord(
+                        date: Date(),
+                        model: model.name,
+                        conversationId: conversation.id,
+                        conversationTitle: conversation.title,
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        cacheReadTokens: usage.cacheReadInputTokens,
+                        cacheWriteTokens: usage.cacheCreationInputTokens,
+                        cost: cost,
+                        responseTime: rt
+                    ))
+                }
+
+                // 上下文总结
+                self.triggerContextSummaryIfNeeded(
+                    conversationId: conversation.id,
+                    contextDepth: preset.sampling.contextDepth,
+                    model: model, providerManager: providerManager
+                )
+            },
+            onError: { [weak self] error in
+                guard let self else { return }
+                if streamingText.isEmpty {
+                    node.content = "\u{26A0}\u{FE0F} \(error)"
+                } else {
+                    // [streaming-perf] error 时保存 partial 内容
+                    node.content = streamingText
+                }
+                streamingText = ""
+                streamingThinkingText = ""
+                isThinking = false
+            }
+        )
+    }
+
     /// Regenerate: create a new assistant response as a sibling branch of the existing one
     func regenerate(assistantNodeId: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
         BreadcrumbLog.shared.add("🔄", "regenerate: node=\(assistantNodeId.prefix(8))")
@@ -901,107 +1005,7 @@ extension ConversationViewModel {
             currentPath.append(newNode)
         }
 
-        conversation.currentNodeId = newAssistantId
-        conversation.updateTime = Date()
-        markConversationDirty()
-        streamingText = ""
-        streamingThinkingText = ""
-        isThinking = false
-        thinkingSummary = ""
-
-        // Assemble prompt
-        let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
-        let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
-
-        providerRouter.sendStreaming(
-            model: model,
-            messages: payload.messages,
-            systemPrompt: payload.systemPrompt,
-                systemLayers: payload.systemLayers,
-            providerManager: providerManager,
-            samplingParams: payload.sampling,
-            additionalHeaders: payload.additionalHeaders,
-            onSegments: { [weak newNode] segments in
-                newNode?.setSegments(segments)
-            },
-            onThinkingToken: { [weak self] token in
-                guard let self else { return }
-                streamingThinkingText += token
-                if !isThinking { isThinking = true }
-            },
-            onToken: { [weak self] token in
-                guard let self else { return }
-                HapticService.shared.streamingTick()
-                if isThinking {
-                    isThinking = false
-                    let capturedThinking = streamingThinkingText
-                    let capturedModel = model
-                    let capturedProvider = providerManager
-                    Task { [weak self] in
-                        guard let self else { return }
-                        let summary = await self.providerRouter.summarizeThinking(
-                            thinkingText: capturedThinking,
-                            model: capturedModel,
-                            providerManager: capturedProvider
-                        )
-                        if let s = summary { self.thinkingSummary = s }
-                    }
-                }
-                streamingText += token
-                // [streaming-perf] 切断 per-token SwiftData 写
-                // newNode.content = streamingText
-            },
-            onComplete: { [weak self] fullText, usage in
-                guard let self else { return }
-                HapticService.shared.streamingComplete()
-                newNode.content = fullText
-                streamingText = ""
-                streamingThinkingText = ""
-                isThinking = false
-                try? context.save()
-                scrollToNodeId = newAssistantId
-                self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
-
-                // Token 统计
-                if let usage = usage {
-                    let cost = providerManager.provider(for: model).map {
-                        BudgetCalculator.actualCost(provider: $0, modelId: model.modelId, usage: usage)
-                    } ?? 0
-                    let rt = self.turnStartTime.map { Date().timeIntervalSince($0) } ?? 0
-                    TokenStatsStore.append(TokenRecord(
-                        date: Date(),
-                        model: model.name,
-                        conversationId: conversation.id,
-                        conversationTitle: conversation.title,
-                        inputTokens: usage.inputTokens,
-                        outputTokens: usage.outputTokens,
-                        cacheReadTokens: usage.cacheReadInputTokens,
-                        cacheWriteTokens: usage.cacheCreationInputTokens,
-                        cost: cost,
-                        responseTime: rt
-                    ))
-                }
-
-                // 上下文总结
-                self.triggerContextSummaryIfNeeded(
-                    conversationId: conversation.id,
-                    contextDepth: preset.sampling.contextDepth,
-                    model: model, providerManager: providerManager
-                )
-            },
-            onError: { [weak self] error in
-                guard let self else { return }
-                if streamingText.isEmpty {
-                    newNode.content = "⚠️ \(error)"
-                } else {
-                    // [streaming-perf] error 时保存 partial 内容
-                    newNode.content = streamingText
-                }
-                streamingText = ""
-                streamingThinkingText = ""
-                isThinking = false
-            }
-        )
+        startAssistantStream(into: newNode, assistantNodeId: newAssistantId, model: model, profile: profile, preset: preset, providerManager: providerManager, conversation: conversation, context: context)
 
         scrollToNodeId = newAssistantId
     }
@@ -1067,106 +1071,7 @@ extension ConversationViewModel {
         effectiveChildrenMap[newUserId, default: []].append(newAssistantId)
         currentPath.append(newAssistantNode)
 
-        conversation.currentNodeId = newAssistantId
-        conversation.updateTime = Date()
-        markConversationDirty()
-        streamingText = ""
-        streamingThinkingText = ""
-        isThinking = false
-        thinkingSummary = ""
-
-        let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: newAssistantId, context: context, globalEntries: globalWorldBookEntries)
-        let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: newAssistantId)
-
-        providerRouter.sendStreaming(
-            model: model,
-            messages: payload.messages,
-            systemPrompt: payload.systemPrompt,
-                systemLayers: payload.systemLayers,
-            providerManager: providerManager,
-            samplingParams: payload.sampling,
-            additionalHeaders: payload.additionalHeaders,
-            onSegments: { [weak newAssistantNode] segments in
-                newAssistantNode?.setSegments(segments)
-            },
-            onThinkingToken: { [weak self] token in
-                guard let self else { return }
-                streamingThinkingText += token
-                if !isThinking { isThinking = true }
-            },
-            onToken: { [weak self] token in
-                guard let self else { return }
-                HapticService.shared.streamingTick()
-                if isThinking {
-                    isThinking = false
-                    let capturedThinking = streamingThinkingText
-                    let capturedModel = model
-                    let capturedProvider = providerManager
-                    Task { [weak self] in
-                        guard let self else { return }
-                        let summary = await self.providerRouter.summarizeThinking(
-                            thinkingText: capturedThinking,
-                            model: capturedModel,
-                            providerManager: capturedProvider
-                        )
-                        if let s = summary { self.thinkingSummary = s }
-                    }
-                }
-                streamingText += token
-                // [streaming-perf] 切断 per-token SwiftData 写
-                // newAssistantNode.content = streamingText
-            },
-            onComplete: { [weak self] fullText, usage in
-                guard let self else { return }
-                HapticService.shared.streamingComplete()
-                newAssistantNode.content = fullText
-                streamingText = ""
-                streamingThinkingText = ""
-                isThinking = false
-                try? context.save()
-                scrollToNodeId = newAssistantId
-                self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
-
-                // Token 统计
-                if let usage = usage {
-                    let cost = providerManager.provider(for: model).map {
-                        BudgetCalculator.actualCost(provider: $0, modelId: model.modelId, usage: usage)
-                    } ?? 0
-                    let rt = self.turnStartTime.map { Date().timeIntervalSince($0) } ?? 0
-                    TokenStatsStore.append(TokenRecord(
-                        date: Date(),
-                        model: model.name,
-                        conversationId: conversation.id,
-                        conversationTitle: conversation.title,
-                        inputTokens: usage.inputTokens,
-                        outputTokens: usage.outputTokens,
-                        cacheReadTokens: usage.cacheReadInputTokens,
-                        cacheWriteTokens: usage.cacheCreationInputTokens,
-                        cost: cost,
-                        responseTime: rt
-                    ))
-                }
-
-                // 上下文总结
-                self.triggerContextSummaryIfNeeded(
-                    conversationId: conversation.id,
-                    contextDepth: preset.sampling.contextDepth,
-                    model: model, providerManager: providerManager
-                )
-            },
-            onError: { [weak self] error in
-                guard let self else { return }
-                if streamingText.isEmpty {
-                    newAssistantNode.content = "⚠️ \(error)"
-                } else {
-                    // [streaming-perf] error 时保存 partial 内容
-                    newAssistantNode.content = streamingText
-                }
-                streamingText = ""
-                streamingThinkingText = ""
-                isThinking = false
-            }
-        )
+        startAssistantStream(into: newAssistantNode, assistantNodeId: newAssistantId, model: model, profile: profile, preset: preset, providerManager: providerManager, conversation: conversation, context: context)
 
         scrollToNodeId = newUserId
     }
