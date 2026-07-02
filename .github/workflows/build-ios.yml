@@ -110,7 +110,8 @@ jobs:
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS \
             -destination 'generic/platform=iOS' \
-            -archivePath build/LiB.xcarchive
+            -archivePath build/LiB.xcarchive \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }}
 
       - name: Inspect app entitlements (post-archive)
         run: |

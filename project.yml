@@ -59,6 +59,10 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes:
+          - processing
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.bunny.lostinblossom.push-agent
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios
