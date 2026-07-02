@@ -85,7 +85,7 @@ enum GroupChatScheduler {
                 messages: [(role: "user", content: selectionPrompt)],
                 systemPrompt: "你是群聊选人助手。只输出一个角色名或'无'，不要其他内容。",
                 providerManager: providerManager,
-                samplingParams: SamplingParams(maxTokens: 20, temperature: 0.3),
+                samplingParams: SamplingParams(temperature: 0.3, maxTokens: 20),
                 onToken: { token in text += token },
                 onComplete: { full, _ in if !done { done = true; cont.resume(returning: full) } },
                 onError: { _ in if !done { done = true; cont.resume(returning: "") } }

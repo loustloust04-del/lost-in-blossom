@@ -1522,7 +1522,9 @@ struct SidebarView: View {
 
     private func handleCreateGroup(_ participants: [GroupParticipant]) {
         let profileId = profileManager?.currentProfile.id ?? ""
-        let conversation = viewModel.createGroupConversation(participants: participants, profileId: profileId, context: modelContext)
+        let cards = cardManager?.cards ?? []
+        let defaultTitle = participants.map(\.name).joined(separator: "\u{3001}")
+        let conversation = viewModel.createGroupConversation(participants: participants, cards: cards, title: defaultTitle.isEmpty ? "新群聊" : defaultTitle, profileId: profileId, context: modelContext)
         refreshList()
         viewModel.loadConversation(conversation, context: modelContext)
     }

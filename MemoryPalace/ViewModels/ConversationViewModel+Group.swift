@@ -143,7 +143,7 @@ extension ConversationViewModel {
                 messages: messages,
                 systemPrompt: systemPrompt,
                 providerManager: providerManager,
-                samplingParams: SamplingParams(maxTokens: 300, temperature: 0.8),
+                samplingParams: SamplingParams(temperature: 0.8, maxTokens: 300),
                 onToken: { [weak self] token in
                     guard let self else { return }
                     accumulated += token
