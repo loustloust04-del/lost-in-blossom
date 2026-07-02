@@ -635,7 +635,7 @@ struct ChatInputBar: View {
         // ChatInputBar 只负责外层 padding、环境模糊背景、sheet、alert。
         return InputFieldContainer(
             isFocused: $isFocused,
-            isStreaming: viewModel.providerRouter.isStreaming,
+            isStreaming: viewModel.providerRouter.isStreaming && viewModel.streamingConversationId == viewModel.selectedConversation?.id,
             placeholder: inputPlaceholder,
             modelName: currentModel.name,
             pendingImageData: pendingImageData,

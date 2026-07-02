@@ -427,6 +427,7 @@ extension ConversationViewModel {
         // 3. Create placeholder assistant node
         let assistantNodeId = UUID().uuidString
         streamingNodeId = assistantNodeId
+        streamingConversationId = selectedConversation?.id
         let assistantNode = MessageNode(
             id: assistantNodeId,
             role: "assistant",
@@ -875,6 +876,7 @@ extension ConversationViewModel {
         isThinking = false
         thinkingSummary = ""
         streamingNodeId = assistantNodeId
+        streamingConversationId = conversation.id
 
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)

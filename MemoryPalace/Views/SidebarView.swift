@@ -761,7 +761,19 @@ struct SidebarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) {
-            Button { createNewConversation() } label: {
+            // 单击 = 新对话（手感不变）；长按 = 菜单（新对话 / 新建群聊）
+            Menu {
+                Button {
+                    createNewConversation()
+                } label: {
+                    Label("新对话", systemImage: "plus.bubble")
+                }
+                Button {
+                    showCreateGroup = true
+                } label: {
+                    Label("新建群聊", systemImage: "person.2")
+                }
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .semibold))
@@ -772,6 +784,8 @@ struct SidebarView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 11)
                 .background(Capsule().fill(Color.black))
+            } primaryAction: {
+                createNewConversation()
             }
             .padding(.trailing, 20)
             .padding(.bottom, 32)
