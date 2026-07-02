@@ -1139,8 +1139,17 @@ struct SidebarView: View {
     }
 
     private var plusButton: some View {
-        Button {
-            showNewTagSheet = true
+        Menu {
+            Button {
+                showNewTagSheet = true
+            } label: {
+                Label("新建标签", systemImage: "tag")
+            }
+            Button {
+                showCreateGroup = true
+            } label: {
+                Label("新建群聊", systemImage: "person.2")
+            }
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: Theme.F.secondary, weight: .medium))

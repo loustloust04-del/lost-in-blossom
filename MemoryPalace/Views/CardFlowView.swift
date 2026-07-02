@@ -39,7 +39,7 @@ struct CardFlowView: View {
     @ViewBuilder
     private func makeBubbleView(for node: MessageNode) -> some View {
         let info = viewModel.branchInfoMap[node.id]
-        let isNodeStreaming = viewModel.providerRouter.isStreaming && node.id == viewModel.currentPath.last?.id && node.role == "assistant"
+        let isNodeStreaming = viewModel.providerRouter.isStreaming && viewModel.streamingNodeId == node.id
         let isNodeHighlighted = viewModel.highlightedNodeId == node.id
         let isNodeSearchMatch = viewModel.inConvMatches.contains(node.id)
         // 思考链流式状态（只传给正在流式输出的那个节点）
@@ -1653,23 +1653,7 @@ struct BubbleView: View {
                     )
                 }
 
-                // PR(usage): 气泡底部 token 用量 + 缓存命中（assistant only；旧消息无 usage 不显示）
-                if !isUser, let input = node.usageInputTokens, input > 0 {
-                    HStack(spacing: 4) {
-                        let cacheRead = node.usageCacheReadTokens ?? 0
-                        let total = input + (node.usageOutputTokens ?? 0)
-                        Text("\(total)t")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                        if cacheRead > 0 {
-                            let pct = Int(Double(cacheRead) / Double(input) * 100)
-                            Text("缓存\(pct)%")
-                                .font(.system(size: 10))
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .padding(.top, 2)
-                }
+// PR(usage): 气泡底部 token 数字已移除（统计走 Token 统计页）
             }
             .padding(.horizontal, bubblePaddingH)
             .padding(.vertical, bubblePaddingV)

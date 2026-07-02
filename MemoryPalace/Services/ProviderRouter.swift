@@ -63,9 +63,7 @@ final class ProviderRouter {
             openAIProvider.onSegmentsCallback = onSegments
             openAIProvider.onThinkingToken = onThinkingToken
             // PR-3: REST bridge 客户端工具（function calling）
-            openAIProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
-            // 联网搜索工具注入
-            openAIProvider.bridgeTools += localSearchToolDescriptors(anthropicFormat: false)
+            openAIProvider.bridgeTools = mergedBridgeTools(anthropicFormat: false)
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = openAIProvider
         case .anthropic:
@@ -74,9 +72,7 @@ final class ProviderRouter {
             anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
             anthropicProvider.onSegmentsCallback = onSegments
             // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
-            anthropicProvider.bridgeTools = MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : []
-            // 联网搜索工具注入
-            anthropicProvider.bridgeTools += localSearchToolDescriptors(anthropicFormat: true)
+            anthropicProvider.bridgeTools = mergedBridgeTools(anthropicFormat: true)
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = anthropicProvider
         case .ccBridge:
@@ -101,6 +97,18 @@ final class ProviderRouter {
             onComplete: onComplete,
             onError: onError
         )
+    }
+
+    /// 桥工具 + 本地搜索/浏览工具合并。
+    /// 桥上与本地同名的 search_web / browse_url 一律剔除（本地版由 App 执行、受搜索开关控制），
+    /// 否则 OpenAI 兼容端会报 "Tool names must be unique"；最后按名字兜底去重。
+    private func mergedBridgeTools(anthropicFormat: Bool) -> [MCPToolDescriptor] {
+        let reserved: Set<String> = [WebSearchToolService.toolName, BrowseURLTool.toolName]
+        var tools = (MCPBridgeConfig.isConfigured ? MCPToolCache.shared.tools : [])
+            .filter { !reserved.contains($0.name) }
+        tools += localSearchToolDescriptors(anthropicFormat: anthropicFormat)
+        var seen = Set<String>()
+        return tools.filter { seen.insert($0.name).inserted }
     }
 
     /// 联网搜索 + 网页浏览两个本地工具的注入描述符。

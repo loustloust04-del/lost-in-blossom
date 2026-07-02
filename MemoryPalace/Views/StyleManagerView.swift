@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// 写作风格统一管理界面（仿 Prompt 插槽模式）：
-/// 一行一个 style：Toggle(互斥,同时只能开一个) + 名字 + 内置/自建 badge。
-/// tap 整行 → push 进编辑器。Toggle 全关 = 无风格。
+/// 纯管理页：一行一个 style（名字 + 内置/自建 badge），tap 整行 → push 进编辑器。
+/// 风格的启用/切换在聊天页输入栏的 ✨ 菜单完成（本页不设开关）。
 /// 从 iOS StickerKeyboardPanel 的 sparkles 直接弹出,没有"选择 vs 管理"两层。
 struct StyleManagerView: View {
     var viewModel: ConversationViewModel?
@@ -10,10 +10,6 @@ struct StyleManagerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var editing: WritingStyle? = nil
-
-    private var currentStyleId: String {
-        viewModel?.selectedConversation?.currentStyleId ?? ""
-    }
 
     private var builtins: [WritingStyle] { manager.styles.filter(\.isBuiltin) }
     private var customs: [WritingStyle] { manager.styles.filter { !$0.isBuiltin } }
@@ -69,31 +65,11 @@ struct StyleManagerView: View {
 
     @ViewBuilder
     private func styleRow(_ style: WritingStyle) -> some View {
-        let isOn = style.id == currentStyleId
         HStack(spacing: 12) {
-            // 互斥 Toggle：开一个就成为当前选中，关掉则 currentStyleId = ""(无风格)
-            Toggle("", isOn: Binding(
-                get: { isOn },
-                set: { val in
-                    guard let conv = viewModel?.selectedConversation else { return }
-                    conv.currentStyleId = val ? style.id : ""
-                    try? modelContext.save()
-                }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .tint(Theme.branchIndicator)
-            #if os(iOS)
-            .scaleEffect(0.75)
-            .frame(width: 50)
-            #endif
-            // Toggle 自己拦自己的点击,整行 tap 不会切 toggle
-            .highPriorityGesture(TapGesture())
-
             VStack(alignment: .leading, spacing: 2) {
                 Text(style.name)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isOn ? Theme.textPrimary : Theme.textPrimary)
+                    .foregroundStyle(Theme.textPrimary)
                 if !style.content.isEmpty {
                     Text(style.content)
                         .font(.caption)

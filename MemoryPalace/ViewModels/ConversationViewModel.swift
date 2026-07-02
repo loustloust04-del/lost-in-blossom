@@ -28,6 +28,8 @@ final class ConversationViewModel {
     var isCurrentConvLoading: Bool {
         isLoading && selectedConversation != nil
     }
+    /// 正在流式生成的节点 id —— 跨对话/分支精确判定打字气泡与思考链归属（防泄漏）
+    var streamingNodeId: String? = nil
     var scrollToNodeId: String? = nil
     var pendingScrollNodeId: String? = nil
     var highlightedNodeId: String? = nil
