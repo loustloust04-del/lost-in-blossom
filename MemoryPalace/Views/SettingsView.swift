@@ -6,6 +6,9 @@ import UIKit
 // MARK: - Settings Container
 
 struct SettingsView: View {
+    /// 写作风格开关需要落到当前对话上（StyleManagerView），从 ContentView 传入。
+    var viewModel: ConversationViewModel? = nil
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
@@ -116,7 +119,7 @@ struct SettingsView: View {
                 case .memory: IOSMemoryPage()
                 case .tokenStats: TokenStatsView()
                 case .regex: IOSRegexPage()
-                case .style: StyleManagerView(viewModel: nil, manager: StyleManager.shared)
+                case .style: StyleManagerView(viewModel: viewModel, manager: StyleManager.shared)
                 case .browser: BrowserView()
                 case .sticker:
                     IOSStickerPage()

@@ -233,7 +233,7 @@ struct ContentView: View {
                 .presentationBackground(Theme.sidebarBg)
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView()
+            SettingsView(viewModel: viewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(.clear)
