@@ -821,8 +821,8 @@ struct SidebarView: View {
             NewTagSheet(profileId: profileId)
         }
         .sheet(isPresented: $showCreateGroup) {
-            CreateGroupChatView { participants in
-                handleCreateGroup(participants)
+            CreateGroupChatView { participants, title in
+                handleCreateGroup(participants, title: title)
             }
         }
         // Settings sheet is presented from ContentView for proper centering
@@ -1520,11 +1520,12 @@ struct SidebarView: View {
         viewModel.loadConversation(conversation, context: modelContext)
     }
 
-    private func handleCreateGroup(_ participants: [GroupParticipant]) {
+    private func handleCreateGroup(_ participants: [GroupParticipant], title: String) {
         let profileId = profileManager?.currentProfile.id ?? ""
         let cards = cardManager?.cards ?? []
-        let defaultTitle = participants.map(\.name).joined(separator: "\u{3001}")
-        let conversation = viewModel.createGroupConversation(participants: participants, cards: cards, title: defaultTitle.isEmpty ? "新群聊" : defaultTitle, profileId: profileId, context: modelContext)
+        let fallback = participants.map(\.name).joined(separator: "\u{3001}")
+        let finalTitle = title.isEmpty ? (fallback.isEmpty ? "新群聊" : fallback) : title
+        let conversation = viewModel.createGroupConversation(participants: participants, cards: cards, title: finalTitle, profileId: profileId, context: modelContext)
         refreshList()
         viewModel.loadConversation(conversation, context: modelContext)
     }
