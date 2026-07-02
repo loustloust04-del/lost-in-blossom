@@ -48,7 +48,6 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
-    @State private var lastStreamingScrollTime: Date = .distantPast
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -117,35 +116,18 @@ struct CardFlowView: View {
 
     // Pin Bar handlers：iOS 版已挪到 ContentView；macOS 版保留（PinBar 仍在 CardFlowView）
 
-    /// 三步回底（滚到底部哨兵 = content 真正的底）：
-    /// 1. 先无动画滚到 lastId（让 LazyVStack 载入长 bubble，此时哨兵可能还没 mount）
-    /// 2. withAnimation 0.3s 滚到哨兵（精准到真正底）
-    /// 3. 0.5s 后无动画再滚哨兵一次（MarkdownUI async 撑大 lastId 后补位）
-    ///
-    /// 之前 scrollTo(lastId, anchor: .bottom) 只让 lastId 底对齐可视底，但 lastId 下方
-    /// 还有 spacing 22 + 哨兵 1 + padding 16 + sticker canvas ≈ 几十到几百 pt，导致
-    /// 滚不到真正的底（log 显示 offY=3116 size=3876 差 200 pt）
-    /// force=false（默认）：只在用户已经在底部时才滚，避免流式时弹跳
-    /// force=true：强制滚底（切换对话、消息完成、用户点回底按钮）
+    /// 回底（反转列表版）：反转后 anchor .top = 视觉底；最新消息(lastId)本来就在
+    /// 物理顶（reversed 第一个），单步 scrollTo 即到，不再需要旧的哨兵三步走。
+    /// force=false（默认）：只在用户已经在底部时才滚，避免弹跳
+    /// force=true：强制滚底（切换对话、用户点回底按钮）
     private func scrollToLastMessage(proxy: ScrollViewProxy, force: Bool = false) {
         guard force || isAtBottom else { return }
         guard let lastId = viewModel.currentPath.last?.id else { return }
-        // 统一禁动画：避免 scrollTo 与 WebView 高度变化同帧竞争导致白屏
+        // 禁动画：避免 scrollTo 与 WebView 高度变化同帧竞争导致白屏
         var tx = Transaction()
         tx.disablesAnimations = true
         withTransaction(tx) {
-            proxy.scrollTo(lastId, anchor: .bottom)
-        }
-        // 延迟滚到哨兵（content 真正的底），同样禁动画
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            var tx2 = Transaction()
-            tx2.disablesAnimations = true
-            withTransaction(tx2) {
-                proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
+            proxy.scrollTo(lastId, anchor: .top)
         }
     }
 
@@ -277,38 +259,17 @@ struct CardFlowView: View {
                         stickerVM.currentPathCount = n
                     }
                     .onChange(of: viewModel.scrollToNodeId) { _, nodeId in
+                        // 反转列表：anchor .center 不受翻转影响（rotation 相对 view 自身）。
+                        // 旧两步走（无动画跳 + 50ms 后动画微调）反转后不需要 → 单步。
                         if let nodeId {
-                            // 先无动画跳（让 LazyVStack 加载目标），再动画微调
-                            proxy.scrollTo(nodeId, anchor: .center)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    proxy.scrollTo(nodeId, anchor: .center)
-                                }
-                                viewModel.scrollToNodeId = nil
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(nodeId, anchor: .center)
                             }
+                            viewModel.scrollToNodeId = nil
                         }
                     }
-                    .onChange(of: viewModel.streamingText) { oldText, newText in
-                        if newText.isEmpty && !oldText.isEmpty {
-                            lastStreamingScrollTime = .distantPast
-                            scrollToLastMessage(proxy: proxy, force: true)
-                            return
-                        }
-                        guard !newText.isEmpty else { return }
-                        // 用户手动上滑时暂停自动滚底，避免弹跳
-                        guard isAtBottom else { return }
-                        let now = Date()
-                        guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
-                        lastStreamingScrollTime = now
-                        // 不带动画滚底：避免 withAnimation 与 WebView 高度变化同帧竞争导致白屏
-                        var tx = Transaction()
-                        tx.disablesAnimations = true
-                        withTransaction(tx) {
-                            if let lastId = viewModel.currentPath.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
-                    }
+                    // 反转列表：流式自动跟随删除——最新消息钉在 offset=0（视觉底），
+                    // bubble 增长时 content 向物理下方扩展，视口自然钉底，无需任何 scrollTo。
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
                     .scrollDismissesKeyboard(.immediately)
