@@ -212,6 +212,19 @@ struct PromptAssembler {
             messages.insert((role: injection.role, content: injection.content), at: insertIndex)
         }
 
+        // 写作风格：拼进最后一条 user 消息末尾（粟粟同款 <style> 标记）。
+        // 走 last user 而非 system 的原因：网关路径只透传 last user（system 由网关端缓存人格接管），
+        // 这样直连与网关两条路都能带上风格；历史轮不复读（node 存的原文干净，只在出口拼一次）。
+        // 此前 styleContent 参数收进来后没有任何使用——搬运时只搬了签名没搬实现，风格从未生效过。
+        if let styleContent, !styleContent.isEmpty {
+            let styleText = "\n<style>\(styleContent)</style>"
+            if let lastUserIdx = messages.lastIndex(where: { $0.role == "user" }) {
+                messages[lastUserIdx].content += styleText
+            } else {
+                messages.append((role: "user", content: styleText))
+            }
+        }
+
         return (systemPrompt: systemPrompt, systemParts: systemParts, messages: messages)
     }
 
