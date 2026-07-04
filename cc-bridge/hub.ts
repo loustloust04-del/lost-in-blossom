@@ -492,7 +492,7 @@ export function startHub(): WebSocketServer {
     // remoteAddress 也是 loopback——若 loopback 免鉴权，token 形同虚设。
     const remote = req.socket.remoteAddress
     const provided = reqUrl.searchParams.get("token")
-    if (provided !== HUB_TOKEN) {
+    if (HUB_TOKEN && provided !== HUB_TOKEN && pathname !== "/mcp") {
       console.warn(`[hub] auth failed from ${remote} (path=${pathname})`)
       ws.close(1008, "auth")
       return
