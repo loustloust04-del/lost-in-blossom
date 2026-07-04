@@ -6,6 +6,10 @@ name: Compile Check
 
 on:
   workflow_dispatch:
+  # push 触发不依赖默认分支注册（dispatch 依赖），镜像仓库的功能分支推送即编译
+  push:
+    branches: ['claude/**', 'feat/**', 'fix/**']
+    paths-ignore: ['docs/**', '*.md', '.gitignore', 'cc-bridge/**', 'gateway/**', 'mcp-bridge/**', 'design/**']
 
 jobs:
   compile:
