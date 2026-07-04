@@ -71,6 +71,15 @@ async function sendLocationRequest(reason?: string) {
 }
 
 export async function callPhoneStatusTool(name: string, input?: any): Promise<string | null> {
+  if (name === 'request_location') {
+    const { callGmailTool } = await import('./tools/gmail');
+    const result = await callGmailTool('gmail_send', {
+      to: 'caelumbunny@gmail.com',
+      subject: 'LOCATION_QUERY',
+      body: input?.reason || '想知道你在哪'
+    });
+    return result ? '已发送位置查询请求，兔兔的手机会自动回报位置。' : '发送失败';
+  }
   if (name !== 'get_phone_status') return null;
   const data = await load();
   if (data.records.length === 0) {
