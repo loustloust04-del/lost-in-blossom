@@ -32,6 +32,40 @@ final class ConversationViewModel {
     var streamingNodeId: String? = nil
     /// 正在流式生成的对话 id —— 输入栏发送/停止按钮只在所属对话变红（防全局泄漏）
     var streamingConversationId: String? = nil
+
+    // MARK: - 发送排队（照搬 SusuPalace pendingSends 方案，全局串行单流）
+    //
+    // providerRouter.isStreaming 是 provider 级状态：Provider 内部工具循环的空窗期它
+    // 短暂为 false；且三个 provider 实例各持单 task，并发第二条流会 resetState 掐死
+    // 前一条（气泡永远卡空）。turn 级状态 assistantTurnInFlight 从发送起到
+    // onComplete/onError/cancel 全程 true，期间任何 sendMessage 一律进 pendingSends
+    // 排队，turn 结束自动补发。参照 SusuPalace docs/plan-consecutive-user-turns-fix.md
+
+    /// 当前 assistant turn（含 Provider 内部工具循环 / 群聊整轮）是否进行中
+    var assistantTurnInFlight = false
+    /// in-flight 期间用户发的消息排队，turn 结束（或回到原对话时）自动补发
+    var pendingSends: [PendingSend] = []
+
+    /// 当前**选中对话**是否正在等 AI 回复。assistantTurnInFlight 全局单值，
+    /// UI（输入栏 stop/send 三态）必须按 streamingConversationId 隔离，
+    /// 否则切到别的对话也显示停止按钮，骗用户以为那个对话也在跑。
+    var isCurrentConvResponding: Bool {
+        assistantTurnInFlight && streamingConversationId == selectedConversation?.id
+    }
+
+    struct PendingSend: Identifiable {
+        let id = UUID()
+        let text: String
+        let imageData: Data?
+        let fileData: Data?
+        let fileName: String?
+        let model: ProviderModel
+        let profile: Profile
+        let preset: Preset
+        let providerManager: ProviderManager
+        let context: ModelContext
+        let conversationId: String
+    }
     var scrollToNodeId: String? = nil
     var pendingScrollNodeId: String? = nil
     var highlightedNodeId: String? = nil
@@ -102,6 +136,12 @@ final class ConversationViewModel {
             self.inConvSearchKeyword = ""
             self.pendingRefreshTask?.cancel()
             self.pendingRefreshTask = nil
+            // 发送排队：不清的话 assistantTurnInFlight 卡 true，新楼层永远发不出消息；
+            // pendingSends 持有旧楼层 ModelContext ref，必须一起丢
+            self.assistantTurnInFlight = false
+            self.pendingSends = []
+            self.streamingNodeId = nil
+            self.streamingConversationId = nil
         }
     }
 

@@ -635,14 +635,16 @@ struct ChatInputBar: View {
         // ChatInputBar 只负责外层 padding、环境模糊背景、sheet、alert。
         return InputFieldContainer(
             isFocused: $isFocused,
-            isStreaming: viewModel.providerRouter.isStreaming && viewModel.streamingConversationId == viewModel.selectedConversation?.id,
+            // turn 级状态（不是 provider 级 isStreaming）：工具循环空窗期按钮不闪回 send，
+            // 堵住本对话在空窗期插队发送（user+user 连排）。别的对话照常显示 send → 排队。
+            isStreaming: viewModel.isCurrentConvResponding,
             placeholder: inputPlaceholder,
             modelName: currentModel.name,
             pendingImageData: pendingImageData,
             pendingFileData: pendingFileData,
             pendingFileName: pendingFileName,
             onSend: { text in send(text) },
-            onCancelStream: { viewModel.providerRouter.cancel() },
+            onCancelStream: { viewModel.cancelAssistantTurn(context: modelContext) },
             onStickerTap: onStickerTap,
             onModelTap: { showModelPicker.toggle() },
             currentStyleId: viewModel.selectedConversation?.currentStyleId,
