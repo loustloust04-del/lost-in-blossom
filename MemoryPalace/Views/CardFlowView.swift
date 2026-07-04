@@ -39,13 +39,17 @@ struct CardFlowView: View {
     @ViewBuilder
     private func makeBubbleView(for node: MessageNode) -> some View {
         let info = viewModel.branchInfoMap[node.id]
-        let isNodeStreaming = viewModel.providerRouter.isStreaming && viewModel.streamingNodeId == node.id
+        // API 车道用 streamingNodeId，CC 车道用 ccTurnNodeId（CC 豁免后不再占 API 车道状态）
+        let isNodeCCWaiting = viewModel.ccTurnNodeId == node.id
+        let isNodeAPIStreaming = viewModel.providerRouter.isStreaming && viewModel.streamingNodeId == node.id
+        let isNodeStreaming = isNodeAPIStreaming || isNodeCCWaiting
         let isNodeHighlighted = viewModel.highlightedNodeId == node.id
         let isNodeSearchMatch = viewModel.inConvMatches.contains(node.id)
-        // 思考链流式状态（只传给正在流式输出的那个节点）
-        let isThinkingNow = isNodeStreaming && viewModel.isThinking
-        let streamingThinkingForNode = isNodeStreaming ? viewModel.streamingThinkingText : ""
-        let thinkingSummaryForNode = isNodeStreaming ? viewModel.thinkingSummary : ""
+        // 思考链/流式文本只传给 API 车道的流式节点——CC 等待期间这些全局值
+        // 可能属于并行的 API 对话，传给 CC 气泡会显示别人的文本
+        let isThinkingNow = isNodeAPIStreaming && viewModel.isThinking
+        let streamingThinkingForNode = isNodeAPIStreaming ? viewModel.streamingThinkingText : ""
+        let thinkingSummaryForNode = isNodeAPIStreaming ? viewModel.thinkingSummary : ""
         // CC Bridge provider 检测：用于 CCThinkingView 显示条件，防止切换 provider 后 thinking 残留
         let selectedModelId = UserDefaults.standard.string(forKey: "selectedChatModel") ?? ""
         let currentProviderModel = providerManager?.model(byId: selectedModelId) ?? providerManager?.availableModels.first
@@ -55,7 +59,7 @@ struct CardFlowView: View {
             hasBranches: info != nil,
             branchInfo: info,
             isStreaming: isNodeStreaming,
-            streamingContentText: isNodeStreaming ? viewModel.streamingText : "",
+            streamingContentText: isNodeAPIStreaming ? viewModel.streamingText : "",
             isThinking: isThinkingNow,
             streamingThinkingText: streamingThinkingForNode,
             thinkingSummary: thinkingSummaryForNode,

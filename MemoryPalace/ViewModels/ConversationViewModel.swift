@@ -41,16 +41,26 @@ final class ConversationViewModel {
     // onComplete/onError/cancel 全程 true，期间任何 sendMessage 一律进 pendingSends
     // 排队，turn 结束自动补发。参照 SusuPalace docs/plan-consecutive-user-turns-fix.md
 
-    /// 当前 assistant turn（含 Provider 内部工具循环 / 群聊整轮）是否进行中
+    /// 当前 assistant turn（含 Provider 内部工具循环 / 群聊整轮）是否进行中。
+    /// 只管 **API 车道**（openAI/anthropic），CC 车道见下。
     var assistantTurnInFlight = false
     /// in-flight 期间用户发的消息排队，turn 结束（或回到原对话时）自动补发
     var pendingSends: [PendingSend] = []
 
-    /// 当前**选中对话**是否正在等 AI 回复。assistantTurnInFlight 全局单值，
-    /// UI（输入栏 stop/send 三态）必须按 streamingConversationId 隔离，
+    // CC 豁免：CC 走 Hub/tmux 线路，和 API providers 物理隔离，互不排队。
+    // 但 CCBridgeProvider 是单实例（replyTimer/isStreaming 单份），CC 车道内部
+    // 仍然串行：已有 CC turn 等待时，新 CC 消息排队。
+    /// 正在等 CC 回复的对话 id（nil = CC 车道空闲）
+    var ccTurnConversationId: String? = nil
+    /// 等 CC 回复的 placeholder 节点 id（打字气泡 + 停止闭合定位用）
+    var ccTurnNodeId: String? = nil
+
+    /// 当前**选中对话**是否正在等 AI 回复（两条车道取或）。
+    /// turn 状态是全局单值，UI（输入栏 stop/send 三态）必须按对话 id 隔离，
     /// 否则切到别的对话也显示停止按钮，骗用户以为那个对话也在跑。
     var isCurrentConvResponding: Bool {
-        assistantTurnInFlight && streamingConversationId == selectedConversation?.id
+        (assistantTurnInFlight && streamingConversationId == selectedConversation?.id)
+            || (ccTurnConversationId != nil && ccTurnConversationId == selectedConversation?.id)
     }
 
     struct PendingSend: Identifiable {
@@ -142,6 +152,8 @@ final class ConversationViewModel {
             self.pendingSends = []
             self.streamingNodeId = nil
             self.streamingConversationId = nil
+            self.ccTurnConversationId = nil
+            self.ccTurnNodeId = nil
         }
     }
 
