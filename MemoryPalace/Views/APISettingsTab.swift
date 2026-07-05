@@ -98,6 +98,37 @@ struct APISettingsTab: View {
 
                 Section("联网搜索") {
                     WebSearchQuickSettings()
+
+                    // web-access-v2 phase3（搬运自粟粟家）：登录态共享 + 黑名单
+                    NavigationLink {
+                        WebLoginStatusPage()
+                    } label: {
+                        HStack {
+                            Text("网页登录态")
+                                .font(.system(size: Theme.SettingsFont.body))
+                                .foregroundColor(Theme.textPrimary)
+                            Spacer()
+                            Text("AI 能用你登录的站")
+                                .font(.system(size: Theme.SettingsFont.caption))
+                                .foregroundColor(Theme.textMuted)
+                        }
+                    }
+
+                    NavigationLink {
+                        BlockedDomainsPage()
+                    } label: {
+                        HStack {
+                            Text("黑名单（AI 不读）")
+                                .font(.system(size: Theme.SettingsFont.body))
+                                .foregroundColor(Theme.textPrimary)
+                            Spacer()
+                            Text(WebSearchSettings.shared.blockedDomains.isEmpty
+                                 ? "未设置"
+                                 : "\(WebSearchSettings.shared.blockedDomains.count) 个域")
+                                .font(.system(size: Theme.SettingsFont.caption))
+                                .foregroundColor(Theme.textMuted)
+                        }
+                    }
                 }
                 .listRowBackground(Theme.mainBg)
                 .listRowSeparator(.hidden)
