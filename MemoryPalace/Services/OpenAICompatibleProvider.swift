@@ -199,6 +199,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         }
         let assistantText = streamingContent
         toolRound += 1
+        // [search-ui] 实时推送（结果未回）：气泡立刻长出"搜索中/阅读中"pending 卡片，
+        // 不等整轮结束。processData 跑在 URLSession delegate 线程，推送必须回 main。
+        let pendingSnapshot = accumulatedToolSegments
+        DispatchQueue.main.async { [weak self] in
+            self?.onSegmentsCallback?(pendingSnapshot)
+        }
         Task { [weak self] in
             guard let self else { return }
             let outcomes = await ToolCallLoop.execute(calls, bridgeTools: self.bridgeTools)
@@ -212,6 +218,8 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                     self.accumulatedToolSegments.append(.toolResult(toolUseId: o.id, text: o.text, isError: o.isError, integrationName: nil))
                 }
                 self.loopBody["messages"] = msgs
+                // [search-ui] 实时推送（结果已回）：pending 卡片翻成来源列表
+                self.onSegmentsCallback?(self.accumulatedToolSegments)
                 self.fireOpenAIRound()
             }
         }

@@ -260,13 +260,21 @@ struct MessageSegmentsView: View {
         case .thinking(let s):
             ThinkingBlockView(text: s)
         case .toolPair(let name, let inputJSON, let resultText, let isError, let integration):
-            ToolCallCardView(
-                name: name,
-                inputJSON: inputJSON,
-                resultText: resultText,
-                isError: isError,
-                integration: integration
-            )
+            // 搜索/读网页走专用卡片（Claude App 风格：查询词 + 来源列表），
+            // 其他工具维持通用 🔧 卡
+            if name == WebSearchToolService.toolName {
+                SearchActivityCardView(inputJSON: inputJSON, resultText: resultText, isError: isError)
+            } else if name == BrowseURLTool.toolName {
+                BrowseActivityCardView(inputJSON: inputJSON, resultText: resultText, isError: isError)
+            } else {
+                ToolCallCardView(
+                    name: name,
+                    inputJSON: inputJSON,
+                    resultText: resultText,
+                    isError: isError,
+                    integration: integration
+                )
+            }
         case .orphanToolResult(let text, let isError, let integration):
             ToolCallCardView(
                 name: isError ? "tool 结果（失败）" : "tool 结果",
@@ -457,6 +465,290 @@ private struct ToolCallCardView: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(Theme.mainBg.opacity(0.5))
         )
+    }
+}
+
+// MARK: - Search Activity Card（search_web 专用）
+
+/// 联网搜索过程卡：折叠态显示查询词 + 状态（搜索中 / N 个来源 / 失败），
+/// 展开显示来源列表（标题 + 域名，点击外开）。参照 Claude 官方 App 的搜索 UI，
+/// 样式沿用 ToolCallCardView 的卡片语言。resultText == nil 表示工具执行中
+/// （Provider 工具轮开始时实时推送的 pending 态）。
+private struct SearchActivityCardView: View {
+    let inputJSON: String
+    let resultText: String?
+    let isError: Bool
+
+    @State private var expanded = false
+
+    private struct SourceItem: Identifiable {
+        let id: Int
+        let title: String
+        let urlStr: String
+        var url: URL? { URL(string: urlStr) }
+        var domain: String {
+            let host = URL(string: urlStr)?.host ?? urlStr
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+    }
+
+    private var query: String {
+        let obj = (try? JSONSerialization.jsonObject(with: Data(inputJSON.utf8))) as? [String: Any]
+        return (obj?["query"] as? String) ?? ""
+    }
+
+    private var errorMessage: String? {
+        guard let r = resultText else { return nil }
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(r.utf8))) as? [String: Any] else {
+            return isError ? r : nil
+        }
+        return obj["error"] as? String
+    }
+
+    private var sources: [SourceItem] {
+        guard let r = resultText,
+              let obj = (try? JSONSerialization.jsonObject(with: Data(r.utf8))) as? [String: Any],
+              let items = obj["items"] as? [[String: Any]] else { return [] }
+        return items.enumerated().map { (i, item) in
+            SourceItem(
+                id: (item["index"] as? Int) ?? (i + 1),
+                title: (item["title"] as? String) ?? "",
+                urlStr: (item["url"] as? String) ?? ""
+            )
+        }
+    }
+
+    private var isPending: Bool { resultText == nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.branchIndicator)
+                    Text(query.isEmpty ? "联网搜索" : query)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                    if isPending {
+                        ProgressView().controlSize(.mini)
+                        Text("搜索中")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                    } else if errorMessage != nil {
+                        Text("失败")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted.opacity(0.8))
+                    } else {
+                        Text("\(sources.count) 个来源")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    if !isPending {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isPending)
+
+            if expanded {
+                if let err = errorMessage {
+                    Text(err)
+                        .font(.system(size: 10))
+                        .foregroundColor(Theme.textMuted)
+                        .textSelection(.enabled)
+                        .padding(.leading, 4)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(sources) { s in
+                            sourceRow(s)
+                        }
+                    }
+                    .padding(.leading, 4)
+                }
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Theme.mainBg.opacity(0.5))
+        )
+    }
+
+    @ViewBuilder
+    private func sourceRow(_ s: SourceItem) -> some View {
+        if let url = s.url {
+            Link(destination: url) {
+                sourceLabel(s)
+            }
+        } else {
+            sourceLabel(s)
+        }
+    }
+
+    private func sourceLabel(_ s: SourceItem) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("\(s.id).")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Theme.textMuted.opacity(0.7))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(s.title.isEmpty ? s.urlStr : s.title)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text(s.domain)
+                    .font(.system(size: 9))
+                    .foregroundColor(Theme.textMuted.opacity(0.8))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Browse Activity Card（browse_url 专用）
+
+/// 读网页过程卡：折叠态显示页面标题（或域名）+ 状态（阅读中 / 已读 N 字 / 失败），
+/// 展开显示 URL（可点）+ 摘要。resultText 格式是 BrowseURLTool 的
+/// YAML-ish header + Markdown 正文。
+private struct BrowseActivityCardView: View {
+    let inputJSON: String
+    let resultText: String?
+    let isError: Bool
+
+    @State private var expanded = false
+
+    private var urlStr: String {
+        let obj = (try? JSONSerialization.jsonObject(with: Data(inputJSON.utf8))) as? [String: Any]
+        return (obj?["url"] as? String) ?? ""
+    }
+
+    private var domain: String {
+        let host = URL(string: urlStr)?.host ?? urlStr
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    private var errorMessage: String? {
+        guard let r = resultText else { return nil }
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(r.utf8))) as? [String: Any] else { return nil }
+        return obj["error"] as? String
+    }
+
+    /// 解析 BrowseURLTool 输出的 YAML-ish header（--- 包围的 key: value 行）
+    private var parsed: (title: String, length: Int?, excerpt: String, body: String) {
+        guard let r = resultText, r.hasPrefix("---\n") else {
+            return ("", nil, "", resultText ?? "")
+        }
+        let afterFirst = String(r.dropFirst(4))
+        guard let endRange = afterFirst.range(of: "\n---\n") else {
+            return ("", nil, "", r)
+        }
+        let header = String(afterFirst[afterFirst.startIndex..<endRange.lowerBound])
+        let body = String(afterFirst[endRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var title = "", excerpt = ""
+        var length: Int? = nil
+        for line in header.split(separator: "\n") {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let key = line[line.startIndex..<colon].trimmingCharacters(in: .whitespaces)
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            if key == "title" { title = value }
+            else if key == "length" { length = Int(value) }
+            else if key == "excerpt" { excerpt = value }
+        }
+        return (title, length, excerpt, body)
+    }
+
+    private var isPending: Bool { resultText == nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.branchIndicator)
+                    Text(headlineText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                    if isPending {
+                        ProgressView().controlSize(.mini)
+                        Text("阅读中")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                    } else if errorMessage != nil {
+                        Text("失败")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted.opacity(0.8))
+                    } else if let len = parsed.length {
+                        Text("已读 \(len) 字")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    if !isPending {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isPending)
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let url = URL(string: urlStr) {
+                        Link(urlStr, destination: url)
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.branchIndicator)
+                            .lineLimit(1)
+                    }
+                    if let err = errorMessage {
+                        Text(err)
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                            .textSelection(.enabled)
+                    } else {
+                        let preview = parsed.excerpt.isEmpty
+                            ? String(parsed.body.prefix(300))
+                            : parsed.excerpt
+                        if !preview.isEmpty {
+                            Text(preview)
+                                .font(.system(size: 10))
+                                .foregroundColor(Theme.textMuted)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(.leading, 4)
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Theme.mainBg.opacity(0.5))
+        )
+    }
+
+    private var headlineText: String {
+        if isPending || parsed.title.isEmpty {
+            return domain.isEmpty ? "读取网页" : domain
+        }
+        return parsed.title
     }
 }
 

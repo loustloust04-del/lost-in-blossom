@@ -1320,6 +1320,18 @@ struct BubbleView: View {
     var isSearchMatch: Bool = false
     /// 当前对话路径的最后一条 assistant 消息。CC 思考链（latestThinking）只挂在这条气泡上。
     var isLastAssistant: Bool = false
+    /// [search-ui] segments 分支的流式尾巴：streamingContentText 里减去 segments
+    /// 已经包含的 .text 长度，只显示还没进 segments 的增量，防止双份显示。
+    private func streamingTailAfterSegments(_ segs: [MessageSegment]) -> String {
+        guard isStreaming, !streamingContentText.isEmpty else { return "" }
+        var segTextCount = 0
+        for seg in segs {
+            if case .text(let t) = seg { segTextCount += t.count }
+        }
+        guard segTextCount < streamingContentText.count else { return "" }
+        return String(streamingContentText.dropFirst(segTextCount))
+    }
+
     /// 思考链预览（时钟 + 可展开）。segments / 纯文本两条渲染分支共用。
     /// 修复：带 segments 的消息（CC 标记式 / API 流式）此前完全不渲染 thinking。
     @ViewBuilder
@@ -1572,6 +1584,20 @@ struct BubbleView: View {
                         paragraphSpacingScale: paragraphSpacingScale,
                         regexScripts: regexScripts
                     )
+                    // [search-ui] 工具轮实时推送后本分支提前接管气泡；流式文本在
+                    // 卡片下方继续显示。减去 segments 已含文本长度防双份
+                    //（Anthropic 轮文本会进 segments，OpenAI 不会）。
+                    let streamingTail = streamingTailAfterSegments(segs)
+                    if !streamingTail.isEmpty {
+                        Markdown(streamingTail)
+                            .markdownTheme(.memoryPalace(
+                                fontName: selectedFont,
+                                scale: fontScale > 0 ? fontScale : 1.0,
+                                lineSpacingScale: lineSpacingScale,
+                                paragraphSpacingScale: paragraphSpacingScale
+                            ))
+                            .textSelection(.enabled)
+                    }
                 } else {
                     thinkingPreview(staticThinking: thinkingResult?.thinking ?? "")
 
