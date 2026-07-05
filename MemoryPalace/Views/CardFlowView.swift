@@ -33,7 +33,6 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
-    @State private var lastStreamingScrollTime: Date = .distantPast
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -205,6 +204,12 @@ struct CardFlowView: View {
                             handleStickerDrop(providers: providers, location: location)
                         }
                     }
+                    // [scroll-anchor] 滚动优化 Round 2（反转列表已回滚，见
+                    // docs/BUGREPORT-INVERTED-LIST-ROLLBACK.md）：iOS 17 原生锚定，
+                    // 零 transform 零兼容雷。语义：初始显示在底部；用户在底部时内容
+                    // 增长（流式 token / WebView 撑高 / 新消息）自动钉底；用户上滑
+                    // 读历史时保持位置不打扰。
+                    .defaultScrollAnchor(.bottom)
                     .contentMargins(.top, 50, for: .scrollContent)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
@@ -267,25 +272,15 @@ struct CardFlowView: View {
                         }
                     }
                     .onChange(of: viewModel.streamingText) { oldText, newText in
+                        // 流式结束 → 强制回底（行为与改造前一致：补齐 MarkdownUI
+                        // async 渲染撑高后的最后一段）
                         if newText.isEmpty && !oldText.isEmpty {
-                            lastStreamingScrollTime = .distantPast
                             scrollToLastMessage(proxy: proxy, force: true)
-                            return
                         }
-                        guard !newText.isEmpty else { return }
-                        // 用户手动上滑时暂停自动滚底，避免弹跳
-                        guard isAtBottom else { return }
-                        let now = Date()
-                        guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
-                        lastStreamingScrollTime = now
-                        // 不带动画滚底：避免 withAnimation 与 WebView 高度变化同帧竞争导致白屏
-                        var tx = Transaction()
-                        tx.disablesAnimations = true
-                        withTransaction(tx) {
-                            if let lastId = viewModel.currentPath.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
+                        // [scroll-anchor] 流式期间不再逐 token scrollTo——
+                        // defaultScrollAnchor(.bottom) 在用户位于底部时自动钉底，
+                        // 上滑读历史时自动不打扰。旧的 0.3s 节流 scrollTo 风暴
+                        //（长对话卡顿源之一 + 与 WebView 高度变化竞争白屏源）整体移除。
                     }
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
