@@ -43,6 +43,18 @@ function convertContent(content: any): any {
   });
 }
 
+// OpenAI tools → Anthropic tools（App 的 search_web/browse_url 等 client 工具。
+// 此前请求侧不转发 tools、role:"tool" 被丢弃 → Claude 系通道 browse_url 从未生效）
+function convertOpenAITools(tools: any[]): any[] {
+  return (tools || [])
+    .filter((t: any) => t?.type === 'function' && t.function?.name)
+    .map((t: any) => ({
+      name: t.function.name,
+      description: t.function.description || '',
+      input_schema: t.function.parameters || { type: 'object', properties: {} },
+    }));
+}
+
 // 给某条 message 的最后一个 content block 挂 cache_control 断点
 function withCacheOnLastBlock(content: any): any {
   if (typeof content === 'string') {
@@ -88,6 +100,41 @@ export function buildAnthropicPayload(body: any, sessionId: string) {
           if (b?.type === 'text') systemBlocks.push({ type: 'text', text: b.text ?? '' });
           else systemBlocks.push(b);
         }
+      }
+    } else if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+      // OpenAI assistant.tool_calls → Anthropic assistant tool_use blocks
+      const blocks: Block[] = [];
+      if (typeof msg.content === 'string' && msg.content) {
+        blocks.push({ type: 'text', text: msg.content });
+      } else if (Array.isArray(msg.content)) {
+        const conv = convertContent(msg.content);
+        if (Array.isArray(conv)) blocks.push(...conv);
+      }
+      for (const tc of msg.tool_calls) {
+        let input: any = {};
+        try { input = JSON.parse(tc?.function?.arguments || '{}'); } catch {}
+        blocks.push({
+          type: 'tool_use',
+          id: tc?.id || 'toolu_' + Math.random().toString(36).slice(2),
+          name: tc?.function?.name || '',
+          input,
+        });
+      }
+      anthropicMessages.push({ role: 'assistant', content: blocks });
+    } else if (msg.role === 'tool') {
+      // OpenAI role:"tool" → Anthropic user turn 的 tool_result block。
+      // 连续多个 tool 结果合并进同一条 user（Anthropic 不允许连续两条 user）
+      const resultBlock: Block = {
+        type: 'tool_result',
+        tool_use_id: msg.tool_call_id || '',
+        content: typeof msg.content === 'string' ? msg.content : convertContent(msg.content),
+      };
+      const last = anthropicMessages[anthropicMessages.length - 1];
+      if (last && last.role === 'user' && Array.isArray(last.content)
+          && last.content.some((b: any) => b.type === 'tool_result')) {
+        last.content.push(resultBlock);
+      } else {
+        anthropicMessages.push({ role: 'user', content: [resultBlock] });
       }
     } else if (msg.role === 'user' || msg.role === 'assistant') {
       anthropicMessages.push({ role: msg.role, content: convertContent(msg.content) });
@@ -163,6 +210,10 @@ export function buildAnthropicPayload(body: any, sessionId: string) {
   };
   if (systemBlocks.length > 0) payload.system = systemBlocks;
   if (isThinking) payload.thinking = { type: 'adaptive' };
+  if (Array.isArray(body.tools) && body.tools.length > 0) {
+    const tools = convertOpenAITools(body.tools);
+    if (tools.length > 0) payload.tools = tools;
+  }
   return payload;
 }
 
@@ -217,6 +268,8 @@ function translateStream(upstream: Response, model: string): Response {
       let buf = '';
       let curType = 'text';
       let finish = 'stop';
+      let toolIdx = -1;                                // OpenAI tool_calls 的 index（0 起）
+      const blockToTool = new Map<number, number>();   // Anthropic block index → tool index
       await writer.write(encoder.encode(chunk({ role: 'assistant', content: '' })));
 
       while (true) {
@@ -236,12 +289,29 @@ function translateStream(upstream: Response, model: string): Response {
             console.log(`[anthropic-native] cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} input=${u.input_tokens || 0}`);
           } else if (ev.type === 'content_block_start') {
             curType = ev.content_block?.type || 'text';
+            if (curType === 'tool_use') {
+              toolIdx += 1;
+              blockToTool.set(ev.index, toolIdx);
+              await writer.write(encoder.encode(chunk({ tool_calls: [{
+                index: toolIdx,
+                id: ev.content_block?.id || 'toolu_' + Math.random().toString(36).slice(2),
+                type: 'function',
+                function: { name: ev.content_block?.name || '', arguments: '' },
+              }] })));
+            }
           } else if (ev.type === 'content_block_delta') {
             const d = ev.delta || {};
             if (d.type === 'text_delta' && d.text) {
               await writer.write(encoder.encode(chunk({ content: d.text })));
             } else if (d.type === 'thinking_delta' && d.thinking) {
               await writer.write(encoder.encode(chunk({ reasoning: d.thinking })));
+            } else if (d.type === 'input_json_delta' && typeof d.partial_json === 'string'
+                       && blockToTool.has(ev.index)) {
+              await writer.write(encoder.encode(chunk({ tool_calls: [{
+                index: blockToTool.get(ev.index),
+                type: 'function',
+                function: { arguments: d.partial_json },
+              }] })));
             }
           } else if (ev.type === 'message_delta') {
             if (ev.delta?.stop_reason) finish = mapStop(ev.delta.stop_reason);
@@ -312,6 +382,7 @@ export async function forwardAnthropicNative(body: any, sessionId: string, opts?
   const data: any = await upstream.json().catch(() => null);
   if (!data) return errorResponse('invalid anthropic response', 502);
   const text = (data.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+  const toolUses = (data.content || []).filter((b: any) => b.type === 'tool_use');
   const u = data.usage || {};
   console.log(`[anthropic-native] cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} input=${u.input_tokens || 0}`);
   const openai = {
@@ -319,7 +390,14 @@ export async function forwardAnthropicNative(body: any, sessionId: string, opts?
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model: body.model,
-    choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: mapStop(data.stop_reason) }],
+    choices: [{ index: 0, message: {
+      role: 'assistant',
+      content: toolUses.length > 0 && !text ? null : text,
+      ...(toolUses.length > 0 ? { tool_calls: toolUses.map((b: any) => ({
+        id: b.id, type: 'function',
+        function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) },
+      })) } : {}),
+    }, finish_reason: mapStop(data.stop_reason) }],
     usage: openAIUsage(u),
   };
   return new Response(JSON.stringify(openai), {
