@@ -40,7 +40,12 @@ struct CardFlowView: View {
         let info = viewModel.branchInfoMap[node.id]
         // API 车道用 streamingNodeId，CC 车道用 ccTurnNodeId（CC 豁免后不再占 API 车道状态）
         let isNodeCCWaiting = viewModel.ccTurnNodeId == node.id
-        let isNodeAPIStreaming = viewModel.providerRouter.isStreaming && viewModel.streamingNodeId == node.id
+        // turn 级判定（不是 provider 级 isStreaming）：工具执行的空窗期 provider
+        // isStreaming 短暂为 false，若在此判定，流式文本/思考链会闪没
+        //（真机 bug："回复消失，搜索完又出现"）。assistantTurnInFlight 盖住整个
+        // 工具循环；OR provider 级作为群聊发言等非 turn 路径的兜底。
+        let isNodeAPIStreaming = (viewModel.assistantTurnInFlight || viewModel.providerRouter.isStreaming)
+            && viewModel.streamingNodeId == node.id
         let isNodeStreaming = isNodeAPIStreaming || isNodeCCWaiting
         let isNodeHighlighted = viewModel.highlightedNodeId == node.id
         let isNodeSearchMatch = viewModel.inConvMatches.contains(node.id)

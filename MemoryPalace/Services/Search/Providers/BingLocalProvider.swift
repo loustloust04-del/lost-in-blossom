@@ -59,8 +59,49 @@ struct BingLocalProvider: WebSearchProvider {
             }
             items.append(WebSearchResultItem(title: title, url: href, text: snippet))
         }
+        // [search-serp] Bing 对裸 URLSession 已全面出验证壳页（HTTP 200、真 SERP 标题、
+        // 零 b_algo，VPS 复现 2026-07-06）→ 直连路径空手时降级到内置 WKWebView 渲染：
+        // 真浏览器环境（JS + cookie + Safari UA）能像 Safari 一样通过验证。
+        if items.isEmpty {
+            items = try await Self.renderAndExtract(url: url, resultSize: common.resultSize)
+        }
         if items.isEmpty { throw WebSearchProviderError.empty }
         return WebSearchResult(items: items)
+    }
+
+    /// WKWebView 渲染 SERP → 页内 JS 结构化抽取（选择器与直连路径一致）
+    private static func renderAndExtract(url: URL, resultSize: Int) async throws -> [WebSearchResultItem] {
+        let js = """
+        (() => {
+          const out = [];
+          document.querySelectorAll('li.b_algo').forEach((li) => {
+            const a = li.querySelector('h2 a') || li.querySelector('a');
+            if (!a) return;
+            const title = (a.textContent || '').trim();
+            const href = a.href || '';
+            const sn = li.querySelector('.b_caption p') || li.querySelector('.b_algoSlug');
+            const text = sn ? (sn.textContent || '').trim() : '';
+            if (title && href) out.push({ title: title, url: href, text: text });
+          });
+          return JSON.stringify(out);
+        })()
+        """
+        let jsonStr = try await InternalBrowser.shared.evaluate(
+            url: url, js: js, timeout: 15, emptyMarker: "[]", retries: 3
+        )
+        guard let data = jsonStr.data(using: .utf8),
+              let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+            return []
+        }
+        return arr.prefix(resultSize).compactMap { d in
+            guard let title = d["title"] as? String, !title.isEmpty,
+                  let raw = d["url"] as? String, !raw.isEmpty else { return nil }
+            var text = (d["text"] as? String) ?? ""
+            if text.count > snippetMax {
+                text = String(text.prefix(snippetMax)) + "…"
+            }
+            return WebSearchResultItem(title: title, url: decodeBingRedirect(raw), text: text)
+        }
     }
 
     /// Bing `ck/a?...&u=a1<base64url>&ntb=1` → 真实 URL

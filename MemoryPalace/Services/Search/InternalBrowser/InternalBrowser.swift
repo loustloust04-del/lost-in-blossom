@@ -69,6 +69,13 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
         let url: URL
         let timeout: TimeInterval
         let completion: (Result<ExtractedPage, Error>) -> Void
+        /// [search-serp] 脚本模式：非 nil 时 didFinish 后不跑 Readability 抽正文，
+        /// 改在页面上下文执行这段 JS，把 String 结果经 scriptCompletion 返回。
+        var script: String? = nil
+        /// 结果等于该值视为"页面未就绪"（验证壳页/懒渲染），间隔重试
+        var scriptEmptyMarker: String = "[]"
+        var scriptRetries: Int = 0
+        var scriptCompletion: ((Result<String, Error>) -> Void)? = nil
     }
 
     private var queue: [Job] = []
@@ -86,6 +93,24 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
             let job = Job(url: url, timeout: timeout) { result in
                 cont.resume(with: result)
             }
+            queue.append(job)
+            processNext()
+        }
+    }
+
+    /// [search-serp] 渲染页面后在页面上下文执行 js，返回其 String 结果。
+    /// 搜索引擎对裸 URLSession 出验证壳页（HTTP 200 但零结果），真 WebView
+    /// 渲染 + JS 执行能像 Safari 一样通过。结果 == emptyMarker 时视为未就绪
+    ///（挑战页还没跳转/懒渲染没完成），间隔 1.2s 页内重试，最多 retries 次。
+    func evaluate(url: URL, js: String, timeout: TimeInterval = 12.0,
+                  emptyMarker: String = "[]", retries: Int = 2) async throws -> String {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+            let job = Job(url: url, timeout: timeout,
+                          completion: { _ in },   // script 模式不走 article completion
+                          script: js,
+                          scriptEmptyMarker: emptyMarker,
+                          scriptRetries: retries,
+                          scriptCompletion: { cont.resume(with: $0) })
             queue.append(job)
             processNext()
         }
@@ -187,7 +212,12 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
     // MARK: - 抽 Markdown
 
     private func runExtraction(in webView: WKWebView) {
-        guard currentJob != nil else { return }
+        guard let job = currentJob else { return }
+        // [search-serp] 脚本模式分流
+        if let js = job.script {
+            runScript(js, in: webView, retriesLeft: job.scriptRetries, emptyMarker: job.scriptEmptyMarker)
+            return
+        }
         guard let readability = Self.loadScript(named: "readability.min"),
               let turndown = Self.loadScript(named: "turndown.min"),
               let extractGlue = Self.loadScript(named: "extract") else {
@@ -252,9 +282,57 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
         return (true, trimmed + "\n\n…（正文截断，原始 \(md.count) 字符；如需后续段落，可二次 browse_url 同一 URL 或后续 Phase 加 offset 参数）")
     }
 
+    // MARK: - 脚本模式执行
+
+    private func runScript(_ js: String, in webView: WKWebView, retriesLeft: Int, emptyMarker: String) {
+        guard currentJob != nil else { return }
+        webView.evaluateJavaScript(js) { [weak self] result, error in
+            Task { @MainActor in
+                guard let self, let job = self.currentJob, job.script != nil else { return }
+                if let error {
+                    self.finishScript(.failure(BrowseError.extractFailed(error.localizedDescription)))
+                    return
+                }
+                let str = (result as? String) ?? ""
+                if (str.isEmpty || str == emptyMarker), retriesLeft > 0 {
+                    // 验证壳页/懒渲染：等 1.2s 页内重试（挑战通过后 JS 会补渲染真结果）
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    guard self.currentJob?.url == job.url else { return }
+                    self.runScript(js, in: webView, retriesLeft: retriesLeft - 1, emptyMarker: emptyMarker)
+                    return
+                }
+                self.finishScript(.success(str))
+            }
+        }
+    }
+
+    private func finishScript(_ result: Result<String, Error>) {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        if let job = currentJob { job.scriptCompletion?(result) }
+        currentJob = nil
+        busy = false
+        webView?.loadHTMLString("", baseURL: nil)
+        if queue.isEmpty {
+            webView?.removeFromSuperview()
+        } else {
+            processNext()
+        }
+    }
+
     // MARK: - 收尾
 
     private func finishCurrent(_ result: Result<ExtractedPage, Error>) {
+        // [search-serp] 脚本模式的失败路径（超时/加载失败/gate 拒绝）统一转 scriptCompletion
+        if let job = currentJob, job.scriptCompletion != nil {
+            switch result {
+            case .failure(let e):
+                finishScript(.failure(e))
+            case .success:
+                finishScript(.failure(BrowseError.extractFailed("internal: article result on script job")))
+            }
+            return
+        }
         timeoutTask?.cancel()
         timeoutTask = nil
         if let job = currentJob { job.completion(result) }

@@ -24,6 +24,10 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     private var loopApiKey = ""
     private var loopHeaders: [String: String] = [:]
     private var accumulatedToolSegments: [MessageSegment] = []
+    /// [search-ui] streamingContent 已经切入 segments 的前缀长度。
+    /// 轮间把本轮新增文本按时间顺序插进 segments（文字→卡片→文字→卡片），
+    /// 最终 [DONE] 只补尾巴，不再整段重复。
+    private var segmentedContentLength = 0
     /// OpenRouter 上的 Claude 系模型：cacheFriendly 时显式 per-block 挂 cache_control（system + 末 assistant），
     /// 动态段（[动态上下文] 伪 user）留在断点外。其他上游自动缓存，不需要它。
     static func wantsORCacheControl(baseURL: String, model: String, samplingParams: SamplingParams?) -> Bool {
@@ -167,6 +171,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         finishReason = nil
         pendingToolCalls = [:]
         accumulatedToolSegments = []
+        segmentedContentLength = 0
         startRequest(request)
     }
 
@@ -191,6 +196,13 @@ final class OpenAICompatibleProvider: BaseChatProvider {
 
     /// PR-3: 执行本轮工具调用并发起下一轮。
     private func runOpenAIToolRound(_ calls: [ToolCallLoop.ToolCall]) {
+        // [search-ui] 本轮文本先入 segments，保持"文字→卡片→文字→卡片"的时间顺序
+        //（此前轮间文本不进 segments，最终全部堆在所有卡片下面）
+        let roundText = String(streamingContent.dropFirst(segmentedContentLength))
+        if !roundText.isEmpty {
+            accumulatedToolSegments.append(.text(roundText))
+            segmentedContentLength = streamingContent.count
+        }
         var assistantToolCalls: [[String: Any]] = []
         for c in calls {
             assistantToolCalls.append(["id": c.id, "type": "function",
@@ -337,7 +349,11 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                         }
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                         if !accumulatedToolSegments.isEmpty {
-                            onSegmentsCallback?(accumulatedToolSegments + [.text(streamingContent)])
+                            // [search-ui] 轮间文本已入 segments，这里只补最终轮的尾巴
+                            let finalTail = String(streamingContent.dropFirst(segmentedContentLength))
+                            onSegmentsCallback?(finalTail.isEmpty
+                                ? accumulatedToolSegments
+                                : accumulatedToolSegments + [.text(finalTail)])
                         }
                         onComplete?(finalContent, finalUsage)
                     }
