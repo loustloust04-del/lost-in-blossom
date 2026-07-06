@@ -147,11 +147,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         }
         // PR-3: bridge 工具（OpenAI function 格式）。工具定义写死保证缓存稳定。
         var oaiTools: [[String: Any]] = bridgeTools.isEmpty ? [] : ToolCallLoop.openAITools(bridgeTools)
-        // 联网搜索：client function（search_web + browse_url），放 MCP 工具之后保证缓存前缀稳定
-        if WebSearchSettings.isSearchEnabledFlag {
-            oaiTools.append(WebSearchToolService.openAITool())
-            oaiTools.append(BrowseURLTool.openAITool())
-        }
+        // Toolbase P0: 内建工具（search_web + browse_url）从注册表取，双家 schema
+        // 由 ToolSchemaRenderer 统一渲染。顺序不变：MCP 之后，保证缓存前缀稳定。
+        oaiTools += ToolSchemaRenderer.render(
+            ToolRegistry.enabledDefinitions(ToolGateContext(family: .openAI)),
+            family: .openAI
+        )
         if !oaiTools.isEmpty {
             body["tools"] = oaiTools
         }

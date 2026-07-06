@@ -142,7 +142,14 @@ final class AnthropicProvider: BaseChatProvider {
         }
         // PR-2: bridge 工具（客户端执行；Anthropic 只返回 tool_use 并停）。工具定义写死保证缓存稳定。
         var antTools: [[String: Any]] = bridgeTools.isEmpty ? [] : ToolCallLoop.anthropicTools(bridgeTools)
-        // 联网搜索：Anthropic 直连用 server tool（Claude 后端自执行搜索），放 MCP 工具之后
+        // Toolbase P0: 注册表内建工具（anthropic 家族——目前 search/browse 的门控
+        // 只发 OpenAI 系，这里通常为空；保留调用作为未来工具的统一接入点）
+        antTools += ToolSchemaRenderer.render(
+            ToolRegistry.enabledDefinitions(ToolGateContext(family: .anthropic)),
+            family: .anthropic
+        )
+        // 联网搜索：Anthropic 直连用 server tool（web_search_20250305 形状特殊，
+        // 不进注册表，Claude 后端自执行搜索），放 MCP 工具之后
         if WebSearchSettings.isSearchEnabledFlag {
             antTools.append(WebSearchToolService.anthropicServerTool())
         }
