@@ -260,18 +260,9 @@ function saveInboundImages(chatId: string, images: any[]): string[] {
     const p = join(dir, `${Date.now()}_${i}.${mimeToExt(img.mime)}`)
     try {
       writeFileSync(p, buf)
-      // txt文件自动转UTF-8（处理GBK等编码）
-      if (safeName.endsWith('.txt') || safeName.endsWith('.md')) {
-        try {
-          const text = buf.toString('utf-8')
-          if (text.includes('�')) {
-            // 有乱码，尝试用iconv转码
-            const { execSync } = require('child_process')
-            execSync(`iconv -f GBK -t UTF-8 '${p}' -o '${p}.utf8' && mv '${p}.utf8' '${p}'`)
-            console.log('[hub] converted', safeName, 'from GBK to UTF-8')
-          }
-        } catch {}
-      }
+      // 注意：图片保存函数，不要加 txt 转码——此前误入的转码段引用了本函数
+      // 不存在的 safeName，运行时 ReferenceError 使 paths.push 永远执行不到：
+      // 图落盘但 attachments=[]，CC 收不到附件路径提示。
       paths.push(p); i++
     }
     catch (e: any) { console.warn(`[hub] saveInboundImage fail: ${e.message}`) }
@@ -480,7 +471,11 @@ export function startHub(): WebSocketServer {
     }
     res.writeHead(404); res.end("not found")
   })
-  const wss = new WebSocketServer({ server: httpServer })
+  const wss = new WebSocketServer({
+    server: httpServer,
+    // iPhone 原图 base64 后可达 10-20MB，ws 默认帧上限（实测 5~12MB 之间）会静默断连
+    maxPayload: 64 * 1024 * 1024,
+  })
   httpServer.listen(PORT, HUB_HOST)
   startAutoForge(TMUX_SESSION)
 
