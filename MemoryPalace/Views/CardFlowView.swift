@@ -205,11 +205,15 @@ struct CardFlowView: View {
                         }
                     }
                     // [scroll-anchor] 滚动优化 Round 2（反转列表已回滚，见
-                    // docs/BUGREPORT-INVERTED-LIST-ROLLBACK.md）：iOS 17 原生锚定，
+                    // docs/BUGREPORT-INVERTED-LIST-ROLLBACK.md）：iOS 17/18 原生锚定，
                     // 零 transform 零兼容雷。语义：初始显示在底部；用户在底部时内容
                     // 增长（流式 token / WebView 撑高 / 新消息）自动钉底；用户上滑
                     // 读历史时保持位置不打扰。
-                    .defaultScrollAnchor(.bottom)
+                    // 注意必须用 iOS 18 分角色版本、且**不设 .alignment**：
+                    // 无参版 .defaultScrollAnchor(.bottom) 连带把不满一屏的短对话
+                    // 也底部对齐（消息沉底、上方大片空白），真机回归确认过。
+                    .defaultScrollAnchor(.bottom, for: .initialOffset)
+                    .defaultScrollAnchor(.bottom, for: .sizeChanges)
                     .contentMargins(.top, 50, for: .scrollContent)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
