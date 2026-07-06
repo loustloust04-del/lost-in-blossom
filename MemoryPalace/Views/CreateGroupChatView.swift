@@ -14,14 +14,12 @@ struct CreateGroupChatView: View {
         SlotState(name: "Caelum", colorHex: "#7C9CBF"),
         SlotState(name: "", colorHex: "#C28E6B")
     ]
+    /// 建群校验失败提示。此前用 .disabled(!canCreate) 静默禁用「开始」，
+    /// 用户点了没任何反馈以为卡死（真机 bug 反馈）——改成永远可点 + alert 说清差什么。
+    @State private var validationMessage: String? = nil
 
     private var models: [ProviderModel] { providerManager?.allModels ?? [] }
     private var cards: [CharacterCard] { cardManager?.cards ?? [] }
-
-    private var canCreate: Bool {
-        let filled = slots.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
-        return filled.count >= 2 && !models.isEmpty
-    }
 
     private static let palette = ["#7C9CBF", "#C28E6B", "#8FA876", "#B07CA8", "#D9A05B", "#6BA8A0", "#A87C7C", "#8E8EC2"]
 
@@ -40,8 +38,15 @@ struct CreateGroupChatView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("开始") { create() }
-                        .disabled(!canCreate)
                 }
+            }
+            .alert("还差一步", isPresented: Binding(
+                get: { validationMessage != nil },
+                set: { if !$0 { validationMessage = nil } }
+            )) {
+                Button("好") { validationMessage = nil }
+            } message: {
+                Text(validationMessage ?? "")
             }
         }
     }
@@ -193,6 +198,17 @@ struct CreateGroupChatView: View {
     // MARK: - Create
 
     private func create() {
+        // 校验失败必须开口说话，不许静默 return（真机反馈"点了开始无事发生"）
+        guard providerManager != nil else {
+            validationMessage = "内部错误：ProviderManager 未注入（环境断链）。请截图给猫排查。"
+            BreadcrumbLog.shared.add("👥", "建群失败: ProviderManager env nil")
+            return
+        }
+        guard !models.isEmpty else {
+            validationMessage = "没有任何可用模型。请先去「设置 → API」添加一个提供商的模型，再回来建群。"
+            BreadcrumbLog.shared.add("👥", "建群失败: allModels 为空")
+            return
+        }
         let participants: [GroupParticipant] = slots.compactMap { slot in
             let name = slot.name.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return nil }
@@ -206,7 +222,11 @@ struct CreateGroupChatView: View {
                 talkativeness: slot.talkativeness
             )
         }
-        guard participants.count >= 2 else { return }
+        guard participants.count >= 2 else {
+            validationMessage = "至少需要两位有名字的 AI（当前只填了 \(participants.count) 位）——每个参与者的「名字」栏都要填。"
+            return
+        }
+        BreadcrumbLog.shared.add("👥", "建群: \(participants.count) 人「\(participants.map(\.name).joined(separator: "、"))」")
         onCreate(participants, groupTitle.trimmingCharacters(in: .whitespaces))
         dismiss()
     }
