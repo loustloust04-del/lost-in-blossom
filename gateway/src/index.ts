@@ -1,4 +1,5 @@
-import app from './app';
+// admin 层包装 app（/api/admin/* 管理路由 + 通道 key 覆盖热加载），其余请求原样透传 app.ts
+import app from './admin';
 import { config } from './config';
 import { startDecayTimer } from './memory/decay';
 import { startDreamTimer } from './memory/dreamer';

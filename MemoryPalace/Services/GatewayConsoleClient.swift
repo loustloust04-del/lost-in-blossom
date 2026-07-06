@@ -166,4 +166,91 @@ enum GatewayConsoleClient {
               let r = try? JSONDecoder().decode(ToolsResp.self, from: data) else { return [] }
         return r.tools
     }
+
+    // MARK: - Admin 通用请求
+
+    private static func send(_ path: String, method: String, json: [String: Any]? = nil, timeout: TimeInterval = 8) async -> [String: Any]? {
+        guard let url = URL(string: baseURL + path) else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.timeoutInterval = timeout
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let json {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: json)
+        }
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+    private static func sendOK(_ path: String, method: String, json: [String: Any]? = nil) async -> Bool {
+        (await send(path, method: method, json: json))?["ok"] as? Bool ?? false
+    }
+
+    // MARK: - Admin：记忆管理
+
+    static func deleteMemory(id: String) async -> Bool {
+        await sendOK("/api/admin/memories/\(id)", method: "DELETE")
+    }
+
+    static func pinMemory(id: String, pinned: Bool) async -> Bool {
+        await sendOK("/api/admin/memories/\(id)/pin", method: "POST", json: ["pinned": pinned])
+    }
+
+    // MARK: - Admin：通道 key 管理
+
+    struct GatewayChannel: Codable, Identifiable {
+        let name: String
+        let configured: Bool
+        let masked: String
+        let overridden: Bool
+        var id: String { name }
+    }
+    private struct ChannelsResp: Codable { let channels: [GatewayChannel] }
+
+    static func channels() async -> [GatewayChannel] {
+        guard let data = try? await get("/api/admin/channels"),
+              let r = try? JSONDecoder().decode(ChannelsResp.self, from: data) else { return [] }
+        return r.channels
+    }
+
+    static func setChannelKey(name: String, key: String) async -> Bool {
+        await sendOK("/api/admin/channels/\(name)/key", method: "PUT", json: ["key": key])
+    }
+
+    /// 清除覆盖，回落到网关启动时的 env 值
+    static func clearChannelKey(name: String) async -> Bool {
+        await sendOK("/api/admin/channels/\(name)/key", method: "DELETE")
+    }
+
+    // MARK: - Admin：定时任务（VPS crontab）
+
+    struct GatewayCronJob: Codable, Identifiable {
+        let idx: Int
+        let line: String
+        let enabled: Bool
+        var id: Int { idx }
+    }
+    private struct CronResp: Codable { let jobs: [GatewayCronJob] }
+
+    static func cronJobs() async -> [GatewayCronJob] {
+        guard let data = try? await get("/api/admin/cron"),
+              let r = try? JSONDecoder().decode(CronResp.self, from: data) else { return [] }
+        return r.jobs
+    }
+
+    /// toggle/delete 都带当前行原文，网关侧校验防并发漂移误改
+    static func cronToggle(job: GatewayCronJob, enabled: Bool) async -> Bool {
+        await sendOK("/api/admin/cron/toggle", method: "POST",
+                     json: ["idx": job.idx, "line": job.line, "enabled": enabled])
+    }
+
+    static func cronAdd(line: String) async -> Bool {
+        await sendOK("/api/admin/cron/add", method: "POST", json: ["line": line])
+    }
+
+    static func cronDelete(job: GatewayCronJob) async -> Bool {
+        await sendOK("/api/admin/cron/delete", method: "POST",
+                     json: ["idx": job.idx, "line": job.line])
+    }
 }

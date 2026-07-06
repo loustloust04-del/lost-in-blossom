@@ -14,6 +14,8 @@ struct GatewayConsoleView: View {
     @State private var dreams: [GatewayConsoleClient.GatewayDream] = []
     @State private var desires: [GatewayConsoleClient.GatewayDesire] = []
     @State private var tools: [GatewayConsoleClient.GatewayTool] = []
+    @State private var channels: [GatewayConsoleClient.GatewayChannel] = []
+    @State private var editingChannel: GatewayConsoleClient.GatewayChannel? = nil
 
     @State private var modelsExpanded = false
     @State private var toolsExpanded = false
@@ -25,11 +27,13 @@ struct GatewayConsoleView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 10) {
                 statusCard
+                channelsCard
                 modelsCard
                 memoriesCard
                 dreamsCard
                 desiresCard
                 toolsCard
+                cronCard
                 Color.clear.frame(height: 32)
             }
             .padding(.horizontal, 20)
@@ -45,6 +49,12 @@ struct GatewayConsoleView: View {
             AddGatewayMemorySheet { added in
                 addMemoryResult = added ? "已入库（source: manual）" : "没有入库——可能与已有记忆重复"
                 Task { await loadMemories() }
+            }
+            .presentationDetents([.medium])
+        }
+        .sheet(item: $editingChannel) { ch in
+            ChannelKeySheet(channel: ch) {
+                Task { channels = await GatewayConsoleClient.channels() }
             }
             .presentationDetents([.medium])
         }
@@ -66,12 +76,14 @@ struct GatewayConsoleView: View {
         async let d = GatewayConsoleClient.dreams()
         async let de = GatewayConsoleClient.desires(limit: 10)
         async let t = GatewayConsoleClient.mcpTools()
+        async let ch = GatewayConsoleClient.channels()
         health = await h
         healthLoaded = true
         models = await m
         dreams = await d
         desires = await de
         tools = await t
+        channels = await ch
         await loadMemories()
     }
 
@@ -116,6 +128,83 @@ struct GatewayConsoleView: View {
     private var statusText: String {
         if !healthLoaded { return "检查中…" }
         return health?.ok == true ? "在线" : "离线"
+    }
+
+    // MARK: - 通道 key 管理卡
+
+    private var channelsCard: some View {
+        GatewayCard {
+            gwLabel("通道 KEY", icon: "key")
+            Text("\(channels.filter(\.configured).count)/\(channels.count)")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(ConsoleView.textPrimary)
+                .padding(.top, 6)
+            Text("已配置 · 点通道改 key，改完即时生效不用重启")
+                .font(.system(size: 12))
+                .foregroundColor(ConsoleView.textMuted)
+            VStack(spacing: 0) {
+                ForEach(channels) { ch in
+                    Button {
+                        editingChannel = ch
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(ch.configured
+                                      ? Color(red: 0.55, green: 0.72, blue: 0.46)
+                                      : ConsoleView.textMuted.opacity(0.35))
+                                .frame(width: 7, height: 7)
+                            Text(ch.name)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundColor(ConsoleView.textPrimary)
+                            if ch.overridden { gwBadge("覆盖") }
+                            Spacer()
+                            Text(ch.configured ? ch.masked : "未配置")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(ConsoleView.textMuted)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9))
+                                .foregroundColor(ConsoleView.textMuted.opacity(0.6))
+                        }
+                        .padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    // MARK: - 定时任务卡
+
+    private var cronCard: some View {
+        GatewayCard {
+            HStack {
+                gwLabel("定时任务", icon: "clock.arrow.circlepath")
+                Spacer()
+                NavigationLink {
+                    GatewayCronPage()
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("管理")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(ConsoleView.textLabel)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(ConsoleView.textMuted)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            Text("VPS crontab")
+                .font(.system(size: 12))
+                .foregroundColor(ConsoleView.textMuted)
+                .padding(.top, 6)
+            Text("Twitter 同步 / CC token 刷新 / 主动推送等，进「管理」页开关、增删")
+                .font(.system(size: 12))
+                .foregroundColor(ConsoleView.textMuted)
+                .padding(.top, 2)
+        }
     }
 
     // MARK: - 通道 & 模型卡
@@ -512,6 +601,258 @@ struct AddGatewayMemorySheet: View {
     }
 }
 
+// MARK: - 通道 key 编辑 sheet
+
+struct ChannelKeySheet: View {
+    let channel: GatewayConsoleClient.GatewayChannel
+    var onDone: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var newKey = ""
+    @State private var submitting = false
+    @State private var resultMessage: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("当前") {
+                    HStack {
+                        Text(channel.name)
+                            .font(.system(size: 14, design: .monospaced))
+                        Spacer()
+                        Text(channel.configured ? channel.masked : "未配置")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(ConsoleView.textMuted)
+                    }
+                }
+                Section("新 key") {
+                    SecureField("粘贴新的 API key", text: $newKey)
+                        .font(.system(size: 13, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                }
+                if channel.overridden {
+                    Section {
+                        Button(role: .destructive) {
+                            submitting = true
+                            Task {
+                                let ok = await GatewayConsoleClient.clearChannelKey(name: channel.name)
+                                await MainActor.run {
+                                    submitting = false
+                                    resultMessage = ok ? "已清除覆盖，回落到网关启动配置" : "清除失败"
+                                }
+                            }
+                        } label: {
+                            Text("清除覆盖（回落到 .env）")
+                        }
+                        .disabled(submitting)
+                    } footer: {
+                        Text("这个通道的 key 当前被控制台覆盖过；清除后恢复网关启动时的环境变量值。")
+                            .font(.system(size: 12))
+                    }
+                }
+                Section {
+                    Text("保存后立刻生效（网关热更新，不用重启）。key 持久化在网关的 config-overrides.json。")
+                        .font(.system(size: 12))
+                        .foregroundColor(ConsoleView.textMuted)
+                }
+            }
+            .navigationTitle("通道 · \(channel.name)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if submitting {
+                        ProgressView()
+                    } else {
+                        Button("保存") {
+                            let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !key.isEmpty else { return }
+                            submitting = true
+                            Task {
+                                let ok = await GatewayConsoleClient.setChannelKey(name: channel.name, key: key)
+                                await MainActor.run {
+                                    submitting = false
+                                    resultMessage = ok ? "已保存，即时生效" : "保存失败"
+                                }
+                            }
+                        }
+                        .disabled(newKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .alert("通道 key", isPresented: Binding(
+                get: { resultMessage != nil },
+                set: { if !$0 { resultMessage = nil } }
+            )) {
+                Button("好") {
+                    resultMessage = nil
+                    dismiss()
+                    onDone()
+                }
+            } message: {
+                Text(resultMessage ?? "")
+            }
+        }
+    }
+}
+
+// MARK: - 定时任务管理页
+
+struct GatewayCronPage: View {
+    @State private var jobs: [GatewayConsoleClient.GatewayCronJob] = []
+    @State private var loading = true
+    @State private var showAdd = false
+    @State private var newLine = ""
+    @State private var errorMessage: String? = nil
+    @State private var pendingDelete: GatewayConsoleClient.GatewayCronJob? = nil
+
+    var body: some View {
+        List {
+            Section {
+                if loading && jobs.isEmpty {
+                    HStack { ProgressView().controlSize(.small); Text("读取 crontab…").foregroundColor(ConsoleView.textMuted) }
+                        .listRowBackground(Color.white)
+                } else if jobs.isEmpty {
+                    Text("crontab 为空")
+                        .font(.system(size: 13))
+                        .foregroundColor(ConsoleView.textMuted)
+                        .listRowBackground(Color.white)
+                } else {
+                    ForEach(jobs) { job in
+                        cronRow(job)
+                            .listRowBackground(Color.white)
+                    }
+                }
+            } header: {
+                Text("VPS crontab · \(jobs.count) 条")
+            } footer: {
+                Text("开关 = 注释/解注释该行；删除有二次确认。所有改动即时写回 crontab。")
+                    .font(.system(size: 12))
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(ConsoleView.pageBg.ignoresSafeArea())
+        .navigationTitle("定时任务")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    newLine = ""
+                    showAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                        .foregroundColor(ConsoleView.textLabel)
+                }
+            }
+        }
+        .task { await reload() }
+        .refreshable { await reload() }
+        .alert("新增定时任务", isPresented: $showAdd) {
+            TextField("如 */30 * * * * /path/to/script.sh", text: $newLine)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+            Button("取消", role: .cancel) {}
+            Button("添加") {
+                let line = newLine.trimmingCharacters(in: .whitespaces)
+                guard !line.isEmpty else { return }
+                Task {
+                    let ok = await GatewayConsoleClient.cronAdd(line: line)
+                    if !ok { errorMessage = "添加失败" }
+                    await reload()
+                }
+            }
+        } message: {
+            Text("标准 5 段 cron 表达式 + 命令")
+        }
+        .alert("删除这条任务？", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )) {
+            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button("删除", role: .destructive) {
+                guard let job = pendingDelete else { return }
+                pendingDelete = nil
+                Task {
+                    let ok = await GatewayConsoleClient.cronDelete(job: job)
+                    if !ok { errorMessage = "删除失败（行内容可能已变化，请下拉刷新重试）" }
+                    await reload()
+                }
+            }
+        } message: {
+            Text(pendingDelete?.line ?? "")
+        }
+        .alert("出错了", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("好") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func cronRow(_ job: GatewayConsoleClient.GatewayCronJob) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(cronSchedule(job.line))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundColor(job.enabled ? ConsoleView.textPrimary : ConsoleView.textMuted)
+                Text(cronCommand(job.line))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(ConsoleView.textMuted)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { job.enabled },
+                set: { on in
+                    Task {
+                        let ok = await GatewayConsoleClient.cronToggle(job: job, enabled: on)
+                        if !ok { errorMessage = "开关失败（行内容可能已变化，请下拉刷新重试）" }
+                        await reload()
+                    }
+                }
+            ))
+            .labelsHidden()
+            .tint(Color(red: 0.55, green: 0.72, blue: 0.46))
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                pendingDelete = job
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        }
+    }
+
+    /// 拆 cron 行：前 5 段是时间表达式（被注释的行先剥掉 #）
+    private func cronSchedule(_ line: String) -> String {
+        let clean = line.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "^#\\s*", with: "", options: .regularExpression)
+        let parts = clean.split(separator: " ", omittingEmptySubsequences: true)
+        guard parts.count > 5 else { return clean }
+        return parts.prefix(5).joined(separator: " ")
+    }
+
+    private func cronCommand(_ line: String) -> String {
+        let clean = line.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "^#\\s*", with: "", options: .regularExpression)
+        let parts = clean.split(separator: " ", omittingEmptySubsequences: true)
+        guard parts.count > 5 else { return "" }
+        return parts.dropFirst(5).joined(separator: " ")
+    }
+
+    private func reload() async {
+        loading = true
+        jobs = await GatewayConsoleClient.cronJobs()
+        loading = false
+    }
+}
+
 // MARK: - 全部记忆浏览页
 
 struct GatewayMemoriesPage: View {
@@ -519,6 +860,8 @@ struct GatewayMemoriesPage: View {
     @State private var total = 0
     @State private var loading = false
     @State private var category: String? = nil
+    @State private var pendingDelete: GatewayConsoleClient.GatewayMemory? = nil
+    @State private var errorMessage: String? = nil
 
     private let pageSize = 50
     private let categories = ["fact", "preference", "goal", "event", "emotion"]
@@ -549,6 +892,27 @@ struct GatewayMemoriesPage: View {
                     .onAppear {
                         if m.id == items.last?.id { Task { await loadMore() } }
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            pendingDelete = m
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button {
+                            let target = !(m.is_pinned ?? false)
+                            Task {
+                                let ok = await GatewayConsoleClient.pinMemory(id: m.id, pinned: target)
+                                if !ok { errorMessage = "置顶操作失败" }
+                                await reload()
+                            }
+                        } label: {
+                            Label(m.is_pinned == true ? "取消置顶" : "置顶",
+                                  systemImage: m.is_pinned == true ? "pin.slash" : "pin")
+                        }
+                        .tint(Color(red: 0.66, green: 0.62, blue: 0.56))
+                    }
                 }
             } header: {
                 Text("\(total) 条 · \(category ?? "全部分类")")
@@ -576,6 +940,31 @@ struct GatewayMemoriesPage: View {
         }
         .task { await reload() }
         .refreshable { await reload() }
+        .alert("删除这条记忆？", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )) {
+            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button("删除", role: .destructive) {
+                guard let m = pendingDelete else { return }
+                pendingDelete = nil
+                Task {
+                    let ok = await GatewayConsoleClient.deleteMemory(id: m.id)
+                    if !ok { errorMessage = "删除失败" }
+                    await reload()
+                }
+            }
+        } message: {
+            Text(pendingDelete?.content ?? "")
+        }
+        .alert("出错了", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("好") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func reload() async {
