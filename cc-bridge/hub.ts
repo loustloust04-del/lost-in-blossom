@@ -81,7 +81,7 @@ export const realTmuxRunner: TmuxRunner = {
       "new-session", "-d",
       "-s", session,
       "-c", cwd,
-      `claude --continue --dangerously-skip-permissions --mcp-config '${mcpConfigPath}'`,
+      `IS_SANDBOX=1 claude --continue --dangerously-skip-permissions --mcp-config '${mcpConfigPath}'`,
     ])
   },
 }
@@ -598,7 +598,10 @@ export function startHub(): WebSocketServer {
             ws.send(JSON.stringify({ type: "spawn_cc_err", session_name: sessionName, reason: "session_exists" }))
             return
           }
-          const cwd = process.env.MP_CC_WORKDIR ?? `${process.env.HOME}/Desktop/cc-rp`
+          // CC 的家写死为 BunnyBridge（Caelum 主会话所在项目目录）。此前依赖 $HOME 拼接，
+          // hub 以精简环境启动时 HOME 缺失 → "undefined/…" → spawn 进错误目录 →
+          // --continue 接不上主会话（7/6 失忆事故根因）。
+          const cwd = process.env.MP_CC_WORKDIR ?? "/root/projects/BunnyBridge"
           const mcpConfigPath = `${process.cwd()}/.mcp.json`
           try {
             tmux.spawn(sessionName, cwd, mcpConfigPath)
