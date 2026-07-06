@@ -147,11 +147,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         }
         // PR-3: bridge 工具（OpenAI function 格式）。工具定义写死保证缓存稳定。
         var oaiTools: [[String: Any]] = bridgeTools.isEmpty ? [] : ToolCallLoop.openAITools(bridgeTools)
-        // 联网搜索：client function（search_web + browse_url），放 MCP 工具之后保证缓存前缀稳定
-        if WebSearchSettings.isSearchEnabledFlag {
-            oaiTools.append(WebSearchToolService.openAITool())
-            oaiTools.append(BrowseURLTool.openAITool())
-        }
+        // Toolbase P0: 内建工具（search_web + browse_url）从注册表取，双家 schema
+        // 由 ToolSchemaRenderer 统一渲染。顺序不变：MCP 之后，保证缓存前缀稳定。
+        oaiTools += ToolSchemaRenderer.render(
+            ToolRegistry.enabledDefinitions(ToolGateContext(family: .openAI)),
+            family: .openAI
+        )
         if !oaiTools.isEmpty {
             body["tools"] = oaiTools
         }
@@ -199,6 +200,12 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         }
         let assistantText = streamingContent
         toolRound += 1
+        // [search-ui] 实时推送（结果未回）：气泡立刻长出"搜索中/阅读中"pending 卡片，
+        // 不等整轮结束。processData 跑在 URLSession delegate 线程，推送必须回 main。
+        let pendingSnapshot = accumulatedToolSegments
+        DispatchQueue.main.async { [weak self] in
+            self?.onSegmentsCallback?(pendingSnapshot)
+        }
         Task { [weak self] in
             guard let self else { return }
             let outcomes = await ToolCallLoop.execute(calls, bridgeTools: self.bridgeTools)
@@ -212,6 +219,8 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                     self.accumulatedToolSegments.append(.toolResult(toolUseId: o.id, text: o.text, isError: o.isError, integrationName: nil))
                 }
                 self.loopBody["messages"] = msgs
+                // [search-ui] 实时推送（结果已回）：pending 卡片翻成来源列表
+                self.onSegmentsCallback?(self.accumulatedToolSegments)
                 self.fireOpenAIRound()
             }
         }

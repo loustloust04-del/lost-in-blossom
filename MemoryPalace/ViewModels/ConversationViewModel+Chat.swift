@@ -307,26 +307,55 @@ extension ConversationViewModel {
         return relevant
     }
 
-    /// Send a user message and get a streaming response
-    func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
+    /// Send a user message and get a streaming response.
+    /// 返回 true = 已受理（发出或排队）；false = 被 guard 拦下（无对话 / 预算闸 / 空群）。
+    /// drainPendingSends 用返回值决定是否把 pending 塞回队列，不静默丢消息。
+    @discardableResult
+    func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) -> Bool {
         // 清洗零宽字符（iOS输入法切换时偷偷插入）
         let text = text.replacingOccurrences(of: "[\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00AD}]", with: "", options: .regularExpression)
-        guard let conversation = selectedConversation else { return }
+        guard let conversation = selectedConversation else { return false }
 
-        // 群聊 V3：串行门控编排，不走单聊逻辑
+        // 群聊 V3：串行门控编排（API 车道），不走单聊逻辑
         if conversation.kind == "group" {
-            let participants = conversation.participants
-            if !participants.isEmpty {
-                Task { @MainActor in
-                    await self.runGroupRound(conversation: conversation, userText: text,
-                                             participants: participants,
-                                             providerManager: providerManager, context: context)
-                }
+            if assistantTurnInFlight {
+                queuePendingSend(text, imageData: imageData, fileData: fileData, fileName: fileName,
+                                 model: model, profile: profile, preset: preset,
+                                 providerManager: providerManager, context: context,
+                                 conversation: conversation)
+                return true
             }
-            return
+            let participants = conversation.participants
+            guard !participants.isEmpty else { return false }
+            assistantTurnInFlight = true
+            streamingConversationId = conversation.id
+            Task { @MainActor in
+                await self.runGroupRound(conversation: conversation, userText: text,
+                                         participants: participants,
+                                         providerManager: providerManager, context: context)
+                self.finishAssistantTurn()
+            }
+            return true
         }
 
-        guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
+        // 车道判定：CC 走 Hub/tmux 线路，与 API providers 物理隔离（CC 豁免，
+        // 两条车道互不排队——CC 等回复不挡 API 对话，API 流式不挡 CC 对话）。
+        let isCCLane = providerManager.provider(for: model)?.type == .ccBridge
+
+        // 发送排队闸门（分车道）：
+        // - API 消息只在 API turn 进行中排队（同 provider 并发 resetState 掐死前一条流；
+        //   跨 provider 并发则 streamingText/streamingNodeId 全局单值被两条流打架）
+        // - CC 消息只在已有 CC turn 等待时排队（CCBridgeProvider 单实例，
+        //   双发会互相打架 replyTimer/replyHandler）
+        if isCCLane ? (ccTurnConversationId != nil) : assistantTurnInFlight {
+            queuePendingSend(text, imageData: imageData, fileData: fileData, fileName: fileName,
+                             model: model, profile: profile, preset: preset,
+                             providerManager: providerManager, context: context,
+                             conversation: conversation)
+            return true
+        }
+
+        guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return false }
 
         // 1. Determine parent node (last node in path, or nil for first message)
         let parentId = currentPath.last?.id
@@ -426,8 +455,17 @@ extension ConversationViewModel {
 
         // 3. Create placeholder assistant node
         let assistantNodeId = UUID().uuidString
-        streamingNodeId = assistantNodeId
-        streamingConversationId = selectedConversation?.id
+        // turn 正式开始（precheck 全过、此后到 sendStreaming 无早退路径，不会卡死 true）。
+        // 分车道记账：CC 不占 API 车道的 streaming 状态，否则 CC 等待期间会把
+        // 正在流式的 API 对话的停止按钮 / 打字气泡顶掉。
+        if isCCLane {
+            ccTurnConversationId = conversation.id
+            ccTurnNodeId = assistantNodeId
+        } else {
+            streamingNodeId = assistantNodeId
+            streamingConversationId = selectedConversation?.id
+            assistantTurnInFlight = true
+        }
         let assistantNode = MessageNode(
             id: assistantNodeId,
             role: "assistant",
@@ -452,11 +490,14 @@ extension ConversationViewModel {
         conversation.updateTime = Date()
         markConversationDirty()
 
-        streamingText = ""
-        streamingThinkingText = ""
-        isThinking = false
-        thinkingSummary = ""
-        turnStartTime = Date()  // PR: Token 统计——记本轮起点
+        // CC 不流式，不碰全局流式状态——API 车道可能正被别的对话用着
+        if !isCCLane {
+            streamingText = ""
+            streamingThinkingText = ""
+            isThinking = false
+            thinkingSummary = ""
+            turnStartTime = Date()  // PR: Token 统计——记本轮起点
+        }
 
         // Register fallback for additional CC replies that arrive after the single-shot
         // sendStreaming handler has been consumed (hub offline-replay burst, proactive CC messages).
@@ -518,9 +559,12 @@ extension ConversationViewModel {
                 guard let self else { return }
                 HapticService.shared.streamingComplete()
                 assistantNode.content = fullText
-                streamingText = ""
-                streamingThinkingText = ""
-                isThinking = false
+                // CC 车道不清全局流式状态（可能是别的 API 对话正在用）
+                if !isCCLane {
+                    streamingText = ""
+                    streamingThinkingText = ""
+                    isThinking = false
+                }
                 conversation.nodeCount = currentPath.filter {
                     ($0.role == "user" || $0.role == "assistant") && !$0.content.isEmpty
                 }.count
@@ -592,9 +636,21 @@ extension ConversationViewModel {
                     contextDepth: preset.sampling.contextDepth,
                     model: model, providerManager: providerManager
                 )
+
+                if isCCLane {
+                    self.finishCCTurn()
+                } else {
+                    self.finishAssistantTurn()
+                }
             },
             onError: { [weak self] error in
                 guard let self else { return }
+                if isCCLane {
+                    // CC 不流式：streamingText 可能是别的 API 对话的半截文本，不能当 partial 用
+                    assistantNode.content = "⚠️ \(error)"
+                    self.finishCCTurn()
+                    return
+                }
                 if streamingText.isEmpty {
                     assistantNode.content = "⚠️ \(error)"
                 } else {
@@ -604,10 +660,102 @@ extension ConversationViewModel {
                 streamingText = ""
                 streamingThinkingText = ""
                 isThinking = false
+                self.finishAssistantTurn()
             }
         )
 
         scrollToNodeId = userNodeId
+        return true
+    }
+
+    // MARK: - 发送排队（turn 生命周期出口）
+
+    /// 入队 + 用户提示。两个调用点：群聊闸门、单聊分车道闸门。
+    private func queuePendingSend(_ text: String, imageData: Data?, fileData: Data?, fileName: String?,
+                                  model: ProviderModel, profile: Profile, preset: Preset,
+                                  providerManager: ProviderManager, context: ModelContext,
+                                  conversation: Conversation) {
+        pendingSends.append(PendingSend(
+            text: text, imageData: imageData, fileData: fileData, fileName: fileName,
+            model: model, profile: profile, preset: preset,
+            providerManager: providerManager, context: context,
+            conversationId: conversation.id
+        ))
+        BreadcrumbLog.shared.add("⏳", "排队@「\(conversation.title)」（队列 \(pendingSends.count) 条）")
+        transientNotice = TransientNotice("已排队，当前回复结束后自动发送")
+    }
+
+    /// API 车道 turn 结束统一出口：sendMessage/startAssistantStream 的 onComplete、
+    /// onError、群聊整轮结束、cancelAssistantTurn 都走这里。清 turn 状态 + 补发排队消息。
+    func finishAssistantTurn() {
+        assistantTurnInFlight = false
+        drainPendingSends()
+    }
+
+    /// CC 车道 turn 结束出口（onComplete / onError / 停止）
+    func finishCCTurn() {
+        ccTurnConversationId = nil
+        ccTurnNodeId = nil
+        drainPendingSends()
+    }
+
+    /// 补发排队消息。只发**当前选中对话**的 pending——sendMessage 的树操作
+    /// （currentPath/nodeMap）全绑定 selectedConversation，不能发进后台对话。
+    /// 其他对话的 pending 留在队列里，等 loadConversation 回到该对话时再 drain。
+    /// 分车道挑件：API 车道忙时仍可补发 CC 消息，反之亦然。
+    /// 一次只发一条：发出去的那条又会占住所属车道，剩下的排到下一次 turn 结束。
+    func drainPendingSends() {
+        guard let conv = selectedConversation else { return }
+        let convId = conv.id
+        let isGroup = conv.kind == "group"
+        guard let idx = pendingSends.firstIndex(where: { pending in
+            guard pending.conversationId == convId else { return false }
+            if isGroup { return !assistantTurnInFlight }   // 群聊走 API 车道
+            let isCC = pending.providerManager.provider(for: pending.model)?.type == .ccBridge
+            return isCC ? (ccTurnConversationId == nil) : !assistantTurnInFlight
+        }) else { return }
+        let pending = pendingSends.remove(at: idx)
+        Task { @MainActor in
+            let accepted = self.sendMessage(
+                pending.text, imageData: pending.imageData,
+                fileData: pending.fileData, fileName: pending.fileName,
+                model: pending.model, profile: pending.profile, preset: pending.preset,
+                providerManager: pending.providerManager, context: pending.context
+            )
+            // 被预算闸等 guard 拦下 → 塞回队首，不静默丢消息
+            // （不会死循环：drain 只由 turn 结束 / loadConversation 触发）
+            if !accepted { self.pendingSends.insert(pending, at: 0) }
+        }
+    }
+
+    /// 停止按钮入口（分车道）。provider 的 cancel 不回调 onComplete/onError
+    /// （NSURLErrorCancelled 被吞、wasStreaming 已被 cancel 置 false），
+    /// 所以闭合必须显式写：空 placeholder 会被 buildAPIMessages 过滤，
+    /// 下一轮 API body 出现 user+user 连排（模型把两条都当待办重复执行）。
+    func cancelAssistantTurn(context: ModelContext) {
+        // CC 车道：当前对话在等 CC → 只取消 CC，不打断别处的 API 流。
+        // reply handler 保持注册，CC 迟到的回复仍会落进气泡（与旧行为一致）。
+        if let ccConv = ccTurnConversationId, ccConv == selectedConversation?.id {
+            providerRouter.cancelCC()
+            if let id = ccTurnNodeId, let node = nodeMap[id],
+               node.role == "assistant", node.content.isEmpty {
+                node.content = "（已停止）"
+                try? context.save()
+            }
+            finishCCTurn()
+            return
+        }
+        // API 车道
+        providerRouter.cancelAPI()
+        if let id = streamingNodeId, let node = nodeMap[id],
+           node.role == "assistant", node.content.isEmpty {
+            node.content = streamingText.isEmpty ? "（已停止）" : streamingText
+            try? context.save()
+        }
+        streamingText = ""
+        streamingThinkingText = ""
+        isThinking = false
+        finishAssistantTurn()
     }
 
     /// CC Bridge：注册"无人认领 reply"的兜底 handler。
@@ -877,6 +1025,7 @@ extension ConversationViewModel {
         thinkingSummary = ""
         streamingNodeId = assistantNodeId
         streamingConversationId = conversation.id
+        assistantTurnInFlight = true
 
         let assembled = assemblePrompt(profile: profile, preset: preset, excludingNodeId: assistantNodeId, context: context, globalEntries: globalWorldBookEntries)
         let payload = prepareRouterPayload(assembled: assembled, model: model, conversation: conversation, profile: profile, providerManager: providerManager, messageNodeId: assistantNodeId)
@@ -960,6 +1109,8 @@ extension ConversationViewModel {
                     contextDepth: preset.sampling.contextDepth,
                     model: model, providerManager: providerManager
                 )
+
+                self.finishAssistantTurn()
             },
             onError: { [weak self] error in
                 guard let self else { return }
@@ -972,6 +1123,7 @@ extension ConversationViewModel {
                 streamingText = ""
                 streamingThinkingText = ""
                 isThinking = false
+                self.finishAssistantTurn()
             }
         )
     }
@@ -979,6 +1131,11 @@ extension ConversationViewModel {
     /// Regenerate: create a new assistant response as a sibling branch of the existing one
     func regenerate(assistantNodeId: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
         BreadcrumbLog.shared.add("🔄", "regenerate: node=\(assistantNodeId.prefix(8))")
+        // 历史操作不排队（排队语义不明），turn 中直接拒，防并发破坏 currentPath
+        guard !assistantTurnInFlight else {
+            transientNotice = TransientNotice("正在回复中，稍后再试")
+            return
+        }
         guard preCheckBudget(text: "", model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
         guard let conversation = selectedConversation,
               let oldNode = nodeMap[assistantNodeId],
@@ -1022,6 +1179,11 @@ extension ConversationViewModel {
     /// Edit a user message: create a new branch from the original message's parent with new text, then get a response
     func editAndResend(_ originalNodeId: String, newText: String, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) {
         BreadcrumbLog.shared.add("✏️", "editAndResend: \(newText.prefix(30))...")
+        // 同 regenerate：turn 中直接拒，不排队
+        guard !assistantTurnInFlight else {
+            transientNotice = TransientNotice("正在回复中，稍后再试")
+            return
+        }
         guard preCheckBudget(text: newText, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return }
         guard let conversation = selectedConversation,
               let originalNode = nodeMap[originalNodeId],

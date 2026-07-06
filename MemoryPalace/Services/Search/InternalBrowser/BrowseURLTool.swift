@@ -22,22 +22,15 @@ enum BrowseURLTool {
     - SPA / 极动态页面可能抽不到正文——失败时 fallback 到 search_web 的 snippet
     """
 
-    private static let properties: [String: Any] = [
-        "url": ["type": "string", "description": "要读的 URL，必须是 http:// 或 https:// 开头"],
-    ]
-    private static let required = ["url"]
-
-    static func openAITool() -> [String: Any] {
-        ["type": "function", "function": [
-            "name": toolName, "description": toolDescription,
-            "parameters": ["type": "object", "properties": properties, "required": required]
-        ]]
-    }
-
-    static func anthropicTool() -> [String: Any] {
-        ["name": toolName, "description": toolDescription,
-         "input_schema": ["type": "object", "properties": properties, "required": required]]
-    }
+    /// 统一定义（Toolbase P0）：注入走 ToolRegistry + ToolSchemaRenderer，不再手写双份。
+    static let definition = ToolDefinition(
+        name: toolName,
+        description: toolDescription,
+        properties: [
+            "url": ["type": "string", "description": "要读的 URL，必须是 http:// 或 https:// 开头"],
+        ],
+        required: ["url"]
+    )
 
     // MARK: - 执行
 

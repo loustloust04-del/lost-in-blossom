@@ -33,19 +33,22 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
-    @State private var lastStreamingScrollTime: Date = .distantPast
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
     private func makeBubbleView(for node: MessageNode) -> some View {
         let info = viewModel.branchInfoMap[node.id]
-        let isNodeStreaming = viewModel.providerRouter.isStreaming && viewModel.streamingNodeId == node.id
+        // API 车道用 streamingNodeId，CC 车道用 ccTurnNodeId（CC 豁免后不再占 API 车道状态）
+        let isNodeCCWaiting = viewModel.ccTurnNodeId == node.id
+        let isNodeAPIStreaming = viewModel.providerRouter.isStreaming && viewModel.streamingNodeId == node.id
+        let isNodeStreaming = isNodeAPIStreaming || isNodeCCWaiting
         let isNodeHighlighted = viewModel.highlightedNodeId == node.id
         let isNodeSearchMatch = viewModel.inConvMatches.contains(node.id)
-        // 思考链流式状态（只传给正在流式输出的那个节点）
-        let isThinkingNow = isNodeStreaming && viewModel.isThinking
-        let streamingThinkingForNode = isNodeStreaming ? viewModel.streamingThinkingText : ""
-        let thinkingSummaryForNode = isNodeStreaming ? viewModel.thinkingSummary : ""
+        // 思考链/流式文本只传给 API 车道的流式节点——CC 等待期间这些全局值
+        // 可能属于并行的 API 对话，传给 CC 气泡会显示别人的文本
+        let isThinkingNow = isNodeAPIStreaming && viewModel.isThinking
+        let streamingThinkingForNode = isNodeAPIStreaming ? viewModel.streamingThinkingText : ""
+        let thinkingSummaryForNode = isNodeAPIStreaming ? viewModel.thinkingSummary : ""
         // CC Bridge provider 检测：用于 CCThinkingView 显示条件，防止切换 provider 后 thinking 残留
         let selectedModelId = UserDefaults.standard.string(forKey: "selectedChatModel") ?? ""
         let currentProviderModel = providerManager?.model(byId: selectedModelId) ?? providerManager?.availableModels.first
@@ -55,7 +58,7 @@ struct CardFlowView: View {
             hasBranches: info != nil,
             branchInfo: info,
             isStreaming: isNodeStreaming,
-            streamingContentText: isNodeStreaming ? viewModel.streamingText : "",
+            streamingContentText: isNodeAPIStreaming ? viewModel.streamingText : "",
             isThinking: isThinkingNow,
             streamingThinkingText: streamingThinkingForNode,
             thinkingSummary: thinkingSummaryForNode,
@@ -201,6 +204,12 @@ struct CardFlowView: View {
                             handleStickerDrop(providers: providers, location: location)
                         }
                     }
+                    // [scroll-anchor] 滚动优化 Round 2（反转列表已回滚，见
+                    // docs/BUGREPORT-INVERTED-LIST-ROLLBACK.md）：iOS 17 原生锚定，
+                    // 零 transform 零兼容雷。语义：初始显示在底部；用户在底部时内容
+                    // 增长（流式 token / WebView 撑高 / 新消息）自动钉底；用户上滑
+                    // 读历史时保持位置不打扰。
+                    .defaultScrollAnchor(.bottom)
                     .contentMargins(.top, 50, for: .scrollContent)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
@@ -263,25 +272,15 @@ struct CardFlowView: View {
                         }
                     }
                     .onChange(of: viewModel.streamingText) { oldText, newText in
+                        // 流式结束 → 强制回底（行为与改造前一致：补齐 MarkdownUI
+                        // async 渲染撑高后的最后一段）
                         if newText.isEmpty && !oldText.isEmpty {
-                            lastStreamingScrollTime = .distantPast
                             scrollToLastMessage(proxy: proxy, force: true)
-                            return
                         }
-                        guard !newText.isEmpty else { return }
-                        // 用户手动上滑时暂停自动滚底，避免弹跳
-                        guard isAtBottom else { return }
-                        let now = Date()
-                        guard now.timeIntervalSince(lastStreamingScrollTime) >= 0.3 else { return }
-                        lastStreamingScrollTime = now
-                        // 不带动画滚底：避免 withAnimation 与 WebView 高度变化同帧竞争导致白屏
-                        var tx = Transaction()
-                        tx.disablesAnimations = true
-                        withTransaction(tx) {
-                            if let lastId = viewModel.currentPath.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
+                        // [scroll-anchor] 流式期间不再逐 token scrollTo——
+                        // defaultScrollAnchor(.bottom) 在用户位于底部时自动钉底，
+                        // 上滑读历史时自动不打扰。旧的 0.3s 节流 scrollTo 风暴
+                        //（长对话卡顿源之一 + 与 WebView 高度变化竞争白屏源）整体移除。
                     }
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
@@ -635,14 +634,16 @@ struct ChatInputBar: View {
         // ChatInputBar 只负责外层 padding、环境模糊背景、sheet、alert。
         return InputFieldContainer(
             isFocused: $isFocused,
-            isStreaming: viewModel.providerRouter.isStreaming && viewModel.streamingConversationId == viewModel.selectedConversation?.id,
+            // turn 级状态（不是 provider 级 isStreaming）：工具循环空窗期按钮不闪回 send，
+            // 堵住本对话在空窗期插队发送（user+user 连排）。别的对话照常显示 send → 排队。
+            isStreaming: viewModel.isCurrentConvResponding,
             placeholder: inputPlaceholder,
             modelName: currentModel.name,
             pendingImageData: pendingImageData,
             pendingFileData: pendingFileData,
             pendingFileName: pendingFileName,
             onSend: { text in send(text) },
-            onCancelStream: { viewModel.providerRouter.cancel() },
+            onCancelStream: { viewModel.cancelAssistantTurn(context: modelContext) },
             onStickerTap: onStickerTap,
             onModelTap: { showModelPicker.toggle() },
             currentStyleId: viewModel.selectedConversation?.currentStyleId,
@@ -1314,6 +1315,18 @@ struct BubbleView: View {
     var isSearchMatch: Bool = false
     /// 当前对话路径的最后一条 assistant 消息。CC 思考链（latestThinking）只挂在这条气泡上。
     var isLastAssistant: Bool = false
+    /// [search-ui] segments 分支的流式尾巴：streamingContentText 里减去 segments
+    /// 已经包含的 .text 长度，只显示还没进 segments 的增量，防止双份显示。
+    private func streamingTailAfterSegments(_ segs: [MessageSegment]) -> String {
+        guard isStreaming, !streamingContentText.isEmpty else { return "" }
+        var segTextCount = 0
+        for seg in segs {
+            if case .text(let t) = seg { segTextCount += t.count }
+        }
+        guard segTextCount < streamingContentText.count else { return "" }
+        return String(streamingContentText.dropFirst(segTextCount))
+    }
+
     /// 思考链预览（时钟 + 可展开）。segments / 纯文本两条渲染分支共用。
     /// 修复：带 segments 的消息（CC 标记式 / API 流式）此前完全不渲染 thinking。
     @ViewBuilder
@@ -1566,6 +1579,20 @@ struct BubbleView: View {
                         paragraphSpacingScale: paragraphSpacingScale,
                         regexScripts: regexScripts
                     )
+                    // [search-ui] 工具轮实时推送后本分支提前接管气泡；流式文本在
+                    // 卡片下方继续显示。减去 segments 已含文本长度防双份
+                    //（Anthropic 轮文本会进 segments，OpenAI 不会）。
+                    let streamingTail = streamingTailAfterSegments(segs)
+                    if !streamingTail.isEmpty {
+                        Markdown(streamingTail)
+                            .markdownTheme(.memoryPalace(
+                                fontName: selectedFont,
+                                scale: fontScale > 0 ? fontScale : 1.0,
+                                lineSpacingScale: lineSpacingScale,
+                                paragraphSpacingScale: paragraphSpacingScale
+                            ))
+                            .textSelection(.enabled)
+                    }
                 } else {
                     thinkingPreview(staticThinking: thinkingResult?.thinking ?? "")
 

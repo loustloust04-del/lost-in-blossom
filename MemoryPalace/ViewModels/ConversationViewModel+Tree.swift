@@ -195,6 +195,9 @@ extension ConversationViewModel {
                 let applyT1 = CFAbsoluteTimeGetCurrent()
                 print(String(format: "[PERF] applyTreeData=%.0fms loadTotal=%.0fms", (applyT1 - applyT0) * 1000, (applyT1 - loadT0) * 1000))
                 #endif
+                // 发送排队：本对话若有排队消息（在别的对话切走时没发出去的），
+                // 树就绪后补发。turn in-flight 时 drain 内部自己跳过。
+                drainPendingSends()
             }
         }
     }

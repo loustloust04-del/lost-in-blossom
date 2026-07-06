@@ -16,24 +16,16 @@ enum WebSearchToolService {
     用结果时在引用内容后紧跟 `[citation](index:id)` 标注来源。
     """
 
-    private static let properties: [String: Any] = [
-        "query": ["type": "string", "description": "搜索关键词"],
-    ]
-    private static let required = ["query"]
-
-    /// Client-side function——OpenAI / 兼容 / chatgptOAuth 用
-    static func openAITool() -> [String: Any] {
-        ["type": "function", "function": [
-            "name": toolName, "description": toolDescription,
-            "parameters": ["type": "object", "properties": properties, "required": required]
-        ]]
-    }
-
-    /// Client-side function——Anthropic 直连里没启用 server tool 时也能用（fallback）
-    static func anthropicTool() -> [String: Any] {
-        ["name": toolName, "description": toolDescription,
-         "input_schema": ["type": "object", "properties": properties, "required": required]]
-    }
+    /// Client-side function 统一定义（Toolbase P0）：注入走 ToolRegistry，
+    /// OpenAI/Anthropic 两种形状由 ToolSchemaRenderer 渲染，不再手写双份。
+    static let definition = ToolDefinition(
+        name: toolName,
+        description: toolDescription,
+        properties: [
+            "query": ["type": "string", "description": "搜索关键词"],
+        ],
+        required: ["query"]
+    )
 
     /// Server-side tool——只有 .anthropic 直连用，Claude 后端自己执行搜索
     /// allowed_domains / blocked_domains / user_location 走配置面板（M2 后期暴露）

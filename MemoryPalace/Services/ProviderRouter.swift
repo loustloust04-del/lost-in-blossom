@@ -219,8 +219,18 @@ final class ProviderRouter {
     }
 
     func cancel() {
+        cancelAPI()
+        cancelCC()
+    }
+
+    /// 只取消 API 车道（openAI/anthropic），不打断 CC 的等待
+    func cancelAPI() {
         openAIProvider.cancel()
         anthropicProvider.cancel()
+    }
+
+    /// 只取消 CC 车道，不打断 API 流
+    func cancelCC() {
         CCBridgeWebSocketClient.shared.unregisterStreamHandler()
         ccBridgeProvider.cancel()
     }
