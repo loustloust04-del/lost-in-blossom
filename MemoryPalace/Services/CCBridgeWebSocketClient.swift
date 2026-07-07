@@ -413,6 +413,9 @@ final class CCBridgeWebSocketClient: NSObject {
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         self.session = session
         let task = session.webSocketTask(with: url)
+        // 默认帧上限 1 MiB：图片压过关，但 base64 文件（最大 10MB → ~13MB）会被拦，
+        // 导致带 TXT/PDF 的 send 帧静默失败。抬到 64MB 对齐 hub 的 maxPayload。
+        task.maximumMessageSize = 64 * 1024 * 1024
         self.task = task
         task.resume()
         receiveLoop()
