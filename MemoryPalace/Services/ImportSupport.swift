@@ -263,6 +263,8 @@ func findCrossProfileConversationConflicts(
 ) throws -> Set<String> {
     var conflicts = Set<String>()
     guard !candidateIds.isEmpty else { return conflicts }
+    // 只查还活着的楼层（已删楼层的残留数据不应阻止导入）
+    let aliveProfileIds = Set(ProfileManager.loadProfiles().map(\.id))
     for start in stride(from: 0, to: candidateIds.count, by: crossProfileQueryBatchSize) {
         let chunk = Array(candidateIds[start..<min(start + crossProfileQueryBatchSize, candidateIds.count)])
         let pid = currentProfileId
@@ -270,7 +272,10 @@ func findCrossProfileConversationConflicts(
             predicate: #Predicate<Conversation> { chunk.contains($0.id) && $0.profileId != pid }
         )
         for hit in try context.fetch(descriptor) {
-            conflicts.insert(hit.id)
+            // 跳过已删楼层的残留数据
+            if aliveProfileIds.contains(hit.profileId) {
+                conflicts.insert(hit.id)
+            }
         }
     }
     return conflicts
@@ -283,6 +288,8 @@ func findCrossProfileNodeConflicts(
 ) throws -> Set<String> {
     var conflicts = Set<String>()
     guard !candidateIds.isEmpty else { return conflicts }
+    // 只查还活着的楼层
+    let aliveProfileIds = Set(ProfileManager.loadProfiles().map(\.id))
     for start in stride(from: 0, to: candidateIds.count, by: crossProfileQueryBatchSize) {
         let chunk = Array(candidateIds[start..<min(start + crossProfileQueryBatchSize, candidateIds.count)])
         let pid = currentProfileId
@@ -290,7 +297,9 @@ func findCrossProfileNodeConflicts(
             predicate: #Predicate<MessageNode> { chunk.contains($0.id) && $0.profileId != pid }
         )
         for hit in try context.fetch(descriptor) {
-            conflicts.insert(hit.id)
+            if aliveProfileIds.contains(hit.profileId) {
+                conflicts.insert(hit.id)
+            }
         }
     }
     return conflicts
