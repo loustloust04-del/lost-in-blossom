@@ -22,6 +22,8 @@ struct GatewayConsoleView: View {
     @State private var dreamsExpanded = false
     @State private var showAddMemory = false
     @State private var addMemoryResult: String? = nil
+    @State private var showConnectionSheet = false
+    @State private var authIssue: String? = nil
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -58,6 +60,12 @@ struct GatewayConsoleView: View {
             }
             .presentationDetents([.medium])
         }
+        .sheet(isPresented: $showConnectionSheet) {
+            GatewayConnectionSheet {
+                Task { await loadAll() }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .alert("添加记忆", isPresented: Binding(
             get: { addMemoryResult != nil },
             set: { if !$0 { addMemoryResult = nil } }
@@ -71,6 +79,7 @@ struct GatewayConsoleView: View {
     // MARK: - 数据加载
 
     private func loadAll() async {
+        GatewayConsoleClient.resetAuthFlag()
         async let h = GatewayConsoleClient.health()
         async let m = GatewayConsoleClient.models()
         async let d = GatewayConsoleClient.dreams()
@@ -85,6 +94,15 @@ struct GatewayConsoleView: View {
         tools = await t
         channels = await ch
         await loadMemories()
+        // 加载完统一诊断鉴权：token 没配 / 被拒都在状态卡横幅明说，
+        // 不再让页面静默显示一排 0（历史坑：client 吞错 + 没有任何设置入口）
+        if !GatewayConsoleClient.tokenConfigured {
+            authIssue = "还没配置访问令牌，网关会拒绝所有请求（HTTP 401）。点右上「连接」填入 token。"
+        } else if GatewayConsoleClient.lastAuthFailed {
+            authIssue = "网关拒绝了当前令牌（HTTP 401）。点右上「连接」检查 token 是否填对。"
+        } else {
+            authIssue = nil
+        }
     }
 
     private func loadMemories() async {
@@ -97,7 +115,22 @@ struct GatewayConsoleView: View {
 
     private var statusCard: some View {
         GatewayCard {
-            gwLabel("GATEWAY", icon: "server.rack")
+            HStack {
+                gwLabel("GATEWAY", icon: "server.rack")
+                Spacer()
+                Button {
+                    showConnectionSheet = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 11))
+                        Text("连接")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(ConsoleView.textLabel)
+                }
+                .buttonStyle(.plain)
+            }
             HStack(spacing: 10) {
                 Circle()
                     .fill(health?.ok == true ? Color(red: 0.55, green: 0.72, blue: 0.46) : Color(red: 0.78, green: 0.45, blue: 0.45))
@@ -121,6 +154,24 @@ struct GatewayConsoleView: View {
             if let h = health {
                 gwSubRow(icon: "brain", text: h.memoryConnected ? "记忆库已连接（Supabase）" : "记忆库未配置")
                     .padding(.top, 6)
+            }
+            if let issue = authIssue {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(red: 0.78, green: 0.55, blue: 0.25))
+                    Text(issue)
+                        .font(.system(size: 12))
+                        .foregroundColor(ConsoleView.textPrimary.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(red: 0.98, green: 0.93, blue: 0.82))
+                )
+                .padding(.top, 8)
             }
         }
     }
@@ -694,6 +745,98 @@ struct ChannelKeySheet: View {
                 }
             } message: {
                 Text(resultMessage ?? "")
+            }
+        }
+    }
+}
+
+// MARK: - 网关连接设置 sheet
+
+/// 网关地址 + 访问令牌设置。历史坑：gatewayAuthToken 全 App 只读不写、
+/// 没有任何设置入口，token 永远是空串 → 控制台/MCP 页全被 401 拒掉。
+struct GatewayConnectionSheet: View {
+    var onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var baseURL = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
+    @State private var token = UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? ""
+    @State private var testing = false
+    @State private var testResult: (ok: Bool, message: String)? = nil
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("网关地址") {
+                    TextField("https://…", text: $baseURL)
+                        .font(.system(size: 13, design: .monospaced))
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                }
+                Section {
+                    SecureField("粘贴网关访问令牌", text: $token)
+                        .font(.system(size: 13, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                } header: {
+                    Text("访问令牌")
+                } footer: {
+                    Text("即网关 .env 里的 GATEWAY_TOKEN。控制台、MCP 页、记忆同步、体征上报全都用这一个令牌。")
+                        .font(.system(size: 12))
+                }
+                Section {
+                    Button {
+                        testing = true
+                        testResult = nil
+                        let url = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let tk = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                        Task {
+                            let (code, msg) = await GatewayConsoleClient.testConnection(baseURL: url, token: tk)
+                            await MainActor.run {
+                                testing = false
+                                testResult = (code == 200, msg)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if testing {
+                                ProgressView().controlSize(.small)
+                                Text("测试中…")
+                            } else {
+                                Image(systemName: "bolt.horizontal")
+                                Text("测试连接")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .medium))
+                    }
+                    .disabled(testing)
+                    if let r = testResult {
+                        HStack(spacing: 6) {
+                            Image(systemName: r.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundColor(r.ok ? .green : .red)
+                            Text(r.message)
+                                .font(.system(size: 13))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("网关连接")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        GatewayConsoleClient.saveConnection(
+                            baseURL: baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                            token: token.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        dismiss()
+                        onSaved()
+                    }
+                    .disabled(baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
         }
     }
