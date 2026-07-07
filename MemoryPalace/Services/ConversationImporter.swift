@@ -29,6 +29,34 @@ final class ConversationImporter {
     func importFile(url: URL) async {
         await beginImport()
 
+        // 清理已删楼层的残留数据（防止跨楼层冲突检查误拦）
+        do {
+            let cleanCtx = ModelContext(modelContainer)
+            cleanCtx.autosaveEnabled = false
+            let aliveIds = Set(ProfileManager.loadProfiles().map(\.id))
+            let allConvs = (try? cleanCtx.fetch(FetchDescriptor<Conversation>())) ?? []
+            var cleaned = 0
+            for conv in allConvs {
+                if !aliveIds.contains(conv.profileId) {
+                    // 这个对话属于已删楼层，清掉
+                    let deadPid = conv.profileId
+                    let deadConvId = conv.id
+                    let nodeDesc = FetchDescriptor<MessageNode>(
+                        predicate: #Predicate<MessageNode> { $0.conversationId == deadConvId && $0.profileId == deadPid }
+                    )
+                    for node in (try? cleanCtx.fetch(nodeDesc)) ?? [] {
+                        cleanCtx.delete(node)
+                    }
+                    cleanCtx.delete(conv)
+                    cleaned += 1
+                }
+            }
+            if cleaned > 0 {
+                try? cleanCtx.save()
+                print("[Import] 清理了 \(cleaned) 条已删楼层的残留对话")
+            }
+        }
+
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             await MainActor.run { statusMessage = "正在解析 JSON..." }
@@ -154,6 +182,26 @@ final class ConversationImporter {
 
     func mergeImportFile(url: URL) async {
         await beginImport()
+
+        // 清理已删楼层的残留数据
+        do {
+            let cleanCtx = ModelContext(modelContainer)
+            cleanCtx.autosaveEnabled = false
+            let aliveIds = Set(ProfileManager.loadProfiles().map(\.id))
+            let allConvs = (try? cleanCtx.fetch(FetchDescriptor<Conversation>())) ?? []
+            var cleaned = 0
+            for conv in allConvs where !aliveIds.contains(conv.profileId) {
+                let deadPid = conv.profileId
+                let deadConvId = conv.id
+                let nodeDesc = FetchDescriptor<MessageNode>(
+                    predicate: #Predicate<MessageNode> { $0.conversationId == deadConvId && $0.profileId == deadPid }
+                )
+                for node in (try? cleanCtx.fetch(nodeDesc)) ?? [] { cleanCtx.delete(node) }
+                cleanCtx.delete(conv)
+                cleaned += 1
+            }
+            if cleaned > 0 { try? cleanCtx.save(); print("[Import] 清理了 \(cleaned) 条残留对话") }
+        }
 
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
