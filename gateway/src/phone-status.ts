@@ -45,12 +45,13 @@ async function save(data: DayData): Promise<void> {
 
 export const PHONE_STATUS_TOOLS = [
   {
-    type: "function" as const,
-    function: {
-      name: "request_location",
-      description: "向兔兔的手机发送位置查询请求。兔兔的iPhone会自动回报当前位置、天气和电量。当你想知道她现在在哪、但phone_status里的数据太旧时使用。",
-      parameters: { type: "object", properties: { reason: { type: "string", description: "为什么想知道位置（如：好久没回消息了、想关心一下）" } } }
-    }
+    // 扁平结构对齐其它 builtin（{name,description,input_schema}）。此前用 OpenAI
+    // 嵌套式 {type,function:{...}}，导致 app.ts 取 t.name 为 undefined：/api/mcp/tools
+    // 列表里这条无名，App 整条数组解码崩（"data couldn't be read"），且发给
+    // Anthropic 时也是畸形 tool。callPhoneStatusTool 本就按扁平 name 匹配。
+    name: "request_location",
+    description: "向兔兔的手机发送位置查询请求。兔兔的iPhone会自动回报当前位置、天气和电量。当你想知道她现在在哪、但phone_status里的数据太旧时使用。",
+    input_schema: { type: "object" as const, properties: { reason: { type: "string", description: "为什么想知道位置（如：好久没回消息了、想关心一下）" } } },
   },
   {
     name: 'get_phone_status',
