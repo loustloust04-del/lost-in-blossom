@@ -145,10 +145,17 @@ final class CCBridgeProvider: BaseChatProvider {
                               let b64 = source["data"] as? String,
                               let mime = source["media_type"] as? String {
                         images.append(["b64": b64, "mime": mime])
+                    } else if type == "file",
+                              let b64 = block["data"] as? String {
+                        // 非图文件：base64 原始字节 → hub saveInboundFiles 落盘，
+                        // 路径写进 channel tag 让 CC 用 Read 读真文件
+                        let name = block["name"] as? String ?? "附件"
+                        let mime = block["media_type"] as? String ?? "application/octet-stream"
+                        files.append(["name": name, "b64": b64, "mime": mime])
                     }
                 }
             }
-            if !textParts.isEmpty || !images.isEmpty {
+            if !textParts.isEmpty || !images.isEmpty || !files.isEmpty {
                 textContent = textParts.joined(separator: "\n")
             }
         }

@@ -163,6 +163,7 @@ enum WebSearchToolService {
 enum WebSearchProviderFactory {
     static func make(for options: WebSearchServiceOptions) throws -> WebSearchProvider {
         switch options.kind {
+        case .gateway:      return GatewaySearchProvider()
         case .bingLocal:    return BingLocalProvider()
         case .duckduckgo:   return DuckDuckGoProvider()
         case .brave:        return BraveProvider()

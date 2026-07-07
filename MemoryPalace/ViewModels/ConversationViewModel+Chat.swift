@@ -324,6 +324,25 @@ extension ConversationViewModel {
         return nil
     }
 
+    /// 扩展名 → MIME（CC 落盘文件的 media_type 提示；不认得就用通用二进制）。
+    static func attachmentMime(ext: String) -> String {
+        switch ext.lowercased() {
+        case "pdf": return "application/pdf"
+        case "txt", "log", "text": return "text/plain"
+        case "md", "markdown": return "text/markdown"
+        case "json", "jsonl": return "application/json"
+        case "csv": return "text/csv"
+        case "html", "htm": return "text/html"
+        case "xml": return "application/xml"
+        case "yaml", "yml": return "application/yaml"
+        case "swift", "py", "js", "jsx", "ts", "tsx", "css", "sh", "java", "kt",
+             "c", "h", "cpp", "hpp", "rs", "go", "rb", "php", "sql":
+            return "text/plain"
+        case "zip": return "application/zip"
+        default: return "application/octet-stream"
+        }
+    }
+
     /// Send a user message and get a streaming response.
     /// 返回 true = 已受理（发出或排队）；false = 被 guard 拦下（无对话 / 预算闸 / 空群）。
     /// drainPendingSends 用返回值决定是否把 pending 塞回队列，不静默丢消息。
@@ -409,17 +428,40 @@ extension ConversationViewModel {
                     ? AttachmentTextExtractor.extractPDFText(data: data)
                     : Self.decodeTextFile(data)
                 let trimmed = (extracted ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let maxChars = AttachmentTextExtractor.maxExtractedCharacters
+                let capped = trimmed.count > maxChars
+                    ? String(trimmed.prefix(maxChars)) + "\n\n[文件过长，已截断]"
+                    : trimmed
+                let displayType = ext.isEmpty ? "文件" : ext.uppercased()
+                let fileMime = Self.attachmentMime(ext: ext)
+                let att = PendingChatAttachment.text(
+                    name: fileName ?? "附件",
+                    typeDescription: displayType,
+                    extractedText: capped,
+                    byteCount: data.count,
+                    fileData: data,
+                    fileMime: fileMime
+                )
+
+                // CC 车道：把原始文件字节 base64 塞进 multimodal JSON 的 file 块，
+                // CCBridgeProvider 解析成 payload.files → hub 落盘到 mp-inbox →
+                // CC 用 Read 读真文件（这才是 CC 收文件的正路；此前 files 数组从没被填，
+                // TXT/PDF 发给 CC 都收不到）。text 块保留用户文字 + 抽取文本，
+                // 让历史 / 事后切 API 模型时仍有内容。
+                if isCCLane {
+                    let b64 = data.base64EncodedString()
+                    let ccText = ChatAttachmentPromptBuilder.modelInput(text: text, attachments: [att])
+                    let blocks: [[String: Any]] = [
+                        ["type": "file", "name": att.name, "media_type": fileMime, "data": b64],
+                        ["type": "text", "text": ccText],
+                    ]
+                    let json = (try? JSONSerialization.data(withJSONObject: blocks))
+                        .flatMap { String(data: $0, encoding: .utf8) } ?? ccText
+                    return (json, "multimodal_text", ChatAttachmentPromptBuilder.segments(text: text, attachments: [att]))
+                }
+
+                // API 车道：抽取文本进 content（气泡走附件卡）
                 if !trimmed.isEmpty {
-                    let maxChars = AttachmentTextExtractor.maxExtractedCharacters
-                    let capped = trimmed.count > maxChars
-                        ? String(trimmed.prefix(maxChars)) + "\n\n[文件过长，已截断]"
-                        : trimmed
-                    let att = PendingChatAttachment.text(
-                        name: fileName ?? "附件",
-                        typeDescription: ext.isEmpty ? "文件" : ext.uppercased(),
-                        extractedText: capped,
-                        byteCount: data.count
-                    )
                     return (
                         ChatAttachmentPromptBuilder.modelInput(text: text, attachments: [att]),
                         "text",
