@@ -117,6 +117,18 @@ enum AttachmentTextExtractor {
         guard let document = PDFDocument(url: url) else {
             throw AttachmentTextExtractorError.unreadable(name)
         }
+        return extractPDFPages(document)
+    }
+
+    /// 发送链路用：从内存字节提取 PDF 文字（sendMessage 只有 Data 没有 URL）。
+    /// 返回 nil = 打不开或没有文字层（扫描件）。
+    static func extractPDFText(data: Data) -> String? {
+        guard let document = PDFDocument(data: data) else { return nil }
+        let text = extractPDFPages(document)
+        return text.isEmpty ? nil : text
+    }
+
+    private static func extractPDFPages(_ document: PDFDocument) -> String {
         var pages: [String] = []
         for index in 0..<document.pageCount {
             if let text = document.page(at: index)?.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {

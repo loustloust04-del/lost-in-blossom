@@ -378,7 +378,9 @@ extension ConversationViewModel {
         let parentId = currentPath.last?.id
 
         // 2. Build content and contentType
-        let (userContent, userContentType): (String, String) = {
+        // 附件管线对齐粟粟：content = 用户文字 + [附件] 全文（发给模型），
+        // attachmentSegments = 文字段 + 附件卡段（气泡渲染折叠卡片，不再把全文铺进气泡）。
+        let (userContent, userContentType, attachmentSegments): (String, String, [MessageSegment]?) = {
             if let data = imageData {
                 let b64 = data.base64EncodedString()
                 let blocks: [[String: Any]] = [
@@ -386,11 +388,10 @@ extension ConversationViewModel {
                     ["type": "text", "text": text]
                 ]
                 let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
-                return (json, "multimodal_text")
+                return (json, "multimodal_text", nil)
             } else if let data = fileData {
                 let ext = (fileName ?? "").lowercased().components(separatedBy: ".").last ?? ""
                 let imageExts = ["jpg", "jpeg", "png", "gif", "webp", "heic"]
-                let textExts = ["json", "txt", "md", "csv", "html", "xml", "swift", "py", "js", "ts", "yaml", "yml", "toml", "log", "sh", "css"]
                 if imageExts.contains(ext) {
                     let b64 = data.base64EncodedString()
                     let mimeType = ext == "png" ? "image/png" : ext == "gif" ? "image/gif" : ext == "webp" ? "image/webp" : "image/jpeg"
@@ -399,37 +400,38 @@ extension ConversationViewModel {
                         ["type": "text", "text": text]
                     ]
                     let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
-                    return (json, "multimodal_text")
-                } else if textExts.contains(ext) {
-                    let fileContent = Self.decodeTextFile(data) ?? "[无法解码文件内容：不是常见文本编码（已尝试 UTF-8/UTF-16/GB18030/GBK/Latin-1）]"
-                    let maxChars = 100_000
-                    let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断至前 100K 字符]" : fileContent
-                    let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
-                    return (combined, "text")
-                } else if ext == "pdf" {
-                    let b64 = data.base64EncodedString()
-                    var docBlock: [String: Any] = [
-                        "type": "document",
-                        "source": ["type": "base64", "media_type": "application/pdf", "data": b64]
-                    ]
-                    if let name = fileName { docBlock["title"] = name }
-                    let blocks: [[String: Any]] = [docBlock, ["type": "text", "text": text]]
-                    let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
-                    return (json, "multimodal_text")
-                } else {
-                    // 未知扩展名：用同一条多编码解码链兜底（此前只试 UTF-8，
-                    // UTF-16 txt / 无扩展名文本都会掉进"不支持的格式"）
-                    if let fileContent = Self.decodeTextFile(data), !fileContent.isEmpty {
-                        let maxChars = 100_000
-                        let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断]" : fileContent
-                        let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
-                        return (combined, "text")
-                    } else {
-                        return ("[无法读取 \(fileName ?? "file")：\(data.isEmpty ? "文件内容为空（可能是 iCloud 未下载或读取失败）" : "不是常见文本编码")]" + (text.isEmpty ? "" : "\n\n" + text), "text")
-                    }
+                    return (json, "multimodal_text", nil)
                 }
+                // 非图附件统一路径：PDF 走 PDFKit 文字提取，其余走多编码解码链。
+                // PDF 不再发 Anthropic document block——OpenAI 兼容通道（网关全部通道）
+                // 会整条拒收，这就是"PDF 发不过去"的原因；提取成文字后所有通道都能收。
+                let extracted: String? = ext == "pdf"
+                    ? AttachmentTextExtractor.extractPDFText(data: data)
+                    : Self.decodeTextFile(data)
+                let trimmed = (extracted ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    let maxChars = AttachmentTextExtractor.maxExtractedCharacters
+                    let capped = trimmed.count > maxChars
+                        ? String(trimmed.prefix(maxChars)) + "\n\n[文件过长，已截断]"
+                        : trimmed
+                    let att = PendingChatAttachment.text(
+                        name: fileName ?? "附件",
+                        typeDescription: ext.isEmpty ? "文件" : ext.uppercased(),
+                        extractedText: capped,
+                        byteCount: data.count
+                    )
+                    return (
+                        ChatAttachmentPromptBuilder.modelInput(text: text, attachments: [att]),
+                        "text",
+                        ChatAttachmentPromptBuilder.segments(text: text, attachments: [att])
+                    )
+                }
+                let reason = ext == "pdf"
+                    ? "PDF 没有可提取的文字层（可能是扫描件）"
+                    : (data.isEmpty ? "文件内容为空（可能是 iCloud 未下载或读取失败）" : "不是常见文本编码（已尝试 UTF-8/UTF-16/GB18030/GBK/Latin-1）")
+                return ("[无法读取 \(fileName ?? "file")：\(reason)]" + (text.isEmpty ? "" : "\n\n" + text), "text", nil)
             } else {
-                return (text, "text")
+                return (text, "text", nil)
             }
         }()
 
@@ -446,6 +448,10 @@ extension ConversationViewModel {
             conversationId: conversation.id,
             profileId: conversation.profileId
         )
+        // 附件消息写入分段：气泡走 segments 分支渲染折叠附件卡（API body 仍用 content 全文）
+        if let segs = attachmentSegments {
+            userNode.setSegments(segs)
+        }
         context.insert(userNode)
 
         // Update parent's childrenIds
