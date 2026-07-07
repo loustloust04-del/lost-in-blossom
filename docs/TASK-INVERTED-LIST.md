@@ -127,3 +127,25 @@ grep -n "isAtBottom\|atBottom\|scrollPosition\|onScrollGeometry" MemoryPalace/Vi
 3. Phase 2 改完就编译测试，不要等到 Phase 5
 4. 如果某个 Phase 改崩了，回退这个 Phase 的改动继续下一个
 5. commit message：`feat(scroll-perf): 反转列表 Phase N — xxx`
+
+---
+
+## ⚠️ 重要：上下文菜单翻转问题（粟粟踩过的坑）
+
+粟粟做完反转列表后发现：iOS 长按上下文菜单也会跟着翻转（上下颠倒）。
+
+她尝试过的方案：
+- ❌ Option D（preview API 绕过）— spike 死刑，完全无效
+- ✅ Phase 1 UIKit 桥 — 用 UIKit 的 UIContextMenuInteraction 替代 SwiftUI .contextMenu
+
+**建议**：Phase 2 做完翻转后，先检查长按菜单是否正常。如果翻了，用 UIKit 桥方案：
+```swift
+// 在翻转的 cell 上用 UIViewRepresentable 包装 UIContextMenuInteraction
+// 而不是 SwiftUI 的 .contextMenu modifier
+```
+
+参考粟粟的实现：
+```bash
+cd /root/projects/SusuPalace
+git log origin/master --oneline | grep contextmenu
+```
