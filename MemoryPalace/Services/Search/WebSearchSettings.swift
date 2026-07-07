@@ -75,6 +75,20 @@ final class WebSearchSettings: ObservableObject {
         if selectedId.isEmpty || !providers.contains(where: { $0.id == selectedId }) {
             selectedId = providers.first?.id ?? ""
         }
+
+        // 种子：确保「网关搜索」provider 存在（免 key，走已配的网关 token）。
+        // 它是当前唯一开箱即用的可靠后端——BingLocal 撞反爬墙已废。
+        if !providers.contains(where: { $0.kind == .gateway }) {
+            let gw = WebSearchServiceOptions.gateway(.init())
+            providers.insert(gw, at: 0)
+            // 没有有效选择、或仍停在坏掉的 BingLocal → 默认改选网关；
+            // 用户自己配过真 provider（tavily 等）则尊重不动。
+            let curKind = providers.first(where: { $0.id == selectedId })?.kind
+            if selectedId.isEmpty || curKind == nil || curKind == .bingLocal {
+                selectedId = gw.id
+            }
+            save()
+        }
         if let data = UserDefaults.standard.data(forKey: blockedDomainsKey),
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             blockedDomains = decoded

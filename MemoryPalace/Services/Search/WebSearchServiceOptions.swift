@@ -2,6 +2,7 @@ import Foundation
 
 /// 13 家 backend 的 kind 标签——WebSearchServiceOptions case 和 UI 显示名都靠它对齐。
 enum WebSearchProviderKind: String, Codable, CaseIterable, Identifiable {
+    case gateway
     case bingLocal
     case duckduckgo
     case brave
@@ -20,6 +21,7 @@ enum WebSearchProviderKind: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .gateway: return "网关搜索（推荐·免 key）"
         case .bingLocal: return "Bing（无 key）"
         case .duckduckgo: return "DuckDuckGo（无 key）"
         case .brave: return "Brave"
@@ -41,7 +43,7 @@ enum WebSearchProviderKind: String, Codable, CaseIterable, Identifiable {
     /// Ollama 用云 API ollama.com/api/web_search，需要 key
     var needsKey: Bool {
         switch self {
-        case .bingLocal, .duckduckgo: return false
+        case .gateway, .bingLocal, .duckduckgo: return false
         default: return true
         }
     }
@@ -57,6 +59,7 @@ enum WebSearchProviderKind: String, Codable, CaseIterable, Identifiable {
 
 /// 持久化用——每家配置一个 case，关联值是字段 struct。Codable 走 type+payload 显式 tagging。
 enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
+    case gateway(GatewayOptions)
     case bingLocal(BingLocalOptions)
     case duckduckgo(DuckDuckGoOptions)
     case brave(BraveOptions)
@@ -73,6 +76,7 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
 
     var kind: WebSearchProviderKind {
         switch self {
+        case .gateway: return .gateway
         case .bingLocal: return .bingLocal
         case .duckduckgo: return .duckduckgo
         case .brave: return .brave
@@ -92,6 +96,7 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
     /// UI 列表用——每条配置一个稳定 id，UserDefaults 重启后保留
     var id: String {
         switch self {
+        case .gateway(let o): return o.id
         case .bingLocal(let o): return o.id
         case .duckduckgo(let o): return o.id
         case .brave(let o): return o.id
@@ -112,6 +117,7 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
     var displayLabel: String {
         let custom: String
         switch self {
+        case .gateway(let o): custom = o.name
         case .bingLocal(let o): custom = o.name
         case .duckduckgo(let o): custom = o.name
         case .brave(let o): custom = o.name
@@ -140,6 +146,7 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try c.decode(WebSearchProviderKind.self, forKey: .kind)
         switch kind {
+        case .gateway: self = .gateway(try c.decode(GatewayOptions.self, forKey: .payload))
         case .bingLocal: self = .bingLocal(try c.decode(BingLocalOptions.self, forKey: .payload))
         case .duckduckgo: self = .duckduckgo(try c.decode(DuckDuckGoOptions.self, forKey: .payload))
         case .brave: self = .brave(try c.decode(BraveOptions.self, forKey: .payload))
@@ -160,6 +167,7 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(kind, forKey: .kind)
         switch self {
+        case .gateway(let o): try c.encode(o, forKey: .payload)
         case .bingLocal(let o): try c.encode(o, forKey: .payload)
         case .duckduckgo(let o): try c.encode(o, forKey: .payload)
         case .brave(let o): try c.encode(o, forKey: .payload)
@@ -179,6 +187,7 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
     /// 工厂——给空 backend kind 造一份默认 options（add 流程用）
     static func makeDefault(kind: WebSearchProviderKind, id: String = UUID().uuidString) -> WebSearchServiceOptions {
         switch kind {
+        case .gateway: return .gateway(.init(id: id))
         case .bingLocal: return .bingLocal(.init(id: id))
         case .duckduckgo: return .duckduckgo(.init(id: id))
         case .brave: return .brave(.init(id: id))
@@ -202,6 +211,13 @@ enum WebSearchServiceOptions: Codable, Identifiable, Equatable {
 protocol WebSearchOptionsBase: Codable, Equatable {
     var id: String { get }
     var name: String { get }
+}
+
+/// 网关搜索：走网关 /api/search（VPS 真 Chrome，免 key）。
+/// 复用全局 gatewayBaseURL / gatewayAuthToken，无需 provider 自己的 key。
+struct GatewayOptions: WebSearchOptionsBase {
+    var id: String = UUID().uuidString
+    var name: String = ""
 }
 
 struct BingLocalOptions: WebSearchOptionsBase {
