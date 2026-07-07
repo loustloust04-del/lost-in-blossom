@@ -781,7 +781,7 @@ struct GatewayConnectionSheet: View {
                 } header: {
                     Text("访问令牌")
                 } footer: {
-                    Text("即网关 .env 里的 AUTH_TOKEN。控制台、MCP 页、记忆同步、体征上报全都用这一个令牌。")
+                    Text("即网关 .env 里的 GATEWAY_TOKEN。控制台、MCP 页、记忆同步、体征上报全都用这一个令牌。")
                         .font(.system(size: 12))
                 }
                 Section {
