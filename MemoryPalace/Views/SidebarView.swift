@@ -187,8 +187,8 @@ struct SidebarView: View {
 
             // ── 导航入口 ─────────────────────────────────────────────────────
             VStack(spacing: 0) {
-                sidebarNavEntry(
-                    icon: "bubble.left.and.bubble.right",
+                sidebarNavEntryAsset(
+                    icon: "anthropicons-chats",
                     title: "Chats",
                     isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .chats
                 ) {
@@ -200,8 +200,8 @@ struct SidebarView: View {
                         }
                     }
                 }
-                sidebarNavEntry(
-                    icon: "folder",
+                sidebarNavEntryAsset(
+                    icon: "anthropicons-projects",
                     title: "Projects",
                     isSelected: showProjectsPage
                 ) {
@@ -212,8 +212,8 @@ struct SidebarView: View {
                         }
                     }
                 }
-                sidebarNavEntry(
-                    icon: "person.2.wave.2",
+                sidebarNavEntryAsset(
+                    icon: "anthropicons-group",
                     title: "群聊",
                     isSelected: showChatroomPage
                 ) {
@@ -224,7 +224,7 @@ struct SidebarView: View {
                         }
                     }
                 }
-                sidebarMemoryEntry(emoji: "🌰", title: "Almond", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .almond) {
+                sidebarMemoryEntry(emoji: "💧", title: "Almond", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .almond) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
@@ -233,7 +233,7 @@ struct SidebarView: View {
                         }
                     }
                 }
-                sidebarMemoryEntry(emoji: "🪨", title: "Amber", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .amber) {
+                sidebarMemoryEntry(emoji: "⬡", title: "Amber", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .amber) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
@@ -952,6 +952,36 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
+    /// 自定义 asset 图标版本（Anthropicons）
+    private func sidebarNavEntryAsset(icon: String, title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(icon)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 20, height: 20)
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textMuted)
+                    .frame(width: 24, alignment: .center)
+                Text(title)
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textMuted)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.textMuted.opacity(0.5))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Theme.accent.opacity(0.5) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     private func sidebarNavEntry(icon: String, title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
