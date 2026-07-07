@@ -27,15 +27,13 @@ enum GroupChatScheduler {
         lastSpeakerId: String?,
         providerManager: ProviderManager
     ) async -> GroupParticipant? {
-        // @ 提及优先：如果最后一条消息里提到了某个角色名
+        // @ 提及优先：只认显式 @名字（旧版 contains(p.name) 命中任意子串，
+        // 会把只是"提到"某人名字的消息误判为点名，选出没话可说的人 → 空回）。
         if let lastMsg = history.last {
             for p in participants {
-                if lastMsg.content.contains("@\(p.name)") || lastMsg.content.contains(p.name) {
-                    // 被提及 + 不是自己刚说完的 → 直接选中
-                    if p.id != lastSpeakerId {
-                        print("[GroupV5] @提及命中: \(p.name)")
-                        return p
-                    }
+                if lastMsg.content.contains("@\(p.name)"), p.id != lastSpeakerId {
+                    print("[GroupV5] @提及命中: \(p.name)")
+                    return p
                 }
             }
         }
