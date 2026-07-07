@@ -62,9 +62,41 @@ async function initSession(url: string): Promise<string> {
   return sid;
 }
 
+// [admin] 服务器列表动态化：admin 层接管后走 override（data/mcp-servers.json），
+// 否则维持 MCP_SERVERS 环境变量。setMcpServers 同时清缓存+会话，热生效。
+let serverOverride: string[] | null = null;
+
+export function getMcpServerUrls(): string[] {
+  if (serverOverride) return serverOverride;
+  return (process.env.MCP_SERVERS || '').split(/[,\n]/).map(u => u.trim()).filter(Boolean);
+}
+
+export function setMcpServers(urls: string[]) {
+  serverOverride = urls;
+  cache = null;
+  cacheTime = 0;
+  sessions.clear();
+}
+
+/// 探活：initialize + tools/list，返回可用性/工具数/耗时
+export async function probeMcpServer(url: string): Promise<{ ok: boolean; toolCount: number; ms: number; error?: string }> {
+  const t0 = Date.now();
+  try {
+    await initSession(url);
+    const { data } = await mcpRequest(url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const list = data?.result?.tools;
+    if (!Array.isArray(list)) {
+      return { ok: false, toolCount: 0, ms: Date.now() - t0, error: 'no tools/list result' };
+    }
+    return { ok: true, toolCount: list.length, ms: Date.now() - t0 };
+  } catch (e: any) {
+    return { ok: false, toolCount: 0, ms: Date.now() - t0, error: e?.message || String(e) };
+  }
+}
+
 export async function getMcpTools(): Promise<McpTool[]> {
   if (cache && Date.now() - cacheTime < 300_000) return cache;
-  const urls = (process.env.MCP_SERVERS || '').split(/[,\n]/).map(u => u.trim()).filter(Boolean);
+  const urls = getMcpServerUrls();
   if (!urls.length) { cache = []; cacheTime = Date.now(); return []; }
 
   const tools: McpTool[] = [];

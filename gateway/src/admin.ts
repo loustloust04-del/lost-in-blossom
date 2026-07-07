@@ -9,6 +9,7 @@ import appExport from './app';
 import { auth } from './middleware/auth';
 import { config } from './config';
 import { supabase } from './db/supabase';
+import { getMcpServerUrls, setMcpServers, probeMcpServer } from './tools/mcp-client';
 
 // ============ 通道 key 运行时覆盖（持久化 + 热生效） ============
 // key 原本只来自启动时 Bun.env；admin 改 key 时写 overrides 文件并直接改 config
@@ -218,6 +219,95 @@ admin.post('/cron/delete', async (c) => {
   const ok = await writeCrontab(lines);
   console.log(`[admin] cron delete idx=${idx} ok=${ok}`);
   return c.json({ ok });
+});
+
+// ---- MCP 服务器管理 ----
+// 列表来源：data/mcp-servers.json（admin 接管后）；文件不存在时从 MCP_SERVERS env 派生。
+// 任何增删都会物化到文件并 setMcpServers 热生效（清工具缓存+会话）。
+const MCP_SERVERS_PATH = new URL('../data/mcp-servers.json', import.meta.url).pathname;
+
+type McpServerEntry = { name: string; url: string };
+
+function deriveName(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.port ? `${u.hostname}:${u.port}` : u.hostname;
+  } catch { return url; }
+}
+
+function loadMcpServerFile(): McpServerEntry[] | null {
+  try {
+    if (!existsSync(MCP_SERVERS_PATH)) return null;
+    const arr = JSON.parse(readFileSync(MCP_SERVERS_PATH, 'utf8'));
+    if (!Array.isArray(arr)) return null;
+    return arr.filter((e: any) => typeof e?.url === 'string' && e.url)
+              .map((e: any) => ({ name: String(e.name || deriveName(e.url)), url: String(e.url) }));
+  } catch { return null; }
+}
+
+function currentMcpServers(): McpServerEntry[] {
+  const file = loadMcpServerFile();
+  if (file) return file;
+  return getMcpServerUrls().map((url) => ({ name: deriveName(url), url }));
+}
+
+function saveMcpServers(list: McpServerEntry[]) {
+  mkdirSync(dirname(MCP_SERVERS_PATH), { recursive: true });
+  writeFileSync(MCP_SERVERS_PATH, JSON.stringify(list, null, 2));
+  setMcpServers(list.map((e) => e.url));
+  console.log(`[admin] mcp servers updated: ${list.map((e) => e.name).join(', ') || '(empty)'}`);
+}
+
+// 启动时：文件存在则接管
+{
+  const file = loadMcpServerFile();
+  if (file) {
+    setMcpServers(file.map((e) => e.url));
+    console.log(`[admin] mcp servers loaded from file: ${file.length}`);
+  }
+}
+
+// 列表 + 逐台探活（并行）
+admin.get('/mcp/servers', async (c) => {
+  const list = currentMcpServers();
+  const probes = await Promise.all(list.map((e) => probeMcpServer(e.url)));
+  const servers = list.map((e, i) => ({ ...e, ...probes[i] }));
+  return c.json({ servers, managed: loadMcpServerFile() !== null });
+});
+
+// 添加：先探活，探不通默认拒绝（body.force=true 强行加）
+admin.post('/mcp/servers', async (c) => {
+  let body: any = {}; try { body = await c.req.json(); } catch {}
+  const url = typeof body?.url === 'string' ? body.url.trim() : '';
+  if (!url || !/^https?:\/\//.test(url)) return c.json({ ok: false, error: 'bad url' }, 400);
+  const name = (typeof body?.name === 'string' && body.name.trim()) ? body.name.trim() : deriveName(url);
+  const list = currentMcpServers();
+  if (list.some((e) => e.url === url)) return c.json({ ok: false, error: 'url exists' }, 409);
+  if (list.some((e) => e.name === name)) return c.json({ ok: false, error: 'name exists' }, 409);
+  const probe = await probeMcpServer(url);
+  if (!probe.ok && body?.force !== true) {
+    return c.json({ ok: false, error: `探活失败：${probe.error || 'unreachable'}（可 force）`, probe }, 422);
+  }
+  list.push({ name, url });
+  saveMcpServers(list);
+  return c.json({ ok: true, probe });
+});
+
+// 删除（按 name）
+admin.delete('/mcp/servers/:name', async (c) => {
+  const name = decodeURIComponent(c.req.param('name'));
+  const list = currentMcpServers();
+  const idx = list.findIndex((e) => e.name === name);
+  if (idx < 0) return c.json({ ok: false, error: 'not found' }, 404);
+  list.splice(idx, 1);
+  saveMcpServers(list);
+  return c.json({ ok: true });
+});
+
+// 手动刷新工具缓存（改动即刻反映到 /api/mcp/tools）
+admin.post('/mcp/refresh', async (c) => {
+  setMcpServers(currentMcpServers().map((e) => e.url));
+  return c.json({ ok: true });
 });
 
 // ============ 导出：包一层 fetch ============

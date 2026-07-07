@@ -12,6 +12,14 @@ struct MCPSettingsTab: View {
     @State private var loadingTools = false
     @State private var toolsError = ""
 
+    // 网关 MCP 服务器（页面主体：全部接入的 MCP 集合在这里管理）
+    @State private var gwServers: [GatewayConsoleClient.MCPServer] = []
+    @State private var loadingServers = false
+    @State private var showAddGwServer = false
+    @State private var pendingDeleteServer: GatewayConsoleClient.MCPServer? = nil
+    @State private var gwErrorMessage: String? = nil
+    @State private var legacyExpanded = false
+
     private var selectedProvider: APIProvider? {
         providerManager?.providers.first(where: { $0.id == apiSelectedProviderId })
     }
@@ -22,6 +30,17 @@ struct MCPSettingsTab: View {
 
     private var servers: [MCPServerConfig] {
         selectedProvider?.mcpServers ?? []
+    }
+
+    private func loadGwServers() {
+        loadingServers = true
+        Task {
+            let s = await GatewayConsoleClient.mcpServers()
+            await MainActor.run {
+                gwServers = s
+                loadingServers = false
+            }
+        }
     }
 
     struct BackendTool: Decodable, Identifiable {
@@ -60,77 +79,73 @@ struct MCPSettingsTab: View {
 
     var body: some View {
         List {
-            // Section 1：后端工具（网关 /api/mcp/tools，只读）
-            Section("后端工具") {
-                if loadingTools {
-                    HStack(spacing: 8) { ProgressView(); Text("加载中…").font(.system(size: Theme.F.secondary)) }
-                } else if !toolsError.isEmpty {
-                    Text("加载失败：\(toolsError)").font(.system(size: Theme.F.secondary)).foregroundColor(.red)
-                } else if backendTools.isEmpty {
-                    Text("暂无后端工具").font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted)
+            // Section 1：网关 MCP 服务器（管理主体：增删 + 可用性探活）
+            Section {
+                if loadingServers && gwServers.isEmpty {
+                    HStack(spacing: 8) { ProgressView(); Text("探活中…").font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted) }
+                } else if gwServers.isEmpty {
+                    Text("网关没有接入任何 MCP 服务器")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
                 } else {
-                    ForEach(backendTools) { t in
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(t.name).font(.system(size: 14, weight: .medium)).foregroundColor(Theme.textPrimary)
-                                Text(t.source)
-                                    .font(.system(size: 10))
-                                    .padding(.horizontal, 5).padding(.vertical, 1)
-                                    .background(Capsule().fill((t.source == "builtin" ? Color.blue : Color.green).opacity(0.15)))
-                                    .foregroundColor(t.source == "builtin" ? .blue : .green)
+                    ForEach(gwServers) { s in
+                        gwServerRow(s)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    pendingDeleteServer = s
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
                             }
-                            if !t.description.isEmpty {
-                                Text(t.description).font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted)
-                            }
-                        }
-                        .padding(.vertical, 1)
                     }
                 }
-                Button("刷新") { loadBackendTools() }
-                    .font(.system(size: Theme.F.secondary))
-                    .disabled(loadingTools)
-            }
-            .listRowBackground(Theme.mainBg)
-            .onAppear { if backendTools.isEmpty && !loadingTools { loadBackendTools() } }
-
-            // 说明
-            Section {
-                Text("MCP 让 AI 连接外部工具（文件系统、数据库、API 等）。")
-                    .font(.system(size: Theme.F.secondary))
-                    .foregroundColor(Theme.textMuted)
-            }
-            .listRowBackground(Theme.mainBg)
-
-            if !isAnthropic {
-                Section {
+                Button {
+                    showAddGwServer = true
+                } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(Theme.textMuted)
-                        Text("MCP 仅支持 Claude API。请在 API 设置里切换到 Anthropic 类型的提供商。")
+                        Image(systemName: "plus.circle")
+                            .foregroundColor(Theme.branchIndicator)
+                        Text("添加 MCP 服务器")
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.branchIndicator)
+                    }
+                }
+                .buttonStyle(.plain)
+            } header: {
+                Text("网关 MCP 服务器")
+            } footer: {
+                Text("所有模型的 MCP 工具都由网关统一接入。增删即时生效；删除只是断开接入，不会动服务器本身。")
+                    .font(.system(size: Theme.F.caption))
+            }
+            .listRowBackground(Theme.mainBg)
+
+            // Section 2：工具清单（按来源分组）
+            Section("MCP 工具 · \(backendTools.filter { $0.source == "mcp" }.count)") {
+                toolsListContent(source: "mcp")
+            }
+            .listRowBackground(Theme.mainBg)
+
+            Section("网关内建工具 · \(backendTools.filter { $0.source == "builtin" }.count)") {
+                toolsListContent(source: "builtin")
+                Button("刷新工具列表") {
+                    Task {
+                        _ = await GatewayConsoleClient.refreshMcpTools()
+                        loadBackendTools()
+                    }
+                }
+                .font(.system(size: Theme.F.secondary))
+                .disabled(loadingTools)
+            }
+            .listRowBackground(Theme.mainBg)
+
+            // 高级：App 直连 MCP（旧通道，仅 Anthropic 直连 provider 用得上）
+            Section {
+                DisclosureGroup(isExpanded: $legacyExpanded) {
+                    if !isAnthropic {
+                        Text("当前提供商不是 Anthropic 直连，此通道未启用。日常 MCP 都走上面的网关，不需要配这里。")
                             .font(.system(size: Theme.F.secondary))
                             .foregroundColor(Theme.textMuted)
-                    }
-                    .padding(.vertical, 4)
-                }
-                .listRowBackground(Theme.mainBg)
-            } else {
-                if servers.isEmpty {
-                    Section {
-                        VStack(spacing: 8) {
-                            Image(systemName: "wrench.and.screwdriver")
-                                .font(.system(size: 24))
-                                .foregroundColor(Theme.textMuted.opacity(0.4))
-                            Text("还没有 MCP Server")
-                                .font(.system(size: Theme.F.body))
-                                .foregroundColor(Theme.textMuted)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                    }
-                    .listRowBackground(Theme.mainBg)
-                    .listRowSeparator(.hidden)
-                } else {
-                    Section("已连接的 Server") {
+                    } else {
                         ForEach(servers) { server in
                             Button {
                                 isAddingServer = false
@@ -147,33 +162,78 @@ struct MCPSettingsTab: View {
                                 }
                             }
                         }
-                    }
-                    .listRowBackground(Theme.mainBg)
-                }
-
-                Section {
-                    Button {
-                        editingServer = nil
-                        isAddingServer = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus.circle")
-                                .foregroundColor(Theme.branchIndicator)
-                            Text("添加 MCP Server")
-                                .font(.system(size: Theme.F.body))
-                                .foregroundColor(Theme.branchIndicator)
+                        Button {
+                            editingServer = nil
+                            isAddingServer = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus.circle")
+                                    .foregroundColor(Theme.branchIndicator)
+                                Text("添加直连 Server")
+                                    .font(.system(size: Theme.F.body))
+                                    .foregroundColor(Theme.branchIndicator)
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                } label: {
+                    Text("高级 · App 直连 MCP（仅 Anthropic 直连）")
+                        .font(.system(size: Theme.F.secondary))
+                        .foregroundColor(Theme.textMuted)
                 }
-                .listRowBackground(Theme.mainBg)
             }
+            .listRowBackground(Theme.mainBg)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Theme.sidebarBg.ignoresSafeArea())
         .navigationTitle("MCP 工具")
         .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            loadGwServers()
+            loadBackendTools()
+        }
+        .onAppear {
+            if backendTools.isEmpty && !loadingTools { loadBackendTools() }
+            if gwServers.isEmpty && !loadingServers { loadGwServers() }
+        }
+        .sheet(isPresented: $showAddGwServer) {
+            AddGatewayMCPServerSheet {
+                loadGwServers()
+                Task {
+                    _ = await GatewayConsoleClient.refreshMcpTools()
+                    loadBackendTools()
+                }
+            }
+            .presentationDetents([.medium])
+        }
+        .alert("断开这个 MCP 服务器？", isPresented: Binding(
+            get: { pendingDeleteServer != nil },
+            set: { if !$0 { pendingDeleteServer = nil } }
+        )) {
+            Button("取消", role: .cancel) { pendingDeleteServer = nil }
+            Button("断开", role: .destructive) {
+                guard let s = pendingDeleteServer else { return }
+                pendingDeleteServer = nil
+                Task {
+                    let ok = await GatewayConsoleClient.deleteMcpServer(name: s.name)
+                    if !ok { gwErrorMessage = "断开失败" }
+                    loadGwServers()
+                    _ = await GatewayConsoleClient.refreshMcpTools()
+                    loadBackendTools()
+                }
+            }
+        } message: {
+            Text("\(pendingDeleteServer?.name ?? "")\n\(pendingDeleteServer?.url ?? "")")
+        }
+        .alert("出错了", isPresented: Binding(
+            get: { gwErrorMessage != nil },
+            set: { if !$0 { gwErrorMessage = nil } }
+        )) {
+            Button("好") { gwErrorMessage = nil }
+        } message: {
+            Text(gwErrorMessage ?? "")
+        }
         .sheet(isPresented: $isAddingServer) {
             MCPServerEditSheet(server: nil) { newServer in
                 providerManager?.addOrUpdateMCPServer(newServer, for: apiSelectedProviderId)
@@ -182,6 +242,69 @@ struct MCPSettingsTab: View {
         .sheet(item: $editingServer) { server in
             MCPServerEditSheet(server: server) { updated in
                 providerManager?.addOrUpdateMCPServer(updated, for: apiSelectedProviderId)
+            }
+        }
+    }
+
+    // MARK: - 网关服务器行 / 工具列表
+
+    private func gwServerRow(_ s: GatewayConsoleClient.MCPServer) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(s.ok ? Color.green : Color.red.opacity(0.7))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(s.name)
+                    .font(.system(size: Theme.F.label, weight: .medium))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+                Text(s.url)
+                    .font(.system(size: Theme.F.caption))
+                    .foregroundColor(Theme.textMuted)
+                    .lineLimit(1)
+                if let err = s.error, !s.ok {
+                    Text(err)
+                        .font(.system(size: Theme.F.caption))
+                        .foregroundColor(.red.opacity(0.8))
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(s.ok ? "\(s.toolCount) 工具" : "不可用")
+                    .font(.system(size: Theme.F.caption, weight: .medium))
+                    .foregroundColor(s.ok ? Theme.textPrimary : .red.opacity(0.8))
+                Text("\(s.ms) ms")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Theme.textMuted)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func toolsListContent(source: String) -> some View {
+        let filtered = backendTools.filter { $0.source == source }
+        if loadingTools && backendTools.isEmpty {
+            HStack(spacing: 8) { ProgressView(); Text("加载中…").font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted) }
+        } else if !toolsError.isEmpty && backendTools.isEmpty {
+            Text("加载失败：\(toolsError)").font(.system(size: Theme.F.secondary)).foregroundColor(.red)
+        } else if filtered.isEmpty {
+            Text("暂无").font(.system(size: Theme.F.secondary)).foregroundColor(Theme.textMuted)
+        } else {
+            ForEach(filtered) { t in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t.name)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundColor(Theme.textPrimary)
+                    if !t.description.isEmpty {
+                        Text(t.description)
+                            .font(.system(size: Theme.F.secondary))
+                            .foregroundColor(Theme.textMuted)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(.vertical, 1)
             }
         }
     }
@@ -219,6 +342,87 @@ struct MCPSettingsTab: View {
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - 添加网关 MCP 服务器 sheet
+
+struct AddGatewayMCPServerSheet: View {
+    var onDone: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var url = ""
+    @State private var force = false
+    @State private var submitting = false
+    @State private var errorText: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("服务器地址") {
+                    TextField("http://127.0.0.1:3100/mcp", text: $url)
+                        .font(.system(size: 13, design: .monospaced))
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                }
+                Section("名字（可选，默认取 host:port）") {
+                    TextField("如 browser", text: $name)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                }
+                if errorText != nil {
+                    Section {
+                        Text(errorText ?? "")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red.opacity(0.85))
+                        Toggle("探活失败也强行接入", isOn: $force)
+                            .font(.system(size: 13))
+                    }
+                }
+                Section {
+                    Text("保存前网关会先探活（initialize + tools/list）；接入后所有模型即刻可用新工具。")
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.textMuted)
+                }
+            }
+            .navigationTitle("添加 MCP 服务器")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if submitting {
+                        ProgressView()
+                    } else {
+                        Button("接入") {
+                            let u = url.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !u.isEmpty else { return }
+                            submitting = true
+                            errorText = nil
+                            Task {
+                                let (ok, err) = await GatewayConsoleClient.addMcpServer(
+                                    name: name.trimmingCharacters(in: .whitespaces),
+                                    url: u, force: force
+                                )
+                                await MainActor.run {
+                                    submitting = false
+                                    if ok {
+                                        dismiss()
+                                        onDone()
+                                    } else {
+                                        errorText = err ?? "接入失败"
+                                    }
+                                }
+                            }
+                        }
+                        .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
     }
 }
 
