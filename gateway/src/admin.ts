@@ -10,6 +10,7 @@ import { auth } from './middleware/auth';
 import { config } from './config';
 import { supabase } from './db/supabase';
 import { getMcpServerUrls, setMcpServers, probeMcpServer } from './tools/mcp-client';
+import { searchWeb } from './tools/websearch';
 
 // ============ 通道 key 运行时覆盖（持久化 + 热生效） ============
 // key 原本只来自启动时 Bun.env；admin 改 key 时写 overrides 文件并直接改 config
@@ -310,6 +311,22 @@ admin.post('/mcp/refresh', async (c) => {
   return c.json({ ok: true });
 });
 
+// ============ 联网搜索端点（App 客户端 search_web 走这里）============
+// 网关侧真 Chrome 搜索，免 key。App 的「网关搜索」provider GET /api/search?q=...&count=
+const search = new Hono().basePath('/api/search');
+search.use('*', auth);
+search.get('/', async (c) => {
+  const q = (c.req.query('q') || '').trim();
+  const count = Math.min(Math.max(parseInt(c.req.query('count') || '8', 10) || 8, 1), 15);
+  if (!q) return c.json({ error: 'missing q' }, 400);
+  try {
+    const items = await searchWeb(q, count);
+    return c.json({ query: q, items });
+  } catch (e: any) {
+    return c.json({ error: e?.message || 'search failed' }, 502);
+  }
+});
+
 // ============ 导出：包一层 fetch ============
 export default {
   ...appExport,
@@ -317,6 +334,9 @@ export default {
     const url = new URL(req.url);
     if (url.pathname.startsWith('/api/admin/')) {
       return admin.fetch(req, env, ctx);
+    }
+    if (url.pathname === '/api/search' || url.pathname.startsWith('/api/search/')) {
+      return search.fetch(req, env, ctx);
     }
     return (appExport as any).fetch(req, env, ctx);
   },
