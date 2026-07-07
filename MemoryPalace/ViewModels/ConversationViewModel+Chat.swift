@@ -14,8 +14,8 @@ extension ConversationViewModel {
         context: ModelContext,
         globalEntries: [WorldBookEntry] = []
     ) -> (systemPrompt: String?, systemLayers: SystemPromptLayers?, messages: [(role: String, content: String)], sampling: SamplingParams) {
-        // memoryEnabled=false 的对话不注入记忆
-        let shouldInjectMemory = selectedConversation?.memoryEnabled ?? true
+        // memoryEnabled=false 的对话不注入记忆；全局三态非 on 也不注入（省一次 fetch）
+        let shouldInjectMemory = (selectedConversation?.memoryEnabled ?? true) && LocalMemoryMode.current.injects
         let memories: [Memory] = shouldInjectMemory ? memoryStore.listHot(profileId: profile.id, context: context) : []
         let ids = memories.map(\.id)
         if !ids.isEmpty { try? memoryStore.recordAccess(ids: ids, context: context) }
@@ -307,6 +307,23 @@ extension ConversationViewModel {
         return relevant
     }
 
+    /// 文本文件多编码解码链：UTF-8 → UTF-16（带/不带 BOM，备忘录导出 /
+    /// Windows 记事本常见）→ GB18030/GBK（中文旧文件）→ Latin-1 兜底。
+    /// 全部失败返回 nil（调用方给出人话错误）。
+    static func decodeTextFile(_ data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        if let s = String(data: data, encoding: .utf8) { return s }
+        if let s = String(data: data, encoding: .utf16) { return s }
+        if let s = String(data: data, encoding: .utf16LittleEndian), !s.contains("\0") { return s }
+        if let s = String(data: data, encoding: .utf16BigEndian), !s.contains("\0") { return s }
+        let gb18030 = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue))
+        if let s = String(data: data, encoding: String.Encoding(rawValue: gb18030)) { return s }
+        let gbk = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GBK_95.rawValue))
+        if let s = String(data: data, encoding: String.Encoding(rawValue: gbk)) { return s }
+        if let s = String(data: data, encoding: .isoLatin1) { return s }
+        return nil
+    }
+
     /// Send a user message and get a streaming response.
     /// 返回 true = 已受理（发出或排队）；false = 被 guard 拦下（无对话 / 预算闸 / 空群）。
     /// drainPendingSends 用返回值决定是否把 pending 塞回队列，不静默丢消息。
@@ -384,16 +401,7 @@ extension ConversationViewModel {
                     let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
                     return (json, "multimodal_text")
                 } else if textExts.contains(ext) {
-                    let fileContent: String = {
-                        if let s = String(data: data, encoding: .utf8) { return s }
-                        if let s = String(data: data, encoding: .ascii) { return s }
-                        // 尝试GBK/GB18030编码（中文文件常见）
-                        let gb18030 = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue))
-                        if let s = String(data: data, encoding: String.Encoding(rawValue: gb18030)) { return s }
-                        let gbk = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GBK_95.rawValue))
-                        if let s = String(data: data, encoding: String.Encoding(rawValue: gbk)) { return s }
-                        return "[无法解码文件内容]"
-                    }()
+                    let fileContent = Self.decodeTextFile(data) ?? "[无法解码文件内容：不是常见文本编码（已尝试 UTF-8/UTF-16/GB18030/GBK/Latin-1）]"
                     let maxChars = 100_000
                     let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断至前 100K 字符]" : fileContent
                     let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
@@ -409,13 +417,15 @@ extension ConversationViewModel {
                     let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? text
                     return (json, "multimodal_text")
                 } else {
-                    if let fileContent = String(data: data, encoding: .utf8), !fileContent.isEmpty {
+                    // 未知扩展名：用同一条多编码解码链兜底（此前只试 UTF-8，
+                    // UTF-16 txt / 无扩展名文本都会掉进"不支持的格式"）
+                    if let fileContent = Self.decodeTextFile(data), !fileContent.isEmpty {
                         let maxChars = 100_000
                         let truncated = fileContent.count > maxChars ? String(fileContent.prefix(maxChars)) + "\n\n[文件过长，已截断]" : fileContent
                         let combined = "📎 \(fileName ?? "file")\n```\n" + truncated + "\n```" + (text.isEmpty ? "" : "\n\n" + text)
                         return (combined, "text")
                     } else {
-                        return ("[无法读取 \(fileName ?? "file")：不支持的格式]" + (text.isEmpty ? "" : "\n\n" + text), "text")
+                        return ("[无法读取 \(fileName ?? "file")：\(data.isEmpty ? "文件内容为空（可能是 iCloud 未下载或读取失败）" : "不是常见文本编码")]" + (text.isEmpty ? "" : "\n\n" + text), "text")
                     }
                 }
             } else {
@@ -892,8 +902,11 @@ extension ConversationViewModel {
         try? context.save()
     }
 
-    /// AUDN 记忆提取：每轮对话后异步调用便宜模型提取/更新/删除记忆
+    /// AUDN 记忆提取：每轮对话后异步调用便宜模型提取/更新/删除记忆。
+    /// 三态开关唯一闸口：off 时所有入口（普通回复/CC 回复）统一不提取；
+    /// recordOnly 照常提取（只是 PromptAssembler 不注入）。
     private func extractMemoriesIfNeeded(profileId: String, conversationId: String, model: ProviderModel, providerManager: ProviderManager, context: ModelContext) {
+        guard LocalMemoryMode.current.extracts else { return }
         guard !profileId.isEmpty else { return }
 
         // SC-B2：recentMessages 带节点 id，供 quote 锚定回溯到具体消息
@@ -989,6 +1002,27 @@ extension ConversationViewModel {
                 print("🧠 记忆提取: ⚠️ 失败 — \(error)")
                 #endif
             }
+        }
+    }
+
+    /// 上下文压缩重 Roll（压缩检查器用）：清掉现有摘要，按当前全量历史重新生成。
+    /// 返回 nil = 成功；非 nil = 错误信息。窗口不足压缩阈值时 summarize 静默跳过
+    ///（属于成功——检查器按"未压缩"显示）。
+    func rerollContextSummary(model: ProviderModel, preset: Preset, providerManager: ProviderManager) async -> String? {
+        guard let conv = selectedConversation else { return "没有选中的对话" }
+        ContextSummarizer.clear(conversationId: conv.id)
+        let all = buildAPIMessages(maxMessages: Int.max)
+        do {
+            try await ContextSummarizer.summarize(
+                allMessages: all,
+                contextDepth: preset.sampling.contextDepth,
+                conversationId: conv.id,
+                model: cheapModel(providerManager: providerManager, fallback: model),
+                providerManager: providerManager
+            )
+            return nil
+        } catch {
+            return error.localizedDescription
         }
     }
 
