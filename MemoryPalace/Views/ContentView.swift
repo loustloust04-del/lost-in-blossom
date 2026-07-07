@@ -59,6 +59,7 @@ struct ContentView: View {
     @State private var showRenameAlert = false
     @State private var renameText: String = ""
     @State private var showChangeProjectSheet = false
+    @State private var showContextSummarySheet = false
     // Pin Bar state（从 CardFlowView 挪上来，Phase 3 用）
     @State private var pinCurrentIndex: Int = 0
     @State private var pinBarHidden: Bool = false
@@ -560,6 +561,11 @@ struct ContentView: View {
                             } label: {
                                 Label("重命名", systemImage: "pencil")
                             }
+                            Button {
+                                showContextSummarySheet = true
+                            } label: {
+                                Label("上下文压缩", systemImage: "rectangle.compress.vertical")
+                            }
                             Divider()
                             Button(role: .destructive) {
                                 viewModel.softDeleteConversation(conv)
@@ -693,6 +699,11 @@ struct ContentView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.sidebarBg)
             }
+        }
+        .sheet(isPresented: $showContextSummarySheet) {
+            ContextSummarySheet(viewModel: viewModel)
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBranchMap) {
             BranchMapSheet(

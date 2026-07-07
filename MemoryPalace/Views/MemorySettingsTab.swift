@@ -13,6 +13,7 @@ struct IOSMemoryPage: View {
     @State private var editingNoteId: UUID? = nil
     @State private var editingNoteText = ""
     @AppStorage("localMemoryEnabled") private var localMemoryEnabled = true
+    @AppStorage(LocalMemoryMode.storageKey) private var localMemoryModeRaw = ""
     @AppStorage("memoryExplanationExpanded") private var memoryExplanationExpanded = true
     @AppStorage("memoryExtractModelId") private var memoryExtractModelId = ""
     @AppStorage("customMemoryExtractionPrompt") private var customMemoryPrompt = ""
@@ -28,18 +29,24 @@ struct IOSMemoryPage: View {
         let totalTokens = hotMems.reduce(0) { $0 + $1.tokenCount }
 
         List {
-            // 本地记忆总开关
+            // 本地记忆三态开关（开启 / 仅记录 / 关闭）
             Section {
-                Toggle(isOn: $localMemoryEnabled) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("启用本地记忆")
-                            .font(.system(size: Theme.F.body, weight: .medium))
-                        Text("关闭后停止记忆注入（不影响提示词），提取照常运行，已有记忆不会删除")
-                            .font(.system(size: Theme.F.caption))
-                            .foregroundStyle(Theme.textSecondary)
+                Picker("记忆系统", selection: Binding(
+                    get: { LocalMemoryMode.current },
+                    set: { mode in
+                        localMemoryModeRaw = mode.rawValue
+                        // 同步旧布尔键（兼容可能残留的读取方）
+                        localMemoryEnabled = mode != .off
+                    }
+                )) {
+                    ForEach(LocalMemoryMode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
                     }
                 }
-                .tint(Theme.accent)
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("开启 = 正常提取 + 注入提示词；仅记录 = 继续在后台生成记忆但不注入（静默攒着）；关闭 = 提取和注入都停。已有记忆任何模式下都不会删除。")
+                    .font(.system(size: Theme.F.caption))
             }
 
             // 说明

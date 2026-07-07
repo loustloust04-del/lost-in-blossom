@@ -190,17 +190,22 @@ struct AddToChatSheet: View {
         .presentationDragIndicator(.visible)
             .fileImporter(
                 isPresented: $showFilePicker,
-                allowedContentTypes: [.pdf, .json, .plainText, .html, .commaSeparatedText, .png, .jpeg, .gif, .webP, .heic, .xml],
+                // .text 是 .plainText 的父类型：txt/md/log 等文本变体都能选
+                allowedContentTypes: [.pdf, .json, .text, .html, .commaSeparatedText, .png, .jpeg, .gif, .webP, .heic, .xml],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {
                 case .success(let urls):
                     guard let url = urls.first else { return }
-                    guard url.startAccessingSecurityScopedResource() else { return }
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    if let data = try? Data(contentsOf: url), data.count <= 10_485_760 {
+                    // scoped 访问失败不硬拦：App 沙盒内/inbox 的 URL 本来就返回 false，
+                    // 之前 guard 直接 return 导致选中后静默无反应
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    if let data = try? Data(contentsOf: url), !data.isEmpty, data.count <= 10_485_760 {
                         pendingFileData = data
                         pendingFileName = url.lastPathComponent
+                    } else {
+                        BreadcrumbLog.shared.add("📎", "文件读取失败: \(url.lastPathComponent)")
                     }
                 case .failure:
                     break
