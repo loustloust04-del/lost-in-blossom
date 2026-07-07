@@ -35,10 +35,15 @@ struct MCPSettingsTab: View {
     private func loadGwServers() {
         loadingServers = true
         Task {
+            GatewayConsoleClient.resetAuthFlag()
             let s = await GatewayConsoleClient.mcpServers()
             await MainActor.run {
                 gwServers = s
                 loadingServers = false
+                // client 静默吞错：401 时列表是空的，别让它伪装成"没接服务器"
+                if s.isEmpty && GatewayConsoleClient.lastAuthFailed {
+                    gwErrorMessage = "网关拒绝访问（HTTP 401）：去 网关控制台 → 右上「连接」填访问令牌"
+                }
             }
         }
     }
@@ -66,7 +71,11 @@ struct MCPSettingsTab: View {
                 let (data, resp) = try await URLSession.shared.data(for: req)
                 guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                     let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                    await MainActor.run { toolsError = "HTTP \(code)"; loadingTools = false }
+                    // 401/403 = 访问令牌没配或填错——指路到设置入口，别只甩状态码
+                    let hint = (code == 401 || code == 403)
+                        ? "HTTP \(code)（网关拒绝访问：去 网关控制台 → 右上「连接」填访问令牌）"
+                        : "HTTP \(code)"
+                    await MainActor.run { toolsError = hint; loadingTools = false }
                     return
                 }
                 let decoded = try JSONDecoder().decode(BackendToolsResp.self, from: data)

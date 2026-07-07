@@ -12,14 +12,51 @@ enum GatewayConsoleClient {
         UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? ""
     }
 
+    /// 鉴权诊断：任何请求撞上 401/403 置位，成功 200 清零。
+    /// 此前所有方法静默吞错（try? + 空数组兜底），token 没配时控制台全是 0、
+    /// 用户看不到任何原因——加载完读这个标志弹横幅指路。
+    static var lastAuthFailed = false
+
+    static var tokenConfigured: Bool { !token.isEmpty }
+
+    static func saveConnection(baseURL: String, token: String) {
+        UserDefaults.standard.set(baseURL, forKey: "gatewayBaseURL")
+        UserDefaults.standard.set(token, forKey: "gatewayAuthToken")
+    }
+
+    /// 连接测试：打一个必须鉴权的端点，返回 (HTTP 状态码, 人话结论)。
+    /// 用显式参数而不是 UserDefaults，让设置页保存前就能试。
+    static func testConnection(baseURL: String, token: String) async -> (Int?, String) {
+        guard let url = URL(string: baseURL + "/api/memories?limit=1") else { return (nil, "地址格式不对") }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 8
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse else { return (nil, "连不上网关（网络或域名问题）") }
+        switch http.statusCode {
+        case 200: return (200, "连接成功，鉴权通过")
+        case 401, 403: return (http.statusCode, "网关拒绝了这个令牌（HTTP \(http.statusCode)）")
+        default: return (http.statusCode, "网关返回 HTTP \(http.statusCode)")
+        }
+    }
+
+    /// 只置位不清零：loadAll 并发打 6 个端点，/health 这类无鉴权端点的 200
+    /// 会晚到并把 401 置的标志洗掉。批次开始时由调用方 resetAuthFlag()。
+    private static func noteStatus(_ code: Int) {
+        if code == 401 || code == 403 { lastAuthFailed = true }
+    }
+
+    static func resetAuthFlag() { lastAuthFailed = false }
+
     private static func get(_ path: String, timeout: TimeInterval = 8) async throws -> Data {
         guard let url = URL(string: baseURL + path) else { throw URLError(.badURL) }
         var req = URLRequest(url: url)
         req.timeoutInterval = timeout
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, resp) = try await URLSession.shared.data(for: req)
-        if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
-            throw URLError(.badServerResponse)
+        if let http = resp as? HTTPURLResponse {
+            noteStatus(http.statusCode)
+            if http.statusCode != 200 { throw URLError(.badServerResponse) }
         }
         return data
     }
@@ -180,7 +217,9 @@ enum GatewayConsoleClient {
             req.httpBody = try? JSONSerialization.data(withJSONObject: json)
         }
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+              let http = resp as? HTTPURLResponse else { return nil }
+        noteStatus(http.statusCode)
+        guard http.statusCode == 200 else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
     private static func sendOK(_ path: String, method: String, json: [String: Any]? = nil) async -> Bool {
