@@ -53,8 +53,39 @@ struct MCPSettingsTab: View {
         let description: String
         let source: String
         var id: String { name }
+
+        // 字段宽容解码：任一工具缺 description/source 不再整条数组解码失败
+        // （历史事故：网关某工具 name 为 null 时，非可选字段让整页报
+        //  "data couldn't be read"）。name 缺失的工具在 resp 层被过滤掉。
+        private enum CodingKeys: String, CodingKey { case name, description, source }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)   // 缺 name → 抛错 → resp 层跳过这条
+            let desc = try? c.decodeIfPresent(String.self, forKey: .description)
+            description = (desc ?? nil) ?? ""
+            let src = try? c.decodeIfPresent(String.self, forKey: .source)
+            source = (src ?? nil) ?? "builtin"
+        }
     }
-    private struct BackendToolsResp: Decodable { let tools: [BackendTool] }
+    private struct BackendToolsResp: Decodable {
+        let tools: [BackendTool]
+        // 单条坏数据（如 name 为 null）跳过，不拖垮整份列表
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            var arr = try c.nestedUnkeyedContainer(forKey: .tools)
+            var out: [BackendTool] = []
+            while !arr.isAtEnd {
+                if let t = try? arr.decode(BackendTool.self) {
+                    out.append(t)
+                } else {
+                    _ = try? arr.decode(AnyDecodableSkip.self)
+                }
+            }
+            tools = out
+        }
+        private enum CodingKeys: String, CodingKey { case tools }
+    }
+    private struct AnyDecodableSkip: Decodable {}
 
     private func loadBackendTools() {
         loadingTools = true

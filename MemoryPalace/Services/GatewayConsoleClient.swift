@@ -193,10 +193,24 @@ enum GatewayConsoleClient {
         let source: String?
         var id: String { name }
     }
-    private struct ToolsResp: Codable {
+    private struct ToolsResp: Decodable {
         let tools: [GatewayTool]
         let count: Int?
+        // 单条工具缺 name（网关历史畸形数据）不再拖垮整份列表解码——逐条容错跳过
+        private enum CodingKeys: String, CodingKey { case tools, count }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            count = (try? c.decodeIfPresent(Int.self, forKey: .count)) ?? nil
+            var arr = try c.nestedUnkeyedContainer(forKey: .tools)
+            var out: [GatewayTool] = []
+            while !arr.isAtEnd {
+                if let t = try? arr.decode(GatewayTool.self) { out.append(t) }
+                else { _ = try? arr.decode(SkipOne.self) }
+            }
+            tools = out
+        }
     }
+    private struct SkipOne: Decodable {}
 
     static func mcpTools() async -> [GatewayTool] {
         guard let data = try? await get("/api/mcp/tools", timeout: 12),
