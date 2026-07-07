@@ -253,4 +253,57 @@ enum GatewayConsoleClient {
         await sendOK("/api/admin/cron/delete", method: "POST",
                      json: ["idx": job.idx, "line": job.line])
     }
+
+    // MARK: - Admin：MCP 服务器管理
+
+    struct MCPServer: Codable, Identifiable {
+        let name: String
+        let url: String
+        let ok: Bool
+        let toolCount: Int
+        let ms: Int
+        let error: String?
+        var id: String { name }
+    }
+    private struct MCPServersResp: Codable {
+        let servers: [MCPServer]
+        let managed: Bool
+    }
+
+    /// 服务器列表 + 逐台探活（网关侧并行探，探活可能要几秒）
+    static func mcpServers() async -> [MCPServer] {
+        guard let data = try? await get("/api/admin/mcp/servers", timeout: 30),
+              let r = try? JSONDecoder().decode(MCPServersResp.self, from: data) else { return [] }
+        return r.servers
+    }
+
+    /// 添加服务器（网关先探活，探不通默认拒绝；force=true 强行加）。
+    /// 返回 (成功?, 错误信息)。
+    static func addMcpServer(name: String?, url: String, force: Bool) async -> (Bool, String?) {
+        guard let reqURL = URL(string: baseURL + "/api/admin/mcp/servers") else { return (false, "bad url") }
+        var req = URLRequest(url: reqURL)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 30
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["url": url, "force": force]
+        if let name, !name.isEmpty { body["name"] = name }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return (false, "网关无响应")
+        }
+        let ok = obj["ok"] as? Bool ?? false
+        return (ok, ok ? nil : (obj["error"] as? String ?? "未知错误"))
+    }
+
+    static func deleteMcpServer(name: String) async -> Bool {
+        let enc = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        return await sendOK("/api/admin/mcp/servers/\(enc)", method: "DELETE")
+    }
+
+    /// 手动刷新网关工具缓存
+    static func refreshMcpTools() async -> Bool {
+        await sendOK("/api/admin/mcp/refresh", method: "POST")
+    }
 }
