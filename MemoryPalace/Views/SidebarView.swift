@@ -224,7 +224,7 @@ struct SidebarView: View {
                         }
                     }
                 }
-                sidebarMemoryEntry(emoji: "💧", title: "Almond", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .almond) {
+                sidebarNavEntryAsset(icon: "icon-almond", title: "Almond", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .almond) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
@@ -233,7 +233,7 @@ struct SidebarView: View {
                         }
                     }
                 }
-                sidebarMemoryEntry(emoji: "⬡", title: "Amber", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .amber) {
+                sidebarNavEntryAsset(icon: "icon-amber", title: "Amber", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .amber) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
