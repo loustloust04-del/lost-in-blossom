@@ -47,6 +47,7 @@ struct ConsoleView: View {
         .task {
             loadVitals()
             ensureTodayContext()
+            await todo.refresh()
             await healthKit.requestAuthorization()
             if healthKit.authState == .authorized, let ctx = todayCtx {
                 await healthKit.populate(context: ctx)

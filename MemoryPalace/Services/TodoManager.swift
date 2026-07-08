@@ -1,26 +1,47 @@
 import Foundation
 import Observation
 
-/// 控制台待办。G1：本地 UserDefaults；G2 会加网关同步，让 Caelum(CC/API) 也能写。
+/// 控制台待办。网关后端（/api/todos）为准，本地 UserDefaults 作离线缓存 + 乐观更新。
+/// CC/API 经 builtin todo_* 工具写入的待办也会在这里出现（双端共用）。
 struct TodoItem: Codable, Identifiable, Hashable {
-    var id: UUID = UUID()
+    var id: String
     var text: String
     var done: Bool = false
-    /// 可选：由 Caelum 写入时标记来源，UI 显示小标
-    var source: String? = nil
+    var source: String? = nil     // 'bunny' / 'caelum' …
     var createdAt: Date = Date()
+
+    enum CodingKeys: String, CodingKey { case id, text, done, source, createdAt }
+    init(id: String = UUID().uuidString, text: String, done: Bool = false, source: String? = nil, createdAt: Date = Date()) {
+        self.id = id; self.text = text; self.done = done; self.source = source; self.createdAt = createdAt
+    }
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        text = try c.decode(String.self, forKey: .text)
+        done = (try? c.decode(Bool.self, forKey: .done)) ?? false
+        source = try? c.decodeIfPresent(String.self, forKey: .source) ?? nil
+        // 网关发 ISO 字符串；本地缓存发 Date。两种都吃。
+        if let s = try? c.decode(String.self, forKey: .createdAt) {
+            createdAt = ISO8601DateFormatter().date(from: s) ?? Date()
+        } else {
+            createdAt = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
+        }
+    }
 }
 
 @MainActor
 @Observable
 final class TodoManager {
     static let shared = TodoManager()
-    private static let key = "consoleTodoItems_v1"
+    private static let cacheKey = "consoleTodoItems_v2"
 
     private(set) var items: [TodoItem]
 
+    private var baseURL: String { UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com" }
+    private var token: String { UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? "" }
+
     private init() {
-        if let data = UserDefaults.standard.data(forKey: Self.key),
+        if let data = UserDefaults.standard.data(forKey: Self.cacheKey),
            let decoded = try? JSONDecoder().decode([TodoItem].self, from: data) {
             items = decoded
         } else {
@@ -29,8 +50,6 @@ final class TodoManager {
     }
 
     var remaining: Int { items.filter { !$0.done }.count }
-
-    /// 未完成在前、已完成沉底；各自按创建时间
     var sorted: [TodoItem] {
         items.sorted { a, b in
             if a.done != b.done { return !a.done }
@@ -38,33 +57,76 @@ final class TodoManager {
         }
     }
 
-    func add(_ text: String, source: String? = nil) {
+    // MARK: - 网关同步
+
+    /// 拉网关最新（含 Caelum 写入的）。失败保留本地缓存。
+    func refresh() async {
+        guard let data = await get("/api/todos") else { return }
+        struct Resp: Decodable { let items: [TodoItem] }
+        guard let r = try? JSONDecoder().decode(Resp.self, from: data) else { return }
+        items = r.items
+        saveCache()
+    }
+
+    func add(_ text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        items.append(TodoItem(text: t, source: source))
-        save()
-    }
-
-    func toggle(_ id: UUID) {
-        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
-        items[idx].done.toggle()
-        save()
-    }
-
-    func delete(_ id: UUID) {
-        items.removeAll { $0.id == id }
-        save()
-    }
-
-    /// 清掉已完成的
-    func clearDone() {
-        items.removeAll { $0.done }
-        save()
-    }
-
-    private func save() {
-        if let d = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(d, forKey: Self.key)
+        // 乐观插入
+        let temp = TodoItem(text: t, source: "bunny")
+        items.append(temp); saveCache()
+        Task {
+            _ = await send("/api/todos", method: "POST", json: ["text": t, "source": "bunny"])
+            await refresh()
         }
+    }
+
+    func toggle(_ id: String) {
+        if let idx = items.firstIndex(where: { $0.id == id }) { items[idx].done.toggle(); saveCache() }
+        Task {
+            _ = await send("/api/todos/\(id)/toggle", method: "POST")
+            await refresh()
+        }
+    }
+
+    func delete(_ id: String) {
+        items.removeAll { $0.id == id }; saveCache()
+        Task {
+            _ = await send("/api/todos/\(id)", method: "DELETE")
+            await refresh()
+        }
+    }
+
+    func clearDone() {
+        items.removeAll { $0.done }; saveCache()
+        Task {
+            _ = await send("/api/todos/done", method: "DELETE")
+            await refresh()
+        }
+    }
+
+    // MARK: - HTTP
+
+    private func saveCache() {
+        if let d = try? JSONEncoder().encode(items) { UserDefaults.standard.set(d, forKey: Self.cacheKey) }
+    }
+    private func get(_ path: String) async -> Data? {
+        guard let url = URL(string: baseURL + path) else { return nil }
+        var req = URLRequest(url: url); req.timeoutInterval = 8
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return data
+    }
+    @discardableResult
+    private func send(_ path: String, method: String, json: [String: Any]? = nil) async -> Bool {
+        guard let url = URL(string: baseURL + path) else { return false }
+        var req = URLRequest(url: url); req.httpMethod = method; req.timeoutInterval = 8
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let json {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: json)
+        }
+        guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
+        return (resp as? HTTPURLResponse)?.statusCode == 200
     }
 }
