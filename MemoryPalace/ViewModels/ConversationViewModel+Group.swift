@@ -169,7 +169,7 @@ extension ConversationViewModel {
                 messages: messages,
                 systemPrompt: isCC ? nil : systemPrompt,
                 providerManager: providerManager,
-                samplingParams: SamplingParams(temperature: 0.8, maxTokens: 300),
+                samplingParams: SamplingParams(temperature: 0.8, maxTokens: 2000),
                 additionalHeaders: headers,
                 onToken: { [weak self] token in
                     guard let self else { return }
