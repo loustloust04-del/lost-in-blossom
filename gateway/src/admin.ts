@@ -11,6 +11,7 @@ import { config } from './config';
 import { supabase } from './db/supabase';
 import { getMcpServerUrls, setMcpServers, probeMcpServer } from './tools/mcp-client';
 import { searchWeb } from './tools/websearch';
+import { listTodos, addTodo, toggleTodo, deleteTodo, clearDone } from './todos';
 
 // ============ 通道 key 运行时覆盖（持久化 + 热生效） ============
 // key 原本只来自启动时 Bun.env；admin 改 key 时写 overrides 文件并直接改 config
@@ -356,6 +357,25 @@ search.get('/', async (c) => {
   }
 });
 
+// ============ 待办（App 控制台读写；CC/API 也经 builtin 工具写）============
+const todos = new Hono().basePath('/api/todos');
+todos.use('*', auth);
+todos.get('/', async (c) => c.json({ items: await listTodos() }));
+todos.post('/', async (c) => {
+  let b: any = {}; try { b = await c.req.json(); } catch {}
+  const it = await addTodo(String(b?.text || ''), String(b?.source || 'bunny'));
+  return it ? c.json({ ok: true, item: it }) : c.json({ error: 'empty text' }, 400);
+});
+todos.post('/:id/toggle', async (c) => {
+  const ok = await toggleTodo(c.req.param('id'));
+  return ok ? c.json({ ok: true }) : c.json({ error: 'not found' }, 404);
+});
+todos.delete('/done', async (c) => c.json({ ok: true, removed: await clearDone() }));
+todos.delete('/:id', async (c) => {
+  const ok = await deleteTodo(c.req.param('id'));
+  return ok ? c.json({ ok: true }) : c.json({ error: 'not found' }, 404);
+});
+
 // ============ 导出：包一层 fetch ============
 export default {
   ...appExport,
@@ -366,6 +386,9 @@ export default {
     }
     if (url.pathname === '/api/search' || url.pathname.startsWith('/api/search/')) {
       return search.fetch(req, env, ctx);
+    }
+    if (url.pathname === '/api/todos' || url.pathname.startsWith('/api/todos/')) {
+      return todos.fetch(req, env, ctx);
     }
     return (appExport as any).fetch(req, env, ctx);
   },

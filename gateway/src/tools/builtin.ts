@@ -7,6 +7,7 @@ import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 import { WEBSEARCH_TOOL, callWebSearch } from './websearch';
+import { TODO_TOOLS, callTodoTool } from '../todos';
 
 export const BUILTIN_TOOLS = [
   ...GMAIL_TOOLS,
@@ -48,6 +49,7 @@ export const BUILTIN_TOOLS = [
   },
   WEBSEARCH_TOOL,
   ...CONSOLE_TOOLS,
+  ...TODO_TOOLS,
 ] as const;
 
 const EXEC_TIMEOUT_MS = 60_000;
@@ -118,6 +120,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (name === 'search_web') return callWebSearch(input);
   const consoleResult = await callConsoleTool(name, input);
   if (consoleResult !== null) return consoleResult;
+  const todoResult = await callTodoTool(name, input);
+  if (todoResult !== null) return todoResult;
   if (name === 'exec') return runExec(String(input?.command || ''));
   if (name === 'recall') return runRecall(input);
   if (name === 'remember') return runRemember(input);
