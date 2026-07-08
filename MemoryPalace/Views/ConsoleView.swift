@@ -78,16 +78,16 @@ struct ConsoleView: View {
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("CAELUM'S CONSOLE")
-                .font(.system(size: 12, weight: .semibold, design: .serif))
+                .font(.cormorant(12))
                 .foregroundColor(Self.greenDeep)
                 .tracking(5)
             Text(greetingString)
-                .font(.system(size: 28, weight: .medium, design: .serif))
+                .font(.songti(28))
                 .foregroundColor(Self.textPrimary)
                 .tracking(3)
                 .padding(.top, 10)
             Text(dateString)
-                .font(.system(size: 14, design: .serif))
+                .font(.cormorant(14))
                 .foregroundColor(Self.textMuted)
                 .tracking(0.5)
                 .padding(.top, 6)
@@ -119,11 +119,11 @@ struct ConsoleView: View {
     private func sectionHeader(_ cn: String, _ en: String, note: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(cn)
-                .font(.system(size: 15, weight: .medium, design: .serif))
+                .font(.songti(15))
                 .tracking(6)
                 .foregroundColor(Self.textPrimary)
             Text(en.uppercased())
-                .font(.system(size: 12, design: .serif))
+                .font(.cormorant(12))
                 .tracking(2)
                 .foregroundColor(Self.textFaint)
             if let note {
@@ -165,10 +165,10 @@ struct ConsoleView: View {
                     .padding(.bottom, 10)
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text("\(value)")
-                        .font(.system(size: 44, weight: .light, design: .serif))
+                        .font(.cormorant(44))
                         .foregroundColor(Self.textPrimary)
                     Text("/\(goal)")
-                        .font(.system(size: 15, design: .serif))
+                        .font(.cormorant(15))
                         .foregroundColor(Self.textFaint)
                 }
                 ProgressBar(ratio: goal > 0 ? min(1, Double(value) / Double(goal)) : 0)
@@ -266,13 +266,13 @@ struct ConsoleView: View {
                         if let st = todayCtx?.screenTime {
                             HStack(alignment: .firstTextBaseline, spacing: 3) {
                                 Text(String(format: "%.1f", st))
-                                    .font(.system(size: 34, weight: .light, design: .serif))
+                                    .font(.cormorant(34))
                                     .foregroundColor(Self.textPrimary)
-                                Text("h").font(.system(size: 13, design: .serif)).foregroundColor(Self.textFaint)
+                                Text("h").font(.cormorant(13)).foregroundColor(Self.textFaint)
                             }
                         } else {
                             Text("—")
-                                .font(.system(size: 34, weight: .light, design: .serif))
+                                .font(.cormorant(34))
                                 .foregroundColor(Self.textMuted)
                         }
                     }
@@ -335,11 +335,11 @@ struct ConsoleView: View {
                 Text(label).font(.system(size: 12)).foregroundColor(Self.textSub).tracking(1)
                     .padding(.bottom, 8)
                 Text(value)
-                    .font(.system(size: small ? 18 : 24, weight: .light, design: .serif))
+                    .font(.cormorant(small ? 18 : 24))
                     .foregroundColor(valueColor ?? Self.textPrimary)
                     .lineLimit(1).minimumScaleFactor(0.6)
                 if !sub.isEmpty {
-                    Text(sub).font(.system(size: 11, design: .serif)).foregroundColor(Self.textMuted)
+                    Text(sub).font(.songti(11)).foregroundColor(Self.textMuted)
                         .padding(.top, 5).lineLimit(1)
                 }
             }
@@ -358,14 +358,14 @@ struct ConsoleView: View {
                         HStack(alignment: .bottom) {
                             HStack(alignment: .firstTextBaseline, spacing: 5) {
                                 Text("\(day)")
-                                    .font(.system(size: 54, weight: .light, design: .serif))
+                                    .font(.cormorant(54))
                                     .foregroundColor(Self.textPrimary)
-                                Text("天").font(.system(size: 15, design: .serif)).foregroundColor(Self.textFaint)
+                                Text("天").font(.songti(15)).foregroundColor(Self.textFaint)
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 5) {
                                 Text(menstrualPhase(day))
-                                    .font(.system(size: 20, weight: .medium, design: .serif))
+                                    .font(.songti(20))
                                     .foregroundColor(Self.greenDeep).tracking(2)
                                 if let next = todayCtx?.nextPeriodDate {
                                     let d = max(0, Calendar.current.dateComponents([.day], from: Date(), to: next).day ?? 0)
@@ -394,7 +394,7 @@ struct ConsoleView: View {
 
     private func cycleStat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(value).font(.system(size: 20, design: .serif)).foregroundColor(Self.textPrimary)
+            Text(value).font(.cormorant(20)).foregroundColor(Self.textPrimary)
             Text(label).font(.system(size: 11)).foregroundColor(Self.textMuted)
         }
     }
@@ -431,7 +431,7 @@ struct ConsoleView: View {
                                 .lineSpacing(4)
                             HStack {
                                 Text("\(noteTime(latest?.ts)) · \(latest?.by ?? "Caelum")")
-                                    .font(.system(size: 12, design: .serif)).foregroundColor(Self.textMuted)
+                                    .font(.cormorant(12)).foregroundColor(Self.textMuted)
                                 Spacer()
                                 Text("查看全部 →").font(.system(size: 12)).foregroundColor(Self.greenDeep)
                             }
@@ -440,12 +440,12 @@ struct ConsoleView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 if let count = todayCtx?.tweetCount {
-                                    Text("今日 \(count) 条").font(.system(size: 18, weight: .medium, design: .serif)).foregroundColor(Self.textPrimary)
+                                    Text("今日 \(count) 条").font(.songti(18)).foregroundColor(Self.textPrimary)
                                     if let s = todayCtx?.latestTweetSummary {
                                         Text(s).font(.system(size: 12)).foregroundColor(Self.textMuted).lineLimit(2)
                                     }
                                 } else {
-                                    Text("—").font(.system(size: 18, design: .serif)).foregroundColor(Self.textMuted)
+                                    Text("—").font(.cormorant(18)).foregroundColor(Self.textMuted)
                                     Text("待接入 Twitter MCP").font(.system(size: 11)).foregroundColor(Self.textFaint)
                                 }
                             }
@@ -568,4 +568,12 @@ private struct MemoBoardPlaceholder: View {
 #Preview {
     ConsoleView()
         .modelContainer(for: DailyContext.self, inMemory: true)
+}
+
+// MARK: - 控制台自定义字体（Cormorant Garamond 数字/英文 + 思源宋体 中文）
+private extension Font {
+    /// Cormorant Garamond — 数字与拉丁字母（古典衬线，oldstyle 数字，还原 console-v6 原型）
+    static func cormorant(_ size: CGFloat) -> Font { .custom("CormorantGaramondLight-SemiBold", size: size) }
+    /// 思源宋体 Source Han Serif SC — 中文标题与标签
+    static func songti(_ size: CGFloat) -> Font { .custom("SourceHanSerifSC-Regular", size: size) }
 }

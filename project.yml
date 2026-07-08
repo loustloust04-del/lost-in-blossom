@@ -41,6 +41,10 @@ targets:
       # 联网搜索 browse_url：离屏 WKWebView 注入的正文抽取脚本，必须进 Copy Bundle Resources
       - path: MemoryPalace/Resources/ReaderScripts
         buildPhase: resources
+      # 自定义字体：Cormorant Garamond（数字/英文）+ 思源宋体/霞鹜文楷（中文）。
+      # 控制台 v6 杂志式排版依赖这些字体，必须进 Copy Bundle Resources。
+      - path: MemoryPalace/Resources/Fonts
+        buildPhase: resources
     dependencies:
       - package: MarkdownUI
       - package: VariableBlur
@@ -63,6 +67,10 @@ targets:
           - processing
         BGTaskSchedulerPermittedIdentifiers:
           - com.bunny.lostinblossom.push-agent
+        UIAppFonts:
+          - CormorantGaramond-SemiBold.ttf
+          - SourceHanSerifSC-Regular.otf
+          - LXGWWenKai-Regular.ttf
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios
