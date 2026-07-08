@@ -152,6 +152,9 @@ extension ConversationViewModel {
             conversation: conversation, context: context
         )
         if isCC { headers["X-MP-MessageId"] = node.id }
+        // 让气泡在流式期间显示实时文本：判定是 streamingNodeId == node.id，
+        // 群聊之前没设它 → 整段流式都是空气泡，直到 onComplete 才一次性冒出来。
+        streamingNodeId = node.id
 
         // 流式调用
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -220,6 +223,7 @@ extension ConversationViewModel {
         }
 
         streamingText = ""
+        streamingNodeId = nil
     }
 
     /// CC 群聊上下文：最近若干条群消息格式化成 `[名字]: 内容`（CC 读不到 messages 历史，靠这个）。
