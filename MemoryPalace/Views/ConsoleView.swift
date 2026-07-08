@@ -423,11 +423,15 @@ struct ConsoleView: View {
                     .padding(.bottom, 14)
                 card {
                     if memoTabForYou {
+                        let latest = vitalsData?.notes?.last
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("这里会显示最新的留言～")
-                                .font(.system(size: 14.5)).foregroundColor(Self.textSub).lineSpacing(4)
+                            Text(latest?.text ?? "这里会显示 Caelum 的最新留言～")
+                                .font(.system(size: 14.5))
+                                .foregroundColor(latest != nil ? Self.textPrimary : Self.textSub)
+                                .lineSpacing(4)
                             HStack {
-                                Text("刚刚 · Caelum").font(.system(size: 12, design: .serif)).foregroundColor(Self.textMuted)
+                                Text("\(noteTime(latest?.ts)) · \(latest?.by ?? "Caelum")")
+                                    .font(.system(size: 12, design: .serif)).foregroundColor(Self.textMuted)
                                 Spacer()
                                 Text("查看全部 →").font(.system(size: 12)).foregroundColor(Self.greenDeep)
                             }
@@ -477,6 +481,11 @@ struct ConsoleView: View {
     }
     private func shortMD(_ date: Date) -> String {
         let f = DateFormatter(); f.dateFormat = "M.d"; return f.string(from: date)
+    }
+    /// console_write 备注的 ISO 时间戳 → HH:mm；解析失败给"刚刚"
+    private func noteTime(_ iso: String?) -> String {
+        guard let iso, let d = ISO8601DateFormatter().date(from: iso) else { return "刚刚" }
+        return timeString(d)
     }
     private func stepsFormatted(_ n: Int) -> String {
         let fmt = NumberFormatter(); fmt.numberStyle = .decimal

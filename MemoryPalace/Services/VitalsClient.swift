@@ -5,9 +5,12 @@ struct VitalsResponse: Codable {
     struct Water: Codable { let count: Int; let goal: Int; let lastUpdated: String }
     struct Food: Codable { let count: Int; let goal: Int; let meals: [String]; let lastUpdated: String }
     struct Meds: Codable { let taken: Bool; let name: String; let lastUpdated: String }
+    /// 控制台备注（Caelum 经 console_write 记的），可选=旧网关兼容
+    struct Note: Codable, Hashable { let text: String; let by: String; let ts: String }
     let water: Water
     let food: Food
     let meds: Meds
+    let notes: [Note]?
     let date: String
 }
 
