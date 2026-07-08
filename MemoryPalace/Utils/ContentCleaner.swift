@@ -114,7 +114,8 @@ enum ContentCleaner {
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
 
         guard !matches.isEmpty else {
-            return ThinkingResult(content: text, thinking: nil)
+            // 没有配对块，但可能残留孤立标签（只打开 / 只打闭 / 被截断）→ 也清掉
+            return ThinkingResult(content: stripStrayThinkingTags(text), thinking: nil)
         }
 
         // Collect all thinking blocks
@@ -132,10 +133,21 @@ enum ContentCleaner {
             let range = Range(match.range, in: cleaned)!
             cleaned.removeSubrange(range)
         }
+        // 残留的孤立 thinking 标签（模型多打一个闭标签是常见现象）也要清掉
+        cleaned = stripStrayThinkingTags(cleaned)
         cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let thinking = thinkingParts.joined(separator: "\n\n")
         return ThinkingResult(content: cleaned, thinking: thinking.isEmpty ? nil : thinking)
+    }
+
+    /// 去掉正文里残留的孤立 thinking 标签（配对块已提取后仍可能有多余的开/闭标签）。
+    private static func stripStrayThinkingTags(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: "\\[/?thinking\\]|</?thinking>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
     }
 
     // MARK: - PUA Block Removal
