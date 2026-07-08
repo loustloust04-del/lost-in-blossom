@@ -311,6 +311,35 @@ admin.post('/mcp/refresh', async (c) => {
   return c.json({ ok: true });
 });
 
+// ============ 提醒规则（P1-3：低电量/地点变化 → APNs）============
+// 规则文件被 cc-bridge/alert-rules.ts（cron 每 15 分钟）读取；这里只管读写配置。
+const ALERT_RULES_PATH = new URL('../data/alert-rules.json', import.meta.url).pathname;
+const ALERT_RULES_DEFAULT = {
+  lowBattery: { enabled: true, threshold: 20, cooldownMin: 120 },
+  placeChange: { enabled: true, cooldownMin: 30 },
+  quietHours: { start: 1, end: 9 },
+};
+
+admin.get('/alert-rules', (c) => {
+  try {
+    return c.json({ ...ALERT_RULES_DEFAULT, ...JSON.parse(readFileSync(ALERT_RULES_PATH, 'utf-8')) });
+  } catch {
+    return c.json(ALERT_RULES_DEFAULT);
+  }
+});
+
+admin.put('/alert-rules', async (c) => {
+  let body: any = {};
+  try { body = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
+  const merged = {
+    lowBattery: { ...ALERT_RULES_DEFAULT.lowBattery, ...(body.lowBattery ?? {}) },
+    placeChange: { ...ALERT_RULES_DEFAULT.placeChange, ...(body.placeChange ?? {}) },
+    quietHours: { ...ALERT_RULES_DEFAULT.quietHours, ...(body.quietHours ?? {}) },
+  };
+  writeFileSync(ALERT_RULES_PATH, JSON.stringify(merged, null, 2));
+  return c.json({ ok: true, rules: merged });
+});
+
 // ============ 联网搜索端点（App 客户端 search_web 走这里）============
 // 网关侧真 Chrome 搜索，免 key。App 的「网关搜索」provider GET /api/search?q=...&count=
 const search = new Hono().basePath('/api/search');
