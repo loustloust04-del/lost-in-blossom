@@ -95,6 +95,41 @@ struct TokenStatsView: View {
         return map.values.sorted { $0.cost > $1.cost }
     }
 
+    // MARK: - 近 7 天趋势（P1-1）
+
+    private struct DayStat: Identifiable {
+        let id: String       // "M/d"
+        let day: Date
+        var rounds: Int = 0
+        var input: Int = 0
+        var cacheRead: Int = 0
+        var cost: Double = 0
+        var hitRate: Double {
+            let denom = Double(cacheRead + input)
+            return denom > 0 ? Double(cacheRead) / denom : 0
+        }
+    }
+
+    private var last7Days: [DayStat] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        var map: [Date: DayStat] = [:]
+        for offset in 0..<7 {
+            guard let day = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
+            map[day] = DayStat(id: day.formatted(.dateTime.month(.defaultDigits).day()), day: day)
+        }
+        for r in records {
+            let day = cal.startOfDay(for: r.date)
+            guard var st = map[day] else { continue }
+            st.rounds += 1
+            st.input += r.inputTokens
+            st.cacheRead += r.cacheReadTokens
+            st.cost += r.cost
+            map[day] = st
+        }
+        return map.values.sorted { $0.day < $1.day }
+    }
+
     var body: some View {
         List {
             // 总览
@@ -104,6 +139,39 @@ struct TokenStatsView: View {
                 statRow("平均响应", String(format: "%.1fs", avgResponseTime), green: false)
                 statRow("累计花费", String(format: "$%.4f", totalCost), green: false)
                 statRow("总轮次", "\(records.count)", green: false)
+            }
+
+            // 近 7 天命中率趋势（P1-1）：轻量条形，不引 Charts
+            Section("近 7 天缓存命中") {
+                if records.isEmpty {
+                    Text("暂无数据").foregroundStyle(.secondary)
+                } else {
+                    ForEach(last7Days) { d in
+                        HStack(spacing: 8) {
+                            Text(d.id)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 38, alignment: .leading)
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.green.opacity(0.12))
+                                    Capsule().fill(Color.green.opacity(0.75))
+                                        .frame(width: max(d.hitRate > 0 ? CGFloat(3) : 0, geo.size.width * CGFloat(d.hitRate)))
+                                }
+                            }
+                            .frame(height: 6)
+                            Text(d.rounds > 0 ? percent(d.hitRate) : "—")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(d.rounds > 0 ? .primary : .secondary)
+                                .frame(width: 40, alignment: .trailing)
+                            Text(d.rounds > 0 ? String(format: "$%.2f", d.cost) : "")
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, alignment: .trailing)
+                        }
+                        .padding(.vertical, 1)
+                    }
+                }
             }
 
             // 按模型分组
@@ -124,7 +192,9 @@ struct TokenStatsView: View {
                                 Text("↑\(formatTokens(m.input))").font(.caption).foregroundStyle(.secondary)
                                 Text("↓\(formatTokens(m.output))").font(.caption).foregroundStyle(.secondary)
                                 if m.cacheRead > 0 {
-                                    Text("缓存 \(formatTokens(m.cacheRead))")
+                                    let denom = Double(m.cacheRead + m.input)
+                                    let rate = denom > 0 ? Double(m.cacheRead) / denom : 0
+                                    Text("缓存 \(formatTokens(m.cacheRead)) · \(percent(rate))")
                                         .font(.caption)
                                         .foregroundColor(.green)
                                 }
