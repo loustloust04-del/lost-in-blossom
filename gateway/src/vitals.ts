@@ -8,6 +8,7 @@ interface VitalsData {
   water: { count: number; goal: number; lastUpdated: string };
   food: { count: number; goal: number; meals: string[]; lastUpdated: string };
   meds: { taken: boolean; name: string; lastUpdated: string };
+  notes?: { text: string; by: string; ts: string }[]; // 控制台备注（console_write），可选=旧文件兼容
   date: string; // YYYY-MM-DD，每天重置
 }
 
@@ -86,6 +87,48 @@ export async function callVitalsTool(name: string, input: any): Promise<string |
     return `记录成功：兔兔今天的 ${data.meds.name} 已服用`;
   }
   return null;
+}
+
+// ============ 控制台读写（P1-4：CC/API 双端可读可记）============
+// console_read：模型随时看今日全况（不用等 App 汇报）；console_write：记备注/计划/心情。
+// 与 vitals 同一数据文件，每天随 date 重置。
+export const CONSOLE_TOOLS = [
+  {
+    name: 'console_read',
+    description: "Read today's care console: Bunny's water/food/meds status and any notes written today. Call when you want to know how she is doing today or before reminding her about water/food/meds.",
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'console_write',
+    description: "Write a note onto today's care console (plan, mood, observation, anything worth tracking today). Both CC and API models share this console.",
+    input_schema: {
+      type: 'object',
+      properties: { text: { type: 'string', description: '要记的内容，一句完整的话' } },
+      required: ['text'],
+    },
+  },
+];
+
+export async function callConsoleTool(name: string, input: any, by = 'model'): Promise<string | null> {
+  if (name !== 'console_read' && name !== 'console_write') return null;
+  const data = await load();
+  if (name === 'console_read') {
+    const notes = (data.notes ?? []).map((n) => `[${n.ts.slice(11, 16)} ${n.by}] ${n.text}`);
+    return [
+      `今日 (${data.date}) 控制台：`,
+      `- 饮水 ${data.water.count}/${data.water.goal} 杯${data.water.lastUpdated ? `（最后 ${data.water.lastUpdated.slice(11, 16)}）` : ''}`,
+      `- 进食 ${data.food.count}/${data.food.goal} 餐${data.food.meals.length ? `：${data.food.meals.join('；')}` : ''}`,
+      `- 药物 ${data.meds.name}：${data.meds.taken ? '已服用' : '未服用'}`,
+      notes.length ? `- 备注：\n  ${notes.join('\n  ')}` : '- 备注：无',
+    ].join('\n');
+  }
+  const text = String(input?.text || '').trim();
+  if (!text) return 'console_write 缺少 text';
+  const notes = data.notes ?? [];
+  notes.push({ text, by, ts: new Date().toISOString() });
+  data.notes = notes.slice(-50);
+  await save(data);
+  return `已记到今日控制台（第 ${notes.length} 条备注）`;
 }
 
 // API 路由（App 只读）

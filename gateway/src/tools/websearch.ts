@@ -111,6 +111,17 @@ export async function searchWeb(query: string, count = 8): Promise<SearchItem[]>
   }
 }
 
+// 常驻浏览器会挡住 bun 进程退出（systemd stop 卡到 90s 超时强杀）——收到停止信号先关浏览器。
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    const p = browserP;
+    browserP = null;
+    Promise.resolve(p ? p.then((b) => b.close()) : null)
+      .catch(() => {})
+      .finally(() => process.exit(0));
+  });
+}
+
 export const WEBSEARCH_TOOL = {
   name: 'search_web',
   description: '联网搜索——实时信息（天气/新闻/今天/最近/最新/价格/赛事/股价/汇率/版本号…）或不确定的事实必须先调这个再回答。返回若干条 {title, url, snippet}。绝不要说"我无法联网"。',

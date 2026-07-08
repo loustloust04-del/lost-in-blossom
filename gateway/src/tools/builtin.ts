@@ -2,7 +2,7 @@
 // 工具定义排在 prompt 前缀最前面，必须字节级稳定（任何改动都会打破 prompt cache 前缀）。
 import { exec as execShell } from 'node:child_process';
 import { GMAIL_TOOLS, callGmailTool } from './gmail';
-import { VITALS_TOOLS, callVitalsTool } from '../vitals';
+import { VITALS_TOOLS, callVitalsTool, CONSOLE_TOOLS, callConsoleTool } from '../vitals';
 import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
@@ -47,6 +47,7 @@ export const BUILTIN_TOOLS = [
     },
   },
   WEBSEARCH_TOOL,
+  ...CONSOLE_TOOLS,
 ] as const;
 
 const EXEC_TIMEOUT_MS = 60_000;
@@ -115,6 +116,8 @@ async function runRemember(input: any): Promise<string> {
 /// 进程内执行内置工具；返回 null 表示"不是内置工具"，由 loop fall through 到 MCP。
 export async function callBuiltinTool(name: string, input: any): Promise<string | null> {
   if (name === 'search_web') return callWebSearch(input);
+  const consoleResult = await callConsoleTool(name, input);
+  if (consoleResult !== null) return consoleResult;
   if (name === 'exec') return runExec(String(input?.command || ''));
   if (name === 'recall') return runRecall(input);
   if (name === 'remember') return runRemember(input);
