@@ -1,5 +1,10 @@
 # 任务：内置浏览器升级（对齐粟粟实现）
 
+> ✅ **已全部完成（Day22 逐条核实）**：改动 1–6 均已在代码中实现，无需再动。
+> - 改动 1–4 见 `MemoryPalace/Views/Web/MiniBrowserView.swift` 的 `makeWebView()`（datastore `.default()` / `customUserAgent` / `allowsLinkPreview=false` / iOS 手势）+ `MemoryPalace/Utils/WebUserAgent.swift`
+> - 改动 5–6 见 `MemoryPalace/Views/Web/BrowserView.swift` 的 `BrowserBlankHome`（`quickSites` 网格 + `loadCookieMap`/`cookieCount` cookie 计数）
+> - 运行行为（登录持久化 / X 不白屏 / 手势 / cookie 数）待真机验收；代码层无改动项。
+
 > 参考：`/root/projects/SusuPalace` origin/master 分支
 > 涉及文件：`MemoryPalace/Views/Web/MiniBrowserView.swift`、`MemoryPalace/Views/Web/BrowserView.swift`
 > 难度：🟢 大部分是一两行改动
