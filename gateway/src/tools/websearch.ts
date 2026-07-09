@@ -183,3 +183,25 @@ export async function callWebSearch(input: any): Promise<string> {
     return JSON.stringify({ error: '搜索失败: ' + (e?.message || String(e)) });
   }
 }
+
+export const BROWSE_TOOL = {
+  name: 'browse_url',
+  description: '打开一个网页链接、抓取正文全文（真浏览器渲染，JS 页面也能拿到内容）。适用：search_web 返回链接后想看某条详情、或用户直接给了网址要读全文。返回 {title, url, text}。绝不要说"我打不开网页"。',
+  input_schema: {
+    type: 'object' as const,
+    properties: { url: { type: 'string', description: '要打开的网页链接（http/https）' } },
+    required: ['url'],
+  },
+};
+
+// callBuiltinTool 用：抓正文，返回 JSON 字符串
+export async function callBrowseUrl(input: any): Promise<string> {
+  const url = typeof input?.url === 'string' ? input.url : '';
+  if (!url) return JSON.stringify({ error: 'browse_url 缺少 url' });
+  try {
+    const page = await browsePage(url);
+    return JSON.stringify({ title: page.title, url: page.url, text: page.text, truncated: page.truncated });
+  } catch (e: any) {
+    return JSON.stringify({ error: '抓取失败: ' + (e?.message || String(e)) });
+  }
+}
