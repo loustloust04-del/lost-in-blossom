@@ -519,6 +519,7 @@ extension ConsoleView {
     static let textPrimary = Color(red:  61/255, green:  54/255, blue:  51/255) // #3D3633
     static let textSub     = Color(red: 128/255, green: 120/255, blue: 112/255) // #807870
     static let textLabel   = Color(red: 173/255, green: 166/255, blue: 158/255) // #ADA69E
+    static let textUnit    = Color(red: 155/255, green: 142/255, blue: 126/255) // #9B8E7E（GatewayConsoleView 引用，勿删）
     static let textMuted   = Color(red: 173/255, green: 166/255, blue: 158/255) // #ADA69E
     static let textFaint   = Color(red: 196/255, green: 188/255, blue: 176/255) // #C4BCB0
     static let line        = Color(red: 228/255, green: 222/255, blue: 211/255) // #E4DED3
