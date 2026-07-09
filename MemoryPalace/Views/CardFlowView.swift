@@ -18,6 +18,7 @@ struct CardFlowView: View {
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
     @Environment(PresetManager.self) private var presetManager: PresetManager?
+    @Environment(\.scenePhase) private var scenePhase
     // globalWBManager 通过 ContentView 同步到 viewModel.globalWorldBookEntries
     @AppStorage("blurRadius") private var blurRadius = 1.3
     @AppStorage("bubbleSpacing") private var bubbleSpacing: Double = 31
@@ -250,6 +251,22 @@ struct CardFlowView: View {
                             >= geometry.contentSize.height - 200
                     } action: { _, atBottom in
                         isAtBottom = atBottom
+                    }
+                    .onAppear {
+                        // [white-screen-fix] 首次/视图重建进入：defaultScrollAnchor 对含 WebView 的
+                        // 动态高度气泡锚不准 → 白屏（需手动下滑才显示）。显式滚底兜底，延迟等 layout 落定。
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            scrollToLastMessage(proxy: proxy, force: true)
+                        }
+                    }
+                    .onChange(of: scenePhase) { _, phase in
+                        // [white-screen-fix] App 回前台会重布局、易白屏，而 isCurrentConvLoading 不变化
+                        // 触发不到下面那条兜底 → 这里补一刀。
+                        if phase == .active {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                scrollToLastMessage(proxy: proxy, force: true)
+                            }
+                        }
                     }
                     .onChange(of: viewModel.isCurrentConvLoading) { _, loading in
                         // 对话加载完成 → 滚到最后一条（applyTreeData 只在搜索跳转时设 scrollToNodeId，
