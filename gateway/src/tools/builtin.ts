@@ -8,6 +8,7 @@ import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 import { WEBSEARCH_TOOL, callWebSearch, BROWSE_TOOL, callBrowseUrl } from './websearch';
 import { TODO_TOOLS, callTodoTool } from '../todos';
+import { TWITTER_TOOLS, callTwitterTool } from './twitter';
 
 export const BUILTIN_TOOLS = [
   ...GMAIL_TOOLS,
@@ -50,6 +51,7 @@ export const BUILTIN_TOOLS = [
   WEBSEARCH_TOOL,
   ...CONSOLE_TOOLS,
   ...TODO_TOOLS,
+  ...TWITTER_TOOLS,
   BROWSE_TOOL,
 ] as const;
 
@@ -124,6 +126,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (consoleResult !== null) return consoleResult;
   const todoResult = await callTodoTool(name, input);
   if (todoResult !== null) return todoResult;
+  const twitterResult = await callTwitterTool(name, input);
+  if (twitterResult !== null) return twitterResult;
   if (name === 'exec') return runExec(String(input?.command || ''));
   if (name === 'recall') return runRecall(input);
   if (name === 'remember') return runRemember(input);
