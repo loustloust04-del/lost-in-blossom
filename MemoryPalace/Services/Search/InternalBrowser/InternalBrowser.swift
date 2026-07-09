@@ -139,10 +139,20 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
             await MainActor.run {
                 guard let self else { return }
                 guard self.currentJob?.url == job.url else { return }   // 已完成则忽略
+                // [browse-probe] progress=0 → TLS 都没连上；>0 → 连上了但没读完
+                let _prog = self.webView?.estimatedProgress ?? -1
+                let _win = self.webView?.window != nil
+                BreadcrumbLog.shared.add("⏱️", "browse超时『\(job.url.host ?? "?")』progress=\(String(format: "%.2f", _prog)) attached=\(_win)")
                 self.webView?.stopLoading()
                 self.finishCurrent(.failure(BrowseError.timeout))
             }
         }
+        // [browse-probe] 取证：attach 上没 / App 前后台 / 低电量（HTTPS 超时根因排查）
+        let _attached = webView.window != nil
+        let _st = UIApplication.shared.applicationState
+        let _stStr = _st == .active ? "前台" : (_st == .background ? "后台" : "inactive")
+        let _lpm = ProcessInfo.processInfo.isLowPowerModeEnabled
+        BreadcrumbLog.shared.add("🔬", "browse『\(job.url.host ?? "?")』attached=\(_attached) app=\(_stStr) 低电量=\(_lpm)")
         webView.load(URLRequest(url: job.url))
     }
 
@@ -172,14 +182,23 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard webView.superview == nil else { return }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         guard let window = scenes.first(where: { $0.activationState == .foregroundActive })?.keyWindow
-            ?? scenes.first?.windows.first else { return }
+            ?? scenes.first?.windows.first else {
+            // [browse-probe] attach 失败 = WebView 游离出视图层级 → iOS 掐 JS/网络
+            BreadcrumbLog.shared.add("⚠️", "browse attach 失败：拿不到 window（App 可能在后台）")
+            return
+        }
         window.insertSubview(webView, at: 0)
     }
 
     // MARK: - WKNavigationDelegate
 
+    nonisolated func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        Task { @MainActor in BreadcrumbLog.shared.add("🔬", "browse didCommit — 服务器已响应，开始收正文") }
+    }
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
+            BreadcrumbLog.shared.add("🔬", "browse didFinish — 页面加载完成")
             // 给 SPA/iframe 一点喘息再抽——非阻塞 ~600ms（HTMLThumbnailRenderer 用 450ms 拍图，抽正文留多一点）
             try? await Task.sleep(nanoseconds: 600_000_000)
             self?.runExtraction(in: webView)
@@ -187,11 +206,17 @@ final class InternalBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        Task { @MainActor [weak self] in self?.finishCurrent(.failure(BrowseError.loadFailed(error.localizedDescription))) }
+        Task { @MainActor [weak self] in
+            BreadcrumbLog.shared.add("⚠️", "browse didFail — \((error as NSError).domain) \((error as NSError).code)")
+            self?.finishCurrent(.failure(BrowseError.loadFailed(error.localizedDescription)))
+        }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        Task { @MainActor [weak self] in self?.finishCurrent(.failure(BrowseError.loadFailed(error.localizedDescription))) }
+        Task { @MainActor [weak self] in
+            BreadcrumbLog.shared.add("⚠️", "browse didFailProvisional — \((error as NSError).domain) \((error as NSError).code)")
+            self?.finishCurrent(.failure(BrowseError.loadFailed(error.localizedDescription)))
+        }
     }
 
     // MARK: - WKUIDelegate noop（离屏 WebView 不能弹 UI，自动放行所有 JS 弹窗）
