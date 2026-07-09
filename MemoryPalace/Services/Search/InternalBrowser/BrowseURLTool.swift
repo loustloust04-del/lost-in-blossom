@@ -50,6 +50,14 @@ enum BrowseURLTool {
             return ExecResult(text: errorJSON("URL 解析失败：\(urlStr)"), isError: true)
         }
 
+        // 优先走网关真 Chrome（/api/browse）——绕开本地离屏 WKWebView 的 iOS 前后台/低电量
+        // 节流坑（HTTPS 全超时的根因）。网关未配置 / 抓取失败 / 空正文时，fallback 本地
+        // WKWebView（保留登录态站点读取能力）。
+        if GatewayBrowseClient.isConfigured {
+            if let page = try? await GatewayBrowseClient.read(url: url), !page.text.isEmpty {
+                return ExecResult(text: formatGatewayPage(page), isError: false)
+            }
+        }
         do {
             let page = try await InternalBrowser.shared.read(url: url)
             return ExecResult(text: formatPage(page, url: url), isError: false)
@@ -75,6 +83,19 @@ enum BrowseURLTool {
         if let excerpt = page.excerpt, !excerpt.isEmpty { out += "excerpt: \(excerpt)\n" }
         out += "---\n\n"
         out += page.markdown
+        return out
+    }
+
+    /// 网关抓取结果的格式化（与 formatPage 同构，标注 source: gateway）
+    private static func formatGatewayPage(_ page: GatewayBrowseClient.Page) -> String {
+        var out = "---\n"
+        out += "url: \(page.url)\n"
+        if !page.title.isEmpty { out += "title: \(page.title)\n" }
+        out += "length: \(page.length)\n"
+        if page.truncated { out += "truncated: true\n" }
+        out += "source: gateway\n"
+        out += "---\n\n"
+        out += page.text
         return out
     }
 
