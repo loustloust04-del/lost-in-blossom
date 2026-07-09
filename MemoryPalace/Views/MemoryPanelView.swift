@@ -58,6 +58,8 @@ struct RightPanelView: View {
             CCTerminalPanelView(viewModel: viewModel)
         case "fileLibrary":
             FileLibraryPanelView()
+        case "browser":
+            BrowserView()
         default:
             Text("未知工具")
                 .foregroundColor(Theme.textMuted)
