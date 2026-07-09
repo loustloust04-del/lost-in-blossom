@@ -1,21 +1,19 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
-/// Caelum's Console — 右滑 page 2 控制台页面（v6：杂志式分区 + 衬线 + 绿调）
+/// Caelum's Console — 右滑 page 2 控制台（v9：粟粟设计语言 · Widget 网格）
 ///
-/// 分区：日常（饮水/进食）→ 待办 → 屏幕 → 身体（步数/睡眠/药物）→ 经期 → 留言
-/// 数据来源：
-///   - DailyContext（SwiftData）— Caelum tool call 写入
-///   - HealthKitService — 步数 / 睡眠 / 月经
-///   - VitalsClient / ScreenTimeClient — 网关数据
-///   - TodoManager — 待办（G1 本地；G2 上网关）
+/// 布局：问候 → 饮水/进食 → 待办 → 步数/睡眠 → 药物/屏幕 → 经期 → 给世界的 → Caelum 留言
+/// 设计语言（对齐 SusuPalace design-dna）：暖奶白 5 阶色阶分层、几乎无阴影、无衬线中文 +
+///   Cormorant 数字（lining）、薄荷绿点缀、圆角 16-18、零装饰。
+/// 数据来源：DailyContext（SwiftData）/ HealthKitService / VitalsClient / ScreenTimeClient / TodoManager。
 struct ConsoleView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \DailyContext.date, order: .reverse) private var allContexts: [DailyContext]
 
     @State private var healthKit = HealthKitService()
     @State private var vitalsData: VitalsResponse? = nil
-    @State private var memoTabForYou: Bool = true
     @State private var showMemoBoard: Bool = false
     @State private var showAddTodo: Bool = false
     @State private var newTodoText: String = ""
@@ -26,21 +24,17 @@ struct ConsoleView: View {
         return allContexts.first { Calendar.current.isDate($0.date, inSameDayAs: today) }
     }
 
+    // MARK: - Body
+
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                headerView
-                VStack(alignment: .leading, spacing: 0) {
-                    dailySection
-                    todoSection
-                    screenSection
-                    bodySection
-                    cycleSection
-                    messagesSection
-                }
-                .padding(.horizontal, 22)
-                Color.clear.frame(height: 48)
+            VStack(spacing: 14) {
+                header
+                grid
+                Color.clear.frame(height: 40)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Self.pageBg.ignoresSafeArea())
@@ -61,11 +55,9 @@ struct ConsoleView: View {
         .alert("添加待办", isPresented: $showAddTodo) {
             TextField("要做的事…", text: $newTodoText)
             Button("取消", role: .cancel) { newTodoText = "" }
-            Button("添加") {
-                todo.add(newTodoText)
-                newTodoText = ""
-            }
+            Button("添加") { todo.add(newTodoText); newTodoText = "" }
         }
+        .sheet(isPresented: $showMemoBoard) { MemoBoardPlaceholder() }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -75,28 +67,338 @@ struct ConsoleView: View {
 
     // MARK: - Header
 
-    private var headerView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("CAELUM'S CONSOLE")
-                .font(.cormorant(12))
-                .foregroundColor(Self.greenDeep)
-                .tracking(5)
-            Text(greetingString)
-                .font(.songti(28))
-                .foregroundColor(Self.textPrimary)
-                .tracking(3)
-                .padding(.top, 10)
-            Text(dateString)
-                .font(.cormorant(14))
-                .foregroundColor(Self.textMuted)
-                .tracking(0.5)
-                .padding(.top, 6)
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("CAELUM'S CONSOLE")
+                    .font(.system(size: 10.5, weight: .semibold)).tracking(2.5)
+                    .foregroundColor(Self.greenDeep)
+                Text(greetingString)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(Self.textPrimary)
+                    .padding(.top, 6)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(monthDayStr).font(.system(size: 13)).foregroundColor(Self.textMuted)
+                Text("\(weekdayCN(Date())) · \(solarTerm(Date()))")
+                    .font(.system(size: 12)).foregroundColor(Self.textMuted)
+            }
+            .padding(.top, 4)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 56)
-        .padding(.horizontal, 24)
         .padding(.bottom, 4)
     }
+
+    // MARK: - Grid
+
+    private var grid: some View {
+        VStack(spacing: 11) {
+            HStack(spacing: 11) { waterWidget; foodWidget }
+            todoWidget
+            HStack(spacing: 11) { stepsWidget; sleepWidget }
+            HStack(spacing: 11) { medsWidget; screenWidget }
+            cycleWidget
+            worldWidget
+            caelumWidget
+        }
+    }
+
+    // MARK: - 小 widget（饮水/进食/步数/睡眠/药物/屏幕）
+
+    private var waterWidget: some View {
+        let w = todayCtx?.waterCount ?? 0
+        return smallWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("饮水", icon: "drop")
+                Spacer(minLength: 6)
+                bigNum("\(w)", "/6")
+                dotsRow(on: w, total: 6).padding(.top, 9)
+            }
+        }
+    }
+
+    private var foodWidget: some View {
+        let count = todayCtx?.meals.count ?? vitalsData?.food.count ?? 0
+        let goal = vitalsData?.food.goal ?? 3
+        let note = vitalsData?.food.meals.last ?? todayCtx?.meals.last?.description ?? "未记录"
+        return smallWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("进食", icon: "fork.knife")
+                Spacer(minLength: 6)
+                bigNum("\(count)", "/\(goal)")
+                Text(note).font(.system(size: 11)).foregroundColor(Self.greenDeep)
+                    .lineLimit(1).padding(.top, 9)
+            }
+        }
+    }
+
+    private var stepsWidget: some View {
+        smallWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("步数", icon: "shoeprints.fill")
+                Spacer(minLength: 6)
+                bigNum(todayCtx?.steps.map(stepsFormatted) ?? "—", "")
+                Text(todayCtx?.steps != nil ? "步 · 今日" : "未记录")
+                    .font(.system(size: 11)).foregroundColor(Self.textMuted).padding(.top, 9)
+            }
+        }
+    }
+
+    private var sleepWidget: some View {
+        smallWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("睡眠", icon: "moon.stars")
+                Spacer(minLength: 6)
+                Text(sleepValue).font(.cormorant(33)).foregroundColor(Self.textPrimary)
+                Text(sleepSub.isEmpty ? " " : sleepSub)
+                    .font(.system(size: 11)).foregroundColor(Self.textMuted).lineLimit(1).padding(.top, 9)
+            }
+        }
+    }
+
+    private var medsWidget: some View {
+        smallWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("药物", icon: "pills", gold: !medsTaken)
+                Spacer(minLength: 6)
+                Text(medsTaken ? "已服" : "未报告")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(medsTaken ? Self.green : Self.gold)
+                Text(medsName).font(.system(size: 11)).foregroundColor(Self.textMuted)
+                    .lineLimit(1).padding(.top, 9)
+            }
+        }
+    }
+
+    private var screenWidget: some View {
+        smallWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("今日屏幕", icon: "hourglass")
+                Spacer(minLength: 6)
+                if let st = todayCtx?.screenTime {
+                    bigNum(String(format: "%.1f", st), "h")
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Self.sink)
+                            Capsule().fill(Self.green)
+                                .frame(width: g.size.width * min(1, st / 8.0))
+                        }
+                    }
+                    .frame(height: 4).padding(.top, 10)
+                } else {
+                    bigNum("—", "")
+                    Text("Screen Time API 暂不可用")
+                        .font(.system(size: 10.5)).foregroundColor(Self.textFaint)
+                        .lineLimit(1).minimumScaleFactor(0.8).padding(.top, 8)
+                }
+            }
+        }
+    }
+
+    // MARK: - 待办 wide
+
+    private var todoWidget: some View {
+        wideWidget {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("To Do").font(.system(size: 11.5, weight: .medium)).tracking(0.5)
+                        .foregroundColor(Self.textSub)
+                    Spacer()
+                }
+                .padding(.bottom, 2)
+                let items = todo.sorted
+                if items.isEmpty {
+                    HStack {
+                        Text("今天还没有待办").font(.system(size: 14)).foregroundColor(Self.textFaint)
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                } else {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                        todoRow(item)
+                        if idx < items.count - 1 {
+                            Rectangle().fill(Self.line).frame(height: 1)
+                        }
+                    }
+                }
+                Button { showAddTodo = true } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                        Text("添加待办").font(.system(size: 12.5, weight: .medium))
+                        Spacer()
+                    }
+                    .foregroundColor(Self.greenDeep).padding(.top, 11).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func todoRow(_ item: TodoItem) -> some View {
+        HStack(spacing: 12) {
+            Button { withAnimation(.easeInOut(duration: 0.15)) { todo.toggle(item.id) } } label: {
+                ZStack {
+                    Circle()
+                        .strokeBorder(item.done ? Self.green : Color(red: 207/255, green: 200/255, blue: 187/255), lineWidth: 1.5)
+                        .background(Circle().fill(item.done ? Self.green : Color.clear))
+                        .frame(width: 18, height: 18)
+                    if item.done {
+                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            Text(item.text)
+                .font(.system(size: 14))
+                .foregroundColor(item.done ? Self.textFaint : Color(red: 66/255, green: 61/255, blue: 55/255))
+                .strikethrough(item.done, color: Self.textFaint)
+            Spacer()
+            if let src = item.source {
+                Text(src).font(.system(size: 10)).foregroundColor(Self.textFaint)
+            }
+        }
+        .padding(.vertical, 9).contentShape(Rectangle())
+        .contextMenu {
+            Button(role: .destructive) { todo.delete(item.id) } label: { Label("删除", systemImage: "trash") }
+            if item.done {
+                Button { todo.toggle(item.id) } label: { Label("标为未完成", systemImage: "arrow.uturn.backward") }
+            }
+        }
+    }
+
+    // MARK: - 经期 wide
+
+    private var cycleWidget: some View {
+        wideWidget {
+            if let day = todayCtx?.menstrualDay {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .bottom) {
+                        bigNum("\(day)", "天", size: 36)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text(menstrualPhase(day))
+                                .font(.system(size: 15, weight: .semibold)).foregroundColor(Self.greenDeep)
+                            if let next = todayCtx?.nextPeriodDate {
+                                let d = max(0, Calendar.current.dateComponents([.day], from: Date(), to: next).day ?? 0)
+                                Text("预计 \(d) 天后来潮").font(.system(size: 11.5)).foregroundColor(Self.textSub)
+                            }
+                        }
+                    }
+                    Rectangle().fill(Self.line).frame(height: 1).padding(.top, 14).padding(.bottom, 12)
+                    HStack(spacing: 22) {
+                        cycStat("29", "上次周期")
+                        cycStat("5", "经期时长")
+                        if let next = todayCtx?.nextPeriodDate { cycStat(shortMD(next), "预计来潮") }
+                    }
+                }
+            } else {
+                HStack {
+                    Text("未记录经期").font(.system(size: 14)).foregroundColor(Self.textFaint)
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private func cycStat(_ v: String, _ l: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(v).font(.cormorant(17)).foregroundColor(Self.textPrimary)
+            Text(l).font(.system(size: 10.5)).foregroundColor(Self.textMuted)
+        }
+    }
+
+    // MARK: - 给世界的（Twitter MCP）wide
+
+    private var worldWidget: some View {
+        wideWidget {
+            HStack(spacing: 13) {
+                Image(systemName: "globe").font(.system(size: 22, weight: .regular)).foregroundColor(Self.textMuted)
+                VStack(alignment: .leading, spacing: 3) {
+                    if let n = todayCtx?.tweetCount {
+                        Text("今日 \(n) 条").font(.system(size: 15, weight: .semibold)).foregroundColor(Self.textPrimary)
+                        if let s = todayCtx?.latestTweetSummary {
+                            Text(s).font(.system(size: 11.5)).foregroundColor(Self.textMuted).lineLimit(1)
+                        }
+                    } else {
+                        Text("给世界的").font(.system(size: 14, weight: .medium)).foregroundColor(Self.textSub)
+                        Text("待接入 Twitter MCP").font(.system(size: 11)).foregroundColor(Self.textFaint)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Self.textFaint)
+            }
+        }
+    }
+
+    // MARK: - Caelum 留言 wide
+
+    private var caelumWidget: some View {
+        wideWidget {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 2).fill(Self.green).frame(width: 3)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(vitalsData?.notes?.last?.text ?? "这里会显示 Caelum 的最新留言～")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(red: 66/255, green: 61/255, blue: 55/255))
+                        .lineSpacing(3)
+                    HStack {
+                        Text("\(noteTime(vitalsData?.notes?.last?.ts)) · \(vitalsData?.notes?.last?.by ?? "Caelum")")
+                            .font(.system(size: 11)).foregroundColor(Self.textMuted)
+                        Spacer()
+                        Text("查看全部 →").font(.system(size: 11)).foregroundColor(Self.greenDeep)
+                    }
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { showMemoBoard = true }
+    }
+
+    // MARK: - Widget 容器 & 通用件
+
+    private func smallWidget<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(EdgeInsets(top: 13, leading: 15, bottom: 13, trailing: 15))
+            .frame(height: 120)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Self.card))
+    }
+
+    private func wideWidget<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Self.card))
+    }
+
+    private func widgetHead(_ label: String, icon: String, gold: Bool = false) -> some View {
+        HStack(spacing: 0) {
+            Text(label).font(.system(size: 11.5, weight: .medium)).tracking(0.5).foregroundColor(Self.textSub)
+            Spacer()
+            Image(systemName: icon).font(.system(size: 14, weight: .regular))
+                .foregroundColor(gold ? Self.gold : Self.green)
+        }
+    }
+
+    private func bigNum(_ main: String, _ unit: String, size: CGFloat = 33) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 2) {
+            Text(main).font(.cormorant(size)).foregroundColor(Self.textPrimary)
+            if !unit.isEmpty {
+                Text(unit).font(.system(size: size * 0.4)).foregroundColor(Self.textFaint)
+            }
+        }
+    }
+
+    private func dotsRow(on: Int, total: Int) -> some View {
+        HStack(spacing: 5) {
+            ForEach(0..<total, id: \.self) { i in
+                Circle().fill(i < on ? Self.green : Self.sink).frame(width: 7, height: 7)
+            }
+        }
+    }
+
+    // MARK: - 数据文案
 
     private var greetingString: String {
         switch Calendar.current.component(.hour, from: Date()) {
@@ -107,371 +409,55 @@ struct ConsoleView: View {
         }
     }
 
-    private var dateString: String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "MMMM d, yyyy"
-        return "\(f.string(from: Date())) · Lost in Blossom"
+    private var monthDayStr: String {
+        let c = Calendar.current
+        return "\(c.component(.month, from: Date())) 月 \(c.component(.day, from: Date())) 日"
     }
 
-    // MARK: - Section header
-
-    private func sectionHeader(_ cn: String, _ en: String, note: String? = nil) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(cn)
-                .font(.songti(15))
-                .tracking(6)
-                .foregroundColor(Self.textPrimary)
-            Text(en.uppercased())
-                .font(.cormorant(12))
-                .tracking(2)
-                .foregroundColor(Self.textFaint)
-            if let note {
-                Spacer()
-                Text(note)
-                    .font(.system(size: 11))
-                    .foregroundColor(Self.textFaint)
-                    .tracking(1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 30)
-        .padding(.bottom, 14)
-        .padding(.horizontal, 2)
+    private func weekdayCN(_ date: Date) -> String {
+        let w = Calendar.current.component(.weekday, from: date)
+        let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        return names[(w - 1) % 7]
     }
 
-    // MARK: - 日常
-
-    private var dailySection: some View {
-        Group {
-            sectionHeader("日 常", "Daily")
-            HStack(spacing: 13) {
-                bigStat(label: "饮水",
-                        value: todayCtx?.waterCount ?? 0, goal: 6,
-                        note: (todayCtx?.waterCount ?? 0) >= 6 ? "今日达标 🎉" : "还差 \(max(0, 6 - (todayCtx?.waterCount ?? 0))) 杯")
-                bigStat(label: "进食",
-                        value: todayCtx?.meals.count ?? vitalsData?.food.count ?? 0,
-                        goal: vitalsData?.food.goal ?? 3,
-                        note: vitalsData?.food.meals.last ?? todayCtx?.meals.last?.description ?? "未记录")
-            }
-        }
-    }
-
-    private func bigStat(label: String, value: Int, goal: Int, note: String) -> some View {
-        card {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(label)
-                    .font(.system(size: 13)).foregroundColor(Self.textSub).tracking(1)
-                    .padding(.bottom, 10)
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text("\(value)")
-                        .font(.cormorant(44))
-                        .foregroundColor(Self.textPrimary)
-                    Text("/\(goal)")
-                        .font(.cormorant(15))
-                        .foregroundColor(Self.textFaint)
-                }
-                ProgressBar(ratio: goal > 0 ? min(1, Double(value) / Double(goal)) : 0)
-                    .padding(.top, 12)
-                Text(note)
-                    .font(.system(size: 12)).foregroundColor(Self.greenDeep)
-                    .lineLimit(1)
-                    .padding(.top, 10)
-            }
-        }
-    }
-
-    // MARK: - 待办
-
-    private var todoSection: some View {
-        Group {
-            sectionHeader("待 办", "To Do", note: "Caelum 也能记")
-            card(padding: false) {
-                VStack(spacing: 0) {
-                    let items = todo.sorted
-                    if items.isEmpty {
-                        HStack {
-                            Text("今天还没有待办")
-                                .font(.system(size: 14)).foregroundColor(Self.textFaint)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20).padding(.vertical, 16)
-                    } else {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                            todoRow(item, isLast: false)
-                            if idx < items.count - 1 {
-                                Rectangle().fill(Self.line).frame(height: 0.5).padding(.leading, 20)
-                            }
-                        }
-                        Rectangle().fill(Self.line).frame(height: 0.5).padding(.leading, 20)
-                    }
-                    Button { showAddTodo = true } label: {
-                        HStack {
-                            Text("＋ 添加待办")
-                                .font(.system(size: 13)).foregroundColor(Self.greenDeep).tracking(1)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20).padding(.vertical, 14)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func todoRow(_ item: TodoItem, isLast: Bool) -> some View {
-        HStack(spacing: 13) {
-            Button { withAnimation(.easeInOut(duration: 0.15)) { todo.toggle(item.id) } } label: {
-                ZStack {
-                    Circle()
-                        .strokeBorder(item.done ? Self.green : Color(red: 214/255, green: 207/255, blue: 195/255), lineWidth: 1.5)
-                        .background(Circle().fill(item.done ? Self.green : Color.clear))
-                        .frame(width: 19, height: 19)
-                    if item.done {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            Text(item.text)
-                .font(.system(size: 14.5))
-                .foregroundColor(item.done ? Self.textFaint : Color(red: 61/255, green: 56/255, blue: 51/255))
-                .strikethrough(item.done, color: Self.textFaint)
-            Spacer()
-            if let src = item.source {
-                Text(src).font(.system(size: 10)).foregroundColor(Self.textFaint)
-            }
-        }
-        .padding(.horizontal, 20).padding(.vertical, 13)
-        .contentShape(Rectangle())
-        .contextMenu {
-            Button(role: .destructive) { todo.delete(item.id) } label: { Label("删除", systemImage: "trash") }
-            if item.done {
-                Button { todo.toggle(item.id) } label: { Label("标为未完成", systemImage: "arrow.uturn.backward") }
-            }
-        }
-    }
-
-    // MARK: - 屏幕
-
-    private var screenSection: some View {
-        Group {
-            sectionHeader("屏 幕", "Screen")
-            card {
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("今日使用").font(.system(size: 13)).foregroundColor(Self.textSub).tracking(1)
-                        if let st = todayCtx?.screenTime {
-                            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                                Text(String(format: "%.1f", st))
-                                    .font(.cormorant(34))
-                                    .foregroundColor(Self.textPrimary)
-                                Text("h").font(.cormorant(13)).foregroundColor(Self.textFaint)
-                            }
-                        } else {
-                            Text("—")
-                                .font(.cormorant(34))
-                                .foregroundColor(Self.textMuted)
-                        }
-                    }
-                    Spacer()
-                    if let st = todayCtx?.screenTime {
-                        let social = todayCtx?.socialScreenTime.map { String(format: "%.1fh", $0) } ?? "—"
-                        Text("社交 \(social) / 3h")
-                            .font(.system(size: 12)).foregroundColor(Self.textMuted)
-                    } else {
-                        Text("Screen Time API\n暂不可用")
-                            .font(.system(size: 11)).foregroundColor(Self.textFaint)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - 身体
-
-    private var bodySection: some View {
-        Group {
-            sectionHeader("身 体", "Body")
-            HStack(spacing: 13) {
-                iconStat(icon: "figure.walk", label: "步数",
-                         value: todayCtx?.steps.map(stepsFormatted) ?? "—",
-                         sub: todayCtx?.steps != nil ? "步" : "未记录")
-                iconStat(icon: "moon", label: "睡眠",
-                         value: sleepValue, sub: sleepSub)
-                iconStat(icon: "pills", label: "药物",
-                         value: medsTaken ? "已服" : "未报告",
-                         sub: medsName, valueColor: medsTaken ? Self.green : Self.gold, small: true)
-            }
-        }
+    /// 公历近似 24 节气：取当前日期所在（最近已过）的节气名。
+    private func solarTerm(_ date: Date) -> String {
+        let c = Calendar.current
+        let m = c.component(.month, from: date), d = c.component(.day, from: date)
+        let terms: [(Int, Int, String)] = [
+            (1,5,"小寒"),(1,20,"大寒"),(2,4,"立春"),(2,19,"雨水"),
+            (3,5,"惊蛰"),(3,20,"春分"),(4,4,"清明"),(4,20,"谷雨"),
+            (5,5,"立夏"),(5,21,"小满"),(6,5,"芒种"),(6,21,"夏至"),
+            (7,7,"小暑"),(7,22,"大暑"),(8,7,"立秋"),(8,23,"处暑"),
+            (9,7,"白露"),(9,23,"秋分"),(10,8,"寒露"),(10,23,"霜降"),
+            (11,7,"立冬"),(11,22,"小雪"),(12,7,"大雪"),(12,21,"冬至")
+        ]
+        var current = "冬至"
+        for (tm, td, name) in terms where m > tm || (m == tm && d >= td) { current = name }
+        return current
     }
 
     private var sleepValue: String {
         guard let dur = todayCtx?.sleepDuration else { return "—" }
-        let h = Int(dur), m = Int((dur - Double(h)) * 60)
-        return m > 0 ? "\(h)h\(m)" : "\(h)h"
+        let h = Int(dur), mn = Int((dur - Double(h)) * 60)
+        return mn > 0 ? "\(h)h\(mn)" : "\(h)h"
     }
     private var sleepSub: String {
         if let s = todayCtx?.sleepStart, let e = todayCtx?.sleepEnd {
-            return "\(timeString(s))–\(timeString(e))"
+            return "\(timeString(s)) – \(timeString(e))"
         }
         return todayCtx?.sleepDuration != nil ? "" : "未记录"
     }
     private var medsTaken: Bool { todayCtx?.medicationStatus == .taken || vitalsData?.meds.taken == true }
     private var medsName: String { vitalsData?.meds.name ?? todayCtx?.medicationName ?? "右佐匹克隆" }
 
-    private func iconStat(icon: String, label: String, value: String, sub: String,
-                          valueColor: Color? = nil, small: Bool = false) -> some View {
-        card {
-            VStack(spacing: 0) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .light))
-                    .foregroundColor(Self.green.opacity(0.85))
-                    .frame(height: 24)
-                    .padding(.bottom, 8)
-                Text(label).font(.system(size: 12)).foregroundColor(Self.textSub).tracking(1)
-                    .padding(.bottom, 8)
-                Text(value)
-                    .font(.cormorant(small ? 18 : 24))
-                    .foregroundColor(valueColor ?? Self.textPrimary)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                if !sub.isEmpty {
-                    Text(sub).font(.songti(11)).foregroundColor(Self.textMuted)
-                        .padding(.top, 5).lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    // MARK: - 经期（极简排版）
-
-    private var cycleSection: some View {
-        Group {
-            sectionHeader("经 期", "Cycle")
-            card {
-                if let day = todayCtx?.menstrualDay {
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(alignment: .bottom) {
-                            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                                Text("\(day)")
-                                    .font(.cormorant(54))
-                                    .foregroundColor(Self.textPrimary)
-                                Text("天").font(.songti(15)).foregroundColor(Self.textFaint)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 5) {
-                                Text(menstrualPhase(day))
-                                    .font(.songti(20))
-                                    .foregroundColor(Self.greenDeep).tracking(2)
-                                if let next = todayCtx?.nextPeriodDate {
-                                    let d = max(0, Calendar.current.dateComponents([.day], from: Date(), to: next).day ?? 0)
-                                    Text("预计 \(d) 天后来潮").font(.system(size: 12)).foregroundColor(Self.textSub)
-                                }
-                            }
-                        }
-                        Divider().background(Self.line).padding(.top, 20).padding(.bottom, 16)
-                        HStack(spacing: 28) {
-                            cycleStat("29", "上次周期")
-                            cycleStat("5", "经期时长")
-                            if let next = todayCtx?.nextPeriodDate {
-                                cycleStat(shortMD(next), "预计来潮")
-                            }
-                        }
-                    }
-                } else {
-                    HStack {
-                        Text("未记录经期").font(.system(size: 14)).foregroundColor(Self.textMuted)
-                        Spacer()
-                    }
-                }
-            }
-        }
-    }
-
-    private func cycleStat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value).font(.cormorant(20)).foregroundColor(Self.textPrimary)
-            Text(label).font(.system(size: 11)).foregroundColor(Self.textMuted)
-        }
-    }
-
     private func menstrualPhase(_ day: Int) -> String {
         switch day {
-        case ...5:   return "经期"
-        case 6...13: return "卵泡期"
+        case ...5:    return "经期"
+        case 6...13:  return "卵泡期"
         case 14...16: return "排卵期"
-        default:     return "黄体期"
+        default:      return "黄体期"
         }
-    }
-
-    // MARK: - 留言
-
-    private var messagesSection: some View {
-        Group {
-            sectionHeader("留 言", "Messages")
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 26) {
-                    tabButton("给你的", active: memoTabForYou) { memoTabForYou = true }
-                    tabButton("给世界的", active: !memoTabForYou) { memoTabForYou = false }
-                    Spacer()
-                }
-                Rectangle().fill(Self.line).frame(height: 0.5).padding(.top, -0.5)
-                    .padding(.bottom, 14)
-                card {
-                    if memoTabForYou {
-                        let latest = vitalsData?.notes?.last
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(latest?.text ?? "这里会显示 Caelum 的最新留言～")
-                                .font(.system(size: 14.5))
-                                .foregroundColor(latest != nil ? Self.textPrimary : Self.textSub)
-                                .lineSpacing(4)
-                            HStack {
-                                Text("\(noteTime(latest?.ts)) · \(latest?.by ?? "Caelum")")
-                                    .font(.cormorant(12)).foregroundColor(Self.textMuted)
-                                Spacer()
-                                Text("查看全部 →").font(.system(size: 12)).foregroundColor(Self.greenDeep)
-                            }
-                        }
-                    } else {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                if let count = todayCtx?.tweetCount {
-                                    Text("今日 \(count) 条").font(.songti(18)).foregroundColor(Self.textPrimary)
-                                    if let s = todayCtx?.latestTweetSummary {
-                                        Text(s).font(.system(size: 12)).foregroundColor(Self.textMuted).lineLimit(2)
-                                    }
-                                } else {
-                                    Text("—").font(.cormorant(18)).foregroundColor(Self.textMuted)
-                                    Text("待接入 Twitter MCP").font(.system(size: 11)).foregroundColor(Self.textFaint)
-                                }
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Self.textFaint)
-                        }
-                    }
-                }
-            }
-            .onTapGesture { if memoTabForYou { showMemoBoard = true } }
-        }
-        .sheet(isPresented: $showMemoBoard) { MemoBoardPlaceholder() }
-    }
-
-    private func tabButton(_ title: String, active: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(.system(size: 14))
-                    .tracking(2)
-                    .foregroundColor(active ? Self.textPrimary : Self.textMuted)
-                Rectangle().fill(active ? Self.green : Color.clear).frame(height: 2)
-            }
-            .fixedSize()
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Helpers
@@ -482,7 +468,6 @@ struct ConsoleView: View {
     private func shortMD(_ date: Date) -> String {
         let f = DateFormatter(); f.dateFormat = "M.d"; return f.string(from: date)
     }
-    /// console_write 备注的 ISO 时间戳 → HH:mm；解析失败给"刚刚"
     private func noteTime(_ iso: String?) -> String {
         guard let iso, let d = ISO8601DateFormatter().date(from: iso) else { return "刚刚" }
         return timeString(d)
@@ -491,54 +476,9 @@ struct ConsoleView: View {
         let fmt = NumberFormatter(); fmt.numberStyle = .decimal
         return fmt.string(from: NSNumber(value: n)) ?? "\(n)"
     }
-
-    // MARK: - Card container
-
-    @ViewBuilder
-    private func card<C: View>(padding: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
-        content()
-            .padding(padding ? EdgeInsets(top: 18, leading: 20, bottom: 18, trailing: 20) : EdgeInsets())
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white)
-                    .shadow(color: Color(red: 80/255, green: 70/255, blue: 55/255).opacity(0.05), radius: 3, x: 0, y: 1)
-            )
-    }
 }
 
-// MARK: - Progress bar
-
-private struct ProgressBar: View {
-    let ratio: Double
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(red: 238/255, green: 232/255, blue: 221/255))
-                Capsule().fill(ConsoleView.green)
-                    .frame(width: max(ratio > 0 ? 3 : 0, geo.size.width * ratio))
-            }
-        }
-        .frame(height: 3)
-    }
-}
-
-// MARK: - Design tokens (v6：暖奶油 + 鼠尾草绿)
-
-extension ConsoleView {
-    static let pageBg      = Color(red: 246/255, green: 243/255, blue: 236/255) // #F6F3EC
-    static let textPrimary = Color(red:  58/255, green:  51/255, blue:  43/255) // #3A332B
-    static let textSub     = Color(red: 124/255, green: 118/255, blue: 107/255) // #7C766B
-    static let textUnit    = Color(red: 155/255, green: 142/255, blue: 126/255) // #9B8E7E
-    static let textLabel   = Color(red: 168/255, green: 158/255, blue: 142/255) // #A89E8E
-    static let textMuted   = Color(red: 167/255, green: 158/255, blue: 143/255) // #A79E8F
-    static let textFaint   = Color(red: 188/255, green: 178/255, blue: 162/255) // #BCB2A2
-    static let line        = Color(red: 236/255, green: 229/255, blue: 217/255) // #ECE5D9
-    static let green       = Color(red: 143/255, green: 174/255, blue: 146/255) // #8FAE92
-    static let greenDeep   = Color(red: 110/255, green: 138/255, blue: 114/255) // #6E8A72
-    static let rose        = Color(red: 199/255, green: 145/255, blue: 145/255) // #C79191
-    static let gold        = Color(red: 205/255, green: 169/255, blue: 104/255) // #CDA968
-}
+// MARK: - 留言板 placeholder
 
 private struct MemoBoardPlaceholder: View {
     @Environment(\.dismiss) private var dismiss
@@ -570,10 +510,35 @@ private struct MemoBoardPlaceholder: View {
         .modelContainer(for: DailyContext.self, inMemory: true)
 }
 
-// MARK: - 控制台自定义字体（Cormorant Garamond 数字/英文 + 思源宋体 中文）
+// MARK: - Design tokens（v9：SusuPalace 暖奶白 + 薄荷绿）
+
+extension ConsoleView {
+    static let pageBg      = Color(red: 255/255, green: 251/255, blue: 246/255) // #FFFBF6
+    static let card        = Color(red: 243/255, green: 242/255, blue: 235/255) // #F3F2EB
+    static let sink        = Color(red: 237/255, green: 231/255, blue: 221/255) // #EDE7DD
+    static let textPrimary = Color(red:  61/255, green:  54/255, blue:  51/255) // #3D3633
+    static let textSub     = Color(red: 128/255, green: 120/255, blue: 112/255) // #807870
+    static let textLabel   = Color(red: 173/255, green: 166/255, blue: 158/255) // #ADA69E
+    static let textMuted   = Color(red: 173/255, green: 166/255, blue: 158/255) // #ADA69E
+    static let textFaint   = Color(red: 196/255, green: 188/255, blue: 176/255) // #C4BCB0
+    static let line        = Color(red: 228/255, green: 222/255, blue: 211/255) // #E4DED3
+    static let green       = Color(red: 142/255, green: 189/255, blue: 159/255) // #8EBD9F
+    static let greenDeep   = Color(red:  95/255, green: 146/255, blue: 119/255) // #5F9277
+    static let gold        = Color(red: 217/255, green: 169/255, blue:  78/255) // #D9A94E
+}
+
+// MARK: - 控制台字体（Cormorant Garamond 数字，强制 lining figures 修掉 oldstyle "11→II"）
+
 private extension Font {
-    /// Cormorant Garamond — 数字与拉丁字母（古典衬线，oldstyle 数字，还原 console-v6 原型）
-    static func cormorant(_ size: CGFloat) -> Font { .custom("CormorantGaramondLight-SemiBold", size: size) }
-    /// 思源宋体 Source Han Serif SC — 中文标题与标签
-    static func songti(_ size: CGFloat) -> Font { .custom("SourceHanSerifSC-Regular", size: size) }
+    static func cormorant(_ size: CGFloat) -> Font {
+        let name = "CormorantGaramondLight-SemiBold"
+        guard let base = UIFont(name: name, size: size) else { return .custom(name, size: size) }
+        let desc = base.fontDescriptor.addingAttributes([
+            .featureSettings: [[
+                UIFontDescriptor.FeatureKey.type: 21,     // kNumberCaseType
+                UIFontDescriptor.FeatureKey.selector: 1   // kUpperCaseNumbersSelector（lining）
+            ]]
+        ])
+        return Font(UIFont(descriptor: desc, size: size))
+    }
 }
