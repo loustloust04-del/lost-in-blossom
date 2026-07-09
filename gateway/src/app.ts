@@ -17,6 +17,7 @@ import { updateSummary } from './memory/keepalive';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
+import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
@@ -134,6 +135,55 @@ app.post('/api/events', async (c) => {
   // app_open 已存本地文件，Supabase 失败不影响
     const ok = (type === 'app_open') ? true : res.ok;
     return c.json({ ok, ...(res.error && type !== 'app_open' ? { error: res.error } : {}) });
+});
+
+// ============ 偷看屏幕（Peek）：快捷指令截屏上传 → App 拉取注入 Caelum 对话 ============
+app.post('/api/peek', async (c) => {
+  // token：Bearer 或 ?key=（快捷指令友好，同 /api/events）
+  const h = c.req.header('Authorization');
+  const tok = (h?.startsWith('Bearer ') ? h.slice(7) : '') || c.req.query('key') || '';
+  if (!verifyEventToken(tok)) return c.json({ ok: false, error: 'forbidden' }, 403);
+  const appName = c.req.query('app') || c.req.query('value') || '';
+  const ct = c.req.header('Content-Type') || '';
+  let buf: ArrayBuffer | null = null;
+  let ext = 'png';
+  try {
+    if (ct.includes('multipart/form-data')) {
+      const body = await c.req.parseBody();
+      const f = (body['image'] || body['file']) as any;
+      if (f && typeof f.arrayBuffer === 'function') {
+        buf = await f.arrayBuffer();
+        if (typeof f.type === 'string' && f.type.includes('jpeg')) ext = 'jpg';
+      }
+    } else {
+      buf = await c.req.arrayBuffer();
+      if (ct.includes('jpeg')) ext = 'jpg';
+    }
+  } catch (e: any) {
+    return c.json({ ok: false, error: 'parse failed: ' + (e?.message || e) }, 400);
+  }
+  if (!buf || buf.byteLength === 0) return c.json({ ok: false, error: 'no image' }, 400);
+  const item = savePeek(buf, appName, ext);
+  console.log('[peek] received', item.id, 'app=', appName, 'bytes=', buf.byteLength);
+  return c.json({ ok: true, id: item.id });
+});
+
+// App 回前台拉未处理的偷看（只给元数据）
+app.get('/api/peek/pending', auth, async (c) => {
+  return c.json({ peeks: pendingPeeks().map((p) => ({ id: p.id, app: p.app, ts: p.ts })) });
+});
+
+// App 取某张偷看图片
+app.get('/api/peek/:id/image', auth, async (c) => {
+  const img = peekImage(c.req.param('id'));
+  if (!img) return c.json({ error: 'not found' }, 404);
+  return new Response(img.buf, { headers: { 'Content-Type': img.ext === 'jpg' ? 'image/jpeg' : 'image/png' } });
+});
+
+// App 注入完成后 ack，避免重复
+app.post('/api/peek/:id/ack', auth, async (c) => {
+  ackPeek(c.req.param('id'));
+  return c.json({ ok: true });
 });
 
 // ============ 未读念头（App 端拉取，支持 ?since=ms 增量）（PR-6）============
