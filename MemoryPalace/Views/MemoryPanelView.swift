@@ -41,6 +41,8 @@ struct RightPanelView: View {
     @ViewBuilder
     private var panelContent: some View {
         switch selectedToolId {
+        case "home":
+            ConsoleView()
         case "calendar":
             CalendarPanelView(viewModel: viewModel, profileId: profileManager?.currentProfile.id ?? "")
         case "memory":

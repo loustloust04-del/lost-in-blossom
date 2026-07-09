@@ -90,6 +90,25 @@ struct ToolBarView: View {
             .buttonStyle(.plain)
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
+
+            // 🏠 桌面键：固定最右，不可拖不可删
+            let isHomeSelected = (selectedToolId == "home")
+            Button {
+                withAnimation(springAnim) {
+                    selectedToolId = "home"
+                }
+            } label: {
+                Image(systemName: "house")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(isHomeSelected ? Theme.textSecondary : Theme.textMuted)
+                    .padding(.horizontal, 10)
+                    .frame(height: 36)
+                    .background(
+                        Capsule()
+                            .fill(Theme.branchIndicator.opacity(isHomeSelected ? 0.14 : 0))
+                    )
+            }
+            .buttonStyle(.plain)
         .animation(springAnim, value: selectedToolId)
         .padding(4)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
