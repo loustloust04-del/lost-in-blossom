@@ -265,6 +265,32 @@ struct PromptAssembler {
 
     /// 解析插槽内容：
     /// - 普通插槽用自身 content
+    /// 从「当前预设 + 楼层」提取人设文本：把角色人格相关的插槽（系统指令 / 助手设定 /
+    /// 用户描述 / 背景设定 / 后置提醒）按 injectionOrder 拼成一段纯文本，供「导入到群聊
+    /// 角色设定」用。刻意排除记忆注入 / 对话历史 / 对话示例 / 世界书——那些是运行时上下文，
+    /// 不属于人格本身。
+    static func personaText(profile: Profile, preset: Preset) -> String {
+        let personaSlotIds: Set<String> = [
+            PromptSlot.mainId,
+            PromptSlot.charDescriptionId,
+            PromptSlot.personaDescriptionId,
+            PromptSlot.scenarioId,
+            PromptSlot.jailbreakId,
+        ]
+        let slots = preset.prompts
+            .filter { ($0.isEnabled || $0.isSystemPrompt) && personaSlotIds.contains($0.id) }
+            .sorted { $0.injectionOrder < $1.injectionOrder }
+
+        var parts: [String] = []
+        for slot in slots {
+            guard let content = resolveSlotContent(
+                slot, profile: profile, preset: preset, memories: [], chatHistory: []
+            ), !content.isEmpty else { continue }
+            parts.append(content)
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
     /// - marker 插槽：如果自身有 content 优先用（导入的预设），否则 fallback 到 profile 数据
     private static func resolveSlotContent(
         _ slot: PromptSlot,

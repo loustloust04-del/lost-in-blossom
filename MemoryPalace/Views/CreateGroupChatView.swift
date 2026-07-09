@@ -8,6 +8,8 @@ struct CreateGroupChatView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
     @Environment(CharacterCardManager.self) private var cardManager: CharacterCardManager?
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+    @Environment(PresetManager.self) private var presetManager: PresetManager?
 
     @State private var groupTitle: String = ""
     @State private var slots: [SlotState] = [
@@ -172,13 +174,36 @@ struct CreateGroupChatView: View {
 
     private func systemPromptField(for idx: Int) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("补充 Prompt（可选，叠加在角色卡之上）")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("角色设定")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if profileManager != nil {
+                    Button {
+                        importCurrentPersona(into: idx)
+                    } label: {
+                        Label("导入当前预设人设", systemImage: "square.and.arrow.down")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
             TextEditor(text: $slots[idx].systemPrompt)
                 .frame(minHeight: 60, maxHeight: 120)
                 .font(.callout)
         }
+    }
+
+    /// 把「当前楼层 + 当前预设」的人设文本导入到这个角色的设定框（本尊进群用）。
+    /// 空框直接填充；已有内容则换行追加，不覆盖用户手写。
+    private func importCurrentPersona(into idx: Int) {
+        guard idx < slots.count, let profile = profileManager?.currentProfile else { return }
+        let preset = presetManager?.preset(byId: profile.presetId) ?? Preset.balanced
+        let text = PromptAssembler.personaText(profile: profile, preset: preset)
+        guard !text.isEmpty else { return }
+        let existing = slots[idx].systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        slots[idx].systemPrompt = existing.isEmpty ? text : existing + "\n\n" + text
     }
 
     @ViewBuilder
