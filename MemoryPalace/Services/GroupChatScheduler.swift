@@ -160,9 +160,10 @@ enum GroupChatScheduler {
             if !card.personality.isEmpty { parts.append("【性格】\n\(card.personality)") }
         }
 
-        // 用户自定义 system prompt
+        // 角色设定（人格主体）：本尊可从预设导入、客串手写。加标题让模型明确「这是你的人设」，
+        // 而不是把它当成一段无主的文字。
         if !participant.systemPrompt.isEmpty {
-            parts.append(participant.systemPrompt)
+            parts.append("## 你的人设\n\(participant.systemPrompt)")
         }
 
         // preset
