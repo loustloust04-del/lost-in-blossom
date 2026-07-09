@@ -111,6 +111,45 @@ export async function searchWeb(query: string, count = 8): Promise<SearchItem[]>
   }
 }
 
+// 网关侧「抓单页正文」——browse_url 复用同一常驻 Chrome（自动带 chrome-proxy 住宅 IP），
+// 绕开 iOS WKWebView 的离屏/前后台/低电量坑。goto 目标页 → 去噪 → 抽正文文本。
+const BROWSE_MAX = 8000; // 与 App InternalBrowser markdownLimit 对齐（约 2000 token）
+
+export interface BrowsedPage { title: string; url: string; text: string; length: number; truncated: boolean; }
+
+export async function browsePage(rawUrl: string): Promise<BrowsedPage> {
+  const target = (rawUrl || '').trim();
+  if (!/^https?:\/\//i.test(target)) throw new Error('browse_url 需要 http(s) 链接');
+  while (inflight >= MAX_INFLIGHT) { await new Promise((r) => setTimeout(r, 200)); }
+  inflight++;
+  const browser = await getBrowser();
+  const ctx = await browser.newContext({ userAgent: UA, locale: 'zh-CN' });
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  });
+  const page = await ctx.newPage();
+  try {
+    await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(800);
+    const res = await page.evaluate(() => {
+      ['script', 'style', 'noscript', 'nav', 'header', 'footer', 'aside', 'iframe', 'svg', 'form']
+        .forEach((sel) => document.querySelectorAll(sel).forEach((e) => e.remove()));
+      const main: any = document.querySelector('article, main, [role="main"]') || document.body;
+      const text: string = (main?.innerText || (document.body as any).innerText || '')
+        .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      return { title: document.title || '', text };
+    });
+    const truncated = res.text.length > BROWSE_MAX;
+    const text = truncated
+      ? res.text.slice(0, BROWSE_MAX) + '\n\n…（正文截断，原始 ' + res.text.length + ' 字）'
+      : res.text;
+    return { title: res.title, url: page.url(), text, length: res.text.length, truncated };
+  } finally {
+    await ctx.close().catch(() => {});
+    inflight--;
+  }
+}
+
 // 常驻浏览器会挡住 bun 进程退出（systemd stop 卡到 90s 超时强杀）——收到停止信号先关浏览器。
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {

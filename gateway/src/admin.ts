@@ -10,7 +10,7 @@ import { auth } from './middleware/auth';
 import { config } from './config';
 import { supabase } from './db/supabase';
 import { getMcpServerUrls, setMcpServers, probeMcpServer } from './tools/mcp-client';
-import { searchWeb } from './tools/websearch';
+import { searchWeb, browsePage } from './tools/websearch';
 import { listTodos, addTodo, toggleTodo, deleteTodo, clearDone } from './todos';
 
 // ============ 通道 key 运行时覆盖（持久化 + 热生效） ============
@@ -357,6 +357,20 @@ search.get('/', async (c) => {
   }
 });
 
+// 网关侧真 Chrome「抓单页正文」，免 key。App 的 browse_url → GET /api/browse?url=...
+const browse = new Hono().basePath('/api/browse');
+browse.use('*', auth);
+browse.get('/', async (c) => {
+  const target = (c.req.query('url') || '').trim();
+  if (!target) return c.json({ error: 'missing url' }, 400);
+  try {
+    const page = await browsePage(target);
+    return c.json(page);
+  } catch (e: any) {
+    return c.json({ error: e?.message || 'browse failed' }, 502);
+  }
+});
+
 // ============ 待办（App 控制台读写；CC/API 也经 builtin 工具写）============
 const todos = new Hono().basePath('/api/todos');
 todos.use('*', auth);
@@ -386,6 +400,9 @@ export default {
     }
     if (url.pathname === '/api/search' || url.pathname.startsWith('/api/search/')) {
       return search.fetch(req, env, ctx);
+    }
+    if (url.pathname === '/api/browse' || url.pathname.startsWith('/api/browse/')) {
+      return browse.fetch(req, env, ctx);
     }
     if (url.pathname === '/api/todos' || url.pathname.startsWith('/api/todos/')) {
       return todos.fetch(req, env, ctx);
