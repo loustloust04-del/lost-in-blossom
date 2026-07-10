@@ -69,8 +69,13 @@ enum GroupChatScheduler {
         - 只输出一个角色名或"无"
         """
 
-        // 用第一个候选人的模型来做选人（便宜快速）
-        guard let model = providerManager.model(byId: pool[0].model) else {
+        // 选人用便宜快速的模型当「主持人」：优先避开 CC——CC 慢、贵、易超时，不适合做
+        // 每轮都要跑的门控（PLAN：门控统一走廉价 API，哪怕角色本体是 CC）。全 CC 群才回退。
+        let selectorModel = pool.lazy
+            .compactMap { providerManager.model(byId: $0.model) }
+            .first { providerManager.provider(for: $0)?.type != .ccBridge }
+            ?? providerManager.model(byId: pool[0].model)
+        guard let model = selectorModel else {
             // fallback: 随机选一个
             return pool.randomElement()
         }
