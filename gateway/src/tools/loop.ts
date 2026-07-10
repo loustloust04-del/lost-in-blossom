@@ -143,7 +143,20 @@ export async function runToolLoop(body: any, sessionId: string): Promise<Respons
           if (b.type !== 'tool_use') continue;
           let out = await callBuiltinTool(b.name, b.input);     // 内置：进程内
           if (out === null) out = await callMcpTool(b.name, b.input, mcpTools); // fall through 到 MCP
-          toolResults.push({ type: 'tool_result', tool_use_id: b.id, content: out });
+          // see_screen 等返回图片的工具：把 __peek_image__ 转成 tool_result 里的 image block（多模态 Caelum 亲眼看）
+          let toolContent: any = out;
+          if (typeof out === 'string' && out.includes('__peek_image__')) {
+            try {
+              const pk = JSON.parse(out);
+              if (pk && pk.__peek_image__ && pk.data) {
+                toolContent = [
+                  { type: 'image', source: { type: 'base64', media_type: pk.media_type || 'image/png', data: pk.data } },
+                  { type: 'text', text: `[用户当前 iPhone 屏幕截图 · App: ${pk.app || '未知'}]` },
+                ];
+              }
+            } catch {}
+          }
+          toolResults.push({ type: 'tool_result', tool_use_id: b.id, content: toolContent });
         }
         messages.push({ role: 'user', content: toolResults });
       }

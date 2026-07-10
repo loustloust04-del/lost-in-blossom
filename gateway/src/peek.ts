@@ -59,3 +59,29 @@ export function ackPeek(id: string) {
   const item = list.find((p) => p.id === id);
   if (item) { item.acked = true; saveMeta(list); }
 }
+
+
+/// 取最新一张截图（base64），供 see_screen 工具喂给多模态 Caelum。
+export function latestPeek(): { app: string; base64: string; mediaType: string; ts: number } | null {
+  const list = loadMeta();
+  if (list.length === 0) return null;
+  list.sort((a, b) => b.ts - a.ts);
+  const item = list[0];
+  const p = join(PEEK_DIR, item.file);
+  if (!existsSync(p)) return null;
+  const buf = readFileSync(p);
+  return { app: item.app, base64: buf.toString('base64'), mediaType: item.ext === 'jpg' ? 'image/jpeg' : 'image/png', ts: item.ts };
+}
+
+export const SEE_SCREEN_TOOL = {
+  name: 'see_screen',
+  description: '看用户 iPhone 的当前屏幕：返回最新一张屏幕截图（图片）+ 当前 App 名。用户说"看我的屏幕 / 看这个 / 帮我看看屏幕上的…"时调用。若还没有截图，会提示让用户先在手机上触发一次。',
+  input_schema: { type: 'object' as const, properties: {}, required: [] as string[] },
+};
+
+/// __peek_image__ 结构：各消费方（loop.ts / cc-bridge mcp-server）识别后各自组装成 image block。
+export function callSeeScreen(): string {
+  const p = latestPeek();
+  if (!p) return JSON.stringify({ error: '还没有屏幕截图——让用户先在手机上触发一次偷看（背部轻点 / 快捷指令）' });
+  return JSON.stringify({ __peek_image__: true, media_type: p.mediaType, data: p.base64, app: p.app });
+}
