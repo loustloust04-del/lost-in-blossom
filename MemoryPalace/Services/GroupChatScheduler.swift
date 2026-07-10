@@ -109,7 +109,7 @@ enum GroupChatScheduler {
     ) -> [(role: String, content: String)] {
         // 最多保留最近 20 条，防上下文爆
         let recent = history.suffix(20)
-        return recent.compactMap { m -> (role: String, content: String)? in
+        let raw: [(role: String, content: String)] = recent.compactMap { m in
             guard !m.content.isEmpty else { return nil }
             if m.senderId == speaker.id {
                 return (role: "assistant", content: m.content)
@@ -118,6 +118,23 @@ enum GroupChatScheduler {
                 return (role: "user", content: "[\(name)]: \(m.content)")
             }
         }
+
+        // Claude/Anthropic 后端要求 user/assistant 严格交替、首条必须是 user。群聊镜像里
+        // 别人的发言都变成 user，多角色时会连续多条 user → Anthropic 直接 400（DeepSeek/
+        // OpenAI 容忍，所以之前只有走 Claude 的角色不回）。这里合并连续同 role、并丢弃前导
+        // assistant，保证交替，兼容所有后端。
+        var merged: [(role: String, content: String)] = []
+        for m in raw {
+            if !merged.isEmpty, merged[merged.count - 1].role == m.role {
+                merged[merged.count - 1].content += "\n" + m.content
+            } else {
+                merged.append(m)
+            }
+        }
+        while let first = merged.first, first.role != "user" {
+            merged.removeFirst()
+        }
+        return merged
     }
 
     // MARK: - System Prompt（增强互感）
