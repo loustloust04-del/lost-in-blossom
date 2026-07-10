@@ -643,7 +643,7 @@ struct ChatInputBar: View {
     }
 
     private var inputPlaceholder: String {
-        "Reply to Caelum"
+        viewModel.selectedConversation?.kind == "group" ? "在群里说点什么…" : "Reply to Caelum"
     }
 
     var body: some View {
