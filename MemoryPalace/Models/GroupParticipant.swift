@@ -9,6 +9,7 @@ struct GroupParticipant: Codable, Identifiable, Hashable {
     var presetId: String
     var colorHex: String            // 气泡颜色
     var systemPrompt: String        // 每个参与者独立的 system prompt
+    var intro: String               // 一句话简介（群名片）：成员互感/选人用，替代长人设截断
     var talkativeness: Double       // 0.0（沉默）~1.0（话痨），默认 0.5
 
     init(id: String = UUID().uuidString,
@@ -18,6 +19,7 @@ struct GroupParticipant: Codable, Identifiable, Hashable {
          presetId: String = "",
          colorHex: String,
          systemPrompt: String = "",
+         intro: String = "",
          talkativeness: Double = 0.5) {
         self.id = id
         self.name = name
@@ -26,6 +28,7 @@ struct GroupParticipant: Codable, Identifiable, Hashable {
         self.presetId = presetId
         self.colorHex = colorHex
         self.systemPrompt = systemPrompt
+        self.intro = intro
         self.talkativeness = talkativeness
     }
 
@@ -39,6 +42,7 @@ struct GroupParticipant: Codable, Identifiable, Hashable {
         presetId = try c.decodeIfPresent(String.self, forKey: .presetId) ?? ""
         colorHex = try c.decode(String.self, forKey: .colorHex)
         systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
+        intro = try c.decodeIfPresent(String.self, forKey: .intro) ?? ""
         talkativeness = try c.decodeIfPresent(Double.self, forKey: .talkativeness) ?? 0.5
     }
 }

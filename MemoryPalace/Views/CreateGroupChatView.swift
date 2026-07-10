@@ -174,6 +174,9 @@ struct CreateGroupChatView: View {
 
     private func systemPromptField(for idx: Int) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            TextField("一句话简介（群名片，给其他成员看的）", text: $slots[idx].intro)
+                .font(.callout)
+            Divider()
             HStack {
                 Text("角色设定")
                     .font(.caption)
@@ -244,6 +247,7 @@ struct CreateGroupChatView: View {
                 model: modelId,
                 colorHex: slot.colorHex,
                 systemPrompt: slot.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
+                intro: slot.intro.trimmingCharacters(in: .whitespacesAndNewlines),
                 talkativeness: slot.talkativeness
             )
         }
@@ -263,6 +267,7 @@ private struct SlotState {
     var name: String
     var modelId: String = ""
     var systemPrompt: String = ""
+    var intro: String = ""
     var colorHex: String
     var characterCardID: String = ""
     var talkativeness: Double = 0.5

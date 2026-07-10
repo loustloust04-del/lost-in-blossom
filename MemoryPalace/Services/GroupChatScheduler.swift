@@ -47,8 +47,10 @@ enum GroupChatScheduler {
         let pool = interested.isEmpty ? candidates : interested
 
         // 构造选人 prompt
+        // 群名片优先：长人设的前 80 字是残句、还泄漏私密设定；intro 是用户写给别人看的简介
         let roster = pool.enumerated().map { (i, p) in
-            "\(i+1). \(p.name) — \(p.systemPrompt.prefix(80))"
+            let desc = p.intro.isEmpty ? String(p.systemPrompt.prefix(80)) : p.intro
+            return "\(i+1). \(p.name) — \(desc)"
         }.joined(separator: "\n")
 
         let recentChat = history.suffix(6).map { m in
@@ -169,7 +171,8 @@ enum GroupChatScheduler {
         var roster = "## 群聊成员\n"
         roster += "- \(userName)（用户）\n"
         for p in allParticipants {
-            let desc = p.systemPrompt.prefix(60)
+            // 群名片优先（同 selectNextSpeaker）：别人眼里的你 = 你写的简介，不是人设残句
+            let desc = p.intro.isEmpty ? String(p.systemPrompt.prefix(60)) : p.intro
             let isMe = p.id == participant.id ? " ← 这是你" : ""
             roster += "- \(p.name)\(isMe)：\(desc)\n"
         }
