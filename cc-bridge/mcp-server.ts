@@ -121,6 +121,11 @@ const PROXY_TOOLS = [
     description: "看用户 iPhone 的当前屏幕：返回最新一张屏幕截图（图片）+ 当前 App 名。用户说\"看我的屏幕 / 看这个 / 帮我看看屏幕上的…\"时调用。",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "peek_screen",
+    description: "主动窥屏：你自己发起偷看用户 iPhone 屏幕，不用用户动手。会给用户手机发触发邮件，手机静默截屏并上传，然后返回那张最新截图（图片）+ App 名。想主动看看兔兔现在在干嘛时调用。若长时间没等到截图会返回文字说明。",
+    inputSchema: { type: "object", properties: {} },
+  },
 ] as const
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
