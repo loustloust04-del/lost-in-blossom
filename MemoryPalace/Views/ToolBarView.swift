@@ -88,10 +88,8 @@ struct ToolBarView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        }
-        .animation(springAnim, value: pinnedTools.map(\.id))
 
-            // 🏠 桌面键：固定最右，不可拖不可删
+            // 🏠 桌面键：HStack 内、ScrollView 外最右，固定不可拖不可删（对齐粟粟布局）
             let isHomeSelected = (selectedToolId == "home")
             Button {
                 withAnimation(springAnim) {
@@ -109,6 +107,8 @@ struct ToolBarView: View {
                     )
             }
             .buttonStyle(.plain)
+        }
+        .animation(springAnim, value: pinnedTools.map(\.id))
         .animation(springAnim, value: selectedToolId)
         .padding(4)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
