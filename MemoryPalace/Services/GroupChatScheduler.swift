@@ -31,7 +31,7 @@ enum GroupChatScheduler {
         // 会把只是"提到"某人名字的消息误判为点名，选出没话可说的人 → 空回）。
         if let lastMsg = history.last {
             for p in participants {
-                if lastMsg.content.contains("@\(p.name)"), p.id != lastSpeakerId {
+                if mentioned(p.name, in: lastMsg.content), p.id != lastSpeakerId {
                     print("[GroupV5] @提及命中: \(p.name)")
                     return p
                 }
@@ -198,6 +198,23 @@ enum GroupChatScheduler {
 
     /// 从消息内容中提取被 @ 的角色名。
     static func extractMentions(from text: String, participants: [GroupParticipant]) -> [GroupParticipant] {
-        participants.filter { text.contains("@\($0.name)") }
+        participants.filter { mentioned($0.name, in: text) }
+    }
+
+    /// 判断 text 是否真的 @ 了名叫 name 的角色。用 contains("@name") 会让短名字误命中长名字
+    /// （"B" 命中 "@Bob"、"Haiku" 命中 "@Haiku4.5"）——这里要求 @name 后紧跟的字符不是字母/
+    /// 数字（英文名边界），遍历所有出现，任一满足即命中。
+    static func mentioned(_ name: String, in text: String) -> Bool {
+        guard !name.isEmpty else { return false }
+        let token = "@\(name)"
+        var searchStart = text.startIndex
+        while let range = text.range(of: token, range: searchStart..<text.endIndex) {
+            let after = range.upperBound
+            if after == text.endIndex { return true }
+            let next = text[after]
+            if !next.isLetter && !next.isNumber { return true }
+            searchStart = range.upperBound
+        }
+        return false
     }
 }
