@@ -675,7 +675,11 @@ struct ChatInputBar: View {
             currentStyleId: viewModel.selectedConversation?.currentStyleId,
             onStyleChange: { styleId in
                 viewModel.selectedConversation?.currentStyleId = styleId
-            }
+            },
+            groupMembers: {
+                guard let conv = viewModel.selectedConversation, conv.kind == "group" else { return [] }
+                return conv.participants.map { (name: $0.name, colorHex: $0.colorHex) }
+            }()
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -823,6 +827,33 @@ private struct InputFieldContainer: View {
     let onModelTap: () -> Void
     var currentStyleId: String? = nil
     var onStyleChange: ((String) -> Void)? = nil
+    /// 群聊成员（名字+气泡色）。单聊传空数组，@ 补全整体不启用。
+    var groupMembers: [(name: String, colorHex: String)] = []
+
+    // ── @ 补全（G2）：纯 SwiftUI 层检测 text 末尾的 @片段，不碰 UITextView 内部 ──
+
+    /// text 末尾正处于 "@xxx" 输入状态时返回 xxx（可为空串=刚打出 @）；否则 nil。
+    private var mentionFragment: String? {
+        guard !groupMembers.isEmpty else { return nil }
+        guard let atIdx = text.lastIndex(of: "@") else { return nil }
+        let frag = String(text[text.index(after: atIdx)...])
+        // @ 后已出现空白 → 这个提及已完成，不再弹
+        guard !frag.contains(where: { $0.isWhitespace }) else { return nil }
+        guard frag.count <= 20 else { return nil }
+        return frag
+    }
+
+    private var mentionCandidates: [(name: String, colorHex: String)] {
+        guard let frag = mentionFragment else { return [] }
+        if frag.isEmpty { return groupMembers }
+        return groupMembers.filter { $0.name.range(of: frag, options: .caseInsensitive) != nil }
+    }
+
+    /// 把末尾的 @片段 替换成 @名字 + 空格（空格同时是后端 mentioned() 认的边界）。
+    private func completeMention(_ name: String) {
+        guard let atIdx = text.lastIndex(of: "@") else { return }
+        text = String(text[..<atIdx]) + "@" + name + " "
+    }
 
     private var canSend: Bool {
         isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
@@ -892,6 +923,35 @@ private struct InputFieldContainer: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 Divider().padding(.horizontal, 12)
+            }
+            // ── @ 补全候选条（G2，群聊输入 @ 时出现）───────────────────
+            if !mentionCandidates.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(mentionCandidates, id: \.name) { member in
+                            Button {
+                                completeMention(member.name)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Circle()
+                                        .fill(Color(hex: member.colorHex) ?? .gray)
+                                        .frame(width: 8, height: 8)
+                                    Text(member.name)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(Theme.textPrimary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(Theme.mainBg.opacity(0.7)))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 2)
+                Divider().padding(.horizontal, 12).padding(.top, 6)
             }
             // ── 上层：多行文本输入 ──────────────────────────────────────
             ZStack(alignment: .topLeading) {
