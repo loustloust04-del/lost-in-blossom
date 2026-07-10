@@ -257,11 +257,17 @@ extension ConversationViewModel {
     /// 提取群聊历史为 HistoryItem 数组。
     func groupHistoryItems() -> [GroupChatScheduler.HistoryItem] {
         currentPath.map { node in
-            GroupChatScheduler.HistoryItem(
+            // 剥离思考链再喂历史——跟单聊一致（ConversationViewModel+Chat 里 assistant
+            // 历史走 extractThinking）。否则每个角色都会看到别人拖着的整段思考链，被污染
+            // 后顺着编上下文 / 产生幻觉，不像在群里对话。
+            let content = node.role == "assistant"
+                ? ContentCleaner.extractThinking(from: node.content).content
+                : node.content
+            return GroupChatScheduler.HistoryItem(
                 role: node.role,
                 senderId: node.senderId,
                 senderName: node.senderName,
-                content: node.content
+                content: content
             )
         }
     }
