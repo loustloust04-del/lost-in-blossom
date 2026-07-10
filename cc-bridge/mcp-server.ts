@@ -116,6 +116,11 @@ const PROXY_TOOLS = [
     description: "Get Bunny's phone status for today — battery level, charging state, timestamps. No parameters needed.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "see_screen",
+    description: "看用户 iPhone 的当前屏幕：返回最新一张屏幕截图（图片）+ 当前 App 名。用户说\"看我的屏幕 / 看这个 / 帮我看看屏幕上的…\"时调用。",
+    inputSchema: { type: "object", properties: {} },
+  },
 ] as const
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
@@ -260,6 +265,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   if (PROXY_TOOL_NAMES.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
+    // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
+    if (typeof text === "string" && text.includes("__peek_image__")) {
+      try {
+        const pk = JSON.parse(text)
+        if (pk && pk.__peek_image__ && pk.data) {
+          return { content: [
+            { type: "image", data: pk.data, mimeType: pk.media_type || "image/png" },
+            { type: "text", text: `用户当前 iPhone 屏幕截图 · App: ${pk.app || "未知"}` },
+          ] }
+        }
+      } catch {}
+    }
     return { content: [{ type: "text", text }] }
   }
 
