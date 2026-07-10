@@ -89,6 +89,25 @@ app.get('/v1/models', auth, (c) => c.json({
     { id: 'relay/claude-opus-4-1-20250805', object: 'model', owned_by: 'relay' },
     { id: 'relay/claude-sonnet-4-5-20250929', object: 'model', owned_by: 'relay' },
     { id: 'relay/claude-haiku-4-5-20251001', object: 'model', owned_by: 'relay' },
+    { id: 'Tree/gpt-5.4', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.4-mini', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.5', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.6-luna', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.6-sol', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.6-terra', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/grok-4.3', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/grok-4.5', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.3-codex-spark', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.5-openai-compact', object: 'model', owned_by: 'tree-new' },
+    { id: 'Tree/gpt-5.4-openai-compact', object: 'model', owned_by: 'tree-new' },
+    { id: 'gua-claude-fable-5', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-opus-4-8', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-opus-4-7', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-opus-4-6', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-sonnet-4-6', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-opus-4-5-20251101', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-sonnet-4-5-20250929', object: 'model', owned_by: 'gua' },
+    { id: 'gua-claude-haiku-4-5-20251001', object: 'model', owned_by: 'gua' },
   ]
 }));
 
@@ -309,6 +328,36 @@ app.post('/v1/chat/completions', auth, async (c) => {
       apiKey: config.treeAwsKey,
       modelName,
     });
+  } else if (actualModel.startsWith("Tree/")) {
+    const treeModelName = actualModel.replace('Tree/', '');
+    console.log('[Tree] model=' + treeModelName + ' stream=' + !!forwardBody.stream);
+    try {
+      const treeUp = await fetch(config.treeNewBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.treeNewKey },
+        body: JSON.stringify({ model: treeModelName, messages: forwardBody.messages, max_tokens: forwardBody.max_tokens || 4096, stream: forwardBody.stream || false }),
+      });
+      console.log('[Tree] status=' + treeUp.status);
+      upstream = new Response(treeUp.body, { status: treeUp.status, headers: { 'Content-Type': treeUp.headers.get('Content-Type') || 'text/event-stream', 'Cache-Control': 'no-cache' } });
+    } catch (e: any) {
+      console.error('[Tree] error:', e?.message);
+      upstream = Response.json({ error: { message: 'Tree: ' + e?.message, type: 'tree_error' } }, { status: 502 });
+    }
+  } else if (actualModel.startsWith("gua-")) {
+    const guaModelName = actualModel.replace('gua-', '');
+    console.log('[gua] model=' + guaModelName + ' stream=' + !!forwardBody.stream);
+    try {
+      const guaUp = await fetch(config.guaBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.guaKey },
+        body: JSON.stringify({ model: guaModelName, messages: forwardBody.messages, max_tokens: forwardBody.max_tokens || 4096, stream: forwardBody.stream || false }),
+      });
+      console.log('[gua] status=' + guaUp.status);
+      upstream = new Response(guaUp.body, { status: guaUp.status, headers: { 'Content-Type': guaUp.headers.get('Content-Type') || 'text/event-stream', 'Cache-Control': 'no-cache' } });
+    } catch (e: any) {
+      console.error('[gua] error:', e?.message);
+      upstream = Response.json({ error: { message: 'gua: ' + e?.message, type: 'gua_error' } }, { status: 502 });
+    }
   } else if (actualModel.startsWith("relay/")) {
     // Relay — 朋友的代理，走A社格式
     const modelName = actualModel.replace('relay/', '');
