@@ -10,13 +10,11 @@ struct DuckDuckGoProvider: WebSearchProvider {
     func search(query: String, common: WebSearchCommonOptions, options: WebSearchServiceOptions) async throws -> WebSearchResult {
         guard case .duckduckgo(let opts) = options else { throw WebSearchProviderError.empty }
 
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         var components = URLComponents(string: "https://html.duckduckgo.com/html/")!
         components.queryItems = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "kl", value: opts.region.isEmpty ? "wt-wt" : opts.region),
         ]
-        _ = encoded
         guard let url = components.url else { throw WebSearchProviderError.missingURL }
 
         var req = URLRequest(url: url)

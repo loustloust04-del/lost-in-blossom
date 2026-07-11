@@ -17,8 +17,11 @@ struct BingLocalProvider: WebSearchProvider {
     func search(query: String, common: WebSearchCommonOptions, options: WebSearchServiceOptions) async throws -> WebSearchResult {
         guard case .bingLocal(let opts) = options else { throw WebSearchProviderError.empty }
 
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        guard let url = URL(string: "https://www.bing.com/search?q=\(encoded)") else {
+        // URLComponents 自动做正确的 query 编码——手动 addingPercentEncoding(.urlQueryAllowed)
+        // 会漏 `+`/`&`（它们是 query 合法字符），中文含空格/符号的查询被服务器拆错
+        var components = URLComponents(string: "https://www.bing.com/search")!
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        guard let url = components.url else {
             throw WebSearchProviderError.missingURL
         }
 

@@ -46,8 +46,15 @@ enum WebSearchToolService {
 
     static func systemPrompt(assistantName: String) -> String {
         let name = assistantName.isEmpty ? "你" : assistantName
+        // 日期注入：模型不知道"今天"是哪天，搜时事的查询词里就不会带年份 → 搜出旧结果
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd EEEE"
+        df.locale = Locale(identifier: "zh_CN")
+        let today = df.string(from: Date())
         return """
         ## 联网搜索（search_web + browse_url 双工具）
+
+        今天是 \(today)。搜索时事/新闻/"最近"类话题时，把年份（必要时带月份）写进查询词。
 
         \(name)，你有**两个联网工具**，**永远不要说"我没联网/无法访问网络/无法查询实时信息"**：
         - `search_web`：搜候选页面，返回标题 + URL + ≤100 字短摘要。**绝不基于摘要直接回答**——摘要是索引不是答案。
