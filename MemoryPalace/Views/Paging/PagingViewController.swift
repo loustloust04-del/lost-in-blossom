@@ -380,6 +380,19 @@ final class PagingViewController: UIViewController, UIScrollViewDelegate {
     // MARK: - UIScrollViewDelegate
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        syncPageFromOffset(scrollView)
+    }
+
+    /// 慢速拖动在页边界停稳后松手 → willDecelerate=false → DidEndDecelerating 永不触发，
+    /// currentPage 卡在旧值。之后任意 SwiftUI 重算走 updateUIViewController 的
+    /// scrollToPage(stale) / viewDidLayoutSubviews 的 offset re-sync，页面被拽回旧页
+    /// （真机 bug：右滑页点一下屏幕就跳回聊天页）。DidEndDragging/DidEndDecelerating
+    /// 是标准配对，必须两个都实现。
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { syncPageFromOffset(scrollView) }
+    }
+
+    private func syncPageFromOffset(_ scrollView: UIScrollView) {
         guard scrollView.bounds.width > 0 else { return }
         let page = Int(round(scrollView.contentOffset.x / scrollView.bounds.width))
         guard page != currentPage else { return }
