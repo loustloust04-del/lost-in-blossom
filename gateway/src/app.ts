@@ -17,6 +17,7 @@ import { updateSummary } from './memory/keepalive';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
+import { listAnniversaries, addAnniversary, removeAnniversary, statusLines } from './anniversary';
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
@@ -185,6 +186,21 @@ app.post('/api/peek', async (c) => {
   const item = savePeek(buf, appName, ext);
   console.log('[peek] received', item.id, 'app=', appName, 'bytes=', buf.byteLength);
   return c.json({ ok: true, id: item.id });
+});
+
+// ============ 纪念日/倒计时（App 与 Caelum 同一份数据）============
+app.get('/api/anniversaries', auth, async (c) => {
+  return c.json({ anniversaries: listAnniversaries(), status: statusLines() });
+});
+app.post('/api/anniversaries', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = addAnniversary(String(body?.name || ''), String(body?.date || ''), body?.type === 'countdown' ? 'countdown' : 'anniversary');
+  if ('error' in r) return c.json({ ok: false, error: r.error }, 400);
+  return c.json({ ok: true, anniversary: r });
+});
+app.delete('/api/anniversaries/:id', auth, async (c) => {
+  const ok = removeAnniversary(c.req.param('id'));
+  return c.json({ ok }, ok ? 200 : 404);
 });
 
 // App 回前台拉未处理的偷看（只给元数据）
