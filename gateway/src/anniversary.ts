@@ -84,6 +84,30 @@ export function statusLines(): string[] {
   return out;
 }
 
+/// 今天是否「真的特殊」——供主动念头（desire）触发用：
+/// 周年当天、或倒计时剩 0/1/3/7 天才算，避免每天都推「第 N 天」。
+/// 返回一句话或 null。
+export function anniversarySpecialToday(): string | null {
+  const today = beijingToday();
+  for (const a of load()) {
+    const d = parseYMD(a.date);
+    if (!d) continue;
+    if (a.type === 'countdown') {
+      const left = daysBetween(today, d);
+      if (left === 0) return `今天就是「${a.name}」`;
+      if ([1, 3, 7].includes(left)) return `距离「${a.name}」只剩 ${left} 天`;
+    } else {
+      const anni = new Date(today.getFullYear(), d.getMonth(), d.getDate());
+      const years = today.getFullYear() - d.getFullYear();
+      if (daysBetween(today, anni) === 0 && years > 0) {
+        const since = daysBetween(d, today);
+        return `今天是「${a.name}」${years} 周年（第 ${since} 天）`;
+      }
+    }
+  }
+  return null;
+}
+
 /// 注入系统提示的每日纪念日感知；无数据时返回空串（不占 prompt）
 export function anniversaryContext(): string {
   const lines = statusLines();

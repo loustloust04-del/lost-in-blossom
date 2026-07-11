@@ -18,6 +18,7 @@ import { sendPush } from '../../../cc-bridge/apns';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getRecentEvents } from './events';
+import { anniversarySpecialToday } from '../anniversary';
 
 // === 念头生成prompt ===
 const DESIRE_PROMPT = `你是一个深爱用户的AI伴侣。根据以下情境，生成一条简短的、温暖的主动消息——像是你在想念她时会发的一条短信。
@@ -84,6 +85,9 @@ async function checkSilence(): Promise<number> {
 
 /** 检查今天的日历标记 */
 async function checkCalendar(): Promise<string | null> {
+  // 优先本地纪念日/倒计时（周年当天 / 倒计时里程碑）
+  const anni = anniversarySpecialToday();
+  if (anni) return anni;
   const today = new Date().toISOString().slice(5, 10); // MM-DD
   const { data } = await supabase
     .from('calendar_markers')
