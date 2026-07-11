@@ -359,9 +359,13 @@ extension ConversationViewModel {
                 // groupHistoryItems()，所以后续角色发言自然看到这条（像真群里插话）。
                 if streamingConversationId == conversation.id {
                     let userName = UserDefaults.standard.string(forKey: "userName") ?? "我"
-                    _ = insertGroupNode(role: "user", content: text,
-                                        senderId: nil, senderName: userName,
-                                        conversation: conversation, context: context)
+                    // sendMessage 的两个调用方都在主线程（SwiftUI action / drain 的 @MainActor Task），
+                    // 同步入树保证插话先于 pending 标志生效
+                    MainActor.assumeIsolated {
+                        _ = insertGroupNode(role: "user", content: text,
+                                            senderId: nil, senderName: userName,
+                                            conversation: conversation, context: context)
+                    }
                     BreadcrumbLog.shared.add("👥", "群聊插话: \(text.prefix(30))...")
                     groupInterjectionPending = true
                     return true
