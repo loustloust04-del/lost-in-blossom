@@ -759,6 +759,7 @@ extension ConversationViewModel {
     /// onError、群聊整轮结束、cancelAssistantTurn 都走这里。清 turn 状态 + 补发排队消息。
     func finishAssistantTurn() {
         assistantTurnInFlight = false
+        groupRoundCancelled = false
         drainPendingSends()
     }
 
@@ -813,6 +814,17 @@ extension ConversationViewModel {
                 try? context.save()
             }
             finishCCTurn()
+            return
+        }
+        // 群聊轮次：设轮次级取消标志 + 掐当前流。不在这里 finishAssistantTurn——
+        // runGroupRound 循环 break 后由调用方收尾（提前清 inFlight 会打破轮次状态不变量）。
+        if selectedConversation?.kind == "group", assistantTurnInFlight {
+            groupRoundCancelled = true
+            providerRouter.cancelAPI()
+            streamingText = ""
+            streamingThinkingText = ""
+            isThinking = false
+            BreadcrumbLog.shared.add("👥", "群聊轮次已手动停止")
             return
         }
         // API 车道

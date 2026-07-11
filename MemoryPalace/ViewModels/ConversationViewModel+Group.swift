@@ -33,6 +33,11 @@ extension ConversationViewModel {
         var repliesThisRound = 0
 
         while repliesThisRound < maxReplies {
+            // 手动停止（⋯ 菜单）→ 整轮刹车
+            if groupRoundCancelled {
+                print("[GroupV5] 🛑 轮次被手动停止")
+                break
+            }
             // 用户插话 → 发言预算清零：成员围绕新消息重新回起，插话不落空
             if groupInterjectionPending {
                 groupInterjectionPending = false

@@ -47,6 +47,8 @@ final class ConversationViewModel {
     /// 群聊插话信号：轮次进行中用户又发了消息 → 循环下一圈重置发言预算，
     /// 让成员围绕新消息再回（否则名额用尽时插话会没人理）。
     var groupInterjectionPending = false
+    /// 群聊轮次级取消：cancelAPI 只能掐当前一条流，掐不掉选人循环——循环每圈查它。
+    var groupRoundCancelled = false
     /// in-flight 期间用户发的消息排队，turn 结束（或回到原对话时）自动补发
     var pendingSends: [PendingSend] = []
 

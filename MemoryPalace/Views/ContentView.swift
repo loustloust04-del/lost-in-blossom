@@ -551,6 +551,13 @@ struct ContentView: View {
                                 } label: {
                                     Label("群成员", systemImage: "person.2")
                                 }
+                                if viewModel.assistantTurnInFlight {
+                                    Button(role: .destructive) {
+                                        viewModel.cancelAssistantTurn(context: modelContext)
+                                    } label: {
+                                        Label("停止回复", systemImage: "stop.circle")
+                                    }
+                                }
                             }
                             Button {
                                 showChangeProjectSheet = true
