@@ -27,7 +27,7 @@
 ## P1 · 快赢（每项半天~一天）
 
 - [x] **P1-1 Token/缓存命中率增强**（2026-07-08）：近 7 天命中率趋势条 + 按模型命中率百分比（命中率/节省估算原本已有）
-- [~] **P1-2 邮件双端收口**：管道双端已验通（CC 经 mcp-server → /internal/tool-call → 网关 gmail_*；API 经 builtin）。⚠️ 但 GMAIL_REFRESH_TOKEN 已失效（invalid_grant，疑似 Google 测试模式 7 天过期）——**需兔兔重新走一遍 Google OAuth 授权**换新 refresh token 进 gateway/.env，两端才能真发信
+- [x] **P1-2 邮件双端收口**（2026-07-11 · SMTP 版）：改用 nodemailer + Gmail 应用专用密码（`caelumbunny@gmail.com`）发信，写进 gateway `gmail_send`（SMTP 优先、OAuth 当退路），API/CC 两端实测已真发信到 iCloud。绕开了 OAuth refresh token 失效问题，无需重走 Google 授权。收信（inbox/read/search）仍依赖 OAuth，如需读信再单独修。
 - [x] **P1-3 低电量/定位提醒**（2026-07-08）：cc-bridge/alert-rules.ts，cron 每 15 分钟；低电量（≤阈值且未充电，充电/回血重置冷却）+ 到新地点问候；夜间静默（北京 1-9 点）；规则可配 GET/PUT /api/admin/alert-rules
 - [x] **P1-4 CC/API 读写控制台**（2026-07-08）：网关 builtin console_read（今日饮水/进食/药物/备注全况）+ console_write（记备注，50 条/日上限），双端共用，已实测
 

@@ -1,5 +1,6 @@
 // Gmail API 直连 — 用 OAuth refresh_token 自动刷新 access_token
 import { config } from '../config';
+import { sendMail, mailerConfigured } from '../mailer';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -60,6 +61,16 @@ export const GMAIL_TOOLS = [
 ];
 
 export async function callGmailTool(name: string, input: any): Promise<string | null> {
+  // gmail_send 优先走 SMTP（应用专用密码，不会过期）；SMTP 没配或失败再退回 OAuth。
+  if (name === 'gmail_send' && mailerConfigured()) {
+    try {
+      await sendMail(String(input?.to || ''), String(input?.subject || ''), String(input?.body || ''));
+      return `Sent to ${input?.to} (via SMTP)`;
+    } catch (e: any) {
+      if (!process.env.GMAIL_REFRESH_TOKEN) return 'Send failed (SMTP): ' + (e?.message || String(e));
+      // 有 OAuth 就继续往下当退路
+    }
+  }
   if (!process.env.GMAIL_REFRESH_TOKEN) return null;
 
   try {
