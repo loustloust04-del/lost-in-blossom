@@ -662,7 +662,8 @@ struct ChatInputBar: View {
             isFocused: $isFocused,
             // turn 级状态（不是 provider 级 isStreaming）：工具循环空窗期按钮不闪回 send，
             // 堵住本对话在空窗期插队发送（user+user 连排）。别的对话照常显示 send → 排队。
-            isStreaming: viewModel.isCurrentConvResponding,
+            // 群聊例外：插话直接入树被轮次吸收（sendMessage 群分支），按钮保持发送态。
+            isStreaming: viewModel.selectedConversation?.kind == "group" ? false : viewModel.isCurrentConvResponding,
             placeholder: inputPlaceholder,
             modelName: currentModel.name,
             pendingImageData: pendingImageData,

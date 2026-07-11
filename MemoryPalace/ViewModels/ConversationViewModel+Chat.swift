@@ -355,6 +355,17 @@ extension ConversationViewModel {
         // 群聊 V3：串行门控编排（API 车道），不走单聊逻辑
         if conversation.kind == "group" {
             if assistantTurnInFlight {
+                // 同一个群的轮次正在跑 → 插话：直接入树，不排队。轮次循环每圈实时重取
+                // groupHistoryItems()，所以后续角色发言自然看到这条（像真群里插话）。
+                if streamingConversationId == conversation.id {
+                    let userName = UserDefaults.standard.string(forKey: "userName") ?? "我"
+                    _ = insertGroupNode(role: "user", content: text,
+                                        senderId: nil, senderName: userName,
+                                        conversation: conversation, context: context)
+                    BreadcrumbLog.shared.add("👥", "群聊插话: \(text.prefix(30))...")
+                    return true
+                }
+                // 别的对话在跑 → 仍排队（跨对话并发会打架全局流式状态，防护保留）
                 queuePendingSend(text, imageData: imageData, fileData: fileData, fileName: fileName,
                                  model: model, profile: profile, preset: preset,
                                  providerManager: providerManager, context: context,
