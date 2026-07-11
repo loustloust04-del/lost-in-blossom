@@ -237,8 +237,8 @@ struct MessageSegmentsView: View {
                 } else {
                     let richSegments = parseRichSegments(applied)
                     if richSegments.count == 1, case .markdown = richSegments[0] {
-                        // 纯 Markdown，走原有渲染路径（零成本）
-                        Markdown(applied)
+                        // 纯 Markdown，走原有渲染路径（零成本）；抹平文档感（assistant 分支）
+                        Markdown(BubbleMarkdownSimplifier.simplify(applied))
                             .markdownTheme(.memoryPalace(
                                 fontName: selectedFont,
                                 scale: fontScale > 0 ? fontScale : 1.0,
@@ -306,7 +306,7 @@ struct MessageSegmentsView: View {
         let scale = fontScale > 0 ? fontScale : 1.0
         switch seg {
         case .markdown(let md):
-            Markdown(md)
+            Markdown(isUser ? md : BubbleMarkdownSimplifier.simplify(md))
                 .markdownTheme(.memoryPalace(
                     fontName: selectedFont,
                     scale: scale,

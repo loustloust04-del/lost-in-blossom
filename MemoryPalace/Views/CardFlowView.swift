@@ -1708,7 +1708,7 @@ struct BubbleView: View {
                     //（Anthropic 轮文本会进 segments，OpenAI 不会）。
                     let streamingTail = streamingTailAfterSegments(segs)
                     if !streamingTail.isEmpty {
-                        Markdown(streamingTail)
+                        Markdown(BubbleMarkdownSimplifier.simplify(streamingTail))
                             .markdownTheme(.memoryPalace(
                                 fontName: selectedFont,
                                 scale: fontScale > 0 ? fontScale : 1.0,
@@ -1756,7 +1756,8 @@ struct BubbleView: View {
                             .frame(height: messageWebViewHeight)
                         } else {
                             // 普通消息：MarkdownUI 渲染（纯 SwiftUI，零白屏）
-                            Markdown(displayText)
+                            // 抹平文档感（## 标题/嵌套列表/---）；只影响渲染，复制仍是 node.content 原文
+                            Markdown(isUser ? displayText : BubbleMarkdownSimplifier.simplify(displayText))
                                 .markdownTheme(
                                     .memoryPalace(
                                         fontName: selectedFont,
