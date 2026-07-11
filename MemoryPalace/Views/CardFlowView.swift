@@ -688,7 +688,15 @@ struct ChatInputBar: View {
             groupMembers: {
                 guard let conv = viewModel.selectedConversation, conv.kind == "group" else { return [] }
                 return conv.participants.map { (name: $0.name, colorHex: $0.colorHex) }
-            }()
+            }(),
+            draftConversationId: viewModel.selectedConversation?.id,
+            initialDraft: viewModel.selectedConversation?.draftText ?? "",
+            onDraftChange: { [weak viewModel] newText in
+                guard let conv = viewModel?.selectedConversation, conv.draftText != newText else { return }
+                conv.draftText = newText
+                // 显式 save：autosave 时机不保证，被杀进程就丢（单行 update 每键无感）
+                try? modelContext.save()
+            }
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -838,6 +846,12 @@ private struct InputFieldContainer: View {
     var onStyleChange: ((String) -> Void)? = nil
     /// 群聊成员（名字+气泡色）。单聊传空数组，@ 补全整体不启用。
     var groupMembers: [(name: String, colorHex: String)] = []
+    /// B41 草稿三件套：对话 id（切换信号）+ 初始草稿（恢复源）+ 每键回调（外层直写模型+save）。
+    /// 粟粟教训：只靠"切换时 flush"必漏——翻页常驻不走 onDisappear、同 id 不走 onChange、
+    /// rootView 重建 @State 直接蒸发。所以每键直写，切换恢复只是读取。
+    var draftConversationId: String? = nil
+    var initialDraft: String = ""
+    var onDraftChange: ((String) -> Void)? = nil
 
     // ── @ 补全（G2）：纯 SwiftUI 层检测 text 末尾的 @片段，不碰 UITextView 内部 ──
 
@@ -1119,6 +1133,18 @@ private struct InputFieldContainer: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 22))
         .onTapGesture { isFocused = true }
+        // B41 草稿：每键上报（外层写 conversation.draftText + 显式 save）
+        .onChange(of: text) { _, newText in
+            onDraftChange?(newText)
+        }
+        // 切对话：换成新对话的草稿（旧对话的已实时落盘，无需 flush）
+        .onChange(of: draftConversationId) { _, _ in
+            text = initialDraft
+        }
+        // 冷启动 / view 重建：恢复当前对话的草稿
+        .onAppear {
+            if text.isEmpty, !initialDraft.isEmpty { text = initialDraft }
+        }
     }
 
     private func triggerSend() {

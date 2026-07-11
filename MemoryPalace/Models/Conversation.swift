@@ -51,6 +51,10 @@ final class Conversation {
     /// 写作风格 ID（空 = 不启用）
     var currentStyleId: String = ""
 
+    /// B41 输入框草稿：每键直写 + 显式 save（不依赖 autosave，杀进程会丢）。
+    /// 切走对话 / 杀进程再回来，输入一半的字都还在。
+    var draftText: String = ""
+
     /// 群聊 V2："single" = 单聊（默认），"group" = 多角色群聊。
     var kind: String = "single"
     /// 群聊参与者（JSON 编码的 [GroupParticipant]）。单聊为 nil。
