@@ -303,7 +303,7 @@ private struct ConstellationCanvas: View {
                         let rect = CGRect(x: cx - r, y: cy - r, width: dot.size, height: dot.size)
                         var circle = Path()
                         circle.addEllipse(in: rect)
-                        ctx.fill(circle, with: .color(Color(hexString: dot.colorHex)))
+                        ctx.fill(circle, with: .color(Color(hex: dot.colorHex)))
                     }
                 }
 
