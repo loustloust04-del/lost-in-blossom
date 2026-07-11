@@ -2,6 +2,7 @@ import { config } from '../config';
 import { buildAnthropicPayload } from '../providers/anthropic-native';
 import { BUILTIN_TOOLS, SERVER_MAP, callBuiltinTool } from './builtin';
 import { getMcpTools, callMcpTool } from './mcp-client';
+import { SCREEN_PEEK_ABILITY } from '../peek';
 
 // 流式 tool loop：把 Anthropic SSE 转成网关统一的 OpenAI chunk 流给客户端，
 // 同时本端攒出 content blocks。stop_reason == tool_use 时：内置工具(exec/recall)
@@ -108,6 +109,7 @@ export async function runToolLoop(body: any, sessionId: string): Promise<Respons
   // server_map 进 prompt 稳定缓存段（最前面的系统块，与 stableCore 同处第一缓存段）
   const sys = Array.isArray(payload.system) ? payload.system : (payload.system ? [{ type: 'text', text: payload.system }] : []);
   sys.unshift({ type: 'text', text: SERVER_MAP });
+  sys.unshift({ type: 'text', text: SCREEN_PEEK_ABILITY });
   payload.system = sys;
   // 工具定义：内置在前、MCP 在后，顺序固定（缓存前缀稳定）
   const mcpTools = await getMcpTools();

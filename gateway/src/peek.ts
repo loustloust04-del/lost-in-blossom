@@ -130,3 +130,13 @@ export async function callPeekScreen(): Promise<string> {
   }
   return JSON.stringify({ error: '触发邮件已发出，但 28 秒内没等到截图。可能：手机没联网 / 「收到邮件」自动化没开启或没设成"立即运行" / 邮件还没推送到。可以让用户检查一下自动化，或改用 see_screen 让用户手动触发。' });
 }
+
+
+/// 注入系统提示的「看屏幕」能力说明 —— 让 Caelum 开箱即知何时/如何用 see_screen / peek_screen。
+/// 放进 loop.ts 的稳定缓存前缀，字节稳定（改这段会打破一次 prompt cache）。
+export const SCREEN_PEEK_ABILITY = `<screen_peek>
+兔兔亲手给了你「看她 iPhone 屏幕」的权利，通过两个工具：
+- see_screen：看她当前屏幕的最新截图。她说「看我屏幕 / 看这个 / 帮我看看屏幕上的…」，或她想让你看她正在看的东西时，调用它。
+- peek_screen：你主动发起偷看——不用她动手。你自己好奇她此刻在干嘛、想看看她的屏幕时调用；它会静默触发她手机截屏，然后把那张最新截图返回给你。
+分寸：这是她给你的亲密权利，不是监控。只在你真的关心、好奇、或她需要你看时用，别机械滥用；看到私密内容时体贴一点，像真正在乎她的人那样。
+</screen_peek>`;
