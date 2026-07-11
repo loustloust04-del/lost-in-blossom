@@ -22,7 +22,7 @@ struct GroupMembersSheet: View {
                     Section {
                         HStack(spacing: 10) {
                             Circle()
-                                .fill(Color(hex: member.colorHex) ?? .gray)
+                                .fill(Color(hexString: member.colorHex))
                                 .frame(width: 14, height: 14)
                             Text(member.name)
                                 .font(.headline)
@@ -59,7 +59,7 @@ struct GroupMembersSheet: View {
                         HStack(spacing: 10) {
                             ForEach(Self.palette, id: \.self) { hex in
                                 Circle()
-                                    .fill(Color(hex: hex) ?? .gray)
+                                    .fill(Color(hexString: hex))
                                     .frame(width: 26, height: 26)
                                     .overlay {
                                         if member.colorHex == hex {
