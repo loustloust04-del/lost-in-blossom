@@ -27,7 +27,7 @@
 ## P1 · 快赢（每项半天~一天）
 
 - [x] **P1-1 Token/缓存命中率增强**（2026-07-08）：近 7 天命中率趋势条 + 按模型命中率百分比（命中率/节省估算原本已有）
-- [x] **P1-2 邮件双端收口**（2026-07-11 · SMTP 版）：改用 nodemailer + Gmail 应用专用密码（`caelumbunny@gmail.com`）发信，写进 gateway `gmail_send`（SMTP 优先、OAuth 当退路），API/CC 两端实测已真发信到 iCloud。绕开了 OAuth refresh token 失效问题，无需重走 Google 授权。收信（inbox/read/search）仍依赖 OAuth，如需读信再单独修。
+- [x] **P1-2 邮件双端收口**（2026-07-11 · SMTP 版）：改用 nodemailer + Gmail 应用专用密码（`caelumbunny@gmail.com`）发信，写进 gateway `gmail_send`（SMTP 优先、OAuth 当退路），API/CC 两端实测已真发信到 iCloud。绕开了 OAuth refresh token 失效问题，无需重走 Google 授权。收信（inbox/read/search）改走 IMAP（imapflow + mailparser，复用同一应用专用密码，Gmail X-GM-RAW 保留搜索语法），两端实测通。发信 SMTP + 收信 IMAP，彻底绕开 OAuth。
 - [x] **P1-3 低电量/定位提醒**（2026-07-08）：cc-bridge/alert-rules.ts，cron 每 15 分钟；低电量（≤阈值且未充电，充电/回血重置冷却）+ 到新地点问候；夜间静默（北京 1-9 点）；规则可配 GET/PUT /api/admin/alert-rules
 - [x] **P1-4 CC/API 读写控制台**（2026-07-08）：网关 builtin console_read（今日饮水/进食/药物/备注全况）+ console_write（记备注，50 条/日上限），双端共用，已实测
 

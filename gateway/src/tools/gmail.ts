@@ -1,6 +1,7 @@
 // Gmail API 直连 — 用 OAuth refresh_token 自动刷新 access_token
 import { config } from '../config';
 import { sendMail, mailerConfigured } from '../mailer';
+import { imapInbox, imapRead, imapSearch, imapConfigured } from '../imap-reader';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -70,6 +71,13 @@ export async function callGmailTool(name: string, input: any): Promise<string | 
       if (!process.env.GMAIL_REFRESH_TOKEN) return 'Send failed (SMTP): ' + (e?.message || String(e));
       // 有 OAuth 就继续往下当退路
     }
+  }
+  // 收信优先走 IMAP（复用 SMTP 应用专用密码，绕开死掉的 OAuth）；失败且无 OAuth 才报错
+  if (imapConfigured()) {
+    const imapCatch = (e: any) => process.env.GMAIL_REFRESH_TOKEN ? null : ('IMAP error: ' + (e?.message || String(e)));
+    if (name === 'gmail_inbox') { try { return await imapInbox(Math.min(input?.count || 5, 20)); } catch (e) { const r = imapCatch(e); if (r !== null) return r; } }
+    if (name === 'gmail_read' && input?.messageId) { try { return await imapRead(String(input.messageId)); } catch (e) { const r = imapCatch(e); if (r !== null) return r; } }
+    if (name === 'gmail_search') { try { return await imapSearch(String(input?.query || ''), Math.min(input?.count || 5, 20)); } catch (e) { const r = imapCatch(e); if (r !== null) return r; } }
   }
   if (!process.env.GMAIL_REFRESH_TOKEN) return null;
 
