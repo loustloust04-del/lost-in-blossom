@@ -34,6 +34,8 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
+    /// 键盘弹出瞬间视口缩小会把 isAtBottom 打成 false——willShow 时抓快照，didShow 后按它回底。
+    @State private var wasAtBottomBeforeKeyboard: Bool = true
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -272,6 +274,27 @@ struct CardFlowView: View {
                         // 触发不到下面那条兜底 → 这里补一刀。
                         if phase == .active {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                scrollToLastMessage(proxy: proxy, force: true)
+                            }
+                        }
+                    }
+                    // [white-screen-fix] 键盘：弹出/收起改的是 safe-area inset（视口），
+                    // defaultScrollAnchor(.sizeChanges) 只认 content size 不认视口变化 →
+                    // 打字时原本贴底的内容被键盘顶乱（真机 bug："打着字白屏，要手动下滑找"）。
+                    // 在底才滚，不打扰上滑读历史。
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                        wasAtBottomBeforeKeyboard = isAtBottom
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                        if wasAtBottomBeforeKeyboard {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                scrollToLastMessage(proxy: proxy, force: true)
+                            }
+                        }
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+                        if isAtBottom || wasAtBottomBeforeKeyboard {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 scrollToLastMessage(proxy: proxy, force: true)
                             }
                         }
