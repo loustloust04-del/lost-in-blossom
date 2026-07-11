@@ -36,11 +36,17 @@ jobs:
 
       - name: Build (unsigned)
         run: |
-          set -o pipefail
+          set +e
           xcodebuild build \
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            | tail -100
+            2>&1 | tee /tmp/build.log > /dev/null
+          status=${PIPESTATUS[0]}
+          echo "===== error: lines ====="
+          grep -nE "error:" /tmp/build.log | head -80 || echo "(no error: lines)"
+          echo "===== last 40 lines ====="
+          tail -40 /tmp/build.log
+          exit $status
