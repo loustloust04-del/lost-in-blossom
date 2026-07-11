@@ -60,6 +60,7 @@ struct ContentView: View {
     @State private var renameText: String = ""
     @State private var showChangeProjectSheet = false
     @State private var showContextSummarySheet = false
+    @State private var showGroupMembersSheet = false
     // Pin Bar state（从 CardFlowView 挪上来，Phase 3 用）
     @State private var pinCurrentIndex: Int = 0
     @State private var pinBarHidden: Bool = false
@@ -544,6 +545,13 @@ struct ContentView: View {
                             Section {
                                 Text(conv.title)
                             }
+                            if conv.kind == "group" {
+                                Button {
+                                    showGroupMembersSheet = true
+                                } label: {
+                                    Label("群成员", systemImage: "person.2")
+                                }
+                            }
                             Button {
                                 showChangeProjectSheet = true
                             } label: {
@@ -704,6 +712,13 @@ struct ContentView: View {
             ContextSummarySheet(viewModel: viewModel)
                 .presentationDetents([.large, .medium])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showGroupMembersSheet) {
+            if let conv = viewModel.selectedConversation {
+                GroupMembersSheet(conversation: conv)
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+            }
         }
         .sheet(isPresented: $showBranchMap) {
             BranchMapSheet(
