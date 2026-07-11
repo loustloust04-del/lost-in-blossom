@@ -47,7 +47,9 @@ extension ConversationViewModel {
 
         // Task H：跨窗口记忆——仅新对话首轮注入最近 15 个对话的摘要
         let isFirstTurn = !chatHistory.contains { $0.role == "assistant" }
-        let crossWindow = isFirstTurn
+        // 深继承的对话已带上文脉络，轻摘要让位（避免重复占 token）
+        let isInherited = ContextInheritance.sourceTitle(for: selectedConversation?.id ?? "") != nil
+        let crossWindow = (isFirstTurn && !isInherited)
             ? CrossWindowMemory.injectionText(excluding: selectedConversation?.id)
             : nil
 

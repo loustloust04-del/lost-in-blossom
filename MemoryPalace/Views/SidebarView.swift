@@ -769,6 +769,11 @@ struct SidebarView: View {
                     Label("新对话", systemImage: "plus.bubble")
                 }
                 Button {
+                    createInheritedConversation()
+                } label: {
+                    Label("接着聊（继承上文）", systemImage: "arrow.turn.down.right")
+                }
+                Button {
                     showCreateGroup = true
                 } label: {
                     Label("新建群聊", systemImage: "person.2")
@@ -1569,6 +1574,20 @@ struct SidebarView: View {
     private func createNewConversation() {
         let profileId = profileManager?.currentProfile.id ?? ""
         let conversation = viewModel.createNewConversation(title: "新对话", profileId: profileId, context: modelContext)
+        refreshList()
+        viewModel.loadConversation(conversation, context: modelContext)
+    }
+
+    /// P3-11 无缝上下文：继承当前对话的脉络+最近原文开新对话
+    private func createInheritedConversation() {
+        guard let source = viewModel.selectedConversation, source.kind != "group" else {
+            createNewConversation()
+            return
+        }
+        let profileId = profileManager?.currentProfile.id ?? ""
+        let title = "↳ " + String(source.title.prefix(14))
+        let conversation = viewModel.createNewConversation(title: title, profileId: profileId, context: modelContext)
+        ContextInheritance.inherit(from: source, to: conversation, context: modelContext)
         refreshList()
         viewModel.loadConversation(conversation, context: modelContext)
     }
