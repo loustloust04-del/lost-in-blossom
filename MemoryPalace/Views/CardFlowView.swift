@@ -943,7 +943,7 @@ private struct InputFieldContainer: View {
                             } label: {
                                 HStack(spacing: 5) {
                                     Circle()
-                                        .fill(Color(hex: member.colorHex) ?? .gray)
+                                        .fill(Color(hexString: member.colorHex))
                                         .frame(width: 8, height: 8)
                                     Text(member.name)
                                         .font(.system(size: 14, weight: .medium))
