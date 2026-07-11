@@ -149,7 +149,7 @@ export async function callPeekScreen(): Promise<string> {
     const p = latestPeekAfter(triggerTs);
     if (p) return JSON.stringify({ __peek_image__: true, media_type: p.mediaType, data: p.base64, app: p.app });
   }
-  console.log(`[peek] ⏱️ 28 秒内没等到 ts>${triggerTs} 的新截图`);
+  console.log(`[peek] ⏱️ 45 秒内没等到 ts>${triggerTs} 的新截图`);
   return JSON.stringify({ error: '触发邮件已发出，但 45 秒内没等到截图。可能：手机没联网 / 「收到邮件」自动化没开启或没设成"立即运行" / 邮件还没推送到。' });
 }
 
