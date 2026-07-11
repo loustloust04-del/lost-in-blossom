@@ -54,6 +54,8 @@ struct ConsoleView: View {
                 ctx.socialScreenTime = st.social_minutes / 60.0
                 try? modelContext.save()
             }
+            // 健康桥：HealthKit/屏幕时间填好后把今日摘要报给网关（30 分钟节流）
+            if let ctx = todayCtx { await HealthBridgeClient.report(from: ctx) }
         }
         .alert("添加待办", isPresented: $showAddTodo) {
             TextField("要做的事…", text: $newTodoText)

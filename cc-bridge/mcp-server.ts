@@ -132,6 +132,11 @@ const PROXY_TOOLS = [
     inputSchema: { type: "object", properties: { name: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD" }, type: { type: "string", enum: ["anniversary", "countdown"] } }, required: ["name", "date"] },
   },
   {
+    name: "get_health",
+    description: "Bunny 的健康数据（HealthKit 摘要）：今日步数/睡眠/经期日/饮水/屏幕时间 + 近 14 天趋势。想关心她睡得好不好、身体状态时调用。No parameters.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "list_anniversaries",
     description: "查看所有纪念日/倒计时及今天的状态（第几天/还有几天）。想主动关心日子或兔兔问起时调用。",
     inputSchema: { type: "object", properties: {} },

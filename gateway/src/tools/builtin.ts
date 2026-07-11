@@ -10,6 +10,7 @@ import { WEBSEARCH_TOOL, callWebSearch, BROWSE_TOOL, callBrowseUrl } from './web
 import { SEE_SCREEN_TOOL, callSeeScreen, PEEK_SCREEN_TOOL, callPeekScreen } from '../peek';
 import { TODO_TOOLS, callTodoTool } from '../todos';
 import { ANNIVERSARY_TOOLS, callAnniversaryTool } from '../anniversary';
+import { HEALTH_TOOLS, callHealthTool } from '../health';
 import { TWITTER_TOOLS, callTwitterTool } from './twitter';
 
 export const BUILTIN_TOOLS = [
@@ -58,6 +59,7 @@ export const BUILTIN_TOOLS = [
   SEE_SCREEN_TOOL,
   PEEK_SCREEN_TOOL,
   ...ANNIVERSARY_TOOLS,
+  ...HEALTH_TOOLS,
 ] as const;
 
 const EXEC_TIMEOUT_MS = 60_000;
@@ -131,6 +133,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (name === 'peek_screen') return callPeekScreen();
   const anniResult = callAnniversaryTool(name, input);
   if (anniResult !== null) return anniResult;
+  const healthResult = await callHealthTool(name);
+  if (healthResult !== null) return healthResult;
   const consoleResult = await callConsoleTool(name, input);
   if (consoleResult !== null) return consoleResult;
   const todoResult = await callTodoTool(name, input);

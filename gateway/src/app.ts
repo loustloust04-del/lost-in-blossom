@@ -21,6 +21,7 @@ import { listAnniversaries, addAnniversary, removeAnniversary, statusLines } fro
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
+import { healthRoutes } from './health';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
 const app = new Hono();
@@ -689,6 +690,7 @@ app.post('/internal/tool-call', async (c) => {
 
 vitalsRoutes(app);
 phoneStatusRoutes(app);
+healthRoutes(app);
 
 // Screen Time 代理：从 dream_events 聚合今日 app_open
 app.get('/api/screentime', auth, async (c) => {
