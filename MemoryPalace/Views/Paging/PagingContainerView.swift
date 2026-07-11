@@ -30,6 +30,10 @@ struct PagingContainerView: UIViewControllerRepresentable {
     /// SwiftUI 天然触发 updateUIViewController，外部 parent 那次会照刷。
     /// Plan: docs/plan-paging-isStreaming-skip.md
     let isStreaming: Bool
+    /// 侧栏拖动/打开期间跳过 updatePages：拖动的每一帧都重算 ContentView body，
+    /// 若每帧都给 4 个 HC 换 rootView = 每帧 diff 整棵聊天树——聊天一长左滑就卡的主凶。
+    /// 侧栏关回 progress=0 时恢复刷新（同 isStreaming skip 的先例模式）。
+    var pauseUpdates: Bool = false
 
     // 订阅 scope 从 ContentView 收敛到 Representable 层
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
@@ -77,7 +81,7 @@ struct PagingContainerView: UIViewControllerRepresentable {
         // B2 窄版 skip：流式响应期间不刷 3 个 HC rootView 避免 CardFlowView 整棵每 token
         // 重 diff。isStreaming false 时照旧 updatePages（= 原行为）。B2a 宽 signature 被
         // 证伪（贴纸 stale / 切对话 stale / 切楼层 race）后的保守版。
-        if !isStreaming {
+        if !isStreaming && !pauseUpdates {
             vc.updatePages([
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage)),

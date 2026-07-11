@@ -288,7 +288,8 @@ struct ContentView: View {
                         disableScroll: stickerVM.isEditingStickers,
                         initialPage: 0,
                         wallpaper: wallpaperConfig,
-                        isStreaming: viewModel.providerRouter.isStreaming
+                        isStreaming: viewModel.providerRouter.isStreaming,
+                        pauseUpdates: progress > 0.01
                     )
                     .ignoresSafeArea()
                     .allowsHitTesting(progress < 0.1)
@@ -305,9 +306,16 @@ struct ContentView: View {
                 .background(Color(UIColor.systemBackground))
                 // 核心视觉：缩小 + 圆角 + 右移，三者同步随 progress 插值
                 .clipShape(RoundedRectangle(cornerRadius: 30 * progress))
+                // 阴影挂在背景 shape 上而不是内容层：shape 阴影走 CA 解析快路径；
+                // 原来 .shadow 直接作用于整棵聊天内容层 = 拖动每帧对全树高斯模糊（radius 20），
+                // 聊天一长左滑就卡的另一半元凶。内容不透明，轮廓阴影视觉等效。
+                .background(
+                    RoundedRectangle(cornerRadius: 30 * progress)
+                        .fill(Color(UIColor.systemBackground))
+                        .shadow(color: .black.opacity(0.18 * progress), radius: 20, x: -6, y: 0)
+                )
                 .scaleEffect(1.0 - 0.08 * progress)
                 .offset(x: chatOffset)
-                .shadow(color: .black.opacity(0.18 * progress), radius: 20, x: -6, y: 0)
             }
             // spring 动画仅在 boolean 跳变时触发（手势跟手期间不添加动画）
             .animation(sidebarAnimation, value: isSidebarOpen)
