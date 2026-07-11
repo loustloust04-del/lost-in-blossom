@@ -126,6 +126,16 @@ const PROXY_TOOLS = [
     description: "主动窥屏：你自己发起偷看用户 iPhone 屏幕，不用用户动手。会给用户手机发触发邮件，手机静默截屏并上传，然后返回那张最新截图（图片）+ App 名。想主动看看兔兔现在在干嘛时调用。若长时间没等到截图会返回文字说明。",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "remember_anniversary",
+    description: "记住一个纪念日或倒计时。兔兔说记一下X月X日相识/生日/距离Y还有多久时调用。type=anniversary 每年循环，type=countdown 一次性未来日期。",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD" }, type: { type: "string", enum: ["anniversary", "countdown"] } }, required: ["name", "date"] },
+  },
+  {
+    name: "list_anniversaries",
+    description: "查看所有纪念日/倒计时及今天的状态（第几天/还有几天）。想主动关心日子或兔兔问起时调用。",
+    inputSchema: { type: "object", properties: {} },
+  },
 ] as const
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
