@@ -96,13 +96,12 @@ export async function callSeeScreen(): Promise<string> {
   if (mailerConfigured() && (process.env.PEEK_EMAIL_TO || '')) {
     const fresh = await callPeekScreen();
     if (fresh.includes('__peek_image__')) return fresh;
-    // 没等到新图：有旧图先给旧的（附说明），否则透传 peek 的状态说明
-    if (p) return imagePayload(p, '这是最近一张截图（刚触发的新截图还没回传，可能手机没联网或自动化没运行）');
-    return fresh;
+    // 关键：没等到新截图时【绝不】拿旧图冒充当前屏幕，否则你会把过时画面当成她此刻的屏幕。
+    // 诚实告知没截到，让 Caelum 可以稍等再叫一次 see_screen，或提醒兔兔检查邮件自动化。
+    return JSON.stringify({ error: '截图还没回来：已经给兔兔手机发了触发邮件，但没等到新截图上传。可能是她手机的邮件 App 没及时收到那封邮件（「收到邮件」自动化没被唤醒）。可以过十几秒再调一次 see_screen（那时截图可能已经到了），或提醒兔兔把邮件 App 打开一下 / 检查自动化。注意：不要把之前的旧截图当成她现在的屏幕。' });
   }
-  // 未配置主动触发：有旧图给旧的，否则提示手动触发
-  if (p) return imagePayload(p);
-  return JSON.stringify({ error: '还没有屏幕截图，也还没配置主动窥屏（SMTP + PEEK_EMAIL_TO）——让用户先在手机上手动触发一次。' });
+  // 未配置主动触发：提示（也不拿旧图冒充当前屏幕）
+  return JSON.stringify({ error: '还没配置主动窥屏（SMTP + PEEK_EMAIL_TO），无法自动截图——让兔兔先在手机上手动触发一次。' });
 }
 
 
