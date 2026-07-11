@@ -58,9 +58,15 @@ export interface TmuxRunner {
 
 export const realTmuxRunner: TmuxRunner = {
   send(text: string, session: string) {
-
     execFileSync("tmux", ["send-keys", "-t", session, "-l", text])
-    execFileSync("tmux", ["send-keys", "-t", session, "Enter"])
+    // ⚠️ 文本已注入输入框——Enter 失败不能外抛：调用方 catch 回 error 帧，
+    // app 端会当整体失败重发整条 → 文本注入 tmux 两遍（粟粟"发两遍"雷一的变体）。
+    // Enter 抖动最坏结果 = 消息留在输入框等手按，绝不重。注入本身失败仍抛（重发安全）。
+    try {
+      execFileSync("tmux", ["send-keys", "-t", session, "Enter"])
+    } catch (e: any) {
+      console.error(`[hub] post-inject Enter 失败（文本已在输入框，不重发）: ${e?.message}`)
+    }
   },
   hasSession(session: string): boolean {
     try {
@@ -111,6 +117,19 @@ interface BufferedReply {
 }
 const REPLY_BUFFER_TTL_MS = 60_000
 const recentReplies: BufferedReply[] = []
+/// reply 幂等（mcp-server 重试帧带同 mp_msg_id）——Set 插入序即最老在前，超上限剔一批。
+/// 导出供测试；生产只经 markReplySeen 使用。
+export const seenMpMsgIds = new Set<string>()
+export function markReplySeen(mpMsgId: string | undefined): boolean {
+  if (!mpMsgId) return false          // 老 CC 不带 id → 不去重（容旧，宁重勿丢由 app 端兜）
+  if (seenMpMsgIds.has(mpMsgId)) return true
+  seenMpMsgIds.add(mpMsgId)
+  if (seenMpMsgIds.size > 600) {
+    const it = seenMpMsgIds.values()
+    for (let i = 0; i < 100; i++) { const v = it.next(); if (!v.done) seenMpMsgIds.delete(v.value) }
+  }
+  return false
+}
 
 // ── Terminal attachment (Phase 2) ─────────────────────────────────────────────
 export interface TerminalAttachment {
@@ -566,17 +585,20 @@ export function startHub(): WebSocketServer {
           }
           try {
             const ts = new Date().toISOString()
+            const rawLen = typeof raw === "string" ? raw.length : (raw as Buffer).length
             // Save any attached images/files to disk; inject paths into channel tag
             const attachments: string[] = []
             if (Array.isArray(msg.images) && msg.images.length > 0) {
+              console.log(`[hub] ⚙ images array len=${msg.images.length} frame=${rawLen}B`)
               attachments.push(...saveInboundImages(String(msg.chat_id), msg.images))
             }
             if (Array.isArray(msg.files) && msg.files.length > 0) {
+              console.log(`[hub] ⚙ files array len=${msg.files.length} frame=${rawLen}B`)
               attachments.push(...saveInboundFiles(String(msg.chat_id), msg.files))
             }
             const tag = buildChannelTag(msg as ChatMessage, ts, attachments)
             tmux.send(tag, targetSession)
-            console.log(`[hub] chat → tmux:${targetSession} chat_id=${String(msg.chat_id ?? "").slice(0, 8)} attachments=${attachments.length} "${String(msg.content ?? "").slice(0, 60)}"`)
+            console.log(`[hub] chat → tmux:${targetSession} chat_id=${String(msg.chat_id ?? "").slice(0, 8)} attachments=${attachments.length} frame=${rawLen}B "${String(msg.content ?? "").slice(0, 60)}"`)
             ws.send(JSON.stringify({ type: "ack", message_id: msg.message_id }))
           } catch (err: any) {
             ws.send(JSON.stringify({
@@ -761,6 +783,13 @@ export function startHub(): WebSocketServer {
         try { msg = JSON.parse(raw.toString()) } catch { return }
 
         if (msg.type === "reply" && typeof msg.chat_id === "string" && typeof msg.content === "string") {
+          // 幂等：mcp-server 的 reply 有 3 次重试（ws.send 抛错≠帧没送达，帧进 OS 缓冲后
+          // 连接异常关闭照样抛）——重试帧带同一个 mp_msg_id，这里按它去重。不去重的话
+          // 每条重试帧分到新 reply_id，app 端 reply_id dedup 全部失效 → 落两遍。
+          if (markReplySeen(typeof msg.mp_msg_id === "string" ? msg.mp_msg_id : undefined)) {
+            console.warn(`[hub] duplicate reply dropped (mp_msg_id=${String(msg.mp_msg_id).slice(0, 8)})`)
+            return
+          }
           const reply_id = crypto.randomUUID()
           // Attach outbound file if CC provided a file_path
           let fileField: StagedFile | undefined

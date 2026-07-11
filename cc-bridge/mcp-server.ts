@@ -311,6 +311,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const args = req.params.arguments as { chat_id: string; message_id?: string; content: string; file_path?: string; thinking?: string }
   // 如果 hub 这一刻断了，等一次重连尝试（最多 retry 几次再放弃）
   let lastErr: Error | undefined
+  // 幂等 id 在循环外生成：重试帧带同一个 mp_msg_id，hub 按它去重（"发两遍"雷二）
+  const mpMsgId = crypto.randomUUID()
   for (let i = 0; i < 3; i++) {
     try {
       const ws = await connectHub()
@@ -319,6 +321,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         chat_id: args.chat_id,
         message_id: args.message_id,  // 可选，回带用于精确匹配
         content: args.content,
+        mp_msg_id: mpMsgId,
       }
       if (args.file_path) payload.file_path = args.file_path
       if (args.thinking) payload.thinking = args.thinking
