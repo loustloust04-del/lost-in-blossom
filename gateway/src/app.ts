@@ -22,6 +22,7 @@ import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
 import { healthRoutes } from './health';
+import { recentTweets } from './tweets';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
 const app = new Hono();
@@ -187,6 +188,12 @@ app.post('/api/peek', async (c) => {
   const item = savePeek(buf, appName, ext);
   console.log('[peek] received', item.id, 'app=', appName, 'bytes=', buf.byteLength);
   return c.json({ ok: true, id: item.id });
+});
+
+// ============ 推特（App 拉同步好的推文）============
+app.get('/api/tweets', auth, async (c) => {
+  const limit = Number(c.req.query('limit')) || 20;
+  return c.json({ tweets: recentTweets(limit) });
 });
 
 // ============ 纪念日/倒计时（App 与 Caelum 同一份数据）============

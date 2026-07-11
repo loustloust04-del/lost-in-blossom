@@ -17,6 +17,8 @@ struct ConsoleView: View {
     @State private var showMemoBoard: Bool = false
     @State private var anniversaries: [AnniversaryClient.Item] = []
     @State private var showAnniversaries: Bool = false
+    @State private var latestTweets: [TweetsClient.Tweet] = []
+    @State private var showTweets: Bool = false
     @State private var showAddTodo: Bool = false
     @State private var newTodoText: String = ""
     @State private var todo = TodoManager.shared
@@ -43,6 +45,7 @@ struct ConsoleView: View {
         .task {
             loadVitals()
             anniversaries = await AnniversaryClient.fetch()
+            latestTweets = await TweetsClient.fetch(limit: 40)
             ensureTodayContext()
             await todo.refresh()
             await healthKit.requestAuthorization()
@@ -66,6 +69,7 @@ struct ConsoleView: View {
         .sheet(isPresented: $showAnniversaries, onDismiss: {
             Task { anniversaries = await AnniversaryClient.fetch() }
         }) { AnniversaryManageSheet() }
+        .sheet(isPresented: $showTweets) { TweetsFeedSheet() }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -361,22 +365,21 @@ struct ConsoleView: View {
     private var worldWidget: some View {
         wideWidget {
             HStack(spacing: 13) {
-                Image(systemName: "globe").font(.system(size: 22, weight: .regular)).foregroundColor(Self.textMuted)
+                Image(systemName: "bird").font(.system(size: 20, weight: .regular)).foregroundColor(Self.green)
                 VStack(alignment: .leading, spacing: 3) {
-                    if let n = todayCtx?.tweetCount {
-                        Text("今日 \(n) 条").font(.system(size: 15, weight: .semibold)).foregroundColor(Self.textPrimary)
-                        if let s = todayCtx?.latestTweetSummary {
-                            Text(s).font(.system(size: 11.5)).foregroundColor(Self.textMuted).lineLimit(1)
-                        }
+                    Text("给世界的").font(.system(size: 11.5, weight: .medium)).tracking(0.5).foregroundColor(Self.textSub)
+                    if let t = latestTweets.first {
+                        Text(t.text).font(.system(size: 14)).foregroundColor(Self.textPrimary).lineLimit(2)
                     } else {
-                        Text("给世界的").font(.system(size: 14, weight: .medium)).foregroundColor(Self.textSub)
-                        Text("待接入 Twitter MCP").font(.system(size: 11)).foregroundColor(Self.textFaint)
+                        Text("还没有同步到推文").font(.system(size: 12.5)).foregroundColor(Self.textFaint)
                     }
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Self.textFaint)
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { showTweets = true }
     }
 
     // MARK: - Caelum 留言 wide

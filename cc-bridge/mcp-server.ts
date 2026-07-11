@@ -132,6 +132,11 @@ const PROXY_TOOLS = [
     inputSchema: { type: "object", properties: { name: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD" }, type: { type: "string", enum: ["anniversary", "countdown"] } }, required: ["name", "date"] },
   },
   {
+    name: "get_my_tweets",
+    description: "兔兔最近发的推文（已同步进记忆库，含配图识别）。想知道她最近在推特上发了什么、在想什么、什么心情时调用。参数 limit（默认 10）。",
+    inputSchema: { type: "object", properties: { limit: { type: "number" } } },
+  },
+  {
     name: "get_health",
     description: "Bunny 的健康数据（HealthKit 摘要）：今日步数/睡眠/经期日/饮水/屏幕时间 + 近 14 天趋势。想关心她睡得好不好、身体状态时调用。No parameters.",
     inputSchema: { type: "object", properties: {} },

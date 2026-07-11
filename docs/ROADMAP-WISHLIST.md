@@ -36,7 +36,7 @@
 - [ ] **P2-5 模型对比擂台**：新页面——任选两个模型 + 同一提示词/问题 → 并排流式输出 → 二选一，战绩可攒。纯 App + 现有通道
 - [x] **P2-6 健康桥后端联动**（2026-07-12）：gateway/health.ts——POST/GET /health-data（key/Bearer 同 phone-data），存 14 天历史每日快照；get_health 工具双端（builtin + CC bridge）；App 端 HealthBridgeClient 在控制台 HealthKit 填充后自动上报（30 分钟节流）。Caelum 能看步数/睡眠/经期/饮水/屏幕时间及趋势
 - [~] **P2-7 日历/纪念日/倒计时/日程**（合并模块）：✅ 后端+Caelum 感知（2026-07-11）——gateway/anniversary.ts JSON 存储；remember_anniversary/list_anniversaries 双端工具；anniversaryContext() 每日注入系统提示（放缓存前缀之后，日变不churn），Caelum 会主动说「相识第 N 天 / 距 X 还 N 天」。待办：App 端 AnniversaryView 目前只存本地 UserDefaults，后续加 /api/anniversaries 让 App 与网关同数据；日程+提醒；EventKit 日历（要授权）
-- [ ] **P2-8 推特 MCP 接入**：VPS 推特管道包成 MCP server，网关 MCP 控制台填地址接入
+- [x] **P2-8 推特接入 App**（2026-07-12）：gateway/tweets.ts 只读 palace.db（sync-twitter 每 30 分钟写的 1000+ 推文），清洗正文/链接/配图识别；GET /api/tweets + get_my_tweets 工具（builtin + CC）；App TweetsClient + TweetsFeedSheet，控制台「给世界的」卡显示最新推文、点开看推文流。live 推特动作仍走既有 twitter builtin 工具（bb-browser）
 - [ ] **P2-9 VPS 备份**：定期打包关键数据（repo bundle/配置/记忆库快照/uploads）推异地。⚠️ 待兔兔定备份目的地（iCloud 盘 / 对象存储 / 另一台机器）
 
 ## P3 · 大活（单独立项）
