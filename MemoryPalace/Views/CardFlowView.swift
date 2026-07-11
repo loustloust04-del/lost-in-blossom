@@ -78,6 +78,14 @@ struct CardFlowView: View {
             onSwitchBranch: { nodeId, idx in viewModel.switchBranch(at: nodeId, to: idx) },
             onRegenerate: makeRegenerateAction(for: node),
             onEdit: makeEditAction(for: node),
+            groupMembers: {
+                guard let conv = viewModel.selectedConversation, conv.kind == "group" else { return [] }
+                return conv.participants.map { (id: $0.id, name: $0.name) }
+            }(),
+            onGroupReply: { [weak viewModel] pid in
+                guard let viewModel, let pm = providerManager else { return }
+                viewModel.groupRequestReply(participantId: pid, providerManager: pm, context: modelContext)
+            },
             regexScripts: {
                 let profileScripts = profileManager?.currentProfile.regexScripts ?? []
                 let presetId = profileManager?.currentProfile.presetId ?? ""
@@ -1507,6 +1515,9 @@ struct BubbleView: View {
     let onSwitchBranch: (String, Int) -> Void
     var onRegenerate: (() -> Void)? = nil
     var onEdit: ((String) -> Void)? = nil
+    /// G3：群成员（长按「让 TA 接话」用）。单聊为空 → 菜单项不出现。
+    var groupMembers: [(id: String, name: String)] = []
+    var onGroupReply: ((String) -> Void)? = nil
     var regexScripts: [RegexScript] = []
 
     @Environment(\.modelContext) private var modelContext
@@ -1839,6 +1850,16 @@ struct BubbleView: View {
                 if !isUser, let onRegenerate, !isStreaming {
                     Button(action: onRegenerate) {
                         Label("重新生成", systemImage: "arrow.counterclockwise")
+                    }
+                    Divider()
+                }
+                if !groupMembers.isEmpty, let onGroupReply, !isStreaming {
+                    Menu {
+                        ForEach(groupMembers, id: \.id) { member in
+                            Button(member.name) { onGroupReply(member.id) }
+                        }
+                    } label: {
+                        Label("让 TA 接话", systemImage: "bubble.left.and.bubble.right")
                     }
                     Divider()
                 }

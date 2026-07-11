@@ -100,6 +100,39 @@ extension ConversationViewModel {
         print("[GroupV5] ═══ 轮次结束 ═══ 共 \(repliesThisRound) 条回复")
     }
 
+    /// G3 长按定向回应：指定某个成员接当前话茬（不选人，直接说）。
+    @MainActor
+    func groupRequestReply(
+        participantId: String,
+        providerManager: ProviderManager,
+        context: ModelContext
+    ) {
+        guard let conversation = selectedConversation, conversation.kind == "group" else { return }
+        guard !assistantTurnInFlight else { return }  // 轮次在跑就忽略，别打架
+        let participants = conversation.participants
+        guard let speaker = participants.first(where: { $0.id == participantId }),
+              let model = providerManager.model(byId: speaker.model) else { return }
+        assistantTurnInFlight = true
+        streamingConversationId = conversation.id
+        BreadcrumbLog.shared.add("👥", "定向接话: \(speaker.name)")
+        Task { @MainActor in
+            let cardManager = CharacterCardManager()
+            let presetManager = PresetManager()
+            await self.groupSpeak(
+                participant: speaker,
+                allParticipants: participants,
+                userName: UserDefaults.standard.string(forKey: "userName") ?? "我",
+                card: cardManager.cards.first { $0.id == speaker.characterCardID },
+                preset: presetManager.preset(byId: speaker.presetId),
+                conversation: conversation,
+                model: model,
+                providerManager: providerManager,
+                context: context
+            )
+            self.finishAssistantTurn()
+        }
+    }
+
     /// 单个角色发言。
     @MainActor
     private func groupSpeak(
