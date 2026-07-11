@@ -363,6 +363,7 @@ extension ConversationViewModel {
                                         senderId: nil, senderName: userName,
                                         conversation: conversation, context: context)
                     BreadcrumbLog.shared.add("👥", "群聊插话: \(text.prefix(30))...")
+                    groupInterjectionPending = true
                     return true
                 }
                 // 别的对话在跑 → 仍排队（跨对话并发会打架全局流式状态，防护保留）

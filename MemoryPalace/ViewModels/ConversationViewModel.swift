@@ -44,6 +44,9 @@ final class ConversationViewModel {
     /// 当前 assistant turn（含 Provider 内部工具循环 / 群聊整轮）是否进行中。
     /// 只管 **API 车道**（openAI/anthropic），CC 车道见下。
     var assistantTurnInFlight = false
+    /// 群聊插话信号：轮次进行中用户又发了消息 → 循环下一圈重置发言预算，
+    /// 让成员围绕新消息再回（否则名额用尽时插话会没人理）。
+    var groupInterjectionPending = false
     /// in-flight 期间用户发的消息排队，turn 结束（或回到原对话时）自动补发
     var pendingSends: [PendingSend] = []
 

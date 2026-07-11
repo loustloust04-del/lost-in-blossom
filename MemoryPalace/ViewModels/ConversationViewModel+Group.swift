@@ -33,6 +33,12 @@ extension ConversationViewModel {
         var repliesThisRound = 0
 
         while repliesThisRound < maxReplies {
+            // 用户插话 → 发言预算清零：成员围绕新消息重新回起，插话不落空
+            if groupInterjectionPending {
+                groupInterjectionPending = false
+                repliesThisRound = 0
+                print("[GroupV5] 💬 检测到插话，发言预算重置")
+            }
             let history = groupHistoryItems()
 
             // 选人
@@ -90,6 +96,7 @@ extension ConversationViewModel {
             }
         }
 
+        groupInterjectionPending = false
         print("[GroupV5] ═══ 轮次结束 ═══ 共 \(repliesThisRound) 条回复")
     }
 
