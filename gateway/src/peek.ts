@@ -137,17 +137,20 @@ export async function callPeekScreen(): Promise<string> {
   try {
     // 主题带 PEEK 标记，iOS 自动化按主题包含 PEEK 来筛
     await sendMail(to, 'PEEK', 'peek ' + triggerTs);
+    console.log(`[peek] 📧 触发邮件已发送 → ${to} (等新截图 ts>${triggerTs})`);
   } catch (e: any) {
+    console.log(`[peek] ❌ 触发邮件发送失败: ${e?.message || e}`);
     return JSON.stringify({ error: '触发邮件发送失败：' + (e?.message || String(e)) });
   }
   // 轮询等新截图：最多 ~28s（App/CC 侧工具超时一般 30s+）
-  const deadline = triggerTs + 28_000;
+  const deadline = triggerTs + 45_000;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 1500));
     const p = latestPeekAfter(triggerTs);
     if (p) return JSON.stringify({ __peek_image__: true, media_type: p.mediaType, data: p.base64, app: p.app });
   }
-  return JSON.stringify({ error: '触发邮件已发出，但 28 秒内没等到截图。可能：手机没联网 / 「收到邮件」自动化没开启或没设成"立即运行" / 邮件还没推送到。可以让用户检查一下自动化，或改用 see_screen 让用户手动触发。' });
+  console.log(`[peek] ⏱️ 28 秒内没等到 ts>${triggerTs} 的新截图`);
+  return JSON.stringify({ error: '触发邮件已发出，但 45 秒内没等到截图。可能：手机没联网 / 「收到邮件」自动化没开启或没设成"立即运行" / 邮件还没推送到。' });
 }
 
 
