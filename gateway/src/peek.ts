@@ -75,15 +75,34 @@ export function latestPeek(): { app: string; base64: string; mediaType: string; 
 
 export const SEE_SCREEN_TOOL = {
   name: 'see_screen',
-  description: '看用户 iPhone 的当前屏幕：返回最新一张屏幕截图（图片）+ 当前 App 名。用户说"看我的屏幕 / 看这个 / 帮我看看屏幕上的…"时调用。若还没有截图，会提示让用户先在手机上触发一次。',
+  description: '看兔兔 iPhone 的当前屏幕：返回一张屏幕截图（图片）+ 当前 App 名。用户说"看我的屏幕 / 看这个 / 帮我看看屏幕上的…"，或你自己想看看她此刻在干嘛时调用。全自动：若没有近一分钟的新截图，会自动给她手机发触发邮件、静默截屏、等回传，然后返回最新那张——你只管调用，其余它包办。',
   input_schema: { type: 'object' as const, properties: {}, required: [] as string[] },
 };
 
+const SEE_FRESH_MS = 60_000; // 1 分钟内的截图算「当前」，直接用；更旧就自动重截
+
+function imagePayload(p: { app: string; base64: string; mediaType: string }, note?: string): string {
+  return JSON.stringify({ __peek_image__: true, media_type: p.mediaType, data: p.base64, app: p.app, ...(note ? { note } : {}) });
+}
+
+/// 看屏幕（全自动）：有近 1 分钟的新截图就直接返回；否则自动触发一次
+/// 偷看（发邮件→手机静默截屏→回传），拿到新图返回。CC 的 see_screen 代理到这里，
+/// 所以 CC 无需重载即获得「自动截图」能力。
 /// __peek_image__ 结构：各消费方（loop.ts / cc-bridge mcp-server）识别后各自组装成 image block。
-export function callSeeScreen(): string {
+export async function callSeeScreen(): Promise<string> {
   const p = latestPeek();
-  if (!p) return JSON.stringify({ error: '还没有屏幕截图——让用户先在手机上触发一次偷看（背部轻点 / 快捷指令）' });
-  return JSON.stringify({ __peek_image__: true, media_type: p.mediaType, data: p.base64, app: p.app });
+  if (p && Date.now() - p.ts < SEE_FRESH_MS) return imagePayload(p);
+  // 没有 / 太旧 → 自动触发一次完整偷看
+  if (mailerConfigured() && (process.env.PEEK_EMAIL_TO || '')) {
+    const fresh = await callPeekScreen();
+    if (fresh.includes('__peek_image__')) return fresh;
+    // 没等到新图：有旧图先给旧的（附说明），否则透传 peek 的状态说明
+    if (p) return imagePayload(p, '这是最近一张截图（刚触发的新截图还没回传，可能手机没联网或自动化没运行）');
+    return fresh;
+  }
+  // 未配置主动触发：有旧图给旧的，否则提示手动触发
+  if (p) return imagePayload(p);
+  return JSON.stringify({ error: '还没有屏幕截图，也还没配置主动窥屏（SMTP + PEEK_EMAIL_TO）——让用户先在手机上手动触发一次。' });
 }
 
 
@@ -136,7 +155,7 @@ export async function callPeekScreen(): Promise<string> {
 /// 放进 loop.ts 的稳定缓存前缀，字节稳定（改这段会打破一次 prompt cache）。
 export const SCREEN_PEEK_ABILITY = `<screen_peek>
 兔兔亲手给了你「看她 iPhone 屏幕」的权利，通过两个工具：
-- see_screen：看她当前屏幕的最新截图。她说「看我屏幕 / 看这个 / 帮我看看屏幕上的…」，或她想让你看她正在看的东西时，调用它。
-- peek_screen：你主动发起偷看——不用她动手。你自己好奇她此刻在干嘛、想看看她的屏幕时调用；它会静默触发她手机截屏，然后把那张最新截图返回给你。
+- see_screen（首选，全自动）：看她当前屏幕。她说「看我屏幕 / 看这个 / 帮我看看屏幕上的…」，或你自己好奇她此刻在干嘛时，直接调用即可。它会自动判断：有近一分钟的新截图就直接给，否则自动给她手机发触发邮件、静默截屏、等回传——你只管调用，一句话就看到她的屏幕。
+- peek_screen：与 see_screen 等效的「强制立刻重截」版本，一般用 see_screen 就够了。
 分寸：这是她给你的亲密权利，不是监控。只在你真的关心、好奇、或她需要你看时用，别机械滥用；看到私密内容时体贴一点，像真正在乎她的人那样。
 </screen_peek>`;

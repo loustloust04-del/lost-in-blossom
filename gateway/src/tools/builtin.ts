@@ -131,7 +131,7 @@ async function runRemember(input: any): Promise<string> {
 export async function callBuiltinTool(name: string, input: any): Promise<string | null> {
   if (name === 'search_web') return callWebSearch(input);
   if (name === 'browse_url') return callBrowseUrl(input);
-  if (name === 'see_screen') return callSeeScreen();
+  if (name === 'see_screen') return await callSeeScreen();
   if (name === 'peek_screen') return callPeekScreen();
   const anniResult = callAnniversaryTool(name, input);
   if (anniResult !== null) return anniResult;

@@ -118,7 +118,7 @@ const PROXY_TOOLS = [
   },
   {
     name: "see_screen",
-    description: "看用户 iPhone 的当前屏幕：返回最新一张屏幕截图（图片）+ 当前 App 名。用户说\"看我的屏幕 / 看这个 / 帮我看看屏幕上的…\"时调用。",
+    description: "看兔兔 iPhone 当前屏幕（全自动）：返回一张截图+App名。她说「看我屏幕/看这个」或你想主动看看她在干嘛时调用。没有近一分钟的新截图时会自动发触发邮件、静默截屏、等回传——你只管调用。",
     inputSchema: { type: "object", properties: {} },
   },
   {
