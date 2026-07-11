@@ -15,6 +15,8 @@ struct ConsoleView: View {
     @State private var healthKit = HealthKitService()
     @State private var vitalsData: VitalsResponse? = nil
     @State private var showMemoBoard: Bool = false
+    @State private var anniversaries: [AnniversaryClient.Item] = []
+    @State private var showAnniversaries: Bool = false
     @State private var showAddTodo: Bool = false
     @State private var newTodoText: String = ""
     @State private var todo = TodoManager.shared
@@ -40,6 +42,7 @@ struct ConsoleView: View {
         .background(Self.pageBg.ignoresSafeArea())
         .task {
             loadVitals()
+            anniversaries = await AnniversaryClient.fetch()
             ensureTodayContext()
             await todo.refresh()
             await healthKit.requestAuthorization()
@@ -58,6 +61,9 @@ struct ConsoleView: View {
             Button("添加") { todo.add(newTodoText); newTodoText = "" }
         }
         .sheet(isPresented: $showMemoBoard) { MemoBoardPlaceholder() }
+        .sheet(isPresented: $showAnniversaries, onDismiss: {
+            Task { anniversaries = await AnniversaryClient.fetch() }
+        }) { AnniversaryManageSheet() }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -98,6 +104,7 @@ struct ConsoleView: View {
             HStack(spacing: 11) { stepsWidget; sleepWidget }
             HStack(spacing: 11) { medsWidget; screenWidget }
             cycleWidget
+            anniversaryWidget
             worldWidget
             caelumWidget
         }
@@ -305,6 +312,45 @@ struct ConsoleView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(v).font(.cormorant(17)).foregroundColor(Self.textPrimary)
             Text(l).font(.system(size: 10.5)).foregroundColor(Self.textMuted)
+        }
+    }
+
+    // MARK: - 纪念日 wide
+
+    private var anniversaryWidget: some View {
+        wideWidget {
+            VStack(alignment: .leading, spacing: 0) {
+                widgetHead("ANNIVERSARY", icon: "heart",
+                           gold: anniversaries.contains { AnniversaryClient.display(for: $0)?.highlight == true })
+                if anniversaries.isEmpty {
+                    Text("跟 Caelum 说「记一下我们的纪念日」")
+                        .font(.system(size: 13))
+                        .foregroundColor(Self.textFaint)
+                        .padding(.top, 10)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(anniversaries.prefix(3)) { item in
+                            anniversaryRow(item)
+                        }
+                    }
+                    .padding(.top, 11)
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { showAnniversaries = true }
+    }
+
+    private func anniversaryRow(_ item: AnniversaryClient.Item) -> some View {
+        let disp = AnniversaryClient.display(for: item)
+        return HStack(alignment: .firstTextBaseline) {
+            Text(item.name)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Self.textPrimary)
+            Spacer()
+            Text(disp?.text ?? "已过去")
+                .font(.cormorant(16))
+                .foregroundColor(disp?.highlight == true ? Self.gold : Self.textSub)
         }
     }
 
