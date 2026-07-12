@@ -129,6 +129,20 @@ async function callSeeScreen(){
   }
   return { error: &#x27;截图还没回来，过十几秒再叫我一次&#x27; };   // 诚实报，别拿旧图冒充
 }</code></pre><p><code>imageBlock(p)</code> 把截图组装成多模态 AI 能吃的<b>图片块</b>（base64）。Anthropic 例：<code>{ type:'image', source:{ type:'base64', media_type:'image/png', data:...] } }</code>。AI 收到就真「看见」了。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇等等！那 AI 岂不是每次都要自己发邮件、自己等、自己拉图……好麻烦呀？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">诶，这才是最巧的地方！AI <b>完全不用管这些</b>。发暗号邮件、轮询、等截图、把图组装好——<b>全部藏在 <code>see_screen</code> 这一个工具里面</b>。对 AI 来说，它只是「调了个函数、拿回一张图」，跟你调 <code>getWeather()</code> 拿到天气一样简单。所有脏活累活都被这个工具「包」起来了。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> ✨ 最巧的地方 · 整条链藏进一个工具</div>
+<p>AI 那边看到的<b>只有一个工具声明</b>——一个名字、无参数、一句说明：</p><pre class="code"><code>{ name: &#x27;see_screen&#x27;,
+  description: &#x27;看用户 iPhone 的当前屏幕，返回一张截图&#x27;,
+  input_schema: { type:&#x27;object&#x27;, properties:{} } }   // 无参数</code></pre>
+<p>AI 一调用，<b>网关内部</b>才依次跑完整条链：发邮件 → 轮询 → 存图 → 组装图片块 → 返回。AI 收到的就是一张图，它<b>既不知道、也不需要知道</b>中间发了封邮件、手机截了屏、还传了回来。</p>
+<p><b>为什么这么设计更好：</b></p>
+<ul>
+<li><b>模型提示词干净</b>：不用在系统提示里教 AI「先发邮件、再等 45 秒、再拉最新图……」——它只需要知道「想看屏幕就调 see_screen」</li>
+<li><b>换实现不动模型</b>：哪天你把截图方式换成别的（比如推送、别的触发），只要工具签名不变，AI 侧一个字都不用改</li>
+<li><b>一处封装，处处可用</b>：App 里的 AI、命令行里的 AI、任何接了这个工具的模型，调用方式完全一样</li>
+</ul>
+<p class="tip">一句话：把「一堆麻烦的步骤」收进「一个干净的工具」，是让 AI 用起来毫不费力的关键。</p></div>
 <hr class="divider">
 <div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇好厉害！那做完就能用啦？</div></div>
 <div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">……理论上是。实际我又踩了一串坑 😂 每个都配好技术事实给你——</div></div>
@@ -151,12 +165,11 @@ location = /api/peek {
     proxy_pass http://127.0.0.1:&lt;后端端口&gt;;
 }</code></pre><p>管用的前提就是端点「<b>请求头优先于 ?key=</b>」。安全不打折：只有 UA 像快捷指令的才补，其它来源仍走原校验。</p></div>
 <div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇学到了！还有别的坑吗？</div></div>
-<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">还有四个，一起给你：</div></div>
-<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 其余四坑</div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">还有三个，一起给你：</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 其余三坑</div>
 <p><b>坑二号 · 别拿旧图骗 AI</b>：没等到新图时<b>返回错误</b>而不是「最近一张」，否则 AI 把十几小时前的画面当成你此刻的屏幕。</p>
-<p><b>坑三号 · 邮件要推送</b>：「收到邮件」自动化要邮件 App <b>真把邮件收下</b>才触发。设置 → 邮件 → 账户 → 获取新数据 → iCloud 设 <b class="tip">「推送」</b>，邮件 App 别从后台划掉。</p>
-<p><b>坑四号 · nginx 嫌图大</b>：截图 1~3 MB，nginx 默认 <code>client_max_body_size</code> 仅 1 MB → 413。server 块加 <code>client_max_body_size 50m;</code>。</p>
-<p><b>坑五号 · 等待窗口</b>：邮件往返约 15 秒、慢时更久。轮询别只等 28 秒（漏掉慢的），给到 45 秒，但别超过 AI 工具超时（一般 60 秒）。</p></div>
+<p><b>坑三号 · nginx 嫌图大</b>：截图 1~3 MB，nginx 默认 <code>client_max_body_size</code> 仅 1 MB → 413。server 块加 <code>client_max_body_size 50m;</code>。</p>
+<p><b>坑四号 · 等待窗口</b>：邮件往返约 15 秒、慢时更久。轮询别只等 28 秒（漏掉慢的），给到 45 秒，但别超过 AI 工具超时（一般 60 秒）。</p></div>
 <div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇……坑好多呀！万一我也卡住，怎么知道哪步坏了？</div></div>
 <div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble"><b>万能定位法</b>——看日志一步步缩小。</div></div>
 <div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 排查流程</div>
@@ -164,7 +177,7 @@ location = /api/peek {
 <table>
 <tr><th>现象</th><th>病因</th></tr>
 <tr><td>有请求但 <b>403</b></td><td>坑一号（令牌被空格挤掉）</td></tr>
-<tr><td><b>压根没这条请求</b></td><td>邮件没到手机 / 自动化没触发（去设推送、检查「立即运行」）</td></tr>
+<tr><td><b>压根没这条请求</b></td><td>邮件没到手机 / 自动化没触发（检查发件人条件 + 「立即运行」是否开）</td></tr>
 <tr><td><b>200 但 AI 看到旧图</b></td><td>坑二号（旧图兜底）</td></tr>
 </table><pre class="code"><code>grep &quot;POST /api/peek&quot; /var/log/nginx/access.log | tail</code></pre></div>
 <hr class="divider">
