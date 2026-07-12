@@ -59,6 +59,12 @@ extension ConversationViewModel {
             return StyleManager.shared.find(styleId)?.content
         }()
 
+        // 发语音条注入段：走 projectInstructions（volatile 层，不碰缓存前缀）。
+        // 三条件（开关+key+楼层选了声音）不满足时 hint 为 nil，一字不注。
+        if let voiceHint = VoicePromptInjector.hint(profile: profile) {
+            projectInstructions = [projectInstructions, voiceHint].compactMap { $0 }.joined(separator: "\n\n")
+        }
+
         let result = PromptAssembler.assemble(
             preset: preset,
             profile: profile,
@@ -663,6 +669,12 @@ extension ConversationViewModel {
                     assistantNode.usageOutputTokens = usage.outputTokens
                 }
                 try? context.save()
+                // 语音条：回复里有 ```voice 块 → 提取脚本、TTS 生成 mp3、挂 audioRef
+                //（send/regenerate/editAndResend 三路共用本收口，一处覆盖全部）
+                VoiceMessageWriter.processChatIntents(
+                    nodeId: assistantNode.id, context: context,
+                    profiles: ProfileManager.loadProfiles()
+                )
                 scrollToNodeId = assistantNodeId
 
                 // 后台本地通知

@@ -60,6 +60,8 @@ struct IOSGeneralPage: View {
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)
 
+            VoiceSettingsSection()
+
             Section("推送调试") {
                 let token = UserDefaults.standard.string(forKey: "apns_device_token") ?? "未获取"
                 let debug = UserDefaults.standard.string(forKey: "push_debug") ?? "未启动"

@@ -319,6 +319,8 @@ struct ContentView: View {
             }
             // spring 动画仅在 boolean 跳变时触发（手势跟手期间不添加动画）
             .animation(sidebarAnimation, value: isSidebarOpen)
+            // 全局 toast（语音条生成提示等）：顶部居中，盖在所有页之上
+            .overlay(alignment: .top) { GlobalToastOverlay() }
             // ── 手势：仅处理侧边栏已打开时的左滑关闭（打开由 UIScreenEdgePanGestureRecognizer 处理）
             .gesture(
                 DragGesture(minimumDistance: 8, coordinateSpace: .local)

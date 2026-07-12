@@ -741,6 +741,8 @@ final class ClaudeImporter {
                 parts.append(s)
             case .file(let name, _):
                 parts.append("🖼 \(name)")
+            case .audioRef(let name, _, _, _, let script):
+                parts.append("🎤 \(name)\(script.map { "\n\($0)" } ?? "")")
             }
         }
         return parts.joined(separator: "\n\n")

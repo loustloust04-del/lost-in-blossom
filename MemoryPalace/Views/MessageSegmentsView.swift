@@ -193,6 +193,9 @@ struct MessageSegmentsView: View {
             case .file(let name, _):
                 result.append(.file(name: name))
                 i += 1
+            case .audioRef:
+                // 语音条不进 segments 渲染——VoiceCapsuleView 在气泡层单独画胶囊
+                i += 1
             }
         }
         return result

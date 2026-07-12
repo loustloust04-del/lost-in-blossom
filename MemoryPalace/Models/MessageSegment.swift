@@ -35,6 +35,10 @@ enum MessageSegment: Codable, Hashable {
 
     // MARK: - Codable
 
+    /// 语音条：AI 表演脚本经 TTS 生成的音频。字节在文件库，
+    /// script 存表演脚本原文——「换一版」靠它重跑，失败降级时也保住文字。
+    case audioRef(name: String, mime: String, path: String, duration: Double?, script: String?)
+
     private enum CodingKeys: String, CodingKey {
         case kind
         case text
@@ -52,6 +56,9 @@ enum MessageSegment: Codable, Hashable {
         case type
         case extractedContent
         case uuid
+        case path
+        case duration
+        case script
     }
 
     private enum Kind: String, Codable {
@@ -62,6 +69,7 @@ enum MessageSegment: Codable, Hashable {
         case flag
         case attachment
         case file
+        case audioRef
     }
 
     func encode(to encoder: Encoder) throws {
@@ -102,6 +110,13 @@ enum MessageSegment: Codable, Hashable {
             try c.encode(Kind.file, forKey: .kind)
             try c.encode(name, forKey: .name)
             try c.encode(uuid, forKey: .uuid)
+        case .audioRef(let name, let mime, let path, let duration, let script):
+            try c.encode(Kind.audioRef, forKey: .kind)
+            try c.encode(name, forKey: .name)
+            try c.encode(mime, forKey: .type)
+            try c.encode(path, forKey: .path)
+            try c.encodeIfPresent(duration, forKey: .duration)
+            try c.encodeIfPresent(script, forKey: .script)
         }
     }
 
@@ -149,6 +164,25 @@ enum MessageSegment: Codable, Hashable {
                 name: try c.decode(String.self, forKey: .name),
                 uuid: try c.decode(String.self, forKey: .uuid)
             )
+        case .audioRef:
+            self = .audioRef(
+                name: try c.decode(String.self, forKey: .name),
+                mime: try c.decode(String.self, forKey: .type),
+                path: try c.decode(String.self, forKey: .path),
+                duration: try c.decodeIfPresent(Double.self, forKey: .duration),
+                script: try c.decodeIfPresent(String.self, forKey: .script)
+            )
+        }
+    }
+}
+
+extension Array where Element == MessageSegment {
+    /// 气泡是否该走 segmented 渲染：audioRef 不算数——语音条在气泡外侧胶囊渲染，
+    /// 只挂了语音条的消息正文仍走纯文本分支（否则挂 segment 瞬间正文蒸发）。
+    var hasRenderableSegments: Bool {
+        contains { seg in
+            if case .audioRef = seg { return false }
+            return true
         }
     }
 }

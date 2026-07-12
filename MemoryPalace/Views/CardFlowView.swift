@@ -1684,7 +1684,7 @@ struct BubbleView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                    } else if let segs = node.segments, !segs.isEmpty {
+                    } else if let segs = node.segments, segs.hasRenderableSegments {
                         // Claude v2 导入的 user 消息（通常只有 text + 末尾 attachment/file 段）
                         MessageSegmentsView(
                             segments: segs,
@@ -1708,7 +1708,7 @@ struct BubbleView: View {
                             .textSelection(.enabled)
                             .lineSpacing(4 * (fontScale > 0 ? fontScale : 1.0) * lineSpacingScale)
                     }
-                } else if let segs = node.segments, !segs.isEmpty {
+                } else if let segs = node.segments, segs.hasRenderableSegments {
                     // 思考链兜底：segments 里没有 .thinking 段时（CC 标记式 / deepseek 流式），
                     // 用共用预览补渲染，否则思考链整体丢失。
                     let segsHaveThinking = segs.contains { seg in
@@ -1795,6 +1795,18 @@ struct BubbleView: View {
                 }
 
                 // Artifact canvas card (assistant only, not during streaming)
+                // 语音条胶囊（audioRef 不进 segments 渲染，这里单独画）
+                if let segs = node.segments {
+                    let voiceSegs: [(path: String, duration: Double?)] = segs.compactMap { seg in
+                        if case .audioRef(_, _, let p, let d, _) = seg { return (p, d) }
+                        return nil
+                    }
+                    ForEach(voiceSegs, id: \.path) { v in
+                        VoiceCapsuleView(path: v.path, duration: v.duration,
+                                         nodeId: node.id, profileId: node.profileId, isUser: isUser)
+                            .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+                    }
+                }
                 if !isUser && !isStreaming, let artifact = ArtifactDetector.find(in: cleaned) {
                     ArtifactCodeFoldView(
                         code: artifact.code,

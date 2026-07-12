@@ -13,6 +13,11 @@ enum FileLibraryStore {
     }
 
     /// 把相对路径解析成库内绝对 URL，拒绝 ../ 越狱与绝对路径。返回 nil = 非法。
+    /// 粟粟侧同功能函数叫 absoluteURL——语音条等搬运件按这个名字调，转发到 resolve。
+    static func absoluteURL(_ relPath: String, profileId: String) -> URL? {
+        resolve(relPath, profileId: profileId)
+    }
+
     static func resolve(_ relPath: String, profileId: String) -> URL? {
         let root = libraryRoot(profileId: profileId).standardizedFileURL
         let cleaned = relPath.trimmingCharacters(in: .init(charactersIn: "/ "))

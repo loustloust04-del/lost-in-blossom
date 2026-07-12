@@ -15,6 +15,9 @@ struct Profile: Identifiable, Hashable, Codable {
     var createdAt: Date
 
     // Phase 3: 人格系统
+    /// 语音条（ElevenLabs 等 TTS）：楼层选定的声音
+    var elevenVoiceId: String?
+    var elevenVoiceName: String?
     var presetId: String
     var userPersona: String
     var characterDescription: String
