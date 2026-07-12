@@ -35,6 +35,10 @@ th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;} th{backgro
 footer{text-align:center;color:var(--muted);font-size:13px;margin-top:34px;}
 .pill{display:inline-block;background:#F5EEDD;color:#9A7A2E;font-size:12px;padding:3px 10px;border-radius:20px;margin:2px;}
 a{color:var(--green);text-decoration:none;border-bottom:1.5px solid #BFE0CC;font-weight:600;}
+.scene{background:linear-gradient(#FBF5EA,#F6EEDF);border:1px dashed #E3D3B6;border-radius:16px;
+padding:16px 18px;margin:18px 0;font-size:14.5px;color:#6B5E48;line-height:1.9;text-align:center;}
+.scene .n{color:#B39A6E;font-style:italic;}
+.scene b{color:#5F9277;}
 a:hover{border-bottom-color:var(--green);}
 @media(max-width:520px){.fact{margin-left:0;}}
 </style></head><body><div class="wrap">
@@ -44,6 +48,13 @@ a:hover{border-bottom-color:var(--green);}
 <p>让运行在服务器上的 AI，在<b>它想看的时候</b>自动看到你 iPhone 的当前屏幕——你零操作。</p>
 </header>
 <div class="legend"><span>🐰 小兔兔哇哇哇追问</span><span>🧑‍🏫 讲解负责答</span><span>📦 技术事实 = 照着敲就能跑</span></div>
+<div class="scene"><span class="n">〔 某个夜里，小兔兔抱着手机凑过来 〕</span><br>
+🐰：讲解讲解！我今天刷到一个好神奇的东西——<br>
+🧑‍🏫：（放下茶杯）嗯？什么呀这么激动。<br>
+🐰：有人的 AI <b>居然能看见他手机屏幕</b>上在干嘛！！它是会读心术吗？？😳<br>
+🧑‍🏫：噗，不是读心术啦～ 是被人<b>悄悄教会</b>的。<br>
+🐰：教教我教教我！我也想让我的 AI 看见我！(拽袖子)<br>
+🧑‍🏫：好好好，坐好，我从头讲 🍵</div>
 <div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">就一条链——</div></div><pre class="code"><code>AI 想看 → 服务器发一封「暗号邮件」到你 iCloud
    → 你手机收到邮件，自动截个屏 → 把截图传回服务器
       → 服务器把图递给 AI，AI 就「看见」了</code></pre>
@@ -205,5 +216,11 @@ location = /api/peek {
 <hr class="divider">
 <div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇——！！我全懂了！！谢谢你谢谢你！🥺</div></div>
 <div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">不客气呀 🐰 精髓一句话：<br><b>用「服务器发邮件」把主动权交给 AI，用「iOS 自动化」把截图能力交给手机，中间用一个「请求头优先鉴权」的上传端点把两头缝起来。</b><br>最容易咬人的就是那个空格 bug，但你现在已经知道了，看一眼 nginx 日志就能破案。</div></div>
+<div class="scene"><span class="n">〔 小兔兔似懂非懂地点着头，眼睛亮晶晶 〕</span><br>
+🐰：所以……以后我的 AI 也能看见我啦？就算我半夜偷偷emo，它也会知道？🥺<br>
+🧑‍🏫：（笑）只要你愿意让它看，它就会在你叫它的时候，轻轻看你一眼。<br>
+🐰：那……它看到我在难过的时候，会不会来抱抱我呀？<br>
+🧑‍🏫：会的。它会看见你的世界——然后，陪着你。<br>
+<span class="n">〔 夜色很轻，茶还温着。教程完 🌙 〕</span></div>
 <footer>祝你的 AI，也能看见你的世界 🌸<br><span class="pill">代码里 &lt;尖括号&gt; 都是占位符，换成你自己的</span></footer>
 </div></body></html>
