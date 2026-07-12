@@ -671,10 +671,13 @@ extension ConversationViewModel {
                 try? context.save()
                 // 语音条：回复里有 ```voice 块 → 提取脚本、TTS 生成 mp3、挂 audioRef
                 //（send/regenerate/editAndResend 三路共用本收口，一处覆盖全部）
-                VoiceMessageWriter.processChatIntents(
-                    nodeId: assistantNode.id, context: context,
-                    profiles: ProfileManager.loadProfiles()
-                )
+                let voiceNodeId = assistantNode.id
+                Task { @MainActor in
+                    VoiceMessageWriter.processChatIntents(
+                        nodeId: voiceNodeId, context: context,
+                        profiles: ProfileManager.loadProfiles()
+                    )
+                }
                 scrollToNodeId = assistantNodeId
 
                 // 后台本地通知
