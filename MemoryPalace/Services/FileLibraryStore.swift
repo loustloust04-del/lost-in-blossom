@@ -77,6 +77,18 @@ enum FileLibraryStore {
         return hits
     }
 
+    /// 二进制读写（语音条 mp3 / 附件字节走这对；粟粟侧同名 API 的最小适配版）
+    static func writeData(_ relPath: String, data: Data, profileId: String) throws {
+        guard let url = resolve(relPath, profileId: profileId) else { throw err("非法路径: \(relPath)") }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+
+    static func readData(_ relPath: String, profileId: String) throws -> Data {
+        guard let url = resolve(relPath, profileId: profileId) else { throw err("非法路径: \(relPath)") }
+        return try Data(contentsOf: url)
+    }
+
     private static func err(_ m: String) -> NSError {
         NSError(domain: "FileLibrary", code: -1, userInfo: [NSLocalizedDescriptionKey: m])
     }
