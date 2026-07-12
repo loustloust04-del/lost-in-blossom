@@ -21,17 +21,6 @@ enum Theme {
 
     static var platformMainBackgroundColor: UIColor { currentTokens.mainBg.platformColor }
 
-    /// 设置页字号表（粟粟侧同名，语音条设置等搬运件引用）
-    enum SettingsFont {
-        static let sectionHeader: CGFloat = 16
-        static let label: CGFloat = 15
-        static let body: CGFloat = 14
-        static let secondary: CGFloat = 13
-        static let caption: CGFloat = 11
-        static let badge: CGFloat = 11
-        static let mono: CGFloat = 13
-    }
-
     static let bubbleCornerRadius: CGFloat = 16
     static let bubblePadding: CGFloat = 14
     static let bubbleSpacing: CGFloat = 6
