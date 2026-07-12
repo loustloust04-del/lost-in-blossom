@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>怎么让 AI 看见我的手机屏幕 · 小兔兔十万个为什么</title>
+<style>
+:root{--bg:#F1ECE3;--card:#FFFCF9;--ink:#3A332B;--sub:#8A7F6E;--muted:#B5AA9A;
+--mint:#8EBD9F;--green:#5F9277;--gold:#D9A94E;--line:#E8E0D4;--codebg:#2B2A26;--codefg:#EDE7DB;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','SF Pro',Segoe UI,sans-serif;
+-webkit-font-smoothing:antialiased;line-height:1.65;}
+.wrap{max-width:720px;margin:0 auto;padding:34px 18px 80px;}
+header{text-align:center;margin-bottom:14px;}
+header .kicker{font-size:12px;letter-spacing:3px;color:var(--green);font-weight:600;text-transform:uppercase;}
+header h1{font-size:26px;margin:10px 0 8px;line-height:1.3;}
+header p{color:var(--sub);font-size:14px;margin:0 auto;max-width:520px;}
+.legend{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:18px 0 26px;font-size:12.5px;color:var(--sub);}
+.legend span{display:inline-flex;align-items:center;gap:5px;background:var(--card);padding:5px 11px;border-radius:20px;border:1px solid var(--line);}
+.turn{display:flex;gap:10px;margin:16px 0;align-items:flex-start;}
+.turn .ava{flex:0 0 34px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--card);border:1px solid var(--line);}
+.turn .bubble{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 16px;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+.turn.bunny .bubble,.turn.bunny .ava{background:#EAF3EC;border-color:#D6E7DB;}
+.turn.teacher .bubble{flex:1;}
+.bubble code{background:#00000010;padding:1px 5px;border-radius:5px;font-size:13px;font-family:ui-monospace,'SF Mono',Menlo,monospace;}
+.fact{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--mint);border-radius:12px;padding:14px 16px;margin:12px 0 20px 44px;}
+.fact-h{font-size:14px;font-weight:600;margin-bottom:10px;}
+.chip{display:inline-block;background:var(--mint);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:.3px;margin-right:6px;}
+.fact ul{margin:8px 0;padding-left:20px;} .fact li{margin:4px 0;font-size:14px;} .fact p{font-size:14px;margin:8px 0;}
+.code{background:var(--codebg);color:var(--codefg);border-radius:9px;padding:13px 15px;overflow-x:auto;
+font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55;margin:10px 0;white-space:pre;}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px;}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;} th{background:#EAF3EC;color:var(--green);}
+.divider{height:1px;background:var(--line);margin:26px 0;border:0;}
+.tip{color:var(--gold);font-weight:600;}
+footer{text-align:center;color:var(--muted);font-size:13px;margin-top:34px;}
+.pill{display:inline-block;background:#F5EEDD;color:#9A7A2E;font-size:12px;padding:3px 10px;border-radius:20px;margin:2px;}
+@media(max-width:520px){.fact{margin-left:0;}}
+</style></head><body><div class="wrap">
+<header>
+<div class="kicker">Little Bunny&#39;s Why</div>
+<h1>🐰 怎么让 AI 看见我的手机屏幕？</h1>
+<p>让运行在服务器上的 AI，在<b>它想看的时候</b>自动看到你 iPhone 的当前屏幕——你零操作。</p>
+</header>
+<div class="legend"><span>🐰 小兔兔哇哇哇追问</span><span>🧑‍🏫 讲解负责答</span><span>📦 技术事实 = 照着敲就能跑</span></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">就一条链——</div></div><pre class="code"><code>AI 想看 → 服务器发一封「暗号邮件」到你 iCloud
+   → 你手机收到邮件，自动截个屏 → 把截图传回服务器
+      → 服务器把图递给 AI，AI 就「看见」了</code></pre>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 全景</div>
+<ul>
+<li>服务器：任意能跑 HTTP 后端的机器（本文用 <b>Bun + Hono</b>，Node/Express 同理）+ <b>nginx</b> 反代</li>
+<li>后端开三样：<code>POST /api/peek</code>（收截图）、SMTP 发信、一个 <code>see_screen</code> 工具</li>
+<li>手机：<b>快捷指令 App</b> 的一条「收到邮件」自动化</li>
+<li>穿起全流程的钥匙：一个共享令牌 <code>&lt;TOKEN&gt;</code>，手机上传和 AI 调用都用它</li>
+</ul></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇等等！为什么要<b>发邮件</b>呀？直接叫手机截图不行吗？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">手机默认是「闷葫芦」——它只会自己定时报数据，服务器<b>没法反过来主动叫它</b>。而 iPhone 的「收到邮件」自动化，是极少数能被<b>外部主动触发</b>的机制。邮件就是那根从服务器伸到手机的「遥控线」🎣。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 为什么非邮件不可</div><p>iOS 里能被外部驱动的自动化触发器很少，「收到邮件 / 收到信息」最实用——服务器一发信，手机就被唤醒执行动作。定时上报、App 打开这类都是「手机自己发起」，服务器无法主动点火。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇原来是遥控线！那服务器怎么发邮件呀？我听说过 OAuth……</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">诶——千万<b>别用 OAuth</b>！第一个大坑。它的令牌在测试模式下 <b>7 天就过期</b>（报 <code>invalid_grant</code>），邮件全挂。正确姿势是<b>应用专用密码</b>：邮箱生成的一串 16 位专用密码，永久有效、发收通用。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> SMTP 发信（nodemailer）</div><pre class="code"><code>import nodemailer from &#x27;nodemailer&#x27;;
+
+const tx = nodemailer.createTransport({
+  host: &#x27;&lt;SMTP主机&gt;&#x27;,   // Gmail: smtp.gmail.com  QQ: smtp.qq.com  163: smtp.163.com
+  port: 465,            // 465=SSL；587=STARTTLS
+  secure: true,         // 端口 465 时为 true
+  auth: { user: &#x27;&lt;发信邮箱&gt;&#x27;, pass: &#x27;&lt;16位应用专用密码&gt;&#x27; },
+});
+
+await tx.sendMail({
+  from: &#x27;&lt;发信邮箱&gt;&#x27;,
+  to:   &#x27;&lt;你的iCloud邮箱&gt;&#x27;,
+  subject: &#x27;PEEK&#x27;,            // 主题当暗号，手机端按它筛
+  text: &#x27;peek &#x27; + Date.now(),
+});</code></pre><p>应用专用密码：邮箱开<b>两步验证</b> → 生成「应用专用密码」（Gmail 直达 <code>myaccount.google.com/apppasswords</code>）。这串密码 <b>SMTP/IMAP 通用</b>。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇！那手机收到暗号，怎么自己截图还传回去呀？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">靠<b>快捷指令</b>，两块：① 一个「截图+上传」的快捷指令；② 一个「收到邮件」自动化去运行它。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> iPhone 端配置</div>
+<p><b>① 快捷指令「截图并上传」</b></p>
+<ul>
+<li>动作「<b>截屏</b>」（是截屏，不是「获取屏幕内容」——后者只对 Safari 等少数 App 有效）</li>
+<li>动作「<b>获取 URL 内容</b>」：URL = <code>https://&lt;你的域名&gt;/api/peek?key=&lt;TOKEN&gt;</code>（<b class="tip">key 放最前</b>）；方法 <b>POST</b>；请求体<b>文件</b>=上一步截图</li>
+</ul>
+<p><b>② 自动化「收到邮件时」</b></p>
+<ul>
+<li>条件：发件人 = <code>&lt;发信邮箱&gt;</code>（或「主题包含 PEEK」）</li>
+<li>动作：运行上面那个快捷指令</li>
+<li><b class="tip">关掉「运行前询问」</b>（立即运行）—— 否则不会自动跑</li>
+</ul></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇哦！那服务器收到截图存哪呀？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">一个上传端点，收下、存盘、记时间戳，只留最近 10 张。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 收截图端点 <code>POST /api/peek</code></div><pre class="code"><code>// 鉴权：请求头 Bearer 优先，其次 ?key=（这个「头优先」是坑一号的救命设计）
+app.post(&#x27;/api/peek&#x27;, async (c) =&gt; {
+  const h = c.req.header(&#x27;Authorization&#x27;);
+  const tok = (h?.startsWith(&#x27;Bearer &#x27;) ? h.slice(7) : &#x27;&#x27;) || c.req.query(&#x27;key&#x27;) || &#x27;&#x27;;
+  if (!verifyToken(tok)) return c.json({ ok:false, error:&#x27;forbidden&#x27; }, 403);
+
+  const buf = await c.req.arrayBuffer();               // 请求体就是图片二进制
+  if (!buf || buf.byteLength === 0) return c.json({ ok:false }, 400);
+
+  const item = savePeek(buf, c.req.query(&#x27;app&#x27;) || &#x27;&#x27;); // 存文件 + push {id, ts, file}
+  return c.json({ ok:true, id:item.id });
+});</code></pre><pre class="code"><code>// 存储：每张一个 UUID 文件 + 一条元数据（毫秒 ts），只留最近 10 张
+const MAX_KEEP = 10;
+function savePeek(buf, app, ext=&#x27;png&#x27;){
+  const id = uuid(), file = id+&#x27;.&#x27;+ext;
+  writeFile(dir(file), Buffer.from(buf));
+  const list = loadMeta(); list.push({ id, app, ts: Date.now(), file });
+  list.sort((a,b)=&gt;a.ts-b.ts);
+  while (list.length &gt; MAX_KEEP){ const old=list.shift(); rm(dir(old.file)); }
+  saveMeta(list); return { id, ts: Date.now() };
+}
+const latestPeek      = ()    =&gt; topByTs(loadMeta());
+const latestPeekAfter = (aft) =&gt; topByTs(loadMeta().filter(p=&gt;p.ts&gt;aft));</code></pre></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇！那 AI 那边呢？它是怎么「看」的？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">给 AI 一个 <code>see_screen</code> 工具：有新图直接给，没有就发暗号邮件、轮询等新截图。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> see_screen 工具</div><pre class="code"><code>const FRESH_MS = 60_000;   // 近 1 分钟的截图算「当前」，直接用，省一次邮件
+const WAIT_MS  = 45_000;   // 触发后最多等 45 秒（别超过 AI 工具超时，一般 60s）
+
+async function callSeeScreen(){
+  const p = latestPeek();
+  if (p &amp;&amp; Date.now()-p.ts &lt; FRESH_MS) return imageBlock(p);   // 新鲜，秒回
+
+  const t0 = Date.now();
+  await sendTriggerMail();                       // 发暗号
+  while (Date.now() &lt; t0 + WAIT_MS){
+    await sleep(1500);
+    const fresh = latestPeekAfter(t0);           // 只认 ts &gt; t0 的新图
+    if (fresh) return imageBlock(fresh);
+  }
+  return { error: &#x27;截图还没回来，过十几秒再叫我一次&#x27; };   // 诚实报，别拿旧图冒充
+}</code></pre><p><code>imageBlock(p)</code> 把截图组装成多模态 AI 能吃的<b>图片块</b>（base64）。Anthropic 例：<code>{ type:'image', source:{ type:'base64', media_type:'image/png', data:...] } }</code>。AI 收到就真「看见」了。</p></div>
+<hr class="divider">
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇好厉害！那做完就能用啦？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">……理论上是。实际我又踩了一串坑 😂 每个都配好技术事实给你——</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble"><b>坑一号 · 最阴险的空格 bug</b> 🐛。上传时好时坏——前台是 <code>Claude</code> 就成，前台是 <code>Lost in Blossom</code> 就 403。原因：URL 里带了「当前 App 名」，App 名含空格时把 <code>&amp;key=</code> 挤没了。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 空格截断为什么发生 & 怎么修</div>
+<p>请求行 <code>POST /api/peek?app=Lost in Blossom&amp;key=xxx HTTP/1.1</code>，HTTP 在<b>第一个空格</b>处认为 URL 结束，服务器只拿到 <code>?app=Lost</code>，<code>&amp;key=xxx</code> 被丢掉 → 无令牌 → 403。App 名没空格（Claude）就没事，所以时灵时不灵。</p>
+<p><b>三种修法（任选）：</b></p>
+<ul>
+<li><code>key=</code> 放 URL 最前：<code>?key=&lt;TOKEN&gt;&amp;app=...</code></li>
+<li>干脆不传动态 App 名</li>
+<li><b>服务器兜底</b>（不想改手机时）—— nginx 按 User-Agent 认出快捷指令、自动补令牌进请求头：</li>
+</ul><pre class="code"><code># http 块（放 conf.d/*.conf）
+map $http_user_agent $peek_auth {
+    default                      $http_authorization;   # 其它来源透传原头
+    &quot;~*BackgroundShortcutRunner&quot; &quot;Bearer &lt;TOKEN&gt;&quot;;       # 快捷指令 → 补令牌
+}
+# server 块：精确匹配上传路径，别误伤 /api/peek/xxx 子路由
+location = /api/peek {
+    proxy_set_header Authorization $peek_auth;
+    proxy_pass http://127.0.0.1:&lt;后端端口&gt;;
+}</code></pre><p>管用的前提就是端点「<b>请求头优先于 ?key=</b>」。安全不打折：只有 UA 像快捷指令的才补，其它来源仍走原校验。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇学到了！还有别的坑吗？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">还有四个，一起给你：</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 其余四坑</div>
+<p><b>坑二号 · 别拿旧图骗 AI</b>：没等到新图时<b>返回错误</b>而不是「最近一张」，否则 AI 把十几小时前的画面当成你此刻的屏幕。</p>
+<p><b>坑三号 · 邮件要推送</b>：「收到邮件」自动化要邮件 App <b>真把邮件收下</b>才触发。设置 → 邮件 → 账户 → 获取新数据 → iCloud 设 <b class="tip">「推送」</b>，邮件 App 别从后台划掉。</p>
+<p><b>坑四号 · nginx 嫌图大</b>：截图 1~3 MB，nginx 默认 <code>client_max_body_size</code> 仅 1 MB → 413。server 块加 <code>client_max_body_size 50m;</code>。</p>
+<p><b>坑五号 · 等待窗口</b>：邮件往返约 15 秒、慢时更久。轮询别只等 28 秒（漏掉慢的），给到 45 秒，但别超过 AI 工具超时（一般 60 秒）。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇……坑好多呀！万一我也卡住，怎么知道哪步坏了？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble"><b>万能定位法</b>——看日志一步步缩小。</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 排查流程</div>
+<p>① 后端日志打三个标记：<code>📧 邮件已发送</code> / <code>📱 收到截图</code> / <code>⏱️ 超时</code>。② 触发一次看走到哪断。③ 若「没收到截图」，翻 <b>nginx 访问日志</b>里的 <code>POST /api/peek</code>：</p>
+<table>
+<tr><th>现象</th><th>病因</th></tr>
+<tr><td>有请求但 <b>403</b></td><td>坑一号（令牌被空格挤掉）</td></tr>
+<tr><td><b>压根没这条请求</b></td><td>邮件没到手机 / 自动化没触发（去设推送、检查「立即运行」）</td></tr>
+<tr><td><b>200 但 AI 看到旧图</b></td><td>坑二号（旧图兜底）</td></tr>
+</table><pre class="code"><code>grep &quot;POST /api/peek&quot; /var/log/nginx/access.log | tail</code></pre></div>
+<hr class="divider">
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇——！！我全懂了！！谢谢你谢谢你！🥺</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">不客气呀 🐰 精髓一句话：<br><b>用「服务器发邮件」把主动权交给 AI，用「iOS 自动化」把截图能力交给手机，中间用一个「请求头优先鉴权」的上传端点把两头缝起来。</b><br>最容易咬人的就是那个空格 bug，但你现在已经知道了，看一眼 nginx 日志就能破案。</div></div>
+<footer>祝你的 AI，也能看见你的世界 🌸<br><span class="pill">代码里 &lt;尖括号&gt; 都是占位符，换成你自己的</span></footer>
+</div></body></html>
