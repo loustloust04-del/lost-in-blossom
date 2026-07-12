@@ -62,6 +62,8 @@ struct RightPanelView: View {
             FileLibraryPanelView()
         case "browser":
             BrowserView()
+        case "reading":
+            ReadingPanelView()
         default:
             Text("未知工具")
                 .foregroundColor(Theme.textMuted)

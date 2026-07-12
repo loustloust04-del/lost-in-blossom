@@ -111,5 +111,6 @@ final class RightPanelToolManager {
         RightPanelTool(id: "ccTerminal",  name: "CC 终端", icon: "terminal",                        order: 6),
         RightPanelTool(id: "fileLibrary", name: "文件库",  icon: "folder.fill",                     order: 7),
         RightPanelTool(id: "browser",     name: "浏览器",  icon: "safari",                              order: 8),
+        RightPanelTool(id: "reading",     name: "读书",    icon: "book.fill",                           order: 9),
     ]
 }

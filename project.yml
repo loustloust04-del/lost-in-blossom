@@ -38,6 +38,10 @@ targets:
       # （Bundle.main.url(forResource:"message-renderer") 运行时必须能找到）。
       - path: MemoryPalace/Resources/message-renderer.html
         buildPhase: resources
+      # 阅读器 WebView 的 JS（extract/readability/turndown）。.js 默认会被 XcodeGen
+      # 当作源码排除或误归类——显式声明进 resources（同 message-renderer.html 先例）。
+      - path: MemoryPalace/Resources/ReaderScripts
+        buildPhase: resources
       # 联网搜索 browse_url：离屏 WKWebView 注入的正文抽取脚本，必须进 Copy Bundle Resources
       - path: MemoryPalace/Resources/ReaderScripts
         buildPhase: resources
