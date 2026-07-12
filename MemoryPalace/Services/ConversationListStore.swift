@@ -39,9 +39,11 @@ enum ConversationListStore {
     /// 楼层内全部对话的 [id: title] 映射（一次查询，避免 N 次单查）
     static func titleMap(profileId: String, context: ModelContext) -> [String: String] {
         let pid = profileId
-        let desc = FetchDescriptor<Conversation>(
+        var desc = FetchDescriptor<Conversation>(
             predicate: #Predicate<Conversation> { $0.profileId == pid }
         )
+        // B9 瘦身：只需要 id/title，不拉整对象（participantsData 等外置大字段跟着 fault 很亏）
+        desc.propertiesToFetch = [\Conversation.id, \Conversation.title]
         guard let allConvs = try? context.fetch(desc) else { return [:] }
         var map: [String: String] = [:]
         map.reserveCapacity(allConvs.count)
