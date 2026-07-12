@@ -85,34 +85,8 @@ enum AttachmentStore {
 
     // MARK: - 外置化（setSegments 统一入口）
 
-    /// 内联附件段 → 落盘 + ref 段。落盘失败保持内联（不丢数据）。幂等：重复调用同内容返回同 ref。
-    static func externalize(
-        _ segments: [MessageSegment],
-        conversationId: String,
-        conversationTitle: String?,
-        profileId: String
-    ) -> [MessageSegment] {
-        guard !profileId.isEmpty, !conversationId.isEmpty else { return segments }
-        return segments.map { seg in
-            switch seg {
-            case .image(let name, let type, let data):
-                let processed = processImageForStorage(data: data, name: name)
-                guard let path = try? save(
-                    fileName: processed.name, data: processed.data,
-                    conversationId: conversationId, conversationTitle: conversationTitle, profileId: profileId
-                ) else { return seg }
-                return .imageRef(name: processed.name, type: type, path: path)
-            case .fileData(let name, let mime, let data):
-                guard let path = try? save(
-                    fileName: ensureExtension(name, fallback: "bin"), data: data,
-                    conversationId: conversationId, conversationTitle: conversationTitle, profileId: profileId
-                ) else { return seg }
-                return .fileDataRef(name: name, mime: mime, path: path)
-            default:
-                return seg
-            }
-        }
-    }
+    // externalize（内联附件段→ref 段）已删：那是粟粟 image/fileDataRef 体系的入口，
+    // 我们的 MessageSegment 没有那些 case；语音条走 persistAudio→save 直存，用不到它。
 
     // MARK: - 图片处理
 
@@ -194,10 +168,6 @@ enum AttachmentStore {
         let newPrefix = "\(folderName)/\(newDir)/"
         let rewritten = segments.map { seg -> MessageSegment in
             switch seg {
-            case .imageRef(let name, let type, let path) where path.hasPrefix(oldPrefix):
-                return .imageRef(name: name, type: type, path: newPrefix + path.dropFirst(oldPrefix.count))
-            case .fileDataRef(let name, let mime, let path) where path.hasPrefix(oldPrefix):
-                return .fileDataRef(name: name, mime: mime, path: newPrefix + path.dropFirst(oldPrefix.count))
             case .audioRef(let name, let mime, let path, let duration, let script) where path.hasPrefix(oldPrefix):
                 return .audioRef(name: name, mime: mime, path: newPrefix + path.dropFirst(oldPrefix.count), duration: duration, script: script)
             default:
