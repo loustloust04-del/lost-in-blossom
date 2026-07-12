@@ -25,10 +25,16 @@ final class OCRStore {
     static let shared = OCRStore()
     struct Line { let text: String; let rect: CGRect }
     func pageLines(safeName: String, profileId: String, page: Int, document: PDFDocument) async -> [Line] { [] }
-    static func selection(from lines: [Line], in box: CGRect) -> (quote: String, rects: [CGRect])? { nil }
+    static func selection(from lines: [Line], in box: CGRect) -> (quote: String, rects: [[Double]])? { nil }
     func pageText(safeName: String, profileId: String, page: Int, document: PDFDocument) async -> String { "" }
     func prefetch(safeName: String, profileId: String, around page: Int, document: PDFDocument) async {}
     static func cachedLines(safeName: String, profileId: String, page: Int) -> [Line]? { nil }
+}
+
+/// 扫描版 PDF 的后台 OCR 索引器——替身：不索引（划词/书内搜索的 OCR 降级路径静默）
+final class BookOCRIndexer {
+    static let shared = BookOCRIndexer()
+    func indexIfNeeded(safeName: String, profileId: String) async {}
 }
 
 // MARK: - 阅读器通知名（真身在共读系统里 post；现在只有 onReceive 挂着，无人发送=静默）

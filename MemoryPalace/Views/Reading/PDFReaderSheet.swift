@@ -589,45 +589,10 @@ struct PDFReaderSheet: View {
         ReadingSignals.logEvent(type: "note", book: bookSafeName, chapter: sel.page, profileId: profileId)
     }
 
-    /// 与 BookReaderSheet.askXiaoke 同构：选段发进主对话（bookRef 双向锚）+ aiBubble 占位，
-    /// 回复由 BookNoteBackfill 回填 → .bookNotesDidChange → 本页玫瑰划线即时可见。
+    // [共读暂缓] 问 AI（PDF 版）：真身依赖 startDraftConversation/resolveModel（共读系统 API）。
+    // OCR stub 让框选识别不出文字 → 动作菜单不可达，本函数为编译占位。
     private func askAI(_ sel: PDFSelectionResult) {
-        defer { pendingSelection = nil }
-        guard let prof = profileManager?.currentProfile,
-              let pm = providerManager,
-              let psm = presetManager else {
-            showToast("缺少 Profile/Provider/Preset，没法发")
-            return
-        }
-        let title = index?.chapters.last(where: { $0.no <= sel.page })?.title ?? "第 \(sel.page) 页"
-        let bookName = index?.name ?? bookSafeName
-        let quote = """
-        （在《\(bookName)》\(title) 读到）
-        「\(sel.quote)」
-
-        你怎么看？
-        """
-        if viewModel.selectedConversation == nil {
-            viewModel.startDraftConversation(profileId: prof.id)
-        }
-        let model = pm.resolveModel(
-            conversationModelId: viewModel.selectedConversation?.selectedModelId,
-            globalFallbackId: nil)
-        let preset = psm.preset(byId: prof.presetId) ?? .balanced
-        let sent = viewModel.sendMessage(quote, model: model, profile: prof, preset: preset,
-                                         providerManager: pm, context: modelContext)
-        guard sent else { showToast("发送失败"); return }
-
-        if let lastUser = viewModel.currentPath.last(where: { $0.role == "user" }) {
-            lastUser.bookRef = "\(bookSafeName)#chapter\(sel.page)"
-            try? lastUser.modelContext?.save()
-        }
-        var note = fidelityNote(sel, kind: "aiBubble", content: "（\(assistantName)正在回答…）")
-        note.role = "ai"
-        note.messageId = viewModel.currentPath.last(where: { $0.role == "user" })?.id
-        appendNote(note)
-        ReadingSignals.logEvent(type: "askAI", book: bookSafeName, chapter: sel.page, profileId: profileId)
-        showToast("已发给\(assistantName)，回答会长在这条划线上")
+        pendingSelection = nil
     }
 
     private func addVocab(_ sel: PDFSelectionResult) {
