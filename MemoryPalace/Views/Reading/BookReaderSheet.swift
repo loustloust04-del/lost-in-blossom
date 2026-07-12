@@ -383,8 +383,8 @@ struct BookReaderSheet: View {
 // [共读暂缓]                     }
 // [共读暂缓]                 }
 // [共读暂缓]             }
-            .buttonStyle(.plain)
-            .foregroundColor(Theme.textSecondary)
+// [共读暂缓]             .buttonStyle(.plain)
+// [共读暂缓]             .foregroundColor(Theme.textSecondary)
 
             Spacer()
 
@@ -1068,75 +1068,12 @@ struct BookReaderSheet: View {
     /// 把选段当作 quote 注入楼层主对话；小克回复时 vm 的 sendMessage 路径自然走流式。
     /// 用户消息的 MessageNode 上盖 bookRef，主对话里能看到 "📖 书名·第N章" tag。
     /// 同时 notes.json 写一条 kind=aiBubble 占位锚点（content 暂为空，等 vm 写回填）。
+    // [共读暂缓] 问 AI：真身依赖 startDraftConversation/resolveModel/BookChatDrawer，
+    // 均属共读系统。入口（toolbar 按钮 + edit menu 条目）已注释，本函数为编译占位。
     private func askXiaoke(_ range: SelectedRange) {
-        guard let prof = profileManager?.currentProfile,
-              let pm = providerManager,
-              let psm = presetManager else {
-            askToast = "缺少 Profile/Provider/Preset，没法发"
-            selectedRange = nil
-            return
-        }
-
-        let chapterTitle = index?.chapters.first(where: { $0.no == range.chapter })?.title ?? "第 \(range.chapter) 章"
-        let bookName = index?.name ?? bookSafeName
-        let quote = """
-        （在《\(bookName)》\(chapterTitle) 读到）
-        「\(range.text)」
-
-        你怎么看？
-        """
-
-        // 确保有活动对话
-        if viewModel.selectedConversation == nil {
-            viewModel.startDraftConversation(profileId: prof.id)
-        }
-
-        let model = pm.resolveModel(
-            conversationModelId: viewModel.selectedConversation?.selectedModelId,
-            globalFallbackId: nil
-        )
-        let preset = psm.preset(byId: prof.presetId) ?? .balanced
-        let bookRef = "\(bookSafeName)#chapter\(range.chapter)"
-
-        let sent = viewModel.sendMessage(
-            quote,
-            model: model,
-            profile: prof,
-            preset: preset,
-            providerManager: pm,
-            context: modelContext
-        )
-
-        if sent {
-            // 给刚发的 user node 盖 bookRef（currentPath 最后一条 user role）
-            if let lastUser = viewModel.currentPath.last(where: { $0.role == "user" }) {
-                lastUser.bookRef = bookRef
-                try? lastUser.modelContext?.save()
-            }
-            // 写 notes.json：anchor=选段，kind=aiBubble 占位（AI 回复回填 content）
-            let note = BookStore.Note(
-                id: UUID().uuidString,
-                chapter: range.chapter,
-                anchorText: range.text,
-                anchorStart: range.start,
-                anchorEnd: range.end,
-                kind: "aiBubble",
-                content: "（\(assistantName)正在回答…）",
-                role: "ai",
-                messageId: viewModel.currentPath.last(where: { $0.role == "user" })?.id,
-                createdAt: Date()
-            )
-            appendNote(note)
-            ReadingSignals.logEvent(type: "askAI", book: bookSafeName, chapter: range.chapter, profileId: profileId)
-            // 自动弹底部抽屉看小克回复（流式回复路上）
-            showChatDrawer = true
-        } else {
-            askToast = "发送失败"
-        }
         selectedRange = nil
     }
 
-    /// Note → ChapterHTMLRenderer.Annotation 映射
     private func annotationFromNote(_ n: BookStore.Note) -> ChapterHTMLRenderer.Annotation? {
         let kind: ChapterHTMLRenderer.Annotation.Kind
         switch n.kind {

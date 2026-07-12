@@ -30,3 +30,21 @@ final class OCRStore {
     func prefetch(safeName: String, profileId: String, around page: Int, document: PDFDocument) async {}
     static func cachedLines(safeName: String, profileId: String, page: Int) -> [Line]? { nil }
 }
+
+// MARK: - 阅读器通知名（真身在共读系统里 post；现在只有 onReceive 挂着，无人发送=静默）
+extension Notification.Name {
+    static let bookNotesDidChange = Notification.Name("mp.bookNotesDidChange")
+    static let openVocabTool = Notification.Name("mp.openVocabTool")
+}
+
+// MARK: - 外链跳系统浏览器（粟粟 WebViewHost.swift 的通用 helper，我们没搬那个文件，抄函数）
+import UIKit
+func openExternalWebViewLink(_ href: String?) {
+    guard let href,
+          let url = URL(string: href),
+          let scheme = url.scheme?.lowercased(),
+          ["http", "https", "mailto"].contains(scheme) else {
+        return
+    }
+    UIApplication.shared.open(url)
+}

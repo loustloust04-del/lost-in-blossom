@@ -113,6 +113,8 @@ final class MessageNode {
     /// 群聊 V2：发言者身份（单聊为 nil）。senderName 用于渲染名字标签 + 镜像 prompt 前缀。
     var senderId: String? = nil
     var senderName: String? = nil
+    /// 读书问 AI：user 消息关联的书+章（"safeName#chapterN"）。共读真身回填 aiBubble 用。
+    var bookRef: String? = nil
 
     /// Stubs: upstream sync dependencies
     var ccMessageId: String? = nil
