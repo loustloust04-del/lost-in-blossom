@@ -41,6 +41,7 @@ final class BookOCRIndexer {
 extension Notification.Name {
     static let bookNotesDidChange = Notification.Name("mp.bookNotesDidChange")
     static let openVocabTool = Notification.Name("mp.openVocabTool")
+    static let bookTextLayerReady = Notification.Name("mp.bookTextLayerReady")
 }
 
 // MARK: - 外链跳系统浏览器（粟粟 WebViewHost.swift 的通用 helper，我们没搬那个文件，抄函数）

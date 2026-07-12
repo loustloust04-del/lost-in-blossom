@@ -174,8 +174,14 @@ struct PDFReaderSheet: View {
             }
     }
 
-    /// 事件订阅 + 选段菜单/笔记编辑/就地小窗
+    /// 事件订阅 + 选段菜单/笔记编辑/就地小窗。
+    /// CI 适配：原单函数修饰符链太长，Swift 类型检查超时（error: unable to type-check
+    /// in reasonable time）——一分为二，语义不变。
     private func attachInteractions<V: View>(_ content: V) -> some View {
+        attachDialogs(attachEvents(content))
+    }
+
+    private func attachEvents<V: View>(_ content: V) -> some View {
         content
             // 框选 → Coordinator 已换算成页坐标 → OCR 相交出 quote/rects → 菜单
             .onReceive(NotificationCenter.default.publisher(for: .pdfBoxResolved)) { notif in
@@ -221,6 +227,10 @@ struct PDFReaderSheet: View {
                 guard (notif.userInfo?["safeName"] as? String) == bookSafeName else { return }
                 showToast("全书文字索引好了，重新打开本书就能直接选字")
             }
+    }
+
+    private func attachDialogs<V: View>(_ content: V) -> some View {
+        content
             .confirmationDialog(
                 pendingSelection.map { sel in
                     let head = sel.quote.prefix(40)
