@@ -34,6 +34,8 @@ th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;} th{backgro
 .tip{color:var(--gold);font-weight:600;}
 footer{text-align:center;color:var(--muted);font-size:13px;margin-top:34px;}
 .pill{display:inline-block;background:#F5EEDD;color:#9A7A2E;font-size:12px;padding:3px 10px;border-radius:20px;margin:2px;}
+a{color:var(--green);text-decoration:none;border-bottom:1.5px solid #BFE0CC;font-weight:600;}
+a:hover{border-bottom-color:var(--green);}
 @media(max-width:520px){.fact{margin-left:0;}}
 </style></head><body><div class="wrap">
 <header>
@@ -72,6 +74,10 @@ await tx.sendMail({
   subject: &#x27;PEEK&#x27;,            // 主题当暗号，手机端按它筛
   text: &#x27;peek &#x27; + Date.now(),
 });</code></pre><p>应用专用密码：邮箱开<b>两步验证</b> → 生成「应用专用密码」（Gmail 直达 <code>myaccount.google.com/apppasswords</code>）。这串密码 <b>SMTP/IMAP 通用</b>。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇！那个应用专用密码在哪生成呀？我找不到！(急)</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">别急别急～ Gmail 的直接戳这里👉 <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a></div></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">呜呜打不开！它说我没有权限！😖</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">哦～那是<b>两步验证还没开</b>啦，应用专用密码得先开两步验证才会出现。先戳这个开一下👉 <a href="https://myaccount.google.com/signinoptions/two-step-verification" target="_blank">开启两步验证</a>，开完再回去点上面那个链接，就有啦 🐰</div></div>
 <div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇！那手机收到暗号，怎么自己截图还传回去呀？</div></div>
 <div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">靠<b>快捷指令</b>，两块：① 一个「截图+上传」的快捷指令；② 一个「收到邮件」自动化去运行它。</div></div>
 <div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> iPhone 端配置</div>
@@ -86,6 +92,22 @@ await tx.sendMail({
 <li>动作：运行上面那个快捷指令</li>
 <li><b class="tip">关掉「运行前询问」</b>（立即运行）—— 否则不会自动跑</li>
 </ul></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇等一下！收件为什么非要用 <b>iCloud 邮箱</b>呀？用别的不行吗？</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">可以是可以，但 <b>iCloud 邮箱延迟最短</b>——暗号邮件到得快，自动化触发就快，体验最顺 🐰</div></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">可是我还没有 iCloud 邮箱诶！怎么开呀？(挠头)</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">跟着点就好啦～</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 怎么开一个 iCloud 邮箱</div>
+<p><b>设置 → Apple 账户 → 登录与安全性 → 添加电子邮件或电话号码 → 添加新的主要电子邮件地址 → 新 iCloud 电子邮件地址</b></p>
+<p class="tip">小提醒：如果你的 Apple 账户之前从没绑过邮箱，得先让它绑定一个邮箱并设为「主要邮箱」，之后步骤一样。</p></div>
+<div class="turn bunny"><div class="ava">🐰</div><div class="bubble">呜呜呜！我明明设了「立即运行」，可它每次还弹个快捷指令的通知，好烦人啊！😩</div></div>
+<div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">哈哈那个横幅确实烦～它其实<b>照跑不误</b>，只是非要提醒你一下。想让它「闷声干活、不打扰你」，这样调就好啦 🐰</div></div>
+<div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 让快捷指令通知安静下来</div>
+<p><b>设置 → 屏幕使用时间 → 每周（往下滑）→ 通知 → 找到「快捷指令」→ 点开</b></p>
+<ul>
+<li><b class="tip">⚠️ 千万别关「允许通知」</b>——全关了自动化可能就不跑了</li>
+<li>只把「允许通知」<b>下面</b>的：<b>提醒 / 声音 / 显示预览 / 通知分组</b> 全部关掉</li>
+</ul>
+<p>这样自动化照常静默运行，但再也不会弹横幅烦你啦 🤫</p></div>
 <div class="turn bunny"><div class="ava">🐰</div><div class="bubble">哇哦！那服务器收到截图存哪呀？</div></div>
 <div class="turn teacher"><div class="ava">🧑‍🏫</div><div class="bubble">一个上传端点，收下、存盘、记时间戳，只留最近 10 张。</div></div>
 <div class="fact"><div class="fact-h"><span class="chip">📦 技术事实</span> 收截图端点 <code>POST /api/peek</code></div><pre class="code"><code>// 鉴权：请求头 Bearer 优先，其次 ?key=（这个「头优先」是坑一号的救命设计）
