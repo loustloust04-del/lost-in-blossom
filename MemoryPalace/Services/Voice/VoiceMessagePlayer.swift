@@ -20,7 +20,7 @@ final class VoiceMessagePlayer: NSObject, AVAudioPlayerDelegate {
             return
         }
         stop()
-        AudiobookPlayer.shared.pause()
+        // （粟粟侧这里会暂停 AudiobookPlayer——我们没有有声书系统，无互斥对象）
         configureSession()
         guard let p = try? AVAudioPlayer(contentsOf: url) else { return }
         player = p
