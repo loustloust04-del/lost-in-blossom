@@ -830,7 +830,15 @@ struct SidebarView: View {
                 refreshList()
             }
         }
-        .onChange(of: selectedTagId) { _, _ in refreshList() }
+        .onChange(of: selectedTagId) { _, _ in
+            // B9：标签快速连点防抖（与搜索共用 task——后触发者胜，语义就是"以最新过滤为准"）
+            searchDebounceTask?.cancel()
+            searchDebounceTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                refreshList()
+            }
+        }
         .onChange(of: memoryFilter) { _, _ in showAllChats = false; refreshList() }
         .onChange(of: showImporter) { _, showing in if !showing { refreshList() } }
         .onChange(of: showSettings) { _, showing in if !showing { refreshList() } }
