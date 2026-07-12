@@ -1,4 +1,7 @@
 import Foundation
+
+/// 主线过滤的分批大小：每批 2 次 IN 查询，内存峰值 = 一批对话的全部节点（B9）
+private let mainPathBatchSize = 20
 import SwiftData
 
 // MARK: - Search Types
@@ -167,30 +170,41 @@ enum SearchService {
                     // .conversation → 仅保留主线 node；.branchContent → 仅保留非主线 node
                     let needsMainPathFilter = filter.resourceKind == .conversation || filter.resourceKind == .branchContent
                     if needsMainPathFilter {
+                        // B9: 命中对话按批分组 IN 查询（原来每对话 2 次 fetch，几百命中 = 几百次往返）。
+                        // 不用 propertiesToFetch 瘦身：computeMainPathSet 的可显判定依赖 content +
+                        // segmentsData，漏列属性逐行 fault 反而更慢。
                         let nodesByConv = Dictionary(grouping: contentNodes) { $0.conversationId }
                         var allowedNodeIds = Set<String>()
                         allowedNodeIds.reserveCapacity(contentNodes.count)
-                        for (convId, nodesInConv) in nodesByConv {
-                            let cid = convId
-                            let pid = scopedProfileId
+                        let hitConvIds = Array(nodesByConv.keys)
+                        let pid = scopedProfileId
+                        for start in stride(from: 0, to: hitConvIds.count, by: mainPathBatchSize) {
+                            let chunk = Array(hitConvIds[start..<min(start + mainPathBatchSize, hitConvIds.count)])
                             let convDesc = FetchDescriptor<Conversation>(
-                                predicate: #Predicate<Conversation> { $0.id == cid && $0.profileId == pid }
+                                predicate: #Predicate<Conversation> { chunk.contains($0.id) && $0.profileId == pid }
                             )
-                            guard let conv = try? context.fetch(convDesc).first else { continue }
+                            let convs = (try? context.fetch(convDesc)) ?? []
+                            let currentNodeByConv = Dictionary(uniqueKeysWithValues: convs.map { ($0.id, $0.currentNodeId) })
                             let allNodesDesc = FetchDescriptor<MessageNode>(
-                                predicate: #Predicate<MessageNode> { $0.conversationId == cid && $0.profileId == pid }
+                                predicate: #Predicate<MessageNode> { chunk.contains($0.conversationId) && $0.profileId == pid }
                             )
-                            let allNodes = (try? context.fetch(allNodesDesc)) ?? []
-                            let mainPathSet = ConversationViewModel.computeMainPathSet(
-                                nodes: allNodes,
-                                currentNodeId: conv.currentNodeId
-                            )
-                            for node in nodesInConv {
-                                let onMain = mainPathSet.contains(node.id)
-                                if filter.resourceKind == .conversation && onMain {
-                                    allowedNodeIds.insert(node.id)
-                                } else if filter.resourceKind == .branchContent && !onMain {
-                                    allowedNodeIds.insert(node.id)
+                            let allNodesInChunk = (try? context.fetch(allNodesDesc)) ?? []
+                            let allNodesByConv = Dictionary(grouping: allNodesInChunk) { $0.conversationId }
+                            for convId in chunk {
+                                // 对话行查不到（孤儿节点）→ 整对话排除，与改造前 guard-continue 同语义
+                                guard let currentNodeId = currentNodeByConv[convId],
+                                      let nodesInConv = nodesByConv[convId] else { continue }
+                                let mainPathSet = ConversationViewModel.computeMainPathSet(
+                                    nodes: allNodesByConv[convId] ?? [],
+                                    currentNodeId: currentNodeId
+                                )
+                                for node in nodesInConv {
+                                    let onMain = mainPathSet.contains(node.id)
+                                    if filter.resourceKind == .conversation && onMain {
+                                        allowedNodeIds.insert(node.id)
+                                    } else if filter.resourceKind == .branchContent && !onMain {
+                                        allowedNodeIds.insert(node.id)
+                                    }
                                 }
                             }
                         }
