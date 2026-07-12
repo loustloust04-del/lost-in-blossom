@@ -39,10 +39,5 @@ extension FileLibraryStore {
 }
 
 
-// MARK: - AttachmentStore (stub)
-
-enum AttachmentStore {
-    static func deleteConversationAttachments(conversationId: String, profileId: String) {
-        // Stub: attachment cleanup not yet implemented
-    }
-}
+// AttachmentStore stub 已删：语音系统搬运带来了完整版（Services/AttachmentStore.swift，
+// 自带真实现的 deleteConversationAttachments），同名冲突且 stub 本来就是空的。
