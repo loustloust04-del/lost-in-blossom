@@ -28,4 +28,5 @@ final class OCRStore {
     static func selection(from lines: [Line], in box: CGRect) -> (quote: String, rects: [CGRect])? { nil }
     func pageText(safeName: String, profileId: String, page: Int, document: PDFDocument) async -> String { "" }
     func prefetch(safeName: String, profileId: String, around page: Int, document: PDFDocument) async {}
+    static func cachedLines(safeName: String, profileId: String, page: Int) -> [Line]? { nil }
 }
