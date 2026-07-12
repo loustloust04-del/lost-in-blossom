@@ -41,7 +41,7 @@ struct ConsoleView: View {
             .padding(.top, 14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Self.pageBg.ignoresSafeArea())
+        .background(Theme.sidebarBg.ignoresSafeArea())
         .task {
             loadVitals()
             anniversaries = await AnniversaryClient.fetch()
@@ -81,128 +81,156 @@ struct ConsoleView: View {
 
     private var header: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("CAELUM'S CONSOLE")
                     .font(.system(size: 10.5, weight: .semibold)).tracking(2.5)
                     .foregroundColor(Self.greenDeep)
                 Text(greetingString)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(Self.textPrimary)
-                    .padding(.top, 6)
+                    .font(.system(size: 14.5))
+                    .foregroundColor(Self.textSub)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 3) {
-                Text(monthDayStr).font(.system(size: 13)).foregroundColor(Self.textMuted)
+                Text(monthDayStr).font(.system(size: 19, weight: .semibold)).foregroundColor(Self.textPrimary)
                 Text("\(weekdayCN(Date())) · \(solarTerm(Date()))")
                     .font(.system(size: 12)).foregroundColor(Self.textMuted)
             }
-            .padding(.top, 4)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
     // MARK: - Grid
 
     private var grid: some View {
-        VStack(spacing: 11) {
-            HStack(spacing: 11) { waterWidget; foodWidget }
+        VStack(alignment: .leading, spacing: 11) {
+            sectionLabel("CARE")
+            careTrio
+            sectionLabel("LOG")
+            logTrio
+            sectionLabel("DAILY")
             todoWidget
-            HStack(spacing: 11) { stepsWidget; sleepWidget }
-            HStack(spacing: 11) { medsWidget; screenWidget }
-            cycleWidget
+            screenWide
+            sectionLabel("WITH YOU")
             anniversaryWidget
             worldWidget
             caelumWidget
         }
     }
 
-    // MARK: - 小 widget（饮水/进食/步数/睡眠/药物/屏幕）
+    private func sectionLabel(_ t: String) -> some View {
+        Text(t)
+            .font(.system(size: 11, weight: .semibold)).tracking(1.5)
+            .foregroundColor(Self.textSub)
+            .padding(.leading, 4)
+            .padding(.top, 9)
+    }
 
-    private var waterWidget: some View {
-        let w = todayCtx?.waterCount ?? 0
-        return smallWidget {
-            VStack(alignment: .leading, spacing: 0) {
-                widgetHead("饮水", icon: "drop")
-                Spacer(minLength: 6)
-                bigNum("\(w)", "/6")
-                dotsRow(on: w, total: 6).padding(.top, 9)
+    // MARK: - 三合一紧凑卡（CARE / LOG）
+
+    private var careTrio: some View {
+        wideWidget {
+            HStack(alignment: .top, spacing: 0) {
+                trioCell(icon: "drop", label: "饮水") {
+                    let w = todayCtx?.waterCount ?? 0
+                    bigNum("\(w)", "/6", size: 26)
+                    dotsRow(on: w, total: 6).padding(.top, 6)
+                }
+                trioDivider
+                trioCell(icon: "fork.knife", label: "进食") {
+                    let count = todayCtx?.meals.count ?? vitalsData?.food.count ?? 0
+                    let goal = vitalsData?.food.goal ?? 3
+                    bigNum("\(count)", "/\(goal)", size: 26)
+                    Text(vitalsData?.food.meals.last ?? todayCtx?.meals.last?.description ?? "未记录")
+                        .font(.system(size: 10.5)).foregroundColor(Self.textMuted)
+                        .lineLimit(1).padding(.top, 6)
+                }
+                trioDivider
+                trioCell(icon: "pills", label: "药物", gold: !medsTaken) {
+                    Text(medsTaken ? "已服" : "未报告")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(medsTaken ? Self.green : Self.gold)
+                        .padding(.top, 5)
+                    Text(medsName).font(.system(size: 10.5)).foregroundColor(Self.textMuted)
+                        .lineLimit(1).padding(.top, 5)
+                }
             }
         }
     }
 
-    private var foodWidget: some View {
-        let count = todayCtx?.meals.count ?? vitalsData?.food.count ?? 0
-        let goal = vitalsData?.food.goal ?? 3
-        let note = vitalsData?.food.meals.last ?? todayCtx?.meals.last?.description ?? "未记录"
-        return smallWidget {
-            VStack(alignment: .leading, spacing: 0) {
-                widgetHead("进食", icon: "fork.knife")
-                Spacer(minLength: 6)
-                bigNum("\(count)", "/\(goal)")
-                Text(note).font(.system(size: 11)).foregroundColor(Self.greenDeep)
-                    .lineLimit(1).padding(.top, 9)
-            }
-        }
-    }
-
-    private var stepsWidget: some View {
-        smallWidget {
-            VStack(alignment: .leading, spacing: 0) {
-                widgetHead("步数", icon: "shoeprints.fill")
-                Spacer(minLength: 6)
-                bigNum(todayCtx?.steps.map(stepsFormatted) ?? "—", "")
-                Text(todayCtx?.steps != nil ? "步 · 今日" : "未记录")
-                    .font(.system(size: 11)).foregroundColor(Self.textMuted).padding(.top, 9)
-            }
-        }
-    }
-
-    private var sleepWidget: some View {
-        smallWidget {
-            VStack(alignment: .leading, spacing: 0) {
-                widgetHead("睡眠", icon: "moon.stars")
-                Spacer(minLength: 6)
-                Text(sleepValue).font(.cormorant(33)).foregroundColor(Self.textPrimary)
-                Text(sleepSub.isEmpty ? " " : sleepSub)
-                    .font(.system(size: 11)).foregroundColor(Self.textMuted).lineLimit(1).padding(.top, 9)
-            }
-        }
-    }
-
-    private var medsWidget: some View {
-        smallWidget {
-            VStack(alignment: .leading, spacing: 0) {
-                widgetHead("药物", icon: "pills", gold: !medsTaken)
-                Spacer(minLength: 6)
-                Text(medsTaken ? "已服" : "未报告")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(medsTaken ? Self.green : Self.gold)
-                Text(medsName).font(.system(size: 11)).foregroundColor(Self.textMuted)
-                    .lineLimit(1).padding(.top, 9)
-            }
-        }
-    }
-
-    private var screenWidget: some View {
-        smallWidget {
-            VStack(alignment: .leading, spacing: 0) {
-                widgetHead("今日屏幕", icon: "hourglass")
-                Spacer(minLength: 6)
-                if let st = todayCtx?.screenTime {
-                    bigNum(String(format: "%.1f", st), "h")
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Self.sink)
-                            Capsule().fill(Self.green)
-                                .frame(width: g.size.width * min(1, st / 8.0))
-                        }
+    private var logTrio: some View {
+        wideWidget {
+            HStack(alignment: .top, spacing: 0) {
+                trioCell(icon: "shoeprints.fill", label: "步数") {
+                    bigNum(todayCtx?.steps.map(stepsFormatted) ?? "—", "", size: 26)
+                    Text(todayCtx?.steps != nil ? "今日" : "未记录")
+                        .font(.system(size: 10.5)).foregroundColor(Self.textMuted).padding(.top, 6)
+                }
+                trioDivider
+                trioCell(icon: "moon.stars", label: "睡眠") {
+                    Text(sleepValue).font(.cormorant(26)).foregroundColor(Self.textPrimary)
+                    Text(sleepSub.isEmpty ? " " : sleepSub)
+                        .font(.system(size: 10.5)).foregroundColor(Self.textMuted)
+                        .lineLimit(1).padding(.top, 6)
+                }
+                trioDivider
+                trioCell(icon: "calendar", label: "经期") {
+                    if let day = todayCtx?.menstrualDay {
+                        bigNum("\(day)", "天", size: 26)
+                        Text(menstrualPhase(day))
+                            .font(.system(size: 10.5)).foregroundColor(Self.greenDeep).padding(.top, 6)
+                    } else {
+                        Text("—").font(.cormorant(26)).foregroundColor(Self.textFaint)
+                        Text("未记录").font(.system(size: 10.5)).foregroundColor(Self.textMuted).padding(.top, 6)
                     }
-                    .frame(height: 4).padding(.top, 10)
-                } else {
-                    bigNum("—", "")
-                    Text("Screen Time API 暂不可用")
-                        .font(.system(size: 10.5)).foregroundColor(Self.textFaint)
-                        .lineLimit(1).minimumScaleFactor(0.8).padding(.top, 8)
+                }
+            }
+        }
+    }
+
+    private var trioDivider: some View {
+        Rectangle().fill(Self.line).frame(width: 1)
+            .padding(.vertical, 3).padding(.horizontal, 10)
+    }
+
+    private func trioCell<C: View>(icon: String, label: String, gold: Bool = false,
+                                   @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 11))
+                    .foregroundColor(gold ? Self.gold : Self.green)
+                Text(label).font(.system(size: 11)).foregroundColor(Self.textSub)
+            }
+            .padding(.bottom, 7)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - 今日屏幕 wide（DAILY）
+
+    private var screenWide: some View {
+        wideWidget {
+            HStack(spacing: 13) {
+                Image(systemName: "hourglass").font(.system(size: 17))
+                    .foregroundColor(Self.green).frame(width: 26)
+                VStack(alignment: .leading, spacing: 7) {
+                    if let st = todayCtx?.screenTime {
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Text("今日屏幕").font(.system(size: 13, weight: .medium)).foregroundColor(Self.textSub)
+                            Text(String(format: "%.1f", st)).font(.cormorant(20)).foregroundColor(Self.textPrimary)
+                            Text("h").font(.system(size: 11)).foregroundColor(Self.textFaint)
+                        }
+                        GeometryReader { g in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Self.sink)
+                                Capsule().fill(Self.green)
+                                    .frame(width: g.size.width * min(1, st / 8.0))
+                            }
+                        }
+                        .frame(height: 5)
+                    } else {
+                        Text("今日屏幕 · 暂无数据").font(.system(size: 13)).foregroundColor(Self.textFaint)
+                    }
                 }
             }
         }
@@ -279,48 +307,6 @@ struct ConsoleView: View {
         }
     }
 
-    // MARK: - 经期 wide
-
-    private var cycleWidget: some View {
-        wideWidget {
-            if let day = todayCtx?.menstrualDay {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .bottom) {
-                        bigNum("\(day)", "天", size: 36)
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 3) {
-                            Text(menstrualPhase(day))
-                                .font(.system(size: 15, weight: .semibold)).foregroundColor(Self.greenDeep)
-                            if let next = todayCtx?.nextPeriodDate {
-                                let d = max(0, Calendar.current.dateComponents([.day], from: Date(), to: next).day ?? 0)
-                                Text("预计 \(d) 天后来潮").font(.system(size: 11.5)).foregroundColor(Self.textSub)
-                            }
-                        }
-                    }
-                    Rectangle().fill(Self.line).frame(height: 1).padding(.top, 14).padding(.bottom, 12)
-                    HStack(spacing: 22) {
-                        cycStat("29", "上次周期")
-                        cycStat("5", "经期时长")
-                        if let next = todayCtx?.nextPeriodDate { cycStat(shortMD(next), "预计来潮") }
-                    }
-                }
-            } else {
-                HStack {
-                    Text("未记录经期").font(.system(size: 14)).foregroundColor(Self.textFaint)
-                    Spacer()
-                }
-                .padding(.vertical, 4)
-            }
-        }
-    }
-
-    private func cycStat(_ v: String, _ l: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(v).font(.cormorant(17)).foregroundColor(Self.textPrimary)
-            Text(l).font(.system(size: 10.5)).foregroundColor(Self.textMuted)
-        }
-    }
-
     // MARK: - 纪念日 wide
 
     private var anniversaryWidget: some View {
@@ -367,7 +353,7 @@ struct ConsoleView: View {
             HStack(spacing: 13) {
                 Image(systemName: "bird").font(.system(size: 20, weight: .regular)).foregroundColor(Self.green)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("给世界的").font(.system(size: 11.5, weight: .medium)).tracking(0.5).foregroundColor(Self.textSub)
+                    Text("TO WORLD").font(.system(size: 11.5, weight: .medium)).tracking(1).foregroundColor(Self.textSub)
                     if let t = latestTweets.first {
                         Text(t.text).font(.system(size: 14)).foregroundColor(Self.textPrimary).lineLimit(2)
                     } else {
@@ -408,19 +394,11 @@ struct ConsoleView: View {
 
     // MARK: - Widget 容器 & 通用件
 
-    private func smallWidget<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        content()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(EdgeInsets(top: 13, leading: 15, bottom: 13, trailing: 15))
-            .frame(height: 120)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Self.card))
-    }
-
     private func wideWidget<C: View>(@ViewBuilder _ content: () -> C) -> some View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Self.card))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.mainBg))
     }
 
     private func widgetHead(_ label: String, icon: String, gold: Bool = false) -> some View {

@@ -23,7 +23,7 @@ struct TweetsFeedSheet: View {
                 }
                 .padding(.horizontal, 16).padding(.top, 12)
             }
-            .background(ConsoleView.pageBg.ignoresSafeArea())
+            .background(Theme.sidebarBg.ignoresSafeArea())
             .navigationTitle("给世界的")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -67,6 +67,6 @@ struct TweetsFeedSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ConsoleView.card))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.mainBg))
     }
 }

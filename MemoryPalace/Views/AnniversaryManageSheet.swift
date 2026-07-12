@@ -24,7 +24,7 @@ struct AnniversaryManageSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
             }
-            .background(ConsoleView.pageBg.ignoresSafeArea())
+            .background(Theme.sidebarBg.ignoresSafeArea())
             .navigationTitle("纪念日")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -96,7 +96,7 @@ struct AnniversaryManageSheet: View {
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ConsoleView.card))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.mainBg))
     }
 
     // MARK: - 新增
@@ -136,7 +136,7 @@ struct AnniversaryManageSheet: View {
             .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || saving)
         }
         .padding(15)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ConsoleView.card))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.mainBg))
     }
 
     private func addNew() async {
