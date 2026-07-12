@@ -167,6 +167,48 @@ enum ConversationListStore {
 
     /// 会话列表分页查询，覆盖 trash / tag / chats / source-filtered 四条路径。
     /// sourceFilter: nil = chats（分页）；"claude"/"chatgpt" = 全量 source 过滤（Almond/Amber）
+    /// 标签桶 IN 查询的 convIds 上限：SQLite 变量数有上限（保守按 999 算），超过走内存兜底（B9/P1-1）
+    private static let tagInQueryLimit = 500
+
+    /// 标签桶会话 predicate（B9/P1-1）：convIds IN + 关键词 × 时间范围，4 分支。
+    private static func tagPredicate(convIds: [String], profileId: String, search: String, interval: (start: Date, end: Date)?) -> Predicate<Conversation> {
+        let hasKeyword = !search.isEmpty
+        let kw = search
+        let pid = profileId
+        let ids = convIds
+        if let interval = interval {
+            let s = interval.start
+            let e = interval.end
+            if hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && ids.contains(conv.id) &&
+                    conv.title.localizedStandardContains(kw) &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            } else {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && ids.contains(conv.id) &&
+                    conv.createTime >= s && conv.createTime <= e
+                }
+            }
+        } else {
+            if hasKeyword {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && ids.contains(conv.id) &&
+                    conv.title.localizedStandardContains(kw)
+                }
+            } else {
+                return #Predicate<Conversation> { conv in
+                    conv.profileId == pid &&
+                    conv.isDeleted == false && ids.contains(conv.id)
+                }
+            }
+        }
+    }
+
     static func fetchPage(
         offset: Int,
         pageSize: Int,
@@ -192,7 +234,9 @@ enum ConversationListStore {
             return ConversationPage(conversations: results, totalCount: total)
         }
 
-        // ── Tag path ──────────────────────────────────────────────────────
+        // ── Tag path（B9/P1-1 真分页）─────────────────────────────────────
+        // 旧写法全量 fetch + 内存 filter + prefix：offset 被无视（loadMore 空转），
+        // 对话多了极慢。改成 convIds 收窄 predicate 走 SwiftData 层分页。
         if let tagId = selectedTagId {
             let tid = tagId
             let pid = profileId
@@ -200,12 +244,28 @@ enum ConversationListStore {
                 predicate: #Predicate<FavoriteItem> { item in item.profileId == pid && item.tagId == tid }
             )
             if let items = try? context.fetch(favDescriptor) {
-                let convIds = Set(items.map(\.conversationId))
-                var convDescriptor = FetchDescriptor<Conversation>(sortBy: sortDescriptors)
-                convDescriptor.predicate = normalPredicate(profileId: profileId, search: searchText, interval: dateInterval, favoritesOnly: false)
-                if let allConvs = try? context.fetch(convDescriptor) {
-                    let filtered = allConvs.filter { convIds.contains($0.id) }
-                    return ConversationPage(conversations: Array(filtered.prefix(pageSize)), totalCount: filtered.count)
+                let convIds = Array(Set(items.map(\.conversationId)))
+                if convIds.isEmpty {
+                    return ConversationPage(conversations: [], totalCount: 0)
+                } else if convIds.count <= tagInQueryLimit {
+                    // 现实全部场景：IN 查询 + 与另两分支同构的真分页
+                    var descriptor = FetchDescriptor<Conversation>(sortBy: sortDescriptors)
+                    descriptor.predicate = tagPredicate(convIds: convIds, profileId: profileId, search: searchText, interval: dateInterval)
+                    let total = (try? context.fetchCount(descriptor)) ?? 0
+                    descriptor.fetchOffset = offset
+                    descriptor.fetchLimit = pageSize
+                    let results = (try? context.fetch(descriptor)) ?? []
+                    return ConversationPage(conversations: results, totalCount: total)
+                } else {
+                    // 兜底：超大标签避开 SQLite IN 变量数上限——内存 filter 但分页正确
+                    var convDescriptor = FetchDescriptor<Conversation>(sortBy: sortDescriptors)
+                    convDescriptor.predicate = normalPredicate(profileId: profileId, search: searchText, interval: dateInterval, favoritesOnly: false)
+                    if let allConvs = try? context.fetch(convDescriptor) {
+                        let idSet = Set(convIds)
+                        let filtered = allConvs.filter { idSet.contains($0.id) }
+                        let page = Array(filtered.dropFirst(offset).prefix(pageSize))
+                        return ConversationPage(conversations: page, totalCount: filtered.count)
+                    }
                 }
             }
             return ConversationPage(conversations: [], totalCount: 0)
