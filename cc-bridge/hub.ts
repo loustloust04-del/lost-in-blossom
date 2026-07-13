@@ -555,9 +555,13 @@ export function startHub(): WebSocketServer {
                 delivered++
               } catch { break }
             }
-            if (delivered >= 0) {
+            // delivered >= 0 恒真——ws.send 全抛错（0 条投出）也清文件 = 离线消息静默丢失。
+            // 改为全部投出才清；部分投递保留文件下次重投，重复由 App 端持久 reply_id 去重挡。
+            if (delivered === messages.length) {
               clearOffline(chatId)
               if (delivered > 0) console.log(`[hub] offline replay: ${delivered} messages for chat_id=${chatId.slice(0, 8)}`)
+            } else {
+              console.warn(`[hub] offline replay partial (${delivered}/${messages.length}) for chat_id=${chatId.slice(0, 8)} — keeping file for retry`)
             }
           }
         }

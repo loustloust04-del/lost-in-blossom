@@ -71,10 +71,33 @@ final class CCBridgeWebSocketClient: NSObject {
     /// L2: list_sessions 回调队列（不带 key，每个 list 请求都会用最早注册的 handler 接收第一个结果）
     @ObservationIgnored private var listHandlers: [(Result<[String], CCBridgeRemoteError>) -> Void] = []
     @ObservationIgnored private let handlersQueue = DispatchQueue(label: "cc.bridge.handlers")
-    /// 已 deliver 的 reply_id 缓存（hub 在 reconnect 时会 replay 最近 60s reply，
-    /// client 端去重避免同一条投递两次）。5 分钟 TTL 足够长。
-    @ObservationIgnored private var seenReplyIds: [String: Date] = [:]
-    private let replyDedupTTL: TimeInterval = 300
+    /// 已 deliver 的 reply_id（持久化）：hub 重连时 replay 最近 60s reply、offline 文件
+    /// 部分投递后还会重投——纯内存版在 App 被杀重开后失忆，补发的旧聊天全部重复入库
+    ///（真机 bug："聊完天 CC 桥又把之前的聊天发一遍"）。改成 UserDefaults 持久 +
+    /// 条数滚动 600（≥ hub reply-log 500），不用 TTL——offline 重投可能隔几小时。
+    @ObservationIgnored private var seenReplyIds: Set<String> = []
+    @ObservationIgnored private var seenReplyOrder: [String] = []
+    @ObservationIgnored private var seenReplyLoaded = false
+    private static let seenReplyDefaultsKey = "ccSeenReplyIds"
+
+    /// handlersQueue 上调用。返回 true = 重复（丢弃）。
+    private func markReplySeen(_ id: String) -> Bool {
+        if !seenReplyLoaded {
+            seenReplyOrder = UserDefaults.standard.stringArray(forKey: Self.seenReplyDefaultsKey) ?? []
+            seenReplyIds = Set(seenReplyOrder)
+            seenReplyLoaded = true
+        }
+        if seenReplyIds.contains(id) { return true }
+        seenReplyIds.insert(id)
+        seenReplyOrder.append(id)
+        if seenReplyOrder.count > 600 {
+            let overflow = seenReplyOrder.count - 600
+            for old in seenReplyOrder.prefix(overflow) { seenReplyIds.remove(old) }
+            seenReplyOrder.removeFirst(overflow)
+        }
+        UserDefaults.standard.set(seenReplyOrder, forKey: Self.seenReplyDefaultsKey)
+        return false
+    }
     /// Fires on main queue when a reply arrives but no active sendStreaming handler is registered
     /// for its chatId. Captures from ConversationViewModel to handle hub offline-replay bursts and
     /// proactive CC messages after the single-shot handler has already been consumed.
@@ -472,15 +495,8 @@ final class CCBridgeWebSocketClient: NSObject {
                 }()
                 handlersQueue.async { [weak self] in
                     guard let self else { return }
-                    if let replyId {
-                        if let lastSeen = self.seenReplyIds[replyId],
-                           Date().timeIntervalSince(lastSeen) < self.replyDedupTTL {
-                            return  // 重复，silently drop
-                        }
-                        self.seenReplyIds[replyId] = Date()
-                        // 清理过期 entries
-                        let cutoff = Date().addingTimeInterval(-self.replyDedupTTL)
-                        self.seenReplyIds = self.seenReplyIds.filter { $0.value >= cutoff }
+                    if let replyId, self.markReplySeen(replyId) {
+                        return  // 重复（replay/重投），silently drop
                     }
                     if let handler = self.replyHandlers.removeValue(forKey: chatId) {
                         // Handler removed atomically on handlersQueue — prevents double-fire race
