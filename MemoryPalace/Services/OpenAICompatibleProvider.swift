@@ -343,6 +343,18 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                     }
                     DispatchQueue.main.async { [self] in
                         isStreaming = false
+                        // flush 任何滞留的标签缓冲，避免结尾被吞字
+                        if !pendingTagBuffer.isEmpty {
+                            let held = pendingTagBuffer
+                            pendingTagBuffer = ""
+                            if isInGatewayThinking {
+                                streamingThinking += held
+                                onThinkingToken?(held)
+                            } else {
+                                streamingContent += held
+                                onToken?(held)
+                            }
+                        }
                         var finalContent = streamingContent
                         if !streamingThinking.isEmpty {
                             finalContent = "[thinking]\(streamingThinking)[/thinking]\n\(streamingContent)"
@@ -431,8 +443,10 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 if pendingTagBuffer.contains("[thinking]") || pendingTagBuffer.contains("[/thinking]") || pendingTagBuffer.contains("<thinking>") || pendingTagBuffer.contains("</thinking>") {
                     processContent = pendingTagBuffer
                     pendingTagBuffer = ""
-                } else if pendingTagBuffer.hasSuffix("[") || pendingTagBuffer.contains("[thinking") || pendingTagBuffer.contains("[/thinking") || pendingTagBuffer.contains("[/") || pendingTagBuffer.contains("<thinking") || pendingTagBuffer.contains("</thinking") || pendingTagBuffer.contains("</") {
-                    // 可能是标签的一部分，继续缓冲
+                } else if pendingTagBuffer.count < 256, Self.endsWithPartialTag(pendingTagBuffer) {
+                    // 结尾可能是被切断的标签前缀，继续缓冲。
+                    // 用 suffix 检测而非 contains：正文里出现的 </、[/ 等闭合标签不会命中，
+                    // 且加 256 字上限，避免缓冲区永久吞字冻结。
                     return
                 } else {
                     processContent = pendingTagBuffer
@@ -471,5 +485,20 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                 }
             }
         }
+    }
+
+    /// 已知的、可能被跨 chunk 切断的标签。
+    private static let bufferableTags = ["[thinking]", "[/thinking]", "<thinking>", "</thinking>"]
+
+    /// 判断缓冲区结尾是否是某个已知标签的非空真前缀（说明标签可能被切断了）。
+    private static func endsWithPartialTag(_ s: String) -> Bool {
+        for tag in bufferableTags {
+            var prefix = tag
+            while prefix.count > 1 {
+                prefix = String(prefix.dropLast())
+                if s.hasSuffix(prefix) { return true }
+            }
+        }
+        return false
     }
 }
