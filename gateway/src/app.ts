@@ -92,6 +92,19 @@ app.get('/v1/models', auth, (c) => c.json({
     { id: 'relay/claude-opus-4-1-20250805', object: 'model', owned_by: 'relay' },
     { id: 'relay/claude-sonnet-4-5-20250929', object: 'model', owned_by: 'relay' },
     { id: 'relay/claude-haiku-4-5-20251001', object: 'model', owned_by: 'relay' },
+        { id: 'GuaGua/claude-fable-5', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-sonnet-5', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-8', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-7', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-6', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-5-20251101', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-sonnet-4-6', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-sonnet-4-5-20250929', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-haiku-4-5-20251001', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-8-thinking', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-7-thinking', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-opus-4-6-thinking', object: 'model', owned_by: 'guagua' },
+    { id: 'GuaGua/claude-sonnet-4-6-thinking', object: 'model', owned_by: 'guagua' },
     { id: 'Tree/gpt-5.4', object: 'model', owned_by: 'tree-new' },
     { id: 'Tree/gpt-5.4-mini', object: 'model', owned_by: 'tree-new' },
     { id: 'Tree/gpt-5.5', object: 'model', owned_by: 'tree-new' },
@@ -352,6 +365,21 @@ app.post('/v1/chat/completions', auth, async (c) => {
       apiKey: config.treeAwsKey,
       modelName,
     });
+  } else if (actualModel.startsWith("GuaGua/")) {
+    const ggModel = actualModel.replace('GuaGua/', '');
+    console.log('[GuaGua] model=' + ggModel + ' stream=' + !!forwardBody.stream);
+    try {
+      const ggUp = await fetch(config.guaguaBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.guaguaKey },
+        body: JSON.stringify({ model: ggModel, messages: forwardBody.messages, max_tokens: forwardBody.max_tokens || 4096, stream: forwardBody.stream || false }),
+      });
+      console.log('[GuaGua] status=' + ggUp.status);
+      upstream = new Response(ggUp.body, { status: ggUp.status, headers: { 'Content-Type': ggUp.headers.get('Content-Type') || 'text/event-stream', 'Cache-Control': 'no-cache' } });
+    } catch (e: any) {
+      console.error('[GuaGua] error:', e?.message);
+      upstream = Response.json({ error: { message: 'GuaGua: ' + e?.message, type: 'guagua_error' } }, { status: 502 });
+    }
   } else if (actualModel.startsWith("Tree/")) {
     const treeModelName = actualModel.replace('Tree/', '');
     console.log('[Tree] model=' + treeModelName + ' stream=' + !!forwardBody.stream);

@@ -17,6 +17,8 @@ export const config = {
   guaBase: Bun.env.GUA_BASE_URL || 'https://woof.guagua.uk/v1/chat/completions',
   treeNewKey: Bun.env.TREE_NEW_API_KEY || '',
   treeNewBase: Bun.env.TREE_NEW_BASE_URL || 'https://api.treegpt.cc/v1/chat/completions',
+  guaguaKey: Bun.env.GUAGUA_API_KEY || '',
+  guaguaBase: Bun.env.GUAGUA_BASE_URL || 'https://woof.guagua.uk/v1/chat/completions',
   embeddingModel: Bun.env.EMBEDDING_MODEL || 'text-embedding-3-small',
   brainEnabled: Bun.env.BRAIN_ENABLED === 'true',
   embeddingBase: Bun.env.EMBEDDING_BASE_URL || 'https://api.openai.com/v1',
