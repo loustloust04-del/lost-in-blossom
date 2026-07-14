@@ -74,7 +74,6 @@ struct PromptAssembler {
 
         // tagged system parts：追踪每个 part 的来源 slot id，世界书需要按 position 插入
         var systemParts: [(tag: String, content: String)] = []
-        var summaryParts: [String] = []
         var preHistoryMessages: [(role: String, content: String)] = []
         var postHistoryInjections: [(depth: Int, role: String, content: String)] = []
 
@@ -188,7 +187,7 @@ struct PromptAssembler {
         // 上下文摘要注入 → 独立的 summaryLayer（滞回裁剪，30轮变一次）
         // 不放 semiStable 里，因为摘要的变化频率跟记忆/世界书不同
         if let summary = contextSummary, !summary.isEmpty {
-            summaryParts.append("[前情提要]\n\(summary)")
+            systemParts.append((tag: "contextSummary", content: "[前情提要]\n\(summary)"))
         }
 
         // Task H 跨窗口记忆：新对话首轮注入最近 15 个对话的摘要（semiStable 层）
