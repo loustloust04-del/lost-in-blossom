@@ -165,6 +165,7 @@ final class StickerViewModel {
     }
 
     /// 导入图片 → 抠图 → 默认描边 → 保存到贴纸库
+    @MainActor
     func importImages(urls: [URL], name: String? = nil, profileId: String, context: ModelContext) async {
         isImporting = true
         defer { isImporting = false }
@@ -182,57 +183,52 @@ final class StickerViewModel {
                 // 1. 读取图片
                 let imageData = try Data(contentsOf: url)
 
-                // 2. 抠图
-                let liftedData = try SubjectLifter.liftSubject(from: imageData)
-
-                // 3. 默认描边（白色）
-                let borderedData = try StickerBorderRenderer.renderBorder(
-                    on: liftedData, style: .solidWhite, width: 8
-                )
-
-                // 4. 保存文件
-                let assetId = UUID()
-                let paths = try StickerFileManager.saveStickerImage(borderedData, id: assetId, profileId: profileId)
-
-                // 保存原图
-                let originalPath = try? StickerFileManager.saveOriginalImage(imageData, id: assetId, profileId: profileId)
-
-                // 5. 创建模型（去重命名）
+                // 2. 去重命名（在主 actor 上读取 stickerAssets）
                 let baseName = name ?? url.deletingPathExtension().lastPathComponent
                 let rawName = urls.count > 1 ? "\(baseName) \(index + 1)" : baseName
                 let displayName = deduplicateName(rawName)
+                let assetId = UUID()
+
+                // 3. 抠图 / 描边 / 存盘（CPU 密集，丢到后台线程）
+                let (imagePath, thumbnailPath, originalPath) = try await Task.detached(priority: .userInitiated) { () -> (String, String, String?) in
+                    let liftedData = try SubjectLifter.liftSubject(from: imageData)
+                    let borderedData = try StickerBorderRenderer.renderBorder(
+                        on: liftedData, style: .solidWhite, width: 8
+                    )
+                    let paths = try StickerFileManager.saveStickerImage(borderedData, id: assetId, profileId: profileId)
+                    let originalPath = try? StickerFileManager.saveOriginalImage(imageData, id: assetId, profileId: profileId)
+                    return (paths.imagePath, paths.thumbnailPath, originalPath)
+                }.value
+
+                // 4. 创建模型（回到主 actor，直接建立 @Model）
                 let asset = StickerAsset(
                     name: displayName,
-                    imagePath: paths.imagePath,
-                    thumbnailPath: paths.thumbnailPath,
+                    imagePath: imagePath,
+                    thumbnailPath: thumbnailPath,
                     originalImagePath: originalPath,
                     borderStyle: BorderStyle.solidWhite.rawValue,
                     borderWidth: 8.0,
                     profileId: profileId
                 )
                 asset.id = assetId
-
-                await MainActor.run {
-                    context.insert(asset)
-                    stickerAssets.insert(asset, at: 0)
-                }
+                context.insert(asset)
+                stickerAssets.insert(asset, at: 0)
             } catch {
                 failedNames.append("\(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
 
         // 保存 + 反馈结果
-        await MainActor.run {
-            try? context.save()
-            if failedNames.isEmpty {
-                importProgress = nil
-            } else {
-                importProgress = "失败：\(failedNames.joined(separator: "; "))"
-            }
+        try? context.save()
+        if failedNames.isEmpty {
+            importProgress = nil
+        } else {
+            importProgress = "失败：\(failedNames.joined(separator: "; "))"
         }
     }
 
     /// iOS: 从 Data 导入（PhotosPicker 返回 Data 而不是 URL）
+    @MainActor
     func importImageData(_ dataList: [Data], name: String, profileId: String, context: ModelContext) async {
         isImporting = true
         defer { isImporting = false }
@@ -242,26 +238,28 @@ final class StickerViewModel {
         for (index, imageData) in dataList.enumerated() {
             importProgress = "处理中 \(index + 1)/\(dataList.count)..."
             do {
-                let liftedData = try SubjectLifter.liftSubject(from: imageData)
-                let borderedData = try StickerBorderRenderer.renderBorder(on: liftedData, style: .solidWhite, width: 8)
-                let assetId = UUID()
-                let paths = try StickerFileManager.saveStickerImage(borderedData, id: assetId, profileId: profileId)
                 let displayName = deduplicateName(dataList.count > 1 ? "\(name) \(index + 1)" : name)
-                let asset = StickerAsset(name: displayName, imagePath: paths.imagePath, thumbnailPath: paths.thumbnailPath,
+                let assetId = UUID()
+                let (imagePath, thumbnailPath) = try await Task.detached(priority: .userInitiated) { () -> (String, String) in
+                    let liftedData = try SubjectLifter.liftSubject(from: imageData)
+                    let borderedData = try StickerBorderRenderer.renderBorder(on: liftedData, style: .solidWhite, width: 8)
+                    let paths = try StickerFileManager.saveStickerImage(borderedData, id: assetId, profileId: profileId)
+                    return (paths.imagePath, paths.thumbnailPath)
+                }.value
+                let asset = StickerAsset(name: displayName, imagePath: imagePath, thumbnailPath: thumbnailPath,
                                          borderStyle: BorderStyle.solidWhite.rawValue, borderWidth: 8.0, profileId: profileId)
                 asset.id = assetId
-                await MainActor.run { context.insert(asset); stickerAssets.insert(asset, at: 0) }
+                context.insert(asset)
+                stickerAssets.insert(asset, at: 0)
             } catch {
                 failCount += 1
             }
         }
-        await MainActor.run {
-            try? context.save()
-            if failCount > 0 {
-                importProgress = "\(failCount) 张处理失败（抠图不支持此图片格式）"
-            } else {
-                importProgress = nil
-            }
+        try? context.save()
+        if failCount > 0 {
+            importProgress = "\(failCount) 张处理失败（抠图不支持此图片格式）"
+        } else {
+            importProgress = nil
         }
     }
 
@@ -379,36 +377,44 @@ final class StickerViewModel {
     // MARK: - Update Border
 
     /// 修改贴纸样式（描边 + 滤镜，重新渲染 PNG）
+    @MainActor
     func updateStyle(asset: StickerAsset, borderStyle: BorderStyle, borderWidth: CGFloat, filterStyle: FilterStyle, profileId: String, context: ModelContext) async {
+        // 先在主 actor 上快照 @Model 属性，后台线程只碰值类型
+        let assetId = asset.id
+        let hasOriginal = asset.originalImagePath != nil
         let sourcePath = asset.originalImagePath ?? asset.imagePath
-        guard let sourceData = StickerFileManager.loadImage(path: sourcePath, profileId: profileId) else { return }
 
         do {
-            // 1. 抠图（如果有原图）
-            let liftedData: Data
-            if asset.originalImagePath != nil {
-                liftedData = try SubjectLifter.liftSubject(from: sourceData)
-            } else {
-                liftedData = sourceData
-            }
+            let rendered = try await Task.detached(priority: .userInitiated) { () -> (String, String)? in
+                guard let sourceData = StickerFileManager.loadImage(path: sourcePath, profileId: profileId) else { return nil }
 
-            // 2. 滤镜
-            let filteredData = try StickerFilterRenderer.applyFilter(on: liftedData, style: filterStyle)
+                // 1. 抠图（如果有原图）
+                let liftedData: Data
+                if hasOriginal {
+                    liftedData = try SubjectLifter.liftSubject(from: sourceData)
+                } else {
+                    liftedData = sourceData
+                }
 
-            // 3. 描边
-            let borderedData = try StickerBorderRenderer.renderBorder(on: filteredData, style: borderStyle, width: borderWidth)
+                // 2. 滤镜
+                let filteredData = try StickerFilterRenderer.applyFilter(on: liftedData, style: filterStyle)
 
-            // 4. 保存
-            let paths = try StickerFileManager.saveStickerImage(borderedData, id: asset.id, profileId: profileId)
+                // 3. 描边
+                let borderedData = try StickerBorderRenderer.renderBorder(on: filteredData, style: borderStyle, width: borderWidth)
 
-            await MainActor.run {
-                asset.imagePath = paths.imagePath
-                asset.thumbnailPath = paths.thumbnailPath
-                asset.borderStyle = borderStyle.rawValue
-                asset.borderWidth = Double(borderWidth)
-                asset.filterStyle = filterStyle.rawValue
-                try? context.save()
-            }
+                // 4. 保存
+                let paths = try StickerFileManager.saveStickerImage(borderedData, id: assetId, profileId: profileId)
+                return (paths.imagePath, paths.thumbnailPath)
+            }.value
+
+            guard let (imagePath, thumbnailPath) = rendered else { return }
+
+            asset.imagePath = imagePath
+            asset.thumbnailPath = thumbnailPath
+            asset.borderStyle = borderStyle.rawValue
+            asset.borderWidth = Double(borderWidth)
+            asset.filterStyle = filterStyle.rawValue
+            try? context.save()
         } catch {
             print("样式更新失败: \(error.localizedDescription)")
         }
