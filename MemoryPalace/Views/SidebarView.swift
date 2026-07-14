@@ -879,12 +879,11 @@ struct SidebarView: View {
     }
 
     private func exportConversation(_ conversation: Conversation) {
-        if exportMode == "full" {
-            // Delay to let context menu dismiss first
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                exportingConversation = conversation
-            }
-        } else {
+        // Both modes present the export options sheet. Previously the default
+        // ("lightweight") mode fell through to an empty else and the menu button
+        // did nothing. Delay lets the context menu dismiss first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            exportingConversation = conversation
         }
     }
 
