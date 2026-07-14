@@ -498,6 +498,16 @@ final class CCBridgeWebSocketClient: NSObject {
                     if let replyId, self.markReplySeen(replyId) {
                         return  // 重复（replay/重投），silently drop
                     }
+                    // Dispatch the attachment BEFORE the reply. Both land on the serial
+                    // main queue, so enqueuing the attachment first guarantees pendingAttachment
+                    // is set before the reply handler fires onComplete (which reads it).
+                    if let att = incomingFile {
+                        if let attHandler = self.replyAttachmentHandlers[chatId] {
+                            DispatchQueue.main.async { attHandler(att) }
+                        } else if let fallback = self.unhandledAttachmentHandler {
+                            DispatchQueue.main.async { fallback(chatId, att) }
+                        }
+                    }
                     if let handler = self.replyHandlers.removeValue(forKey: chatId) {
                         // Handler removed atomically on handlersQueue — prevents double-fire race
                         // when hub replay sends multiple replies in rapid succession.
@@ -506,13 +516,6 @@ final class CCBridgeWebSocketClient: NSObject {
                         // No active sendStreaming handler — route to persistent fallback
                         // (handles hub offline-replay bursts and proactive CC messages).
                         DispatchQueue.main.async { fallback(chatId, content) }
-                    }
-                    if let att = incomingFile {
-                        if let attHandler = self.replyAttachmentHandlers[chatId] {
-                            DispatchQueue.main.async { attHandler(att) }
-                        } else if let fallback = self.unhandledAttachmentHandler {
-                            DispatchQueue.main.async { fallback(chatId, att) }
-                        }
                     }
                 }
             }
