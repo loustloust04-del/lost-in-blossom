@@ -108,8 +108,13 @@ struct RegexEngine {
                 let range = NSRange(result.startIndex..<result.endIndex, in: result)
 
                 // 替换模板：{{match}} → $0
-                let template = script.replaceString
+                let rawTemplate = script.replaceString
                     .replacingOccurrences(of: "{{match}}", with: "$0", options: .caseInsensitive)
+
+                // 清理模板里指向不存在捕获组的反向引用（如 $1 但正则无捕获组）。
+                // 否则 stringByReplacingMatches 会抛出无法被 do-catch 捕获的
+                // NSInvalidArgumentException（ObjC 异常），直接崩掉整个 App。
+                let template = sanitizeTemplate(rawTemplate, groupCount: regex.numberOfCaptureGroups)
 
                 result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: template)
             } catch {
@@ -156,5 +161,70 @@ struct RegexEngine {
         // g = global，NSRegularExpression 默认全局替换
 
         return (pattern, options)
+    }
+
+    /// 清理替换模板中的反向引用：把指向不存在捕获组的 `$N` 以及裸 `$` 转义为字面量。
+    ///
+    /// `NSRegularExpression.stringByReplacingMatches(withTemplate:)` 在模板引用了
+    /// 不存在的捕获组时（例如正则没有分组却写了 `$1`），会抛出
+    /// `NSInvalidArgumentException`。这是 ObjC 异常，Swift 的 `do-catch` 抓不到，
+    /// 会导致 App 崩溃。用户可自行编辑酒馆正则脚本，所以必须在这里做兜底清理。
+    ///
+    /// - Parameters:
+    ///   - template: 已做过 `{{match}} → $0` 展开的替换模板
+    ///   - groupCount: `regex.numberOfCaptureGroups`（不含表示整体匹配的 `$0`）
+    /// - Returns: 只保留有效反向引用（`$0` 到 `$groupCount`）的安全模板
+    static func sanitizeTemplate(_ template: String, groupCount: Int) -> String {
+        var output = ""
+        output.reserveCapacity(template.count)
+        let chars = Array(template)
+        var i = 0
+        while i < chars.count {
+            let c = chars[i]
+
+            // 已有的转义序列（\$ / \\ / \N 等）原样保留
+            if c == "\\" {
+                output.append(c)
+                if i + 1 < chars.count {
+                    output.append(chars[i + 1])
+                    i += 2
+                } else {
+                    i += 1
+                }
+                continue
+            }
+
+            if c == "$" {
+                // 贪婪读取紧随其后的数字串
+                var j = i + 1
+                while j < chars.count, chars[j].isNumber {
+                    j += 1
+                }
+
+                if j == i + 1 {
+                    // 裸 `$`（后面没有数字）→ 转义成字面量
+                    output.append("\\$")
+                    i += 1
+                    continue
+                }
+
+                let digits = String(chars[(i + 1)..<j])
+                if let n = Int(digits), n <= groupCount {
+                    // 有效反向引用：$0 = 整体匹配，$1...$groupCount = 捕获组
+                    output.append("$")
+                    output.append(contentsOf: digits)
+                } else {
+                    // 指向不存在的捕获组（或数字过大溢出）→ 整段转义为字面量
+                    output.append("\\$")
+                    output.append(contentsOf: digits)
+                }
+                i = j
+                continue
+            }
+
+            output.append(c)
+            i += 1
+        }
+        return output
     }
 }
