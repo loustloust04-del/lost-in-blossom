@@ -44,6 +44,9 @@ struct BookReaderSheet: View {
 
     @State private var index: BookStore.BookIndex?
     @State private var currentChapter: Int = 1
+    /// loadBook 把 currentChapter 从默认 1 改到续读章 N 会触发 onChange。
+    /// 这个标记吞掉那一次 resetScroll，避免用 0 覆盖存档的阅读进度。
+    @State private var suppressChapterReset = false
     @State private var chapterText: String = ""
     @State private var initialScrollRatio: Double? = nil
     @State private var latestScrollRatio: Double = 0
@@ -106,6 +109,10 @@ struct BookReaderSheet: View {
         }
         .onAppear { loadBook() }
         .onChange(of: currentChapter) { _, newValue in
+            if suppressChapterReset {
+                suppressChapterReset = false
+                return  // 续读首帧：loadBook 已用存档的 scroll 加载本章，别 reset
+            }
             loadChapter(newValue, resetScroll: true)
         }
         // CR-2 阅读打点：sheet 活着 = 在读，60s 一跳（iOS 切后台 Task 挂起，天然不计后台）
@@ -744,7 +751,10 @@ struct BookReaderSheet: View {
             return
         }
         index = idx
-        currentChapter = max(1, min(idx.totalChapters, initialChapter ?? idx.currentChapter))
+        let targetChapter = max(1, min(idx.totalChapters, initialChapter ?? idx.currentChapter))
+        // 只有真的跳章（默认 1 → N）才会触发 onChange，这时才需要吞掉那次 reset
+        if targetChapter != currentChapter { suppressChapterReset = true }
+        currentChapter = targetChapter
         initialScrollRatio = idx.scrollRatio
         allNotes = BookStore.loadNotes(safeName: bookSafeName, profileId: profileId)
         bookmarks = BookStore.loadBookmarks(safeName: bookSafeName, profileId: profileId)
