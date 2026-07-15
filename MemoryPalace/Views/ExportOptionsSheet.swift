@@ -137,11 +137,39 @@ struct ExportOptionsSheet: View {
             )
         }
 
-        // Save file
-        // iOS: 暂时保存到临时目录（后续接 ShareSheet）
+        // 写临时 .md，然后弹系统分享面板（存文件/隔空投送/发给自己…）
         let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(MarkdownExporter.sanitizedFileName(conversation.title)).md")
-        try? markdown.write(to: tmpURL, atomically: true, encoding: .utf8)
-
+        do {
+            try markdown.write(to: tmpURL, atomically: true, encoding: .utf8)
+        } catch {
+            ToastCenter.shared.show("导出失败：\(error.localizedDescription)")
+            dismiss()
+            return
+        }
+        // 先收起本 sheet，再弹 UIActivityViewController（StickerViewModel 先例：SwiftUI
+        // sheet 关闭回调里弹 UIKit VC 不可靠，改直接从当前 keyWindow 的顶层 VC present）。
         dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            presentShareSheet(for: tmpURL)
+        }
+    }
+
+    /// 从当前活跃 window 的最顶层 VC 弹系统分享面板。
+    private func presentShareSheet(for url: URL) {
+        guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first,
+              var top = window.rootViewController else { return }
+        while let presented = top.presentedViewController { top = presented }
+
+        let ac = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        // iPad：给 popover 一个锚点，避免崩溃
+        if let pop = ac.popoverPresentationController {
+            pop.sourceView = top.view
+            pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+            pop.permittedArrowDirections = []
+        }
+        top.present(ac, animated: true)
     }
 }
