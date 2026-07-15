@@ -146,24 +146,26 @@ struct ExportOptionsSheet: View {
             dismiss()
             return
         }
-        // 先收起本 sheet，再弹 UIActivityViewController（StickerViewModel 先例：SwiftUI
-        // sheet 关闭回调里弹 UIKit VC 不可靠，改直接从当前 keyWindow 的顶层 VC present）。
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            presentShareSheet(for: tmpURL)
-        }
+        // 不先 dismiss——照抄能工作的 StickerViewModel.shareNoteAsPNG：从当前顶层 VC
+        // 直接 present 分享面板（本 sheet 的 host 还在场，present 才稳）。分享完/取消
+        // 后再收起导出选项。之前"先 dismiss 再延迟弹"会落空 → 面板不出现。
+        presentShareSheet(for: tmpURL)
     }
 
-    /// 从当前活跃 window 的最顶层 VC 弹系统分享面板。
+    /// 从当前顶层 VC 弹系统分享面板；完成后收起本 sheet。
     private func presentShareSheet(for url: URL) {
-        guard let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first,
-              var top = window.rootViewController else { return }
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = scene.windows.first?.rootViewController else {
+            dismiss()
+            return
+        }
+        var top = rootVC
         while let presented = top.presentedViewController { top = presented }
 
         let ac = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        ac.completionWithItemsHandler = { _, _, _, _ in
+            dismiss()
+        }
         // iPad：给 popover 一个锚点，避免崩溃
         if let pop = ac.popoverPresentationController {
             pop.sourceView = top.view
