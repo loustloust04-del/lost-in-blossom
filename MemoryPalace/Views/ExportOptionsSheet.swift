@@ -7,6 +7,8 @@ struct ExportOptionsSheet: View {
     var viewModel: ConversationViewModel
     let userName: String
     let assistantName: String
+    /// 导出成功后把文件 URL 交给父视图，由它在本 sheet 关闭后呈现分享面板。
+    var onExported: (URL) -> Void = { _ in }
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -146,32 +148,25 @@ struct ExportOptionsSheet: View {
             dismiss()
             return
         }
-        // 不先 dismiss——照抄能工作的 StickerViewModel.shareNoteAsPNG：从当前顶层 VC
-        // 直接 present 分享面板（本 sheet 的 host 还在场，present 才稳）。分享完/取消
-        // 后再收起导出选项。之前"先 dismiss 再延迟弹"会落空 → 面板不出现。
-        presentShareSheet(for: tmpURL)
+        // 交棒给父视图（SidebarView）：它在本 sheet 关闭后用 SwiftUI 原生 .sheet 呈现分享
+        // 面板。不再手动 connectedScenes.first + present——那套无序取 scene，在本 App 上
+        // 贴纸/导出分享都弹不出来（真机确诊：贴纸也弹不出）。
+        onExported(tmpURL)
+        dismiss()
     }
+}
 
-    /// 从当前顶层 VC 弹系统分享面板；完成后收起本 sheet。
-    private func presentShareSheet(for url: URL) {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootVC = scene.windows.first?.rootViewController else {
-            dismiss()
-            return
-        }
-        var top = rootVC
-        while let presented = top.presentedViewController { top = presented }
-
-        let ac = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        ac.completionWithItemsHandler = { _, _, _, _ in
-            dismiss()
-        }
-        // iPad：给 popover 一个锚点，避免崩溃
-        if let pop = ac.popoverPresentationController {
-            pop.sourceView = top.view
-            pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
-            pop.permittedArrowDirections = []
-        }
-        top.present(ac, animated: true)
+/// 系统分享面板的 SwiftUI 包装——用 .sheet 呈现，由 SwiftUI 管理，不手动找 window/VC。
+struct ExportActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+/// 待分享的导出文件（Identifiable 供 .sheet(item:)）。
+struct ExportShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }

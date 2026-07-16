@@ -80,6 +80,8 @@ struct SidebarView: View {
     @State private var renamingConversationId: String? = nil
     @State private var renameText: String = ""
     @State private var exportingConversation: Conversation? = nil
+    @State private var pendingExportURL: URL? = nil        // 导出选项 sheet 生成、待关闭后分享
+    @State private var exportShareItem: ExportShareItem? = nil
     @State private var searchResults: [SearchResult] = []
     @State private var stickerSearchResults: [StickerSearchResult] = []
     @State private var characterCardResults: [CharacterCardSearchResult] = []
@@ -853,13 +855,24 @@ struct SidebarView: View {
             }
         }
         // Settings sheet is presented from ContentView for proper centering
-        .sheet(item: $exportingConversation) { conversation in
+        .sheet(item: $exportingConversation, onDismiss: {
+            // 导出选项 sheet 完全关闭后再呈现分享面板（SwiftUI 顺序 sheet 的标准做法，
+            // 避免"关一个立刻开另一个"被吞）。
+            if let u = pendingExportURL {
+                pendingExportURL = nil
+                exportShareItem = ExportShareItem(url: u)
+            }
+        }) { conversation in
             ExportOptionsSheet(
                 conversation: conversation,
                 viewModel: viewModel,
                 userName: userName,
-                assistantName: assistantName
+                assistantName: assistantName,
+                onExported: { url in pendingExportURL = url }
             )
+        }
+        .sheet(item: $exportShareItem) { item in
+            ExportActivityView(items: [item.url])
         }
         .sheet(item: $moveToProjectConversation) { conversation in
             ProjectPickerSheet(conversation: conversation, profileId: profileId)
