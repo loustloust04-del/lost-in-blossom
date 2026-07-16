@@ -25,6 +25,8 @@ struct ConsoleView: View {
     @State private var periodPred: PeriodClient.Prediction? = nil
     @State private var showPeriod: Bool = false
     @State private var showSleep: Bool = false
+    @State private var showCare: Bool = false
+    @State private var showLog: Bool = false
 
     private var todayCtx: DailyContext? {
         let today = Calendar.current.startOfDay(for: Date())
@@ -85,6 +87,12 @@ struct ConsoleView: View {
         .sheet(isPresented: $showSleep) {
             if let ctx = todayCtx { SleepSheet(context: ctx) }
         }
+        .sheet(isPresented: $showCare) {
+            CareView(contexts: allContexts, vitals: vitalsData, period: periodPred)
+        }
+        .sheet(isPresented: $showLog) {
+            LogView(contexts: allContexts, todayNotes: vitalsData?.notes ?? [])
+        }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -118,9 +126,9 @@ struct ConsoleView: View {
 
     private var grid: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("CARE")
+            sectionHeaderTappable("CARE") { showCare = true }
             careTrio
-            sectionLabel("LOG")
+            sectionHeaderTappable("LOG") { showLog = true }
             logTrio
             sectionLabel("DAILY")
             todoWidget
@@ -138,6 +146,25 @@ struct ConsoleView: View {
             .foregroundColor(Self.textSub)
             .padding(.leading, 4)
             .padding(.top, 9)
+    }
+
+    /// 可点的分区标题（CARE / LOG 点开二级界面）。
+    private func sectionHeaderTappable(_ t: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(t)
+                    .font(.system(size: 11, weight: .semibold)).tracking(1.5)
+                    .foregroundColor(Self.textSub)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(Self.textFaint)
+                Spacer()
+            }
+            .padding(.leading, 4)
+            .padding(.top, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 三合一紧凑卡（CARE / LOG）
