@@ -33,6 +33,12 @@ extension ConversationViewModel {
             .sorted { ($0.pinnedAt ?? .distantPast) > ($1.pinnedAt ?? .distantPast) }
     }
 
+    /// 便宜的存在性判断——短路，不做 filter + sort 分配。ContentView.iOSChatTopBar 每次
+    /// body 都要判断 PinBar 显隐，用它替代 `!pinnedNodes.isEmpty`（后者每帧全量 filter+sort）。
+    var hasPinnedNodes: Bool {
+        currentPath.contains { $0.isPinned && !$0.isDeleted }
+    }
+
     func softDelete(_ node: MessageNode) {
         // 1) Instantly remove from display path (single-item diff, no lag)
         let deletedId = node.id

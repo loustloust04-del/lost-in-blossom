@@ -95,6 +95,11 @@ struct CardFlowView: View {
                 return presetScripts + profileScripts
             }()
         )
+        // B3 性能：流式期间 CardFlowView.body 每 token 重算 → makeBubbleView 对**所有**节点
+        // 重建 BubbleView（含闭包，SwiftUI 视为输入变化）→ 每条气泡 body 重跑 ContentCleaner /
+        // extractThinking / ArtifactDetector / Markdown 解析。对话越长越卡。.equatable() 拦下
+        // "父重建但语义未变"的非流式气泡，只有真正变化的节点（流式那条 / 内容改动）才重渲染。
+        .equatable()
     }
 
     private func makeRegenerateAction(for node: MessageNode) -> (() -> Void)? {
@@ -191,11 +196,15 @@ struct CardFlowView: View {
                                     makeBubbleView(for: node)
                                         .id(node.id)
                                         .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                        // 贴纸定位追踪：每条气泡记录 midY。旧版用 .task(id: midY)——
+                                        // 滚动时每帧每条可见气泡 cancel+新建一个 async Task，是滚动卡顿
+                                        // 大户。改 iOS 18 原生 onGeometryChange：同步闭包、值变才回调、
+                                        // 零 Task 分配。bubblePositions 是 @ObservationIgnored，写它不触发重绘。
                                         .background(
-                                            GeometryReader { geo in
-                                                Color.clear.task(id: geo.frame(in: .named("scrollContent")).midY) {
-                                                    stickerVM.bubblePositions[node.id] = geo.frame(in: .named("scrollContent")).midY
-                                                }
+                                            Color.clear.onGeometryChange(for: CGFloat.self) { proxy in
+                                                proxy.frame(in: .named("scrollContent")).midY
+                                            } action: { midY in
+                                                stickerVM.bubblePositions[node.id] = midY
                                             }
                                         )
                                 }
@@ -2003,6 +2012,39 @@ struct BubbleView: View {
                 ArtifactCanvasSheet(artifact: artifact)
             }
         }
+    }
+}
+
+// MARK: - BubbleView Equatable (B3 性能优化)
+//
+// 只比较影响渲染的**值输入**，排除每次 makeBubbleView 都新建的闭包
+//（onToggleFavorite / onRegenerate…）。闭包行为稳定（同 node 同语义），不进 == 判据。
+// node 的内容变化：流式走 streamingContentText / streamingThinkingText（每 token 变 → 该条
+// 重渲染），finalize / 切分支 flip isStreaming / streamingNodeId（父 prop 变 → 重渲染），
+// 编辑/重生成建新 node（ForEach id 变 → 新视图）。node.content 兜底真机可能的原地写。
+// @AppStorage / @State（字体、展开态…）走独立 invalidation，不受 == 影响，照常更新。
+extension BubbleView: Equatable {
+    static func == (lhs: BubbleView, rhs: BubbleView) -> Bool {
+        lhs.node.id == rhs.node.id
+            && lhs.node.content == rhs.node.content
+            && lhs.node.isPinned == rhs.node.isPinned
+            && lhs.node.isFavorite == rhs.node.isFavorite
+            && lhs.node.isDeleted == rhs.node.isDeleted
+            && lhs.hasBranches == rhs.hasBranches
+            && lhs.branchInfo?.branchNodeId == rhs.branchInfo?.branchNodeId
+            && lhs.branchInfo?.branchCount == rhs.branchInfo?.branchCount
+            && lhs.branchInfo?.displayedNodeId == rhs.branchInfo?.displayedNodeId
+            && lhs.isStreaming == rhs.isStreaming
+            && lhs.streamingContentText == rhs.streamingContentText
+            && lhs.isThinking == rhs.isThinking
+            && lhs.streamingThinkingText == rhs.streamingThinkingText
+            && lhs.thinkingSummary == rhs.thinkingSummary
+            && lhs.isHighlighted == rhs.isHighlighted
+            && lhs.isSearchMatch == rhs.isSearchMatch
+            && lhs.isLastAssistant == rhs.isLastAssistant
+            && lhs.isCCBridgeProvider == rhs.isCCBridgeProvider
+            && lhs.regexScripts.count == rhs.regexScripts.count
+            && lhs.groupMembers.count == rhs.groupMembers.count
     }
 }
 

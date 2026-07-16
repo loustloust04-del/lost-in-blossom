@@ -509,7 +509,7 @@ struct ContentView: View {
                 }
 
                 // 中间：PinBar（有 pin 时）或 Spacer。Phase 3 P3.9 会在这里挂 PinnedMessageBar。
-                if !viewModel.pinnedNodes.isEmpty, !pinBarHidden, viewModel.selectedConversation != nil {
+                if viewModel.hasPinnedNodes, !pinBarHidden, viewModel.selectedConversation != nil {
                     PinnedMessageBar(
                         pinnedNodes: viewModel.pinnedNodes,
                         currentIndex: $pinCurrentIndex,
@@ -758,7 +758,9 @@ struct ContentView: View {
     /// 含嵌套分支（DFS 全树），跟 BranchMapSheet 显示口径一致。空则按钮隐藏。
     /// B20 part 2 A3 反馈 + 第二轮 1+2 修：count 跟 sheet list 自洽。
     private var branchOffMainCount: Int {
-        viewModel.collectAllBranches().count
+        // 读缓存而非每次 body 重跑 collectAllBranches() DFS（侧栏拖动每帧都会重算
+        // ContentView.body，对话越长 DFS 越慢 = 左滑卡顿）。缓存在树结构变化处刷新。
+        viewModel.cachedBranchOffMainCount
     }
 
     /// 右滑 page 2: 右栏插件系统

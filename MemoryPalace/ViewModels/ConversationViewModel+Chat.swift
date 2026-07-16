@@ -1298,6 +1298,8 @@ extension ConversationViewModel {
             currentPath.append(newNode)
         }
 
+        refreshBranchOffMainCount()
+
         startAssistantStream(into: newNode, assistantNodeId: newAssistantId, model: model, profile: profile, preset: preset, providerManager: providerManager, conversation: conversation, context: context)
 
         scrollToNodeId = newAssistantId
@@ -1368,6 +1370,8 @@ extension ConversationViewModel {
         effectiveChildrenMap[newAssistantId] = []
         effectiveChildrenMap[newUserId, default: []].append(newAssistantId)
         currentPath.append(newAssistantNode)
+
+        refreshBranchOffMainCount()
 
         startAssistantStream(into: newAssistantNode, assistantNodeId: newAssistantId, model: model, profile: profile, preset: preset, providerManager: providerManager, conversation: conversation, context: context)
 

@@ -107,6 +107,17 @@ final class ConversationViewModel {
     /// Precomputed branch info for each node in currentPath (avoids redundant computation during rendering)
     var branchInfoMap: [String: BranchInfo] = [:]
 
+    /// 缓存 collectAllBranches().count（🌿 角标）。ContentView.iOSChatTopBar 每次 body 都会读它，
+    /// 而侧栏拖动 / 键盘 / 流式都会高频重算 ContentView.body——直接调 collectAllBranches() 会
+    /// 每帧 DFS 整棵树，对话越长越卡（左滑卡顿主凶之一）。只在树结构变化处刷新此缓存。
+    var cachedBranchOffMainCount: Int = 0
+
+    /// 树结构变化后刷新 🌿 计数缓存。只在 applyTreeData / rebuildPath / regenerate /
+    /// editAndResend 这几个改动分支结构的地方调用。
+    func refreshBranchOffMainCount() {
+        cachedBranchOffMainCount = collectAllBranches().count
+    }
+
     var nodeMap: [String: MessageNode] = [:]
     var mainPathIds: Set<String> = []
     var cachedRootId: String?

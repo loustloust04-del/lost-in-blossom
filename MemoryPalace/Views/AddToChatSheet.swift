@@ -71,12 +71,34 @@ struct AddToChatSheet: View {
                 .onChange(of: photoPickerItems) { _, newItems in
                     guard let item = newItems.first else { return }
                     Task {
-                        if let data = try? await item.loadTransferable(type: Data.self),
-                           let uiImage = UIImage(data: data),
-                           let compressed = compressImage(uiImage) {
-                            await MainActor.run {
-                                pendingImageData = compressed
+                        // 三级 fallback：Data.self → 自定义 TransferableImage → 降级 JPEG
+                        var loaded = false
+                        // 1) 原路径：loadTransferable(type: Data.self)
+                        do {
+                            if let data = try await item.loadTransferable(type: Data.self),
+                               let uiImage = UIImage(data: data),
+                               let compressed = compressImage(uiImage) {
+                                await MainActor.run { pendingImageData = compressed }
+                                loaded = true
                             }
+                        } catch {
+                            BreadcrumbLog.shared.add("📷", "loadTransferable(Data) failed: \(error.localizedDescription)")
+                        }
+                        // 2) Fallback：直接 loadTransferable 为自定义 TransferableImage
+                        if !loaded {
+                            do {
+                                if let img = try await item.loadTransferable(type: TransferableImage.self),
+                                   let compressed = compressImage(img.uiImage) {
+                                    await MainActor.run { pendingImageData = compressed }
+                                    loaded = true
+                                    BreadcrumbLog.shared.add("📷", "fallback TransferableImage succeeded")
+                                }
+                            } catch {
+                                BreadcrumbLog.shared.add("📷", "loadTransferable(TransferableImage) failed: \(error.localizedDescription)")
+                            }
+                        }
+                        if !loaded {
+                            BreadcrumbLog.shared.add("📷", "all image load paths failed for item: \(item.debugDescription)")
                         }
                         await MainActor.run {
                             photoPickerItems = []
@@ -300,5 +322,22 @@ private struct RowEntranceModifier: ViewModifier {
 private extension View {
     func rowEntrance(index: Int, appeared: Bool) -> some View {
         modifier(RowEntranceModifier(index: index, appeared: appeared))
+    }
+}
+
+// MARK: - TransferableImage（PhotosPicker fallback）
+
+/// PhotosPicker 的 loadTransferable(type: Data.self) 在某些 iOS 版本 / HEIC 场景下
+/// 会静默失败。此类型用 .image 表示类型，让系统自动解码为 UIImage。
+struct TransferableImage: Transferable {
+    let uiImage: UIImage
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .image) { data in
+            guard let img = UIImage(data: data) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return TransferableImage(uiImage: img)
+        }
     }
 }

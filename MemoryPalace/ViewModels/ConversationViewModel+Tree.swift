@@ -465,6 +465,7 @@ extension ConversationViewModel {
 
         conversation.nodeCount = data.displayableCount
         isLoading = false
+        refreshBranchOffMainCount()
 
         // Fire pending scroll after tree is loaded — must be next runloop turn
         // so ScrollView exists before onChange sees the value change
@@ -604,6 +605,7 @@ extension ConversationViewModel {
                 )
             }
         }
+        refreshBranchOffMainCount()
     }
 }
 

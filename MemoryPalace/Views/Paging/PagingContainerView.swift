@@ -66,9 +66,12 @@ struct PagingContainerView: UIViewControllerRepresentable {
             initialPage: initialPage
         )
         vc.onPageChanged = { newPage in
-            DispatchQueue.main.async {
-                currentPage = newPage
-            }
+            // 同步回写 binding（此闭包由 UIScrollViewDelegate 在 SwiftUI update 周期**之外**
+            // 调用，直接改 @Binding 安全）。旧版 DispatchQueue.main.async 留了一帧窗口：
+            // VC 已翻到新页（programmaticCurrentPage=1）但 binding 还是 0，其间任意
+            // updateUIViewController 会命中 `programmaticCurrentPage != currentPage` →
+            // scrollToPage(0) 把用户拽回聊天页（右滑页点一下就跳回的残留 edge case）。
+            currentPage = newPage
         }
         vc.setScrollEnabled(!disableScroll)
         vc.setShieldHiddenByCaller(disableScroll)   // sticker 编辑时让 home indicator 给 toolbar
