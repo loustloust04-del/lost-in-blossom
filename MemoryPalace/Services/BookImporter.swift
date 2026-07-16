@@ -22,7 +22,7 @@ enum BookImporter {
         var errorDescription: String? {
             switch self {
             case .unreadable(let detail): return "无法读取文件：\(detail)"
-            case .unsupportedEncoding: return "无法识别文件编码（试过 UTF-8 / GBK / GB18030 都失败）"
+            case .unsupportedEncoding: return "无法识别文件编码（试过 UTF-8 / UTF-16 / GBK / GB18030 / Big5 都失败）"
             case .emptyText: return "文件内容为空"
             case .fileTooLarge(let bytes): return "文件过大（\(bytes / 1_000_000)MB），第一版限制 50MB"
             case .duplicateName(let name): return "书架里已经有一本《\(name)》了——换个书名再导，或者先删掉旧的"
@@ -49,24 +49,34 @@ enum BookImporter {
 
     // MARK: - 编码嗅探
 
-    /// 试 UTF-8 → GBK → GB18030。GBK/GB18030 在 swift 里用 CFStringEncoding 转 String.Encoding。
+    private static func cfEnc(_ e: CFStringEncodings) -> String.Encoding {
+        String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(e.rawValue)))
+    }
+
+    /// 编码嗅探：系统自动识别（读 BOM）优先，再手动试 UTF-8 / UTF-16 / GB18030 / GB2312 / Big5。
     static func readTextSniffEncoding(_ url: URL) throws -> String {
         let data = try Data(contentsOf: url)
         if data.isEmpty { throw ImportError.emptyText }
 
+        // 0. 系统自动嗅探——认 BOM（UTF-8/16 记事本另存的文件最常见），最省事的第一道
+        var usedEnc: String.Encoding = .utf8
+        if let s = try? String(contentsOf: url, usedEncoding: &usedEnc), !s.isEmpty {
+            return s
+        }
+
+        // 1. 手动候选（不含会"永远成功但可能乱码"的 latin1——宁可报错也不给乱码）
         let candidates: [String.Encoding] = [
             .utf8,
-            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(
-                CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue))),
-            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(
-                CFStringEncoding(CFStringEncodings.GB_2312_80.rawValue))),
+            .utf16, .utf16LittleEndian, .utf16BigEndian,
+            cfEnc(.GB_18030_2000),
+            cfEnc(.GB_2312_80),
+            cfEnc(.big5),
         ]
         for enc in candidates {
             if let s = String(data: data, encoding: enc), !s.isEmpty {
-                // utf8 失败 String 会返回 nil；GBK 一般不返 nil 但可能乱码——
-                // 简单启发：含太多 replacement char (\u{FFFD}) 认为是乱码
+                // GBK/Big5 对 UTF-8 文件不返 nil 但会乱码——含太多 replacement char 判乱码
                 let replacementCount = s.unicodeScalars.filter { $0 == "\u{FFFD}" }.count
-                if Double(replacementCount) / Double(s.count) < 0.01 { return s }
+                if Double(replacementCount) / Double(max(s.count, 1)) < 0.01 { return s }
             }
         }
         throw ImportError.unsupportedEncoding
