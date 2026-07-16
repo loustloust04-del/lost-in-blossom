@@ -63,6 +63,35 @@ enum FileLibraryStore {
         try FileManager.default.removeItem(at: url)
     }
 
+    /// 文件末尾追加内容（日记/笔记用）。文件不存在时自动创建。
+    static func append(_ relPath: String, content: String, profileId: String) throws {
+        guard let url = resolve(relPath, profileId: profileId) else { throw err("非法路径: \(relPath)") }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: url.path) {
+            let handle = try FileHandle(forWritingTo: url)
+            handle.seekToEndOfFile()
+            handle.write(content.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            try content.data(using: .utf8)!.write(to: url, options: .atomic)
+        }
+    }
+
+    /// 重命名或移动文件。目标已存在时报错。
+    static func rename(_ oldPath: String, to newPath: String, profileId: String) throws {
+        guard let src = resolve(oldPath, profileId: profileId) else { throw err("非法路径: \(oldPath)") }
+        guard let dst = resolve(newPath, profileId: profileId) else { throw err("非法路径: \(newPath)") }
+        guard !FileManager.default.fileExists(atPath: dst.path) else { throw err("目标已存在: \(newPath)") }
+        try FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: src, to: dst)
+    }
+
+    /// 文件是否存在
+    static func exists(_ relPath: String, profileId: String) -> Bool {
+        guard let url = resolve(relPath, profileId: profileId) else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     /// 跨文件关键词搜索，返回 [(path, 命中行)]。大小写不敏感。
     static func search(_ keyword: String, profileId: String) -> [(path: String, line: String)] {
         guard !keyword.isEmpty else { return [] }
