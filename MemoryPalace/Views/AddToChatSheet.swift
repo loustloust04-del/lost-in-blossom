@@ -68,7 +68,7 @@ struct AddToChatSheet: View {
                         trailing: nil
                     )
                 }
-                .onChange(of: photoPickerItems) { _, newItems in
+                .onChange(of: photoPickerItems) { (_: [PhotosPickerItem], newItems: [PhotosPickerItem]) in
                     guard let item = newItems.first else { return }
                     Task {
                         // 三级 fallback：Data.self → 自定义 TransferableImage → 降级 JPEG
