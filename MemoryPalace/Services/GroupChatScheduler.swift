@@ -46,6 +46,11 @@ enum GroupChatScheduler {
         let interested = candidates.filter { Double.random(in: 0...1) < $0.talkativeness }
         let pool = interested.isEmpty ? candidates : interested
 
+        // 单候选（含"只有一个 Caelum(CC)"的单角色群）→ 直接返回，无需 LLM 选人。
+        // 关键：避免把选人 prompt 发给唯一的 CC 角色（它会以为自己是主持人不回复，
+        // 且该调用不带路由头 → 回复飘进别的窗口吞掉上下文）。
+        if pool.count == 1 { return pool.first }
+
         // 构造选人 prompt
         // 群名片优先：长人设的前 80 字是残句、还泄漏私密设定；intro 是用户写给别人看的简介
         let roster = pool.enumerated().map { (i, p) in
@@ -71,14 +76,14 @@ enum GroupChatScheduler {
         - 只输出一个角色名或"无"
         """
 
-        // 选人用便宜快速的模型当「主持人」：优先避开 CC——CC 慢、贵、易超时，不适合做
-        // 每轮都要跑的门控（PLAN：门控统一走廉价 API，哪怕角色本体是 CC）。全 CC 群才回退。
-        let selectorModel = pool.lazy
-            .compactMap { providerManager.model(byId: $0.model) }
-            .first { providerManager.provider(for: $0)?.type != .ccBridge }
-            ?? providerManager.model(byId: pool[0].model)
-        guard let model = selectorModel else {
-            // fallback: 随机选一个
+        // 选人器必须是非 CC 的 API 模型：给 CC 发「你是群聊主持人」选人 prompt 会让它
+        // 以为自己是主持人而不回复，且该调用不带路由头 → CC 回复飘进别的窗口、吞掉那边的
+        // 上下文（本次惊天 bug 根因，正是"兜底到 pool[0] 的 CC"造成的）。找不到非 CC 选人器
+        // 就不跑 LLM，直接从 pool 随机选一个开口——CC 走 groupSpeak 时才带正确路由头。
+        guard let model = pool.lazy
+                .compactMap({ providerManager.model(byId: $0.model) })
+                .first(where: { providerManager.provider(for: $0)?.type != .ccBridge }) else {
+            print("[GroupV5] 无非 CC 选人器 → 随机选一个（绝不拿 CC 跑选人 prompt）")
             return pool.randomElement()
         }
 
