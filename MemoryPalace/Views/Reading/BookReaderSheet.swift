@@ -26,7 +26,8 @@ struct BookReaderSheet: View {
     @Environment(\.modelContext) private var modelContext
 
     // M3-B：问 AI → 楼层主对话需要的依赖
-    @Environment(ConversationViewModel.self) private var viewModel
+    // 见 PDFReaderSheet：Page 2 阅读器面板没注入 ConversationViewModel，非 optional 会崩。
+    @Environment(ConversationViewModel.self) private var viewModel: ConversationViewModel?
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
     @Environment(PresetManager.self) private var presetManager: PresetManager?
@@ -410,7 +411,7 @@ struct BookReaderSheet: View {
     /// 当前书在主对话里出现过多少条相关 user 消息（用来在按钮上做 badge）
     private var bookMessageCount: Int {
         let prefix = "\(bookSafeName)#"
-        return viewModel.currentPath.filter { $0.bookRef?.hasPrefix(prefix) == true }.count
+        return (viewModel?.currentPath ?? []).filter { $0.bookRef?.hasPrefix(prefix) == true }.count
     }
 
     /// M3.5：把点击的 ai-ul noteId 映射到对应主对话 MessageNode.id

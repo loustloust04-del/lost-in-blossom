@@ -13,7 +13,9 @@ struct PDFReaderSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
-    @Environment(ConversationViewModel.self) private var viewModel
+    // 基础阅读器不需要 ConversationViewModel（共读功能已 stub）；且 Page 2 阅读器面板
+    // 环境没注入它——非 optional @Environment 找不到对象会 fatalError → 进书秒崩。改 optional。
+    @Environment(ConversationViewModel.self) private var viewModel: ConversationViewModel?
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
     @Environment(PresetManager.self) private var presetManager: PresetManager?
     @AppStorage("assistantName") private var assistantName = "助手"
