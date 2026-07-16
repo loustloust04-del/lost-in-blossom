@@ -18,6 +18,7 @@ import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
 import { listAnniversaries, addAnniversary, removeAnniversary, statusLines, setAnniversaryPinned, reorderAnniversaries } from './anniversary';
+import { listPeriods, addPeriodStart, setPeriodEnd, removePeriod, syncPeriodStarts, predictPeriod } from './period';
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
@@ -269,6 +270,35 @@ app.post('/api/anniversaries/reorder', auth, async (c) => {
   const ids = Array.isArray(body?.ids) ? body.ids.map((x: any) => String(x)) : [];
   const ok = reorderAnniversaries(ids);
   return c.json({ ok });
+});
+
+// ============ 经期记录 + 预测（App 与 Caelum 同一份）============
+app.get('/api/period', auth, async (c) => {
+  return c.json({ events: listPeriods(), prediction: predictPeriod() });
+});
+// 记一次来潮（默认今天）
+app.post('/api/period/start', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = addPeriodStart(body?.date ? String(body.date) : undefined, String(body?.source || 'bunny'));
+  if ('error' in r) return c.json({ ok: false, error: r.error }, 400);
+  return c.json({ ok: true, event: r, prediction: predictPeriod() });
+});
+// 给最近/指定来潮补结束日
+app.post('/api/period/end', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const ok = setPeriodEnd(String(body?.end || ''), body?.start ? String(body.start) : undefined);
+  return c.json({ ok, prediction: predictPeriod() }, ok ? 200 : 400);
+});
+// 从 Apple 健康批量同步来潮日
+app.post('/api/period/sync', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const dates = Array.isArray(body?.dates) ? body.dates.map((x: any) => String(x)) : [];
+  const added = syncPeriodStarts(dates, String(body?.source || 'healthkit'));
+  return c.json({ ok: true, added, prediction: predictPeriod() });
+});
+app.delete('/api/period/:date', auth, async (c) => {
+  const ok = removePeriod(c.req.param('date'));
+  return c.json({ ok }, ok ? 200 : 404);
 });
 
 // App 回前台拉未处理的偷看（只给元数据）

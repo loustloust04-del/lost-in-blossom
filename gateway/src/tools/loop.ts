@@ -4,6 +4,7 @@ import { BUILTIN_TOOLS, SERVER_MAP, callBuiltinTool } from './builtin';
 import { getMcpTools, callMcpTool } from './mcp-client';
 import { SCREEN_PEEK_ABILITY } from '../peek';
 import { anniversaryContext } from '../anniversary';
+import { periodContext } from '../period';
 import { NOTEBOOK_ABILITY } from '../notebook';
 
 // 流式 tool loop：把 Anthropic SSE 转成网关统一的 OpenAI chunk 流给客户端，
@@ -117,6 +118,9 @@ export async function runToolLoop(body: any, sessionId: string): Promise<Respons
   // 纪念日感知：每日变化，放系统块末尾，不动前面的稳定缓存前缀
   const anni = anniversaryContext();
   if (anni) (payload.system as any[]).push({ type: 'text', text: anni });
+  // 经期感知：每日变化，同放系统块末尾，让 Caelum 主动体贴兔兔身体
+  const period = periodContext();
+  if (period) (payload.system as any[]).push({ type: 'text', text: period });
   // 工具定义：内置在前、MCP 在后，顺序固定（缓存前缀稳定）
   const mcpTools = await getMcpTools();
   payload.tools = [
