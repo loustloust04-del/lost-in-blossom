@@ -12,6 +12,7 @@ import { TODO_TOOLS, callTodoTool } from '../todos';
 import { ANNIVERSARY_TOOLS, callAnniversaryTool } from '../anniversary';
 import { PERIOD_TOOLS, callPeriodTool } from '../period';
 import { BOARD_TOOLS, callBoardTool } from '../board';
+import { POCKET_TOOLS, callPocketTool } from '../pocket';
 import { HEALTH_TOOLS, callHealthTool } from '../health';
 import { TWEETS_TOOLS, callTweetsTool } from '../tweets';
 import { NOTEBOOK_TOOLS, callNotebookTool } from '../notebook';
@@ -68,6 +69,7 @@ export const BUILTIN_TOOLS = [
   ...NOTEBOOK_TOOLS,
   ...PERIOD_TOOLS,
   ...BOARD_TOOLS,
+  ...POCKET_TOOLS,
 ] as const;
 
 const EXEC_TIMEOUT_MS = 60_000;
@@ -143,6 +145,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (periodResult !== null) return periodResult;
   const boardResult = await callBoardTool(name, input);
   if (boardResult !== null) return boardResult;
+  const pocketResult = await callPocketTool(name, input);
+  if (pocketResult !== null) return pocketResult;
   const anniResult = callAnniversaryTool(name, input);
   if (anniResult !== null) return anniResult;
   const healthResult = await callHealthTool(name);

@@ -6,11 +6,23 @@ import { startDreamTimer } from './memory/dreamer';
 import { startDesireTimer } from './memory/desire';
 import { startMurmurTimer } from './memory/murmur';
 import { keepCacheAlive } from './memory/keepalive';
+import { pocketWSHandler, isPocketToken } from './pocket';
 
 const server = Bun.serve({
   port: config.port,
-  fetch: app.fetch,
   idleTimeout: 120, // 2分钟，给 Opus 4.7/4.8 足够的首 token 时间
+  fetch(req, srv) {
+    const url = new URL(req.url);
+    // Pocket Browser：手机 App 经 wss /pocket/ws 注册执行端（token 走 query）
+    if (url.pathname === '/pocket/ws') {
+      const token = url.searchParams.get('token') || '';
+      if (!isPocketToken(token)) return new Response('unauthorized', { status: 401 });
+      if (srv.upgrade(req, { data: { kind: 'pocket' } })) return undefined as any;
+      return new Response('upgrade failed', { status: 400 });
+    }
+    return app.fetch(req, srv);
+  },
+  websocket: pocketWSHandler,
 });
 
 console.log(`🌸 Lost in Blossom Gateway`);

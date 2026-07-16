@@ -20,6 +20,7 @@ import { recordEvent, verifyEventToken } from './memory/events';
 import { listAnniversaries, addAnniversary, removeAnniversary, statusLines, setAnniversaryPinned, reorderAnniversaries } from './anniversary';
 import { listPeriods, addPeriodStart, setPeriodEnd, removePeriod, syncPeriodStarts, predictPeriod } from './period';
 import { listPosts, addPost, addReply, deletePost, deleteReply } from './board';
+import { sendCommand as pocketSend, phoneConnected, pocketLastSeen } from './pocket';
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
@@ -325,6 +326,26 @@ app.delete('/api/board/:id/reply/:rid', auth, async (c) => {
 app.delete('/api/board/:id', auth, async (c) => {
   const ok = await deletePost(c.req.param('id'));
   return c.json({ ok }, ok ? 200 : 404);
+});
+
+// ============ Pocket Browser（手机 WKWebView 远程控制中继）============
+app.get('/api/pocket/status', auth, async (c) => {
+  return c.json({ phone_connected: phoneConnected(), last_seen: pocketLastSeen() });
+});
+app.post('/api/pocket/cmd', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const action = String(body?.action || '');
+  if (!action) return c.json({ ok: false, error: 'action 必填' }, 400);
+  const payload: Record<string, any> = {};
+  if (body?.url !== undefined) payload.url = String(body.url);
+  if (body?.code !== undefined) payload.code = String(body.code);
+  if (body?.js !== undefined) payload.code = String(body.js);
+  try {
+    const result = await pocketSend(action, payload, body?.timeout_ms);
+    return c.json({ ok: true, result });
+  } catch (e: any) {
+    return c.json({ ok: false, error: e?.message || 'error' });
+  }
 });
 
 // App 回前台拉未处理的偷看（只给元数据）

@@ -2,6 +2,7 @@ export const config = {
   port: parseInt(Bun.env.GATEWAY_PORT || '4567'),
   gatewayToken: Bun.env.GATEWAY_TOKEN || '',
   gatewayTokenAlt: Bun.env.GATEWAY_TOKEN_ALT || '',
+  pocketToken: Bun.env.POCKET_TOKEN || '',
   deepseekKey: Bun.env.DEEPSEEK_API_KEY || '',
   openrouterKey: Bun.env.OPENROUTER_API_KEY || '',
   anthropicKey: Bun.env.ANTHROPIC_API_KEY || '',
