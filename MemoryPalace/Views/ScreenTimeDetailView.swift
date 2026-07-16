@@ -55,7 +55,7 @@ struct ScreenTimeDetailView: View {
             summaryCell("社交", d.social_minutes, ConsoleView.gold)
             Rectangle().fill(ConsoleView.line).frame(width: 1).padding(.vertical, 4)
             VStack(spacing: 3) {
-                Text("\(d.apps.count)").font(.cormorant(26)).foregroundColor(ConsoleView.textPrimary)
+                Text("\(d.apps.count)").font(.system(size: 25, weight: .semibold)).foregroundColor(ConsoleView.textPrimary)
                 Text("个 App").font(.system(size: 10.5)).foregroundColor(ConsoleView.textMuted)
             }
             .frame(maxWidth: .infinity)
@@ -66,7 +66,7 @@ struct ScreenTimeDetailView: View {
 
     private func summaryCell(_ label: String, _ minutes: Double, _ color: Color) -> some View {
         VStack(spacing: 3) {
-            Text(hoursText(minutes)).font(.cormorant(26)).foregroundColor(color)
+            Text(hoursText(minutes)).font(.system(size: 25, weight: .semibold)).foregroundColor(color)
             Text(label).font(.system(size: 10.5)).foregroundColor(ConsoleView.textMuted)
         }
         .frame(maxWidth: .infinity)
