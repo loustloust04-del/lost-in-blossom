@@ -59,6 +59,13 @@ enum ToolCallLoop {
                                             text: result.text, isError: result.isError))
                 continue
             }
+            // ── 笔记本工具（fs_*，走网关 REST，与 CC 共用同一本）──
+            if NotebookTool.toolNames.contains(call.name) {
+                let result = await NotebookTool.execute(name: call.name, inputJSON: call.argumentsJSON)
+                outcomes.append(ToolOutcome(id: call.id, name: call.name,
+                                            text: result.text, isError: result.isError))
+                continue
+            }
             guard let server = bridgeTools.first(where: { $0.name == call.name })?.server else {
                 outcomes.append(ToolOutcome(id: call.id, name: call.name,
                                             text: "未知工具: \(call.name)", isError: true))

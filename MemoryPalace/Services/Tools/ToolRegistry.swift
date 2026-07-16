@@ -31,7 +31,10 @@ enum ToolRegistry {
             Entry(definition: BrowseURLTool.definition, enabledIf: { ctx in
                 ctx.family == .openAI && WebSearchSettings.isSearchEnabledFlag
             }),
-        ]
+        ] + NotebookTool.definitions.map { def in
+            // 笔记本 fs_* 工具：两家模型都给，网关 token 配好就开
+            Entry(definition: def, enabledIf: { _ in NotebookTool.isConfigured })
+        }
     }
 
     static func enabledDefinitions(_ ctx: ToolGateContext) -> [ToolDefinition] {
