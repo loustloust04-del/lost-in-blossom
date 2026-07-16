@@ -12,6 +12,7 @@ import { TODO_TOOLS, callTodoTool } from '../todos';
 import { ANNIVERSARY_TOOLS, callAnniversaryTool } from '../anniversary';
 import { HEALTH_TOOLS, callHealthTool } from '../health';
 import { TWEETS_TOOLS, callTweetsTool } from '../tweets';
+import { NOTEBOOK_TOOLS, callNotebookTool } from '../notebook';
 import { TWITTER_TOOLS, callTwitterTool } from './twitter';
 
 export const BUILTIN_TOOLS = [
@@ -62,6 +63,7 @@ export const BUILTIN_TOOLS = [
   ...ANNIVERSARY_TOOLS,
   ...HEALTH_TOOLS,
   ...TWEETS_TOOLS,
+  ...NOTEBOOK_TOOLS,
 ] as const;
 
 const EXEC_TIMEOUT_MS = 60_000;
@@ -139,6 +141,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (healthResult !== null) return healthResult;
   const tweetsResult = callTweetsTool(name, input);
   if (tweetsResult !== null) return tweetsResult;
+  const notebookResult = callNotebookTool(name, input);
+  if (notebookResult !== null) return notebookResult;
   const consoleResult = await callConsoleTool(name, input);
   if (consoleResult !== null) return consoleResult;
   const todoResult = await callTodoTool(name, input);

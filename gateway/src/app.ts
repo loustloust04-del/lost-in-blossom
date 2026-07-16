@@ -23,6 +23,7 @@ import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
 import { healthRoutes } from './health';
 import { recentTweets } from './tweets';
+import { nbList, nbRead, nbWrite, nbAppend, nbEdit, nbDelete, nbRename, nbSearch } from './notebook';
 import { listMemories, listDreams, listDesires, syncMemories, diffMemories } from './memory/sync';
 
 const app = new Hono();
@@ -208,6 +209,33 @@ app.post('/api/peek', async (c) => {
   console.log('[peek] received', item.id, 'app=', appName, 'bytes=', buf.byteLength);
   return c.json({ ok: true, id: item.id });
 });
+
+// ============ 笔记本（App 与 CC 共用同一本；App 走这些 REST）============
+app.get('/api/notebook', auth, async (c) => c.json({ notes: nbList() }));
+app.get('/api/notebook/file', auth, async (c) => {
+  try { return c.json({ path: c.req.query('path'), content: nbRead(String(c.req.query('path') || '')) }); }
+  catch (e: any) { return c.json({ error: e?.message || String(e) }, 404); }
+});
+app.post('/api/notebook/file', auth, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  try {
+    const op = String(b?.op || 'write');
+    if (op === 'append') nbAppend(String(b.path), String(b.content || ''));
+    else if (op === 'edit') nbEdit(String(b.path), String(b.old_string || ''), String(b.new_string || ''));
+    else nbWrite(String(b.path), String(b.content || ''));
+    return c.json({ ok: true });
+  } catch (e: any) { return c.json({ ok: false, error: e?.message || String(e) }, 400); }
+});
+app.post('/api/notebook/rename', auth, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  try { nbRename(String(b.old_path), String(b.new_path)); return c.json({ ok: true }); }
+  catch (e: any) { return c.json({ ok: false, error: e?.message || String(e) }, 400); }
+});
+app.delete('/api/notebook/file', auth, async (c) => {
+  try { nbDelete(String(c.req.query('path') || '')); return c.json({ ok: true }); }
+  catch (e: any) { return c.json({ ok: false, error: e?.message || String(e) }, 400); }
+});
+app.get('/api/notebook/search', auth, async (c) => c.json({ hits: nbSearch(String(c.req.query('q') || '')) }));
 
 // ============ 推特（App 拉同步好的推文）============
 app.get('/api/tweets', auth, async (c) => {
