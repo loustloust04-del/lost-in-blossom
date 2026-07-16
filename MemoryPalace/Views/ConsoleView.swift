@@ -24,6 +24,7 @@ struct ConsoleView: View {
     @State private var todo = TodoManager.shared
     @State private var periodPred: PeriodClient.Prediction? = nil
     @State private var showPeriod: Bool = false
+    @State private var showSleep: Bool = false
 
     private var todayCtx: DailyContext? {
         let today = Calendar.current.startOfDay(for: Date())
@@ -81,6 +82,9 @@ struct ConsoleView: View {
         .sheet(isPresented: $showPeriod, onDismiss: {
             Task { if let snap = await PeriodClient.fetch() { periodPred = snap.prediction } }
         }) { PeriodSheet() }
+        .sheet(isPresented: $showSleep) {
+            if let ctx = todayCtx { SleepSheet(context: ctx) }
+        }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -183,6 +187,8 @@ struct ConsoleView: View {
                         .font(.system(size: 10.5)).foregroundColor(Self.textMuted)
                         .lineLimit(1).padding(.top, 6)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { ensureTodayContext(); showSleep = true }
                 trioDivider
                 trioCell(icon: "calendar", label: "经期") {
                     if let p = periodPred, p.hasData {
