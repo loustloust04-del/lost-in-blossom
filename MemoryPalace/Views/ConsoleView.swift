@@ -27,6 +27,8 @@ struct ConsoleView: View {
     @State private var showSleep: Bool = false
     @State private var showCare: Bool = false
     @State private var showLog: Bool = false
+    @State private var screenData: ScreenTimeResponse? = nil
+    @State private var showScreenDetail: Bool = false
 
     private var todayCtx: DailyContext? {
         let today = Calendar.current.startOfDay(for: Date())
@@ -63,10 +65,13 @@ struct ConsoleView: View {
                 if !starts.isEmpty { _ = await PeriodClient.sync(dates: starts) }
             }
             if let snap = await PeriodClient.fetch() { periodPred = snap.prediction }
-            if let st = await ScreenTimeClient.fetch(), let ctx = todayCtx {
-                ctx.screenTime = st.total_minutes / 60.0
-                ctx.socialScreenTime = st.social_minutes / 60.0
-                try? modelContext.save()
+            if let st = await ScreenTimeClient.fetch() {
+                screenData = st
+                if let ctx = todayCtx {
+                    ctx.screenTime = st.total_minutes / 60.0
+                    ctx.socialScreenTime = st.social_minutes / 60.0
+                    try? modelContext.save()
+                }
             }
             // 健康桥：HealthKit/屏幕时间填好后把今日摘要报给网关（30 分钟节流）
             if let ctx = todayCtx { await HealthBridgeClient.report(from: ctx) }
@@ -92,6 +97,9 @@ struct ConsoleView: View {
         }
         .sheet(isPresented: $showLog) {
             LogView(contexts: allContexts, todayNotes: vitalsData?.notes ?? [])
+        }
+        .sheet(isPresented: $showScreenDetail) {
+            ScreenTimeDetailView(initial: screenData)
         }
     }
 
@@ -293,8 +301,11 @@ struct ConsoleView: View {
                         Text("今日屏幕 · 暂无数据").font(.system(size: 13)).foregroundColor(Self.textFaint)
                     }
                 }
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundColor(Self.textFaint)
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { showScreenDetail = true }
     }
 
     // MARK: - 待办 wide
