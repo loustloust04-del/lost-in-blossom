@@ -120,9 +120,14 @@ struct BookshelfView: View {
 
     private var header: some View {
         HStack {
-            Text("📚 书架")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Theme.textPrimary)
+            // SF Symbol 图标 + 文字（对齐 App 其他面板风格，不用 emoji）
+            HStack(spacing: 6) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("书架")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundColor(Theme.textPrimary)
             Spacer()
             Button {
                 showFileImporter = true
