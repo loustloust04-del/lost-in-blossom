@@ -9,6 +9,9 @@ enum AnniversaryClient {
         let name: String
         let date: String          // YYYY-MM-DD
         let type: String          // "anniversary" | "countdown"
+        let pinned: Bool?         // 置顶（旧记录缺省 → nil）
+        let order: Int?           // 手动排序序号
+        var isPinned: Bool { pinned ?? false }
     }
 
     private static var baseURL: String {
@@ -51,6 +54,22 @@ enum AnniversaryClient {
 
     static func remove(id: String) async -> Bool {
         guard let req = request("/api/anniversaries/\(id)", method: "DELETE") else { return false }
+        guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
+        return (resp as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    /// 置顶 / 取消置顶
+    static func setPinned(id: String, pinned: Bool) async -> Bool {
+        guard let req = request("/api/anniversaries/\(id)/pin", method: "PATCH",
+                                body: ["pinned": pinned]) else { return false }
+        guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
+        return (resp as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    /// 手动排序：ids 为新顺序
+    static func reorder(ids: [String]) async -> Bool {
+        guard let req = request("/api/anniversaries/reorder", method: "POST",
+                                body: ["ids": ids]) else { return false }
         guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
         return (resp as? HTTPURLResponse)?.statusCode == 200
     }

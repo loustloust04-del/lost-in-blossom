@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 纪念日管理页 — 控制台纪念日卡点开进入。
 /// 数据直连网关 /api/anniversaries（与 Caelum 的 remember_anniversary 同一份）。
+/// v7：支持置顶（钉图标）+ 长按拖动排序（List.onMove），置顶项自动排在最前。
 struct AnniversaryManageSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var items: [AnniversaryClient.Item] = []
@@ -15,15 +16,17 @@ struct AnniversaryManageSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 14) {
-                    listSection
-                    addSection
-                    Color.clear.frame(height: 30)
+            List {
+                listSection
+                addSection
+                Section {
+                    Color.clear.frame(height: 24)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(Theme.sidebarBg.ignoresSafeArea())
             .navigationTitle("纪念日")
             .navigationBarTitleDisplayMode(.inline)
@@ -45,20 +48,38 @@ struct AnniversaryManageSheet: View {
 
     // MARK: - 列表
 
+    @ViewBuilder
     private var listSection: some View {
-        VStack(spacing: 9) {
+        Section {
             if loading {
-                ProgressView().padding(.vertical, 30)
+                HStack { Spacer(); ProgressView(); Spacer() }
+                    .padding(.vertical, 30)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             } else if items.isEmpty {
                 Text("还没有记录。也可以直接跟 Caelum 说\n「记一下我们 X 月 X 日相识」")
                     .font(.system(size: 13.5))
                     .foregroundColor(ConsoleView.textFaint)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, 30)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             } else {
                 ForEach(items) { item in
                     itemRow(item)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
+                .onMove(perform: move)
+            }
+        } header: {
+            if !loading && !items.isEmpty {
+                Text("长按拖动排序 · 点钉置顶")
+                    .font(.system(size: 11))
+                    .foregroundColor(ConsoleView.textFaint)
+                    .textCase(nil)
             }
         }
     }
@@ -66,6 +87,19 @@ struct AnniversaryManageSheet: View {
     private func itemRow(_ item: AnniversaryClient.Item) -> some View {
         let disp = AnniversaryClient.display(for: item)
         return HStack(spacing: 12) {
+            Button {
+                Task {
+                    _ = await AnniversaryClient.setPinned(id: item.id, pinned: !item.isPinned)
+                    await reload()
+                }
+            } label: {
+                Image(systemName: item.isPinned ? "pin.fill" : "pin")
+                    .font(.system(size: 14))
+                    .foregroundColor(item.isPinned ? ConsoleView.gold : ConsoleView.textFaint)
+                    .frame(width: 20)
+            }
+            .buttonStyle(.plain)
+
             Image(systemName: item.type == "countdown" ? "hourglass" : "heart")
                 .font(.system(size: 15))
                 .foregroundColor(disp?.highlight == true ? ConsoleView.gold : ConsoleView.green)
@@ -99,9 +133,24 @@ struct AnniversaryManageSheet: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.mainBg))
     }
 
+    private func move(from source: IndexSet, to destination: Int) {
+        items.move(fromOffsets: source, toOffset: destination)
+        let ids = items.map { $0.id }
+        Task { _ = await AnniversaryClient.reorder(ids: ids) }
+    }
+
     // MARK: - 新增
 
     private var addSection: some View {
+        Section {
+            addForm
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    private var addForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("ADD")
                 .font(.system(size: 11.5, weight: .medium)).tracking(0.5)
