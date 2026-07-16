@@ -49,4 +49,16 @@ jobs:
           grep -nE "error:" /tmp/build.log | head -80 || echo "(no error: lines)"
           echo "===== last 40 lines ====="
           tail -40 /tmp/build.log
+          grep -nE "error:" /tmp/build.log > /tmp/errors.txt || echo "(no error: lines)" > /tmp/errors.txt
+          cp /tmp/build.log ./build.log; cp /tmp/errors.txt ./errors.txt
           exit $status
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            errors.txt
+            build.log
+          retention-days: 3
