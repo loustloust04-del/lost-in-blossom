@@ -76,7 +76,7 @@ struct ConsoleView: View {
             Button("取消", role: .cancel) { newTodoText = "" }
             Button("添加") { todo.add(newTodoText); newTodoText = "" }
         }
-        .sheet(isPresented: $showMemoBoard) { MemoBoardPlaceholder() }
+        .sheet(isPresented: $showMemoBoard) { MemoBoardView() }
         .sheet(isPresented: $showAnniversaries, onDismiss: {
             Task { anniversaries = await AnniversaryClient.fetch() }
         }) { AnniversaryManageSheet() }
@@ -565,33 +565,6 @@ struct ConsoleView: View {
     private func stepsFormatted(_ n: Int) -> String {
         let fmt = NumberFormatter(); fmt.numberStyle = .decimal
         return fmt.string(from: NSNumber(value: n)) ?? "\(n)"
-    }
-}
-
-// MARK: - 留言板 placeholder
-
-private struct MemoBoardPlaceholder: View {
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Image(systemName: "envelope.open")
-                    .font(.system(size: 48))
-                    .foregroundColor(ConsoleView.textLabel)
-                Text("留言板")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(ConsoleView.textPrimary)
-                Text("Coming soon · 后续接入留言系统")
-                    .font(.system(size: 14))
-                    .foregroundColor(ConsoleView.textMuted)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(ConsoleView.pageBg)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("关闭") { dismiss() } }
-            }
-        }
     }
 }
 
