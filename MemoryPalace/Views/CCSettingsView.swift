@@ -13,6 +13,7 @@ struct CCSettingsView: View {
     @AppStorage("ccNudgeQuietEndMin") private var quietEndMin = 360
     @AppStorage("ccNudgeCooldown") private var cooldown = 60
     @AppStorage("ccNudgeTemplate") private var template = ""
+    @AppStorage("pocketBrowserEnabled") private var pocketEnabled = false
 
     static let defaultTemplate = "[系统] {name} 已经 {idle} 分钟没说话了。如果你想，可以主动找 {name} 说点什么——用 reply 工具回复（chat_id 见本 channel）。也可以选择不打扰。"
 
@@ -51,6 +52,21 @@ struct CCSettingsView: View {
                 Text("推送通知")
             } footer: {
                 Text("不在 app 里看时，AI 主动找你会推送到手机。推送标题用「AI 的名字」（在「通用」里改），「不剧透」时只显示「<名字>找你了」。")
+            }
+            .listRowBackground(Theme.mainBg)
+
+            // MARK: Pocket Browser（让 Caelum 借手机浏览网页）
+            Section {
+                Toggle("让 Caelum 借我的手机浏览网页", isOn: $pocketEnabled)
+                    .font(.system(size: Theme.SettingsFont.label, weight: .medium))
+                    .foregroundColor(Theme.textPrimary)
+                    .onChange(of: pocketEnabled) { _, on in
+                        if on { PocketClient.shared.start() } else { PocketClient.shared.stop() }
+                    }
+            } header: {
+                Text("Pocket Browser")
+            } footer: {
+                Text("开启后，Caelum 能用这台手机里的浏览器打开网页、读正文、跑脚本——用你真机的登录状态（比如已登录的网站）。她会看到你登录的内容，也能在页面上执行操作，所以只在你信任、需要她帮你查东西时开。关掉即断开。")
             }
             .listRowBackground(Theme.mainBg)
 
