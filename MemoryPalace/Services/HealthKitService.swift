@@ -202,6 +202,48 @@ final class HealthKitService {
         }
     }
 
+    /// 读取最近约 12 个月的月经流量样本，聚类成「每次来潮」，返回每次来潮的首日（YYYY-MM-DD）。
+    /// 相邻样本间隔 ≥2 天视为新一次来潮。用于同步到网关做周期预测。
+    func fetchMenstrualStarts(monthsBack: Int = 12) async -> [String] {
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
+        guard let flowType = HKObjectType.categoryType(forIdentifier: .menstrualFlow) else { return [] }
+        let cal = Calendar.current
+        let startDate = cal.date(byAdding: .month, value: -monthsBack, to: Date())
+        let flowPred = HKQuery.predicateForCategorySamples(
+            with: .greaterThan, value: HKCategoryValueMenstrualFlow.none.rawValue)
+        let datePred = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: [])
+        let combined = NSCompoundPredicate(andPredicateWithSubpredicates: [flowPred, datePred])
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: flowType, predicate: combined,
+                limit: HKObjectQueryNoLimit, sortDescriptors: [sort]
+            ) { _, samples, _ in
+                guard let samples = samples as? [HKCategorySample], !samples.isEmpty else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                var starts: [String] = []
+                var prevDay: Date?
+                for sample in samples {
+                    let day = cal.startOfDay(for: sample.startDate)
+                    if let prev = prevDay {
+                        let gap = cal.dateComponents([.day], from: prev, to: day).day ?? 0
+                        if gap >= 2 { starts.append(fmt.string(from: day)) }
+                    } else {
+                        starts.append(fmt.string(from: day))
+                    }
+                    prevDay = day
+                }
+                continuation.resume(returning: starts)
+            }
+            self.store.execute(query)
+        }
+    }
+
     // MARK: - Populate DailyContext
 
     /// 读取所有 HealthKit 数据并写入 DailyContext。

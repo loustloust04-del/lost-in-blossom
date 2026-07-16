@@ -22,6 +22,8 @@ struct ConsoleView: View {
     @State private var showAddTodo: Bool = false
     @State private var newTodoText: String = ""
     @State private var todo = TodoManager.shared
+    @State private var periodPred: PeriodClient.Prediction? = nil
+    @State private var showPeriod: Bool = false
 
     private var todayCtx: DailyContext? {
         let today = Calendar.current.startOfDay(for: Date())
@@ -52,6 +54,12 @@ struct ConsoleView: View {
             if healthKit.authState == .authorized, let ctx = todayCtx {
                 await healthKit.populate(context: ctx)
             }
+            // 经期：把 Apple 健康的来潮日同步到网关，再拉预测
+            if healthKit.authState == .authorized {
+                let starts = await healthKit.fetchMenstrualStarts()
+                if !starts.isEmpty { _ = await PeriodClient.sync(dates: starts) }
+            }
+            if let snap = await PeriodClient.fetch() { periodPred = snap.prediction }
             if let st = await ScreenTimeClient.fetch(), let ctx = todayCtx {
                 ctx.screenTime = st.total_minutes / 60.0
                 ctx.socialScreenTime = st.social_minutes / 60.0
@@ -70,6 +78,9 @@ struct ConsoleView: View {
             Task { anniversaries = await AnniversaryClient.fetch() }
         }) { AnniversaryManageSheet() }
         .sheet(isPresented: $showTweets) { TweetsFeedSheet() }
+        .sheet(isPresented: $showPeriod, onDismiss: {
+            Task { if let snap = await PeriodClient.fetch() { periodPred = snap.prediction } }
+        }) { PeriodSheet() }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -174,7 +185,22 @@ struct ConsoleView: View {
                 }
                 trioDivider
                 trioCell(icon: "calendar", label: "经期") {
-                    if let day = todayCtx?.menstrualDay {
+                    if let p = periodPred, p.hasData {
+                        if p.onPeriod, let d = p.currentCycleDay {
+                            bigNum("\(d)", "天", size: 26)
+                            Text("经期中").font(.system(size: 10.5)).foregroundColor(Self.gold).padding(.top, 6)
+                        } else if let du = p.daysUntil, du >= 0 {
+                            bigNum("\(du)", "天", size: 26)
+                            Text(du <= 3 ? "快来了" : p.phase)
+                                .font(.system(size: 10.5)).foregroundColor(Self.greenDeep).padding(.top, 6)
+                        } else if let du = p.daysUntil {
+                            bigNum("\(-du)", "天", size: 26)
+                            Text("推迟").font(.system(size: 10.5)).foregroundColor(Self.gold).padding(.top, 6)
+                        } else {
+                            Text(p.phase).font(.cormorant(26)).foregroundColor(Self.textPrimary)
+                            Text("预测").font(.system(size: 10.5)).foregroundColor(Self.textMuted).padding(.top, 6)
+                        }
+                    } else if let day = todayCtx?.menstrualDay {
                         bigNum("\(day)", "天", size: 26)
                         Text(menstrualPhase(day))
                             .font(.system(size: 10.5)).foregroundColor(Self.greenDeep).padding(.top, 6)
@@ -183,6 +209,8 @@ struct ConsoleView: View {
                         Text("未记录").font(.system(size: 10.5)).foregroundColor(Self.textMuted).padding(.top, 6)
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { showPeriod = true }
             }
         }
     }
