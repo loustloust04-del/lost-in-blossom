@@ -19,6 +19,7 @@ import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
 import { listAnniversaries, addAnniversary, removeAnniversary, statusLines, setAnniversaryPinned, reorderAnniversaries } from './anniversary';
 import { listPeriods, addPeriodStart, setPeriodEnd, removePeriod, syncPeriodStarts, predictPeriod } from './period';
+import { listPosts, addPost, addReply, deletePost, deleteReply } from './board';
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
@@ -298,6 +299,31 @@ app.post('/api/period/sync', auth, async (c) => {
 });
 app.delete('/api/period/:date', auth, async (c) => {
   const ok = removePeriod(c.req.param('date'));
+  return c.json({ ok }, ok ? 200 : 404);
+});
+
+// ============ 留言板（双人小纸条，App 与 Caelum 同一份）============
+app.get('/api/board', auth, async (c) => {
+  return c.json({ posts: await listPosts() });
+});
+app.post('/api/board', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const p = await addPost(String(body?.text || ''), String(body?.by || 'bunny'));
+  if (!p) return c.json({ ok: false, error: 'text 不能为空' }, 400);
+  return c.json({ ok: true, post: p });
+});
+app.post('/api/board/:id/reply', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await addReply(c.req.param('id'), String(body?.text || ''), String(body?.by || 'bunny'));
+  if (!r) return c.json({ ok: false, error: '帖子不存在或内容为空' }, 400);
+  return c.json({ ok: true, reply: r });
+});
+app.delete('/api/board/:id/reply/:rid', auth, async (c) => {
+  const ok = await deleteReply(c.req.param('id'), c.req.param('rid'));
+  return c.json({ ok }, ok ? 200 : 404);
+});
+app.delete('/api/board/:id', auth, async (c) => {
+  const ok = await deletePost(c.req.param('id'));
   return c.json({ ok }, ok ? 200 : 404);
 });
 
