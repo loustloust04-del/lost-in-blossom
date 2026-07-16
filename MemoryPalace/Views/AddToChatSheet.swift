@@ -98,7 +98,7 @@ struct AddToChatSheet: View {
                             }
                         }
                         if !loaded {
-                            BreadcrumbLog.shared.add("📷", "all image load paths failed for item: \(item.debugDescription)")
+                            BreadcrumbLog.shared.add("📷", "all image load paths failed for item: \(String(describing: item))")
                         }
                         await MainActor.run {
                             photoPickerItems = []
