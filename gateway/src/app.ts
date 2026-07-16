@@ -17,7 +17,7 @@ import { updateSummary } from './memory/keepalive';
 import { config } from './config';
 import { getUnreadDesires, onAppOpenEvent } from './memory/desire';
 import { recordEvent, verifyEventToken } from './memory/events';
-import { listAnniversaries, addAnniversary, removeAnniversary, statusLines } from './anniversary';
+import { listAnniversaries, addAnniversary, removeAnniversary, statusLines, setAnniversaryPinned, reorderAnniversaries } from './anniversary';
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
@@ -228,6 +228,19 @@ app.post('/api/anniversaries', auth, async (c) => {
 app.delete('/api/anniversaries/:id', auth, async (c) => {
   const ok = removeAnniversary(c.req.param('id'));
   return c.json({ ok }, ok ? 200 : 404);
+});
+// 置顶 / 取消置顶
+app.patch('/api/anniversaries/:id/pin', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const ok = setAnniversaryPinned(c.req.param('id'), !!body?.pinned);
+  return c.json({ ok }, ok ? 200 : 404);
+});
+// 手动排序：body.ids 为新顺序
+app.post('/api/anniversaries/reorder', auth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const ids = Array.isArray(body?.ids) ? body.ids.map((x: any) => String(x)) : [];
+  const ok = reorderAnniversaries(ids);
+  return c.json({ ok });
 });
 
 // App 回前台拉未处理的偷看（只给元数据）

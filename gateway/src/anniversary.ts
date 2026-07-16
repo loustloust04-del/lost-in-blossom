@@ -15,6 +15,8 @@ export interface Anniversary {
   name: string;
   date: string;              // YYYY-MM-DD
   type: 'anniversary' | 'countdown';
+  pinned?: boolean;          // 置顶：钉在列表最前
+  order?: number;            // 手动排序序号（越小越靠前）
 }
 
 function load(): Anniversary[] {
@@ -40,7 +42,45 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
-export function listAnniversaries(): Anniversary[] { return load(); }
+/// 排序口径：置顶优先，其次手动 order（缺省用文件内位置），最后稳定。
+function sortAnniversaries(list: Anniversary[]): Anniversary[] {
+  return list
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => {
+      const px = x.a.pinned ? 0 : 1;
+      const py = y.a.pinned ? 0 : 1;
+      if (px !== py) return px - py;
+      const ox = x.a.order ?? x.i;
+      const oy = y.a.order ?? y.i;
+      if (ox !== oy) return ox - oy;
+      return x.i - y.i;
+    })
+    .map((w) => w.a);
+}
+
+export function listAnniversaries(): Anniversary[] { return sortAnniversaries(load()); }
+
+/// 置顶 / 取消置顶
+export function setAnniversaryPinned(id: string, pinned: boolean): boolean {
+  const list = load();
+  const item = list.find((a) => a.id === id);
+  if (!item) return false;
+  item.pinned = pinned;
+  save(list);
+  return true;
+}
+
+/// 按给定 id 顺序重排（order = 数组下标）
+export function reorderAnniversaries(ids: string[]): boolean {
+  const list = load();
+  const pos = new Map<string, number>(ids.map((id, i) => [id, i]));
+  for (const a of list) {
+    const o = pos.get(a.id);
+    if (o !== undefined) a.order = o;
+  }
+  save(list);
+  return true;
+}
 
 export function addAnniversary(name: string, date: string, type: 'anniversary' | 'countdown' = 'anniversary'): Anniversary | { error: string } {
   if (!name?.trim()) return { error: 'name 不能为空' };
