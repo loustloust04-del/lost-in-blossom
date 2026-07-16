@@ -54,15 +54,25 @@ enum FileLibraryTools {
     /// name + inputJSON(字符串) → 执行 → 回灌文本。失败也返回文本+isError，让模型自愈。
     static func execute(name: String, inputJSON: String, profileId: String) -> Result {
         let args = (try? JSONSerialization.jsonObject(with: Data(inputJSON.utf8))) as? [String: Any] ?? [:]
+        // memory/ 记忆树只读：任何写类工具碰 memory/ 路径一律拒绝
+        let touched = ["path", "old_path", "new_path"].compactMap { args[$0] as? String }
+        if touched.contains(where: { $0.hasPrefix(FileLibraryStore.memoryVirtualPrefix) }),
+           name != Name.read.rawValue, name != Name.list.rawValue, name != Name.search.rawValue {
+            return Result(text: "memory/ 记忆树只读，不可修改", isError: true)
+        }
         do {
             switch Name(rawValue: name) {
             case .list:
-                let items = FileLibraryStore.list(profileId: profileId)
+                let items = FileLibraryStore.list(profileId: profileId) + FileLibraryStore.memoryList(profileId: profileId)
                 return ok(items.isEmpty ? "（空文件库）" : items.map { "\($0.path)  (\($0.bytes)B)" }.joined(separator: "\n"))
             case .read:
-                return ok(try FileLibraryStore.read(str(args, "path"), profileId: profileId))
+                let p = str(args, "path")
+                return ok(p.hasPrefix(FileLibraryStore.memoryVirtualPrefix)
+                    ? try FileLibraryStore.memoryRead(p, profileId: profileId)
+                    : try FileLibraryStore.read(p, profileId: profileId))
             case .search:
-                let hits = FileLibraryStore.search(str(args, "keyword"), profileId: profileId)
+                let kw = str(args, "keyword")
+                let hits = FileLibraryStore.search(kw, profileId: profileId) + FileLibraryStore.memorySearch(kw, profileId: profileId)
                 return ok(hits.isEmpty ? "无命中" : hits.map { "\($0.path): \($0.line)" }.joined(separator: "\n"))
             case .write:
                 try FileLibraryStore.write(str(args, "path"), content: str(args, "content"), profileId: profileId)

@@ -118,6 +118,70 @@ enum FileLibraryStore {
         return try Data(contentsOf: url)
     }
 
+
+    // MARK: - 记忆树（只读映射）
+    // memory/ 前缀 → App Support/MemoryPalace/memory/{profileId}/。对话摘要/心声/日记等
+    // 内部系统写入的内容，工具层只许读（写由 InnerVoice 等内部系统经 memoryWrite 走）。
+
+    static let memoryVirtualPrefix = "memory/"
+
+    static func memoryRoot(profileId: String) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = base.appendingPathComponent("MemoryPalace/memory/\(profileId)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// 把 memory/ 虚拟路径解析成记忆树内绝对 URL，拒绝越狱。返回 nil = 非法。
+    private static func resolveMemory(_ virtualPath: String, profileId: String) -> URL? {
+        let trimmed = virtualPath.trimmingCharacters(in: .init(charactersIn: " "))
+        let rel = (trimmed.hasPrefix(memoryVirtualPrefix) ? String(trimmed.dropFirst(memoryVirtualPrefix.count)) : trimmed)
+            .trimmingCharacters(in: .init(charactersIn: "/ "))
+        guard !rel.isEmpty else { return nil }
+        let root = memoryRoot(profileId: profileId).standardizedFileURL
+        let target = root.appendingPathComponent(rel).standardizedFileURL
+        guard target.path.hasPrefix(root.path + "/") || target.path == root.path else { return nil }
+        return target
+    }
+
+    /// 记忆树文件清单（路径带 memory/ 前缀，与 fs_* 工具视角一致）
+    static func memoryList(profileId: String) -> [FileMeta] {
+        let root = memoryRoot(profileId: profileId)
+        guard let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]) else { return [] }
+        var out: [FileMeta] = []
+        for case let url as URL in en where url.pathExtension == "md" {
+            let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            let rel = String(url.standardizedFileURL.path.dropFirst(root.standardizedFileURL.path.count + 1))
+            out.append(.init(path: memoryVirtualPrefix + rel, bytes: v?.fileSize ?? 0, modifiedAt: v?.contentModificationDate ?? .distantPast))
+        }
+        return out.sorted { $0.path < $1.path }
+    }
+
+    static func memoryRead(_ virtualPath: String, profileId: String) throws -> String {
+        guard let url = resolveMemory(virtualPath, profileId: profileId) else { throw err("非法路径: \(virtualPath)") }
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    static func memorySearch(_ keyword: String, profileId: String) -> [(path: String, line: String)] {
+        guard !keyword.isEmpty else { return [] }
+        var hits: [(path: String, line: String)] = []
+        for meta in memoryList(profileId: profileId) {
+            guard let body = try? memoryRead(meta.path, profileId: profileId) else { continue }
+            for line in body.split(separator: "\n", omittingEmptySubsequences: false)
+                where line.range(of: keyword, options: .caseInsensitive) != nil {
+                hits.append((meta.path, String(line)))
+            }
+        }
+        return hits
+    }
+
+    /// 内部系统写记忆树（心声/日记）。工具层禁止写 memory/，只有 InnerVoice 等走这里。
+    static func memoryWrite(_ virtualPath: String, content: String, profileId: String) throws {
+        guard let url = resolveMemory(virtualPath, profileId: profileId) else { throw err("非法路径: \(virtualPath)") }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try content.data(using: .utf8)!.write(to: url, options: .atomic)
+    }
+
     private static func err(_ m: String) -> NSError {
         NSError(domain: "FileLibrary", code: -1, userInfo: [NSLocalizedDescriptionKey: m])
     }
