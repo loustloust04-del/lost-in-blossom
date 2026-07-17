@@ -6,6 +6,7 @@ import { SCREEN_PEEK_ABILITY } from '../peek';
 import { anniversaryContext } from '../anniversary';
 import { periodContext } from '../period';
 import { medsContext } from '../meds';
+import { boardContext } from '../board';
 import { NOTEBOOK_ABILITY } from '../notebook';
 
 // 流式 tool loop：把 Anthropic SSE 转成网关统一的 OpenAI chunk 流给客户端，
@@ -124,6 +125,8 @@ export async function runToolLoop(body: any, sessionId: string): Promise<Respons
   if (period) (payload.system as any[]).push({ type: 'text', text: period });
   const meds = await medsContext();
   if (meds) (payload.system as any[]).push({ type: 'text', text: meds });
+  const board = await boardContext();
+  if (board) (payload.system as any[]).push({ type: 'text', text: board });
   // 工具定义：内置在前、MCP 在后，顺序固定（缓存前缀稳定）
   const mcpTools = await getMcpTools();
   payload.tools = [

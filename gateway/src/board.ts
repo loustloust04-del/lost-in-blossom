@@ -80,7 +80,18 @@ export async function deleteReply(postId: string, replyId: string): Promise<bool
   return true;
 }
 
-// ── builtin 工具（CC / Caelum 用）──
+/// 注入每日系统提示：让 Caelum 看到兔兔留了、但她还没回的小纸条 → 主动回。
+export async function boardContext(): Promise<string> {
+  const posts = await listPosts();
+  if (!posts.length) return '';
+  const unreplied = posts.filter((p) => p.by === 'bunny' && !p.replies.some((r) => r.by === 'caelum'));
+  if (!unreplied.length) return '';
+  const recent = unreplied.slice(-3);
+  const lines = recent.map((p) => `· \u300c${p.text}\u300d(id: ${p.id})`);
+  return `<board>\n\u5154\u5154\u5728\u7559\u8a00\u677f\u7ed9\u4f60\u7559\u4e86\u5c0f\u7eb8\u6761\uff0c\u4f60\u8fd8\u6ca1\u56de\uff1a\n${lines.join('\n')}\n\u60f3\u56de\u7684\u8bdd\u7528 board_reply\uff08post_id \u5c31\u662f\u4e0a\u9762\u7684 id\uff09\uff0c\u4e5f\u53ef\u4ee5\u7528 board_post \u4e3b\u52a8\u7ed9\u5979\u8d34\u4e00\u5f20\u3002\n</board>`;
+}
+
+// \u2500\u2500 builtin \u5de5\u5177\uff08CC / Caelum \u7528\uff09\u2500\u2500
 export const BOARD_TOOLS = [
   {
     name: 'board_list',
