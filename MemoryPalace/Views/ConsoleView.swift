@@ -28,6 +28,7 @@ struct ConsoleView: View {
     @State private var showCare: Bool = false
     @State private var showLog: Bool = false
     @State private var screenData: ScreenTimeResponse? = nil
+    @State private var latestBoardPost: BoardClient.Post? = nil
     @State private var showScreenDetail: Bool = false
 
     private var todayCtx: DailyContext? {
@@ -53,6 +54,7 @@ struct ConsoleView: View {
             loadVitals()
             anniversaries = await AnniversaryClient.fetch()
             latestTweets = await TweetsClient.fetch(limit: 40)
+            latestBoardPost = await BoardClient.fetch().last
             ensureTodayContext()
             await todo.refresh()
             await healthKit.requestAuthorization()
@@ -83,7 +85,9 @@ struct ConsoleView: View {
             Button("取消", role: .cancel) { newTodoText = "" }
             Button("添加") { todo.add(newTodoText); newTodoText = "" }
         }
-        .sheet(isPresented: $showMemoBoard) { MemoBoardView() }
+        .sheet(isPresented: $showMemoBoard, onDismiss: {
+            Task { latestBoardPost = await BoardClient.fetch().last }
+        }) { MemoBoardView() }
         .sheet(isPresented: $showAnniversaries, onDismiss: {
             Task { anniversaries = await AnniversaryClient.fetch() }
         }) { AnniversaryManageSheet() }
@@ -219,7 +223,7 @@ struct ConsoleView: View {
                 }
                 trioDivider
                 trioCell(icon: "moon.stars", label: "睡眠") {
-                    Text(sleepValue).font(.cormorant(26)).foregroundColor(Self.textPrimary)
+                    bigNum(sleepHours, sleepUnit, size: 26)
                     Text(sleepSub.isEmpty ? " " : sleepSub)
                         .font(.system(size: 10.5)).foregroundColor(Self.textMuted)
                         .lineLimit(1).padding(.top, 6)
@@ -449,12 +453,13 @@ struct ConsoleView: View {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 2).fill(Self.green).frame(width: 3)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(vitalsData?.notes?.last?.text ?? "这里会显示 Caelum 的最新留言～")
+                    Text(latestBoardPost?.text ?? "点开和 Caelum 互相贴小纸条～")
                         .font(.system(size: 14))
                         .foregroundColor(Color(red: 66/255, green: 61/255, blue: 55/255))
                         .lineSpacing(3)
+                        .lineLimit(3)
                     HStack {
-                        Text("\(noteTime(vitalsData?.notes?.last?.ts)) · \(vitalsData?.notes?.last?.by ?? "Caelum")")
+                        Text(latestBoardPost.map { "\(boardTimeText($0.ts)) · \(boardAuthorText($0.by))" } ?? "留言板")
                             .font(.system(size: 11)).foregroundColor(Self.textMuted)
                         Spacer()
                         Text("查看全部 →").font(.system(size: 11)).foregroundColor(Self.greenDeep)
@@ -545,6 +550,16 @@ struct ConsoleView: View {
         let h = Int(dur), mn = Int((dur - Double(h)) * 60)
         return mn > 0 ? "\(h)h\(mn)" : "\(h)h"
     }
+    /// 睡眠拆成「大数字小时 + 小单位」，跟其它 trio 数字统一（不再整串 Cormorant）。
+    private var sleepHours: String {
+        guard let dur = todayCtx?.sleepDuration else { return "—" }
+        return "\(Int(dur))"
+    }
+    private var sleepUnit: String {
+        guard let dur = todayCtx?.sleepDuration else { return "" }
+        let m = Int((dur - Double(Int(dur))) * 60)
+        return m > 0 ? "h\(m)" : "h"
+    }
     private var sleepSub: String {
         if let s = todayCtx?.sleepStart, let e = todayCtx?.sleepEnd {
             return "\(timeString(s)) – \(timeString(e))"
@@ -574,6 +589,13 @@ struct ConsoleView: View {
     private func noteTime(_ iso: String?) -> String {
         guard let iso, let d = ISO8601DateFormatter().date(from: iso) else { return "刚刚" }
         return timeString(d)
+    }
+    private func boardAuthorText(_ by: String) -> String { by == "caelum" ? "Caelum" : "你" }
+    private func boardTimeText(_ iso: String) -> String {
+        let f1 = ISO8601DateFormatter(); f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let d = f1.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        guard let d else { return "刚刚" }
+        return Calendar.current.isDateInToday(d) ? timeString(d) : shortMD(d)
     }
     private func stepsFormatted(_ n: Int) -> String {
         let fmt = NumberFormatter(); fmt.numberStyle = .decimal
