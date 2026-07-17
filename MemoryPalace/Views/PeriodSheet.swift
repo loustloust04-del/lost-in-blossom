@@ -10,6 +10,8 @@ struct PeriodSheet: View {
     @State private var busy = false
     @State private var backfillDate = Date()
     @State private var showBackfill = false
+    @State private var healthKit = HealthKitService()
+    @State private var syncMsg: String? = nil
 
     private var ymd: DateFormatter {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX"); return f
@@ -109,6 +111,14 @@ struct PeriodSheet: View {
 
     private var actionCard: some View {
         VStack(spacing: 10) {
+            actionButton(title: "从 Apple 健康同步", icon: "heart.text.square.fill", filled: false) {
+                Task { await syncHealthKit() }
+            }
+            if let msg = syncMsg {
+                Text(msg)
+                    .font(.system(size: 12)).foregroundColor(ConsoleView.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             actionButton(title: "记录来潮 · 今天", icon: "drop.fill", filled: true) {
                 Task { await act { _ = await PeriodClient.logStart() } }
             }
@@ -152,6 +162,20 @@ struct PeriodSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(busy)
+    }
+
+    private func syncHealthKit() async {
+        busy = true
+        await healthKit.requestAuthorization()
+        let starts = await healthKit.fetchMenstrualStarts()
+        if starts.isEmpty {
+            syncMsg = "Apple 健康里没读到经期记录——去「设置→隐私与安全性→健康→Lost in Blossom」确认「经期」读取是开的"
+        } else {
+            let added = await PeriodClient.sync(dates: starts)
+            syncMsg = added > 0 ? "从 Apple 健康同步了 \(added) 次来潮 🩸" : "已是最新（Apple 健康里 \(starts.count) 次都同步过了）"
+        }
+        await reload()
+        busy = false
     }
 
     private func act(_ op: @escaping () async -> Void) async {

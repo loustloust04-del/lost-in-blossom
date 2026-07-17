@@ -209,36 +209,45 @@ final class HealthKitService {
         guard let flowType = HKObjectType.categoryType(forIdentifier: .menstrualFlow) else { return [] }
         let cal = Calendar.current
         let startDate = cal.date(byAdding: .month, value: -monthsBack, to: Date())
-        let flowPred = HKQuery.predicateForCategorySamples(
-            with: .greaterThan, value: HKCategoryValueMenstrualFlow.none.rawValue)
+        // 只按日期范围查——不再按 flow>none 筛（那会漏掉「只标经期、没填流量」的记录）。
+        // 经期起始靠 HKMetadataKeyMenstrualCycleStart 元数据判断，退回用间隔。
         let datePred = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: [])
-        let combined = NSCompoundPredicate(andPredicateWithSubpredicates: [flowPred, datePred])
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         fmt.locale = Locale(identifier: "en_US_POSIX")
         return await withCheckedContinuation { continuation in
             let query = HKSampleQuery(
-                sampleType: flowType, predicate: combined,
+                sampleType: flowType, predicate: datePred,
                 limit: HKObjectQueryNoLimit, sortDescriptors: [sort]
             ) { _, samples, _ in
                 guard let samples = samples as? [HKCategorySample], !samples.isEmpty else {
                     continuation.resume(returning: [])
                     return
                 }
-                var starts: [String] = []
-                var prevDay: Date?
+                // 1) 优先：Apple 健康给每次经期第一天打的「周期开始」元数据
+                var startSet = Set<String>()
                 for sample in samples {
-                    let day = cal.startOfDay(for: sample.startDate)
-                    if let prev = prevDay {
-                        let gap = cal.dateComponents([.day], from: prev, to: day).day ?? 0
-                        if gap >= 2 { starts.append(fmt.string(from: day)) }
-                    } else {
-                        starts.append(fmt.string(from: day))
+                    if (sample.metadata?[HKMetadataKeyMenstrualCycleStart] as? Bool) == true {
+                        startSet.insert(fmt.string(from: cal.startOfDay(for: sample.startDate)))
                     }
-                    prevDay = day
                 }
-                continuation.resume(returning: starts)
+                // 2) 没有元数据标记时，退回「相邻记录间隔 ≥2 天 = 新一次来潮」
+                if startSet.isEmpty {
+                    var prevDay: Date?
+                    for sample in samples {
+                        let day = cal.startOfDay(for: sample.startDate)
+                        if let prev = prevDay {
+                            if (cal.dateComponents([.day], from: prev, to: day).day ?? 0) >= 2 {
+                                startSet.insert(fmt.string(from: day))
+                            }
+                        } else {
+                            startSet.insert(fmt.string(from: day))
+                        }
+                        prevDay = day
+                    }
+                }
+                continuation.resume(returning: startSet.sorted())
             }
             self.store.execute(query)
         }
