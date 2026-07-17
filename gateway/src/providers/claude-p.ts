@@ -24,7 +24,7 @@ export async function forwardClaudeP(body: any): Promise<Response> {
   }
 
   const args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "none", "--include-partial-messages", "--model", model]
-  if (finalSystemPrompt) args.push("--append-system-prompt", finalSystemPrompt)
+  if (finalSystemPrompt) args.push("--system-prompt", finalSystemPrompt)
 
   const proc = spawn("claude", args, {
     cwd: "/root/projects/BunnyPalace",
