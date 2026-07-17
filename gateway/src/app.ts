@@ -791,15 +791,18 @@ import { BUILTIN_TOOLS, callBuiltinTool } from './tools/builtin';
 app.get('/api/mcp/tools', auth, async (c) => {
   const mcpTools = await getMcpTools();
   const all = [
-    ...BUILTIN_TOOLS.map((t: any) => ({ name: t.name, description: t.description, source: 'builtin' })),
-    ...mcpTools.map((t: any) => ({ name: t.name, description: t.description, source: 'mcp' })),
+    ...BUILTIN_TOOLS.map((t: any) => ({ server: 'gateway', name: t.name, description: t.description, inputSchema: t.input_schema || { type: 'object', properties: {} }, source: 'builtin' })),
+    ...mcpTools.map((t: any) => ({ server: 'mcp', name: t.name, description: t.description, inputSchema: t.input_schema || { type: 'object', properties: {} }, source: 'mcp' })),
   ];
   return c.json({ tools: all, count: all.length });
 });
 
 // 调用工具（App端直接调）
 app.post('/api/mcp/call', auth, async (c) => {
-  const { name, input } = await c.req.json();
+  const body = await c.req.json().catch(() => ({}));
+  // 兼容两种协议：{name,input}（网关原生）与 {server,tool,arguments}（App 工具桥）
+  const name = body?.name || body?.tool;
+  const input = body?.input ?? body?.arguments ?? {};
   console.log('[mcp-proxy] call:', name, JSON.stringify(input).slice(0, 100));
 
   // 先试内置工具
