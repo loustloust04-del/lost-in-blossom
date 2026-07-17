@@ -63,7 +63,15 @@ final class ProviderRouter {
             openAIProvider.onSegmentsCallback = onSegments
             openAIProvider.onThinkingToken = onThinkingToken
             // PR-3: REST bridge 客户端工具（function calling）
-            openAIProvider.bridgeTools = sanitizedBridgeTools()
+            // MetaTools 目录化：MCP 工具超阈值时只注入 3 个元工具，完整目录进 metaToolCatalog。
+            let oaiMCPTools = sanitizedBridgeTools()
+            if oaiMCPTools.count > ProviderRouter.metaToolThreshold {
+                openAIProvider.bridgeTools = MetaTools.toolDescriptors
+                openAIProvider.metaToolCatalog = oaiMCPTools
+            } else {
+                openAIProvider.bridgeTools = oaiMCPTools
+                openAIProvider.metaToolCatalog = []
+            }
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = openAIProvider
         case .anthropic:
@@ -72,7 +80,15 @@ final class ProviderRouter {
             anthropicProvider.mcpServersToInject = mcpEnabled ? provider.mcpServers.filter(\.isEnabled) : []
             anthropicProvider.onSegmentsCallback = onSegments
             // PR-2: REST bridge 客户端工具（所有 provider 可用）。同步读快照，异步预热下一轮。
-            anthropicProvider.bridgeTools = sanitizedBridgeTools()
+            // MetaTools 目录化：MCP 工具超阈值时只注入 3 个元工具，完整目录进 metaToolCatalog。
+            let antMCPTools = sanitizedBridgeTools()
+            if antMCPTools.count > ProviderRouter.metaToolThreshold {
+                anthropicProvider.bridgeTools = MetaTools.toolDescriptors
+                anthropicProvider.metaToolCatalog = antMCPTools
+            } else {
+                anthropicProvider.bridgeTools = antMCPTools
+                anthropicProvider.metaToolCatalog = []
+            }
             if MCPBridgeConfig.isConfigured { Task { _ = try? await MCPService.shared.fetchTools() } }
             chatProvider = anthropicProvider
         case .ccBridge:
@@ -98,6 +114,9 @@ final class ProviderRouter {
             onError: onError
         )
     }
+
+    /// MetaTools 目录化阈值：MCP 工具数超过它就只注入 3 个元工具（详见 applyBridgeTools 内联逻辑）。
+    private static let metaToolThreshold = 15
 
     /// 桥工具净化：剔除与本地同名的 search_web / browse_url，并按名字兜底去重。
     /// ⚠️ 搜索/浏览工具由各 Provider 内部原生注入（OpenAICompatibleProvider 与

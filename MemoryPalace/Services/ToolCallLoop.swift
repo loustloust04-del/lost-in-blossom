@@ -43,7 +43,7 @@ enum ToolCallLoop {
 
     /// 执行一批工具调用：按名在 bridgeTools 里查 server → 解析参数 → 调 MCPService。
     /// 失败不抛——返回 isError 的 outcome，让循环把它当 tool_result 回灌，模型自行决定。
-    static func execute(_ calls: [ToolCall], bridgeTools: [MCPToolDescriptor]) async -> [ToolOutcome] {
+    static func execute(_ calls: [ToolCall], bridgeTools: [MCPToolDescriptor], metaToolCatalog: [MCPToolDescriptor] = []) async -> [ToolOutcome] {
         var outcomes: [ToolOutcome] = []
         for call in calls {
             // ── 本地工具：联网搜索 / 读网页（在 MCP 查找之前拦截）──
@@ -64,6 +64,39 @@ enum ToolCallLoop {
                 let result = await NotebookTool.execute(name: call.name, inputJSON: call.argumentsJSON)
                 outcomes.append(ToolOutcome(id: call.id, name: call.name,
                                             text: result.text, isError: result.isError))
+                continue
+            }
+            // ── 元工具（MetaTools 目录化）：tool_search / tool_inspect / tool_invoke ──
+            if MetaTools.names.contains(call.name) {
+                let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8))) as? [String: Any] ?? [:]
+                var text = ""
+                var isError = false
+                switch call.name {
+                case MetaTools.searchName:
+                    text = MetaTools.search(query: args["query"] as? String ?? "", catalog: metaToolCatalog)
+                case MetaTools.inspectName:
+                    text = MetaTools.inspect(names: args["names"] as? [String] ?? [], catalog: metaToolCatalog)
+                case MetaTools.invokeName:
+                    let toolName = args["name"] as? String ?? ""
+                    let toolArgs = args["arguments"] as? [String: Any] ?? [:]
+                    if let resolved = MetaTools.resolve(toolName, catalog: metaToolCatalog),
+                       let server = metaToolCatalog.first(where: { $0.name == resolved })?.server {
+                        do {
+                            let blocks = try await MCPService.shared.callTool(server: server, tool: resolved, arguments: toolArgs)
+                            text = MCPContentBlock.flatten(blocks)
+                        } catch {
+                            text = "调用 \(resolved) 失败: \(error.localizedDescription)"
+                            isError = true
+                        }
+                    } else {
+                        text = "工具 '\(toolName)' 未找到。用 tool_search 搜索可用工具。"
+                        isError = true
+                    }
+                default:
+                    text = "未知元工具: \(call.name)"
+                    isError = true
+                }
+                outcomes.append(ToolOutcome(id: call.id, name: call.name, text: text, isError: isError))
                 continue
             }
             guard let server = bridgeTools.first(where: { $0.name == call.name })?.server else {

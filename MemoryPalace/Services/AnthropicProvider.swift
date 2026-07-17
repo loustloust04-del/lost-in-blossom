@@ -412,7 +412,7 @@ final class AnthropicProvider: BaseChatProvider {
                 toolRound += 1
                 Task { [weak self] in
                     guard let self else { return }
-                    let outcomes = await ToolCallLoop.execute(bridgeCalls, bridgeTools: self.bridgeTools)
+                    let outcomes = await ToolCallLoop.execute(bridgeCalls, bridgeTools: self.bridgeTools, metaToolCatalog: self.metaToolCatalog)
                     await MainActor.run {
                         var userContent: [[String: Any]] = []
                         for o in outcomes {

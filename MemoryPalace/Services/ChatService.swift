@@ -21,6 +21,9 @@ class BaseChatProvider: NSObject {
     var onToken: ((String) -> Void)?
     var onComplete: ((String, TokenUsage?) -> Void)?
     var onError: ((String) -> Void)?
+    /// 目录化模式（MetaTools）：完整 MCP 工具目录，MCP 工具超过阈值时由 ProviderRouter 填入，
+    /// 供 ToolCallLoop 处理 tool_search/tool_inspect/tool_invoke 时查目录/转发用。
+    var metaToolCatalog: [MCPToolDescriptor] = []
     /// 流式过程中累积的 token 用量。usage 信息常在 stream 末尾或分事件到来。
     var accumulatedInputTokens: Int = 0
     var accumulatedOutputTokens: Int = 0

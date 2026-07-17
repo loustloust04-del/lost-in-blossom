@@ -220,7 +220,7 @@ final class OpenAICompatibleProvider: BaseChatProvider {
         }
         Task { [weak self] in
             guard let self else { return }
-            let outcomes = await ToolCallLoop.execute(calls, bridgeTools: self.bridgeTools)
+            let outcomes = await ToolCallLoop.execute(calls, bridgeTools: self.bridgeTools, metaToolCatalog: self.metaToolCatalog)
             await MainActor.run {
                 var msgs = (self.loopBody["messages"] as? [[String: Any]]) ?? []
                 var assistantMsg: [String: Any] = ["role": "assistant", "tool_calls": assistantToolCalls]
