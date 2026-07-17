@@ -50,6 +50,15 @@ export const TWITTER_TOOLS = [
       required: ['query'],
     },
   },
+  {
+    name: 'twitter_command',
+    description: "在兔兔的 Twitter 上执行任意操作（发推、回复、点赞、关注等）——运行任意 bb-browser 命令。示例：'site twitter/post 内容' 发推、'site twitter/reply <推文链接> 内容' 回复。需要动手做点什么(不只是读)时用。",
+    input_schema: {
+      type: 'object' as const,
+      properties: { command: { type: 'string', description: "bb-browser 命令参数（不含 bb-browser 前缀），如 site twitter/post 你好世界" } },
+      required: ['command'],
+    },
+  },
 ];
 
 export async function callTwitterTool(name: string, input: any): Promise<string | null> {
@@ -68,6 +77,11 @@ export async function callTwitterTool(name: string, input: any): Promise<string 
     const q = String(input?.query || '').trim();
     if (!q) return 'twitter_search: 缺少 query';
     return runBB(['site', 'twitter/search', q]);
+  }
+  if (name === 'twitter_command') {
+    const cmd = String(input?.command || '').trim();
+    if (!cmd) return 'twitter_command: 缺少 command';
+    return runBB(cmd.split(/\s+/));
   }
   return null;
 }

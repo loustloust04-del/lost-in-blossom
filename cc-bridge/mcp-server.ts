@@ -144,6 +144,7 @@ const PROXY_TOOLS = [
   { name: "fs_search", description: "在所有笔记里按关键词搜索。", inputSchema: { type: "object", properties: { keyword: { type: "string" } }, required: ["keyword"] } },
   { name: "fs_rename", description: "重命名/移动笔记文件；目标已存在则失败。", inputSchema: { type: "object", properties: { old_path: { type: "string" }, new_path: { type: "string" } }, required: ["old_path", "new_path"] } },
   { name: "fs_delete", description: "删除一个笔记文件。", inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } },
+  { name: "twitter_command", description: "在兔兔 Twitter 上执行任意操作(发推/回复/点赞/关注)——运行任意 bb-browser 命令。需要动手时用。", inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } },
   {
     name: "get_health",
     description: "Bunny 的健康数据（HealthKit 摘要）：今日步数/睡眠/经期日/饮水/屏幕时间 + 近 14 天趋势。想关心她睡得好不好、身体状态时调用。No parameters.",
