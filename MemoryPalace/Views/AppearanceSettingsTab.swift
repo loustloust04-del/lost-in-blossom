@@ -21,6 +21,7 @@ struct AppearanceSettingsTab: View {
     @AppStorage("hideActionBar") private var hideActionBar: Bool = false
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
+    @AppStorage("thinkingSheetMode") private var thinkingSheetMode = false  // 开=弹全屏 sheet，关=原地折叠
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     // 负向 key：true = 关闭自动半透明。这样 key 缺省（false）= 行为保持原样。
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
@@ -218,6 +219,12 @@ struct AppearanceSettingsTab: View {
                     }
                     .pickerStyle(.segmented)
                 }
+
+                // Thinking expand mode（折叠展开 / 弹全屏窗口）
+                Toggle("思考链弹全屏窗口", isOn: $thinkingSheetMode)
+                    .font(.system(size: Theme.SettingsFont.label))
+                    .foregroundColor(Theme.textPrimary)
+                    .tint(Theme.branchIndicator)
             }
         }
         .onAppear {
@@ -305,6 +312,7 @@ struct IOSAppearancePage: View {
     @AppStorage("hideActionBar") private var hideActionBar: Bool = false
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
+    @AppStorage("thinkingSheetMode") private var thinkingSheetMode = false  // 开=弹全屏 sheet，关=原地折叠
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
     @AppStorage("disableAutoTransparentBubblesOnWallpaper") private var disableAutoTransparent: Bool = false
     @AppStorage("bubbleAdvExpanded") private var bubbleAdvExpanded: Bool = false
@@ -485,6 +493,13 @@ struct IOSAppearancePage: View {
                     Text("关闭").tag("hidden")
                 }
                 .pickerStyle(.segmented)
+            }
+            .listRowBackground(Theme.mainBg)
+            .listRowSeparator(.hidden)
+
+            Section("思考链展开方式") {
+                Toggle("弹全屏窗口", isOn: $thinkingSheetMode)
+                    .tint(Theme.branchIndicator)
             }
             .listRowBackground(Theme.mainBg)
             .listRowSeparator(.hidden)

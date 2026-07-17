@@ -1491,8 +1491,12 @@ struct BubbleView: View {
                         let rawPreview = String(displayThinking.prefix(40)) + (displayThinking.count > 40 ? "…" : "")
                         let previewStr = thinkingPreviewMode == "prefix" ? rawPreview : (thinkingSummary.isEmpty ? rawPreview : thinkingSummary)
                         Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                thinkingExpanded.toggle()
+                            if thinkingSheetMode {
+                                showThinkingSheet = true
+                            } else {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    thinkingExpanded.toggle()
+                                }
                             }
                         } label: {
                             HStack(spacing: 5) {
@@ -1514,6 +1518,10 @@ struct BubbleView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        // 弹窗模式（thinkingSheetMode 开）：点标题弹全屏 sheet，复用 ThinkingPanelView
+                        .sheet(isPresented: $showThinkingSheet) {
+                            ThinkingPanelView(thinkingText: displayThinking, isThinking: liveThinking && isThinking)
+                        }
 
                         // 内联展开区域（替代原 ThinkingPanelView sheet）
                         // 空白框 bug 修复：thinking 为空（trim 后）不渲染任何内容
@@ -1600,6 +1608,8 @@ struct BubbleView: View {
     @State private var showFolderPicker = false
     @State private var thinkingExpanded = false
     @State private var thinkingShowFull = false  // "Show more" 控制
+    @AppStorage("thinkingSheetMode") private var thinkingSheetMode = false  // 开=弹全屏 sheet，关=原地折叠
+    @State private var showThinkingSheet = false
     @State private var showArtifactCanvas = false
     @State private var detectedArtifact: ArtifactContent? = nil
     @State private var messageWebViewHeight: CGFloat = 44
