@@ -154,6 +154,51 @@ const PROXY_TOOLS = [
     description: "查看所有纪念日/倒计时及今天的状态（第几天/还有几天）。想主动关心日子或兔兔问起时调用。",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "period_status",
+    description: "查看 Bunny 的经期状态与预测（当前周期第几天、预计还有几天来潮、所处阶段）。想主动关心她身体、或她问起时调用。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "period_log_start",
+    description: "记录 Bunny 来月经了（一次来潮）。她说「我来例假了/姨妈来了」时调用。date 省略则记今天。",
+    inputSchema: { type: "object", properties: { date: { type: "string", description: "来潮日 YYYY-MM-DD，省略=今天" } } },
+  },
+  {
+    name: "board_list",
+    description: "看 Bunny 留言板上的帖子和回复（你俩的双人小纸条）。想看看她贴了啥、或要回复前先读一下时调用。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "board_post",
+    description: "在 Bunny 的留言板贴一张小纸条（一条新帖）。想给她留句话、放个念头、写点心里话时用。会出现在她控制台的留言板上。",
+    inputSchema: { type: "object", properties: { text: { type: "string", description: "纸条内容" } }, required: ["text"] },
+  },
+  {
+    name: "board_reply",
+    description: "回复留言板上某条帖子（用 board_list 拿 post id）。Bunny 贴了纸条、你想接话时用。",
+    inputSchema: { type: "object", properties: { post_id: { type: "string", description: "帖子 id（来自 board_list）" }, text: { type: "string", description: "回复内容" } }, required: ["post_id", "text"] },
+  },
+  {
+    name: "pocket_status",
+    description: "查看 Pocket Browser 是否可用（Bunny 手机 App 里的 WKWebView 有没有在线）。用别的 pocket_* 前可以先查。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "pocket_goto",
+    description: "让 Bunny 手机里的浏览器打开一个网址（用她真机的登录态）。之后可用 pocket_read 读正文、pocket_js 跑脚本。",
+    inputSchema: { type: "object", properties: { url: { type: "string", description: "要打开的网址，含 https://" } }, required: ["url"] },
+  },
+  {
+    name: "pocket_read",
+    description: "读取 Bunny 手机浏览器当前页面的可见正文（innerText，已截断）。想知道页面上写了啥时用。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "pocket_js",
+    description: "在 Bunny 手机浏览器的当前页面执行一段 JavaScript，返回结果。用于提取数据、点按钮、填表单等。谨慎使用。",
+    inputSchema: { type: "object", properties: { code: { type: "string", description: "一段 JS 表达式或语句，结果会被返回" } }, required: ["code"] },
+  },
 ] as const
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
