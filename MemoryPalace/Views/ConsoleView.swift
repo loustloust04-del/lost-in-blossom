@@ -29,6 +29,8 @@ struct ConsoleView: View {
     @State private var showLog: Bool = false
     @State private var screenData: ScreenTimeResponse? = nil
     @State private var latestBoardPost: BoardClient.Post? = nil
+    @State private var medsData: MedsClient.Snapshot? = nil
+    @State private var showMeds: Bool = false
     @State private var showScreenDetail: Bool = false
 
     private var todayCtx: DailyContext? {
@@ -55,6 +57,7 @@ struct ConsoleView: View {
             anniversaries = await AnniversaryClient.fetch()
             latestTweets = await TweetsClient.fetch(limit: 40)
             latestBoardPost = await BoardClient.fetch().last
+            medsData = await MedsClient.fetch()
             ensureTodayContext()
             await todo.refresh()
             await healthKit.requestAuthorization()
@@ -107,6 +110,9 @@ struct ConsoleView: View {
         .sheet(isPresented: $showScreenDetail) {
             ScreenTimeDetailView(initial: screenData)
         }
+        .sheet(isPresented: $showMeds, onDismiss: {
+            Task { medsData = await MedsClient.fetch() }
+        }) { MedsSheet() }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
@@ -201,14 +207,24 @@ struct ConsoleView: View {
                         .lineLimit(1).padding(.top, 6)
                 }
                 trioDivider
-                trioCell(icon: "pills", label: "药物", gold: !medsTaken) {
-                    Text(medsTaken ? "已服" : "未报告")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(medsTaken ? Self.green : Self.gold)
-                        .padding(.top, 5)
-                    Text(medsName).font(.system(size: 10.5)).foregroundColor(Self.textMuted)
-                        .lineLimit(1).padding(.top, 5)
+                trioCell(icon: "pills", label: "药物", gold: medsUntakenToday) {
+                    if let snap = medsData, !snap.meds.isEmpty {
+                        let took = !snap.today.isEmpty
+                        Text(took ? "已服" : "未服")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(took ? Self.green : Self.gold)
+                            .padding(.top, 5)
+                        Text("\(snap.meds.count) 种药").font(.system(size: 10.5)).foregroundColor(Self.textMuted)
+                            .lineLimit(1).padding(.top, 5)
+                    } else {
+                        Text("—").font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Self.textFaint).padding(.top, 5)
+                        Text(medsData == nil ? "…" : "点击加药").font(.system(size: 10.5))
+                            .foregroundColor(Self.textMuted).lineLimit(1).padding(.top, 5)
+                    }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { showMeds = true }
             }
         }
     }
@@ -567,6 +583,10 @@ struct ConsoleView: View {
         return todayCtx?.sleepDuration != nil ? "" : "未记录"
     }
     private var medsTaken: Bool { todayCtx?.medicationStatus == .taken || vitalsData?.meds.taken == true }
+    private var medsUntakenToday: Bool {
+        guard let snap = medsData else { return false }
+        return !snap.meds.isEmpty && snap.today.isEmpty
+    }
     private var medsName: String { vitalsData?.meds.name ?? todayCtx?.medicationName ?? "右佐匹克隆" }
 
     private func menstrualPhase(_ day: Int) -> String {
