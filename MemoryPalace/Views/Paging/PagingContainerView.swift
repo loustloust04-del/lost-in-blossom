@@ -21,6 +21,7 @@ struct PagingContainerView: UIViewControllerRepresentable {
     let dashPage: AnyView
     let consolePage: AnyView
     let archivePage: AnyView
+    let writingPage: AnyView
     @Binding var currentPage: Int
     let disableScroll: Bool
     let initialPage: Int
@@ -61,7 +62,8 @@ struct PagingContainerView: UIViewControllerRepresentable {
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage)),
                 AnyView(injectChatManagers(consolePage)),
-                AnyView(injectChatManagers(archivePage))
+                AnyView(injectChatManagers(archivePage)),
+                AnyView(injectChatManagers(writingPage))
             ],
             initialPage: initialPage
         )
@@ -89,7 +91,8 @@ struct PagingContainerView: UIViewControllerRepresentable {
                 AnyView(injectChatManagers(chatPage)),
                 AnyView(injectChatManagers(dashPage)),
                 AnyView(injectChatManagers(consolePage)),
-                AnyView(injectChatManagers(archivePage))
+                AnyView(injectChatManagers(archivePage)),
+                AnyView(injectChatManagers(writingPage))
             ])
         } else {
             #if DEBUG

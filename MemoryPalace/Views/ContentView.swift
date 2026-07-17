@@ -284,6 +284,7 @@ struct ContentView: View {
                         dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
                         consolePage: AnyView(injectPagingEnv(iOSConsolePage)),
                         archivePage: AnyView(injectPagingEnv(iOSArchivePage)),
+                        writingPage: AnyView(injectPagingEnv(iOSWritingPage)),
                         currentPage: $iOSPage,
                         disableScroll: stickerVM.isEditingStickers,
                         initialPage: 0,
@@ -458,7 +459,7 @@ struct ContentView: View {
     /// 页面指示点：chat(0) / dashboard(1) / console(2) / archive(3) 四个点
     private var pageIndicatorDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<4) { i in
+            ForEach(0..<5) { i in
                 Circle()
                     .fill(iOSPage == i ? Theme.branchIndicator : Theme.textMuted.opacity(0.3))
                     .frame(width: 6, height: 6)
@@ -780,6 +781,10 @@ struct ContentView: View {
     /// 右滑 page 4: The Archive（记忆馆）
     private var iOSArchivePage: some View {
         ArchivePageView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+    private var iOSWritingPage: some View {
+        WritingRoomView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
