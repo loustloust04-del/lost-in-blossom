@@ -199,6 +199,26 @@ const PROXY_TOOLS = [
     description: "在 Bunny 手机浏览器的当前页面执行一段 JavaScript，返回结果。用于提取数据、点按钮、填表单等。谨慎使用。",
     inputSchema: { type: "object", properties: { code: { type: "string", description: "一段 JS 表达式或语句，结果会被返回" } }, required: ["code"] },
   },
+  {
+    name: "meds_list",
+    description: "看 Bunny 药箱里的药：都有哪些、各剩多少、今天吃了啥。想帮她管药、盯库存、或她问起时调用。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "meds_add",
+    description: "往药箱加一种药（或给已有的药补货）。Bunny 说「我买了X药，多少片」时用。已存在同名则累加。",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, count: { type: "number" }, unit: { type: "string", description: "默认「片」" }, per_dose: { type: "number", description: "每次吃几个，默认 1" } }, required: ["name", "count"] },
+  },
+  {
+    name: "meds_take",
+    description: "记录 Bunny 吃了某个药（自动扣库存）。她说「我吃药了/吃了X」时用。amount 省略=每次剂量。",
+    inputSchema: { type: "object", properties: { name: { type: "string", description: "药名（模糊匹配）" }, amount: { type: "number" } }, required: ["name"] },
+  },
+  {
+    name: "meds_restock",
+    description: "给药箱里某个药补货（加数量）。Bunny 说「X药我又买了N片」时用。",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, count: { type: "number" } }, required: ["name", "count"] },
+  },
 ] as const
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))

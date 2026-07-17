@@ -21,6 +21,7 @@ import { listAnniversaries, addAnniversary, removeAnniversary, statusLines, setA
 import { listPeriods, addPeriodStart, setPeriodEnd, removePeriod, syncPeriodStarts, predictPeriod } from './period';
 import { listPosts, addPost, addReply, deletePost, deleteReply } from './board';
 import { sendCommand as pocketSend, phoneConnected, pocketLastSeen } from './pocket';
+import { listMeds, todayIntake, addMed, restockMed, takeMed, updateMed, removeMed } from './meds';
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
@@ -332,6 +333,37 @@ app.delete('/api/board/:id', auth, async (c) => {
 app.get('/api/pocket/status', auth, async (c) => {
   return c.json({ phone_connected: phoneConnected(), last_seen: pocketLastSeen() });
 });
+// ============ 药箱（Caelum 帮兔兔管药，App 与 Caelum 同一份）============
+app.get('/api/meds', auth, async (c) => {
+  return c.json({ meds: await listMeds(), today: await todayIntake() });
+});
+app.post('/api/meds', auth, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const m = await addMed(String(b?.name || ''), Number(b?.count ?? b?.remaining ?? 0), String(b?.unit || '片'), Number(b?.perDose ?? b?.per_dose ?? 1), b?.note ? String(b.note) : undefined);
+  if (!m) return c.json({ ok: false, error: '药名不能为空' }, 400);
+  return c.json({ ok: true, med: m });
+});
+app.post('/api/meds/:id/take', auth, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const r = await takeMed(c.req.param('id'), b?.amount ? Number(b.amount) : undefined);
+  if ('error' in r) return c.json({ ok: false, error: r.error }, 404);
+  return c.json({ ok: true, med: r.med, intake: r.intake });
+});
+app.post('/api/meds/:id/restock', auth, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const m = await restockMed(c.req.param('id'), Number(b?.count || 0));
+  return c.json({ ok: !!m, med: m }, m ? 200 : 404);
+});
+app.patch('/api/meds/:id', auth, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const ok = await updateMed(c.req.param('id'), b || {});
+  return c.json({ ok }, ok ? 200 : 404);
+});
+app.delete('/api/meds/:id', auth, async (c) => {
+  const ok = await removeMed(c.req.param('id'));
+  return c.json({ ok }, ok ? 200 : 404);
+});
+
 app.post('/api/pocket/cmd', auth, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const action = String(body?.action || '');
