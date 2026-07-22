@@ -126,6 +126,11 @@ final class ProfileManager {
     static let fullSchema = Schema([
         Conversation.self,
         MessageNode.self,
+            WeightEntry.self,
+            Medication.self,
+            MedicationLog.self,
+            CycleDay.self,
+            IntimacyEntry.self,
         UserCard.self,
         ConversationTag.self,
         FavoriteItem.self,
@@ -139,6 +144,11 @@ final class ProfileManager {
         DailyContext.self,
         Project.self,
         BookEntry.self,
+        WeightEntry.self,
+        Medication.self,
+        MedicationLog.self,
+        CycleDay.self,
+        IntimacyEntry.self,
     ])
 
     /// Unified store 的固定路径 —— 所有 profile 数据合并存这一个 SQLite 文件。
@@ -226,6 +236,11 @@ final class ProfileManager {
             try? ctx.delete(model: PlacedSticker.self, where: #Predicate { $0.profileId == deletedId })
             try? ctx.delete(model: ImportRecord.self, where: #Predicate { $0.profileId == deletedId })
             try? ctx.delete(model: ImportConversationChange.self, where: #Predicate { $0.profileId == deletedId })
+            try? ctx.delete(model: WeightEntry.self, where: #Predicate { $0.profileId == deletedId })
+            try? ctx.delete(model: Medication.self, where: #Predicate { $0.profileId == deletedId })
+            try? ctx.delete(model: MedicationLog.self, where: #Predicate { $0.profileId == deletedId })
+            try? ctx.delete(model: CycleDay.self, where: #Predicate { $0.profileId == deletedId })
+            try? ctx.delete(model: IntimacyEntry.self, where: #Predicate { $0.profileId == deletedId })
             try? ctx.save()
         }
 
