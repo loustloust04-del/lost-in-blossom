@@ -224,7 +224,7 @@ enum HealthLogStore {
     static func composedHealthSummary(context: ModelContext, profileId: String, now: Date = Date()) -> String {
         var parts: [String] = []
         let hk: String? = nil  // TODO: 接入 HealthKitService
-        if !hk.isEmpty { parts.append(hk) }
+        if let hk, !hk.isEmpty { parts.append(hk) }
 
         if weightGateEnabled {
             let seg = weightSummary(weights: fetchRecentWeights(context: context, profileId: profileId), now: now)
