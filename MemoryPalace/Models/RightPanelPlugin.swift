@@ -103,14 +103,15 @@ final class RightPanelToolManager {
 
     static let builtInTools: [RightPanelTool] = [
         RightPanelTool(id: "calendar",    name: "日历",    icon: "calendar",                       order: 0),
-        RightPanelTool(id: "memory",      name: "记忆",    icon: "brain",                          order: 1),
-        RightPanelTool(id: "worldBook",   name: "世界书",  icon: "book.closed",                    order: 2),
-        RightPanelTool(id: "cardLibrary", name: "卡库",    icon: "person.crop.rectangle.stack",    order: 3),
-        RightPanelTool(id: "sticker",     name: "贴纸",    icon: "star.circle",                    order: 4),
-        RightPanelTool(id: "prompt",      name: "Prompt", icon: "text.bubble",  isEnabled: false, order: 5),
-        RightPanelTool(id: "ccTerminal",  name: "CC 终端", icon: "terminal",                        order: 6),
-        RightPanelTool(id: "fileLibrary", name: "文件库",  icon: "folder.fill",                     order: 7),
-        RightPanelTool(id: "browser",     name: "浏览器",  icon: "safari",                              order: 8),
-        RightPanelTool(id: "reading",     name: "读书",    icon: "book.fill",                           order: 9),
+        RightPanelTool(id: "health",      name: "健康",    icon: "heart.fill",                     order: 1),
+        RightPanelTool(id: "memory",      name: "记忆",    icon: "brain",                          order: 2),
+        RightPanelTool(id: "worldBook",   name: "世界书",  icon: "book.closed",                    order: 3),
+        RightPanelTool(id: "cardLibrary", name: "卡库",    icon: "person.crop.rectangle.stack",    order: 4),
+        RightPanelTool(id: "sticker",     name: "贴纸",    icon: "star.circle",                    order: 5),
+        RightPanelTool(id: "prompt",      name: "Prompt", icon: "text.bubble",  isEnabled: false, order: 6),
+        RightPanelTool(id: "ccTerminal",  name: "CC 终端", icon: "terminal",                        order: 7),
+        RightPanelTool(id: "fileLibrary", name: "文件库",  icon: "folder.fill",                     order: 8),
+        RightPanelTool(id: "browser",     name: "浏览器",  icon: "safari",                              order: 9),
+        RightPanelTool(id: "reading",     name: "读书",    icon: "book.fill",                           order: 10),
     ]
 }

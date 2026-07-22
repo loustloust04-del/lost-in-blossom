@@ -64,6 +64,8 @@ struct RightPanelView: View {
             BrowserView()
         case "reading":
             ReadingPanelView()
+        case "health":
+            HealthPanelView(profileId: profileManager?.currentProfile.id ?? "")
         default:
             Text("未知工具")
                 .foregroundColor(Theme.textMuted)
