@@ -850,19 +850,19 @@ export function startHub(): WebSocketServer {
               if (!backgroundedClients.has(app)) activeCount++
             }
           }
-          // Persist for later delivery when no foreground client is focused on
-          // this chat. iOS kills WebSocket connections on background, so the
-          // broadcast above may silently fail; the offline queue guarantees
-          // the message survives for replay on reconnect.
-          if (activeCount === 0 || !isFocused) {
-            appendOffline(msg.chat_id, {
-              content: msg.content,
-              message_id: msg.message_id,
-              reply_id,
-              timestamp: new Date().toISOString(),
-            })
-            console.log(`[hub] reply offline-queued chat_id=${String(msg.chat_id).slice(0, 8)}`)
-          }
+          // Persist unconditionally. ws.send() succeeding only means the bytes
+          // reached the local buffer — a half-open socket (cell handover, NAT
+          // timeout) swallows them silently. Gating this on activeCount/isFocused
+          // meant exactly the "client looks online and focused" case wrote no
+          // backup, so a silent send failure lost the message for good once the
+          // 60s reply buffer pruned it. Duplicates from replay are cheap; the
+          // App dedupes on persisted reply_id.
+          appendOffline(msg.chat_id, {
+            content: msg.content,
+            message_id: msg.message_id,
+            reply_id,
+            timestamp: new Date().toISOString(),
+          })
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
           // Push to all known devices. Tokens outlive the WebSocket (iOS kills the
           // socket on background — exactly when push is needed), so iterate the

@@ -80,14 +80,21 @@ final class CCBridgeWebSocketClient: NSObject {
     @ObservationIgnored private var seenReplyLoaded = false
     private static let seenReplyDefaultsKey = "ccSeenReplyIds"
 
-    /// handlersQueue 上调用。返回 true = 重复（丢弃）。
-    private func markReplySeen(_ id: String) -> Bool {
+    /// handlersQueue 上调用。只查，不写。
+    private func isReplySeen(_ id: String) -> Bool {
         if !seenReplyLoaded {
             seenReplyOrder = UserDefaults.standard.stringArray(forKey: Self.seenReplyDefaultsKey) ?? []
             seenReplyIds = Set(seenReplyOrder)
             seenReplyLoaded = true
         }
-        if seenReplyIds.contains(id) { return true }
+        return seenReplyIds.contains(id)
+    }
+
+    /// handlersQueue 上调用。只有消息确实交给了某个 handler 之后才落已读标记。
+    /// 早于交付去标记，会让下游任何一次 return（handler 未安装、会话不在本地、
+    /// save 失败）变成永久丢失 —— hub 之后重投也会被这个标记挡在门外。
+    private func commitReplySeen(_ id: String) {
+        if seenReplyIds.contains(id) { return }
         seenReplyIds.insert(id)
         seenReplyOrder.append(id)
         if seenReplyOrder.count > 600 {
@@ -96,12 +103,34 @@ final class CCBridgeWebSocketClient: NSObject {
             seenReplyOrder.removeFirst(overflow)
         }
         UserDefaults.standard.set(seenReplyOrder, forKey: Self.seenReplyDefaultsKey)
-        return false
+    }
+
+    /// handler 还没装上时暂存的 reply。hub 在 WebSocket 连上的瞬间就 replay
+    /// （reply buffer + offline 队列），而那一刻 loadConversation 往往还没跑完、
+    /// unhandledReplyHandler 仍是 nil。没有这个队列，冷启动收到的消息会被直接丢掉：
+    /// 推送到了，聊天页却是空的。
+    @ObservationIgnored private var pendingReplies: [(chatId: String, content: String, replyId: String?)] = []
+    private static let pendingRepliesMax = 100
+
+    /// handlersQueue 上调用。
+    private func flushPendingReplies() {
+        guard let fallback = unhandledReplyHandler, !pendingReplies.isEmpty else { return }
+        let queued = pendingReplies
+        pendingReplies.removeAll()
+        for item in queued {
+            DispatchQueue.main.async { fallback(item.chatId, item.content) }
+            if let rid = item.replyId { commitReplySeen(rid) }
+        }
     }
     /// Fires on main queue when a reply arrives but no active sendStreaming handler is registered
     /// for its chatId. Captures from ConversationViewModel to handle hub offline-replay bursts and
     /// proactive CC messages after the single-shot handler has already been consumed.
-    var unhandledReplyHandler: ((String, String) -> Void)?
+    var unhandledReplyHandler: ((String, String) -> Void)? {
+        didSet {
+            guard unhandledReplyHandler != nil else { return }
+            handlersQueue.async { [weak self] in self?.flushPendingReplies() }
+        }
+    }
     var unhandledAttachmentHandler: ((String, PendingChatAttachment) -> Void)?  // (chatId, content)
 
     // MARK: - Terminal streaming (Phase 2)
@@ -495,8 +524,8 @@ final class CCBridgeWebSocketClient: NSObject {
                 }()
                 handlersQueue.async { [weak self] in
                     guard let self else { return }
-                    if let replyId, self.markReplySeen(replyId) {
-                        return  // 重复（replay/重投），silently drop
+                    if let replyId, self.isReplySeen(replyId) {
+                        return  // 真重复（replay/重投），silently drop
                     }
                     // Dispatch the attachment BEFORE the reply. Both land on the serial
                     // main queue, so enqueuing the attachment first guarantees pendingAttachment
@@ -512,10 +541,19 @@ final class CCBridgeWebSocketClient: NSObject {
                         // Handler removed atomically on handlersQueue — prevents double-fire race
                         // when hub replay sends multiple replies in rapid succession.
                         DispatchQueue.main.async { handler(content) }
+                        if let replyId { self.commitReplySeen(replyId) }
                     } else if let fallback = self.unhandledReplyHandler {
                         // No active sendStreaming handler — route to persistent fallback
                         // (handles hub offline-replay bursts and proactive CC messages).
                         DispatchQueue.main.async { fallback(chatId, content) }
+                        if let replyId { self.commitReplySeen(replyId) }
+                    } else {
+                        // 两个 handler 都还没装 —— 冷启动 replay 撞上这里。排队等，
+                        // 且不落已读标记：万一队列没能排空，hub 重投仍有机会补上。
+                        self.pendingReplies.append((chatId, content, replyId))
+                        if self.pendingReplies.count > Self.pendingRepliesMax {
+                            self.pendingReplies.removeFirst(self.pendingReplies.count - Self.pendingRepliesMax)
+                        }
                     }
                 }
             }
