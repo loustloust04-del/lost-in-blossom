@@ -51,6 +51,29 @@ enum NotebookRemoteStore {
         try await post("/api/notebook/file", ["path": path, "content": content])
     }
 
+    /// 末尾追加（Gateway op=append）
+    static func append(_ path: String, content: String) async throws {
+        try await post("/api/notebook/file", ["op": "append", "path": path, "content": content])
+    }
+
+    /// 局部替换（Gateway op=edit）
+    static func edit(_ path: String, oldString: String, newString: String) async throws {
+        try await post("/api/notebook/file", ["op": "edit", "path": path,
+                                              "old_string": oldString, "new_string": newString])
+    }
+
+    /// 全文搜索
+    static func search(_ keyword: String) async throws -> [String] {
+        var c = URLComponents(string: baseURL + "/api/notebook/search")!
+        c.queryItems = [.init(name: "q", value: keyword)]
+        let j = try await getJSON(url: c.url!)
+        return (j["hits"] as? [Any])?.compactMap { hit in
+            if let s = hit as? String { return s }
+            if let d = hit as? [String: Any] { return d["path"] as? String }
+            return nil
+        } ?? []
+    }
+
     static func rename(_ oldPath: String, to newPath: String) async throws {
         try await post("/api/notebook/rename", ["old_path": oldPath, "new_path": newPath])
     }
