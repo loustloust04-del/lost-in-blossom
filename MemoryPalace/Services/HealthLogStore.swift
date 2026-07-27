@@ -101,7 +101,16 @@ enum HealthLogStore {
     static func logIntake(context: ModelContext, profileId: String, medication: Medication, minuteOfDay: Int, now: Date = Date()) {
         let scheduled = scheduledDate(minuteOfDay: minuteOfDay, on: now)
         context.insert(MedicationLog(profileId: profileId, medicationId: medication.id, scheduledAt: scheduled, takenAt: now))
+        // 本地库存也扣一次（Gateway 侧由 take 接口扣）
+        if medication.remaining > 0 {
+            medication.remaining = max(0, medication.remaining - medication.perDose)
+        }
         try? context.save()
+        // 同步给 Gateway：Caelum 问「今天吃药了吗」能答上
+        if let gid = medication.gatewayId {
+            let dose = medication.perDose
+            Task { await MedsClient.take(id: gid, amount: dose) }
+        }
     }
 
     /// 撤销打卡 = 删对应计划时刻的当日 log。

@@ -59,6 +59,19 @@ enum MedsClient {
         return (resp as? HTTPURLResponse)?.statusCode == 200
     }
 
+    /// 新增药物并返回 Gateway 侧 id（同步用）
+    static func addReturningId(name: String, count: Double, unit: String, perDose: Double, note: String? = nil) async -> String? {
+        var body: [String: Any] = ["name": name, "count": count, "unit": unit, "perDose": perDose]
+        if let note, !note.isEmpty { body["note"] = note }
+        guard let req = request("/api/meds", method: "POST", body: body) else { return nil }
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let med = obj["med"] as? [String: Any],
+              let id = med["id"] as? String else { return nil }
+        return id
+    }
+
     @discardableResult
     static func take(id: String, amount: Double? = nil) async -> Bool {
         var body: [String: Any] = [:]

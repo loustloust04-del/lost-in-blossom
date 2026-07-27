@@ -10,6 +10,7 @@ import UIKit
 /// 数据来源：DailyContext（SwiftData）/ HealthKitService / VitalsClient / ScreenTimeClient / TodoManager。
 struct ConsoleView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
     @Query(sort: \DailyContext.date, order: .reverse) private var allContexts: [DailyContext]
     // 统一数据源：健康数据全部读本地 SwiftData（跟健康面板同一份）
     @Query private var localMeds: [Medication]
@@ -57,6 +58,10 @@ struct ConsoleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.sidebarBg.ignoresSafeArea())
         .task {
+            // 健康数据双向同步（本地 SwiftData ↔ Gateway 药品柜 ↔ Caelum）
+            if let pid = profileManager?.currentProfile.id {
+                await HealthSyncService.sync(context: modelContext, profileId: pid)
+            }
             loadVitals()
             anniversaries = await AnniversaryClient.fetch()
             latestTweets = await TweetsClient.fetch(limit: 40)

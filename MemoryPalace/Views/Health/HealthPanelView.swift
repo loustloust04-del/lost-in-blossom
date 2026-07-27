@@ -73,6 +73,10 @@ struct HealthPanelView: View {
             .scrollContentBackground(.hidden)
         }
         .background(Theme.sidebarBg)
+        .task {
+            // 健康数据双向同步（本地 SwiftData ↔ Gateway 药品柜 ↔ Caelum）
+            await HealthSyncService.sync(context: modelContext, profileId: profileId)
+        }
         .sheet(item: $editingMed) { med in
             MedEditorSheet(profileId: profileId, med: med)
         }

@@ -38,6 +38,13 @@ final class Medication {
     var note: String = ""
     var createdAt: Date = Date()
 
+    // ── 库存（跟 Gateway 药品柜同步，Caelum 的 meds_* 工具管的就是这些）──
+    var remaining: Double = 0       // 剩余数量
+    var unit: String = "片"          // 片/粒/mg
+    var perDose: Double = 1         // 每次剂量
+    var gatewayId: String? = nil    // Gateway 侧 id（本地新建时为 nil，同步后填上）
+    var lastSyncedAt: Date? = nil
+
     init(profileId: String, name: String, dosage: String, timesOfDay: [Int], reminderEnabled: Bool = true) {
         self.profileId = profileId
         self.name = name
