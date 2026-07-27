@@ -65,6 +65,12 @@ extension ConversationViewModel {
             projectInstructions = [projectInstructions, voiceHint].compactMap { $0 }.joined(separator: "\n\n")
         }
 
+        // 健康手账帮记 hint：同 voiceHint 走 projectInstructions（volatile 层，不碰缓存前缀），闸全关一字不注。
+        let healthEntryHint = HealthLogStore.chatEntryHint(context: context, profileId: profile.id)
+        if !healthEntryHint.isEmpty {
+            projectInstructions = [projectInstructions, healthEntryHint].compactMap { $0 }.joined(separator: "\n\n")
+        }
+
         let result = PromptAssembler.assemble(
             preset: preset,
             profile: profile,
@@ -114,6 +120,9 @@ extension ConversationViewModel {
         if usesHealth {
             let h = HealthService.shared.injectedSummary
             if !h.isEmpty { volatileParts.append(h) }
+            // 手账注入（体重/吃药/经期/亲密，各闸在 composedHealthSummary 内收口；亲密只报当天、note 不注）
+            let hl = HealthLogStore.composedHealthSummary(context: context, profileId: profile.id)
+            if !hl.isEmpty { volatileParts.append(hl) }
         }
         // 始终注入当前日期和时间（不再依赖 {{date}}/{{time}} 宏）
         volatileParts.append("当前日期：\(df.string(from: Date()))")
@@ -669,6 +678,8 @@ extension ConversationViewModel {
                     assistantNode.usageOutputTokens = usage.outputTokens
                 }
                 try? context.save()
+                // 健康手账：回复里有 ```health-log 块 → 落库、块变结果行（三路共用本收口，无块零成本）
+                HealthLogIntentWriter.processChatIntents(nodeId: assistantNode.id, context: context)
                 // 语音条：回复里有 ```voice 块 → 提取脚本、TTS 生成 mp3、挂 audioRef
                 //（send/regenerate/editAndResend 三路共用本收口，一处覆盖全部）
                 let voiceNodeId = assistantNode.id

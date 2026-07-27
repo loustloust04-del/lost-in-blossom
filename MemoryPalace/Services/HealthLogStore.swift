@@ -261,6 +261,49 @@ enum HealthLogStore {
         return parts.joined(separator: "")
     }
 
+    /// 聊天内帮记 hint（教 AI 输出 ```health-log 块，plan-health-chat-entry 协议）。
+    /// 全闸关/无可教内容 = ""，一字不注。{{user}} 由 PromptAssembler 宏替换展开。
+    static func chatEntryHint(context: ModelContext, profileId: String) -> String {
+        let weightOn = weightGateEnabled
+            && !fetchRecentWeights(context: context, profileId: profileId, limit: 1).isEmpty
+        let meds = medsGateEnabled ? fetchActiveMeds(context: context, profileId: profileId) : []
+        // cycle/intimacy 只看闸不看域：敏感闸手动开 = 明确要用，教 AI 记第一笔有价值
+        let cycleOn = cycleGateEnabled
+        let intimacyOn = intimacyGateEnabled
+        guard weightOn || !meds.isEmpty || cycleOn || intimacyOn else { return "" }
+
+        let example = weightOn
+            ? "{\"type\": \"weight\", \"kg\": 52.3}"
+            : (!meds.isEmpty
+                ? "{\"type\": \"med\", \"name\": \"药名\", \"time\": \"8:00\"}"
+                : (cycleOn
+                    ? "{\"type\": \"cycle\", \"flow\": \"medium\"}"
+                    : "{\"type\": \"intimacy\"}"))
+        var lines = """
+        \n{{user}} 在用健康手账。她口头告诉你健康记录时（"我吃药了""今天 52.3"），在回复中输出代码块帮她记下，一块一条 JSON，可多块：
+        ```health-log
+        \(example)
+        ```
+        """
+        if weightOn, !meds.isEmpty {
+            lines += "\n吃药打卡用 {\"type\": \"med\", \"name\": \"药名\", \"time\": \"8:00\"}（time 可省略=就近计划时刻）。"
+        }
+        if !meds.isEmpty {
+            let list = meds.map { med in
+                "\(med.name)（\(med.timesOfDay.sorted().map(HealthLogStore.timeText).joined(separator: "/"))）"
+            }.joined(separator: "、")
+            lines += "\n当前的药：\(list)。"
+        }
+        if cycleOn {
+            lines += "\n月经打点用 {\"type\": \"cycle\", \"flow\": \"medium\"}（flow: spotting/light/medium/heavy，date 可补记）。"
+        }
+        if intimacyOn {
+            lines += "\n亲密记录用 {\"type\": \"intimacy\"}（date/note 可选）。"
+        }
+        lines += "\n系统会真实落库并把块变成结果行。只在她明确说了才记，不要猜测。"
+        return lines
+    }
+
     // MARK: - Fetch helpers（全带 profileId predicate，量级：条目个位数~几十）
 
     static func fetchRecentWeights(context: ModelContext, profileId: String, limit: Int = 60) -> [WeightEntry] {
