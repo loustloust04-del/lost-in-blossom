@@ -266,6 +266,24 @@ struct FileLibraryPanelView: View {
         }
         .frame(maxWidth: .infinity)
     }
+}
+
+struct FileEditorSheet: View {
+    let path: String
+    let initialContent: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var content: String
+    @State private var isPreview: Bool = true
+
+    init(path: String, initialContent: String, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        self.path = path
+        self.initialContent = initialContent
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _content = State(initialValue: initialContent)
+    }
 
     var body: some View {
         NavigationStack {
