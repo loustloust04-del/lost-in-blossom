@@ -9,6 +9,12 @@ struct CCBridgeRemoteError: LocalizedError {
     var errorDescription: String? { reason }
 }
 
+extension Notification.Name {
+    /// 服务器端笔记本被改动（CC 或 App 自己写的都算）。userInfo 带 path / op，
+    /// 但订阅方通常不必看——整个重拉 /api/notebook 最省心。
+    static let ccNotebookChanged = Notification.Name("ccNotebookChanged")
+}
+
 /// CC 执行任务时推送过来的一段思考链（来自 hub 的 cc_thinking 广播）。
 struct CCThinkingBlock: Identifiable {
     let id = UUID()
@@ -560,6 +566,17 @@ final class CCBridgeWebSocketClient: NSObject {
         case "ack":
             // v1 no-op；后续版本可用于确认送达
             break
+        case "notebook_changed":
+            // CC 那边改了笔记本。这一帧只是个"去刷新"的口信，不带内容——
+            // 谁在展示笔记本谁自己去重拉 /api/notebook，省掉手动下拉。
+            // 丢了也无所谓，下次进页面照样拉得到最新的，故不做去重/补投。
+            let info: [AnyHashable: Any] = [
+                "path": (obj["path"] as? String) ?? "",
+                "op": (obj["op"] as? String) ?? "",
+            ]
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .ccNotebookChanged, object: nil, userInfo: info)
+            }
         case "error":
             let reason = (obj["reason"] as? String) ?? "unknown"
             DispatchQueue.main.async { [weak self] in

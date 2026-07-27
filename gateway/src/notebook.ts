@@ -17,6 +17,34 @@ function safe(rel: string): string | null {
   return abs;
 }
 
+// hub 是另一个进程(只管 WebSocket)，gateway 落盘后没法直接推给 App，
+// 于是走它的 loopback 内部 HTTP 口，由 hub 转成 WS 帧广播出去。
+const HUB_NOTIFY_URL = process.env.MP_CC_HUB_NOTIFY_URL || 'http://127.0.0.1:7890/internal/notify';
+const HUB_TOKEN = process.env.MP_CC_HUB_TOKEN || '';
+
+/// 库内绝对路径 → 规范相对路径，与 nbList 报的形式一致(调用方传进来的 rel
+/// 可能带多余的斜杠)，免得 App 拿到两种写法的同一个文件。
+function relOf(abs: string): string { return abs.slice(ROOT.length + 1); }
+
+/// 笔记本被改动后知会 hub，让 App 自动刷新列表。
+/// 刻意 fire-and-forget 且吞掉一切异常：这只是一句"去刷新"的口信，hub 没起、
+/// 超时、报错都无所谓——App 下次进页面照样能拉到最新的。用户的写入不能被它拖累。
+function notifyHub(path: string, op: string): void {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (HUB_TOKEN) headers['Authorization'] = 'Bearer ' + HUB_TOKEN;
+    fetch(HUB_NOTIFY_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ type: 'notebook_changed', path, op }),
+      signal: AbortSignal.timeout(2000),
+    }).catch((e: any) => console.warn('[notebook] 通知 hub 失败:', e?.message || String(e)));
+  } catch (e: any) {
+    // fetch 本身构造失败(极少)也不能冒泡到调用方
+    console.warn('[notebook] 通知 hub 失败:', e?.message || String(e));
+  }
+}
+
 export interface NoteMeta { path: string; bytes: number; modified: number; }
 
 /// 递归列出所有 .md 文件(相对路径)
@@ -46,31 +74,43 @@ export function nbExists(rel: string): boolean {
   const p = safe(rel); return !!p && existsSync(p);
 }
 
+/// 落盘本体，不发通知。抽出来是为了让 nbEdit 借道时只算一次改动——
+/// 否则 edit 会先后发出 write 与 edit 两帧。
+function putFile(abs: string, content: string): void {
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, content, 'utf8');
+}
+
 export function nbWrite(rel: string, content: string): void {
   const p = safe(rel); if (!p) throw new Error('非法路径: ' + rel);
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, content, 'utf8');
+  putFile(p, content);
+  notifyHub(relOf(p), 'write');
 }
 
 /// 末尾追加；文件不存在时创建
 export function nbAppend(rel: string, content: string): void {
   const p = safe(rel); if (!p) throw new Error('非法路径: ' + rel);
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, (existsSync(p) ? readFileSync(p, 'utf8') : '') + content, 'utf8');
+  putFile(p, (existsSync(p) ? readFileSync(p, 'utf8') : '') + content);
+  notifyHub(relOf(p), 'append');
 }
 
 /// old→new 唯一命中替换(仿 CC Edit 语义)
 export function nbEdit(rel: string, oldStr: string, newStr: string): void {
+  const p = safe(rel); if (!p) throw new Error('非法路径: ' + rel);
   const body = nbRead(rel);
   const n = body.split(oldStr).length - 1;
   if (n === 0) throw new Error('未找到要替换的文本');
   if (n > 1) throw new Error(`要替换的文本命中 ${n} 处，需更具体`);
-  nbWrite(rel, body.replace(oldStr, newStr));
+  putFile(p, body.replace(oldStr, newStr));
+  notifyHub(relOf(p), 'edit');
 }
 
 export function nbDelete(rel: string): void {
   const p = safe(rel); if (!p) throw new Error('非法路径: ' + rel);
-  if (existsSync(p)) unlinkSync(p);
+  // 文件本来就不在 = 列表没变，不必惊动 App
+  if (!existsSync(p)) return;
+  unlinkSync(p);
+  notifyHub(relOf(p), 'delete');
 }
 
 /// 重命名/移动；目标已存在报错
@@ -81,6 +121,8 @@ export function nbRename(oldRel: string, newRel: string): void {
   if (existsSync(dst)) throw new Error('目标已存在: ' + newRel);
   mkdirSync(dirname(dst), { recursive: true });
   renameSync(src, dst);
+  // 报新路径：App 拿到就整个重拉列表，旧路径的消失自然也就同步了
+  notifyHub(relOf(dst), 'rename');
 }
 
 /// 跨文件关键词搜索(大小写不敏感)，返回 [path, 命中行]

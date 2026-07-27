@@ -447,6 +447,20 @@ function pruneReplyBuffer(): void {
   }
 }
 
+/// 笔记本变更 → 广播给所有在线 App，让它自己去重拉 /api/notebook。
+/// 刻意不进 recentReplies、不进 offline 队列：这只是一句"去刷新"的口信，
+/// 丢了下次进页面照样拉得到最新列表，落盘只会白白撑大 offline 文件。
+function broadcastNotebookChanged(path: string, op: string): number {
+  const payload = JSON.stringify({ type: "notebook_changed", path, op })
+  let count = 0
+  for (const app of appClients) {
+    if (app.readyState === WebSocket.OPEN) {
+      try { app.send(payload); count++ } catch { /* dead, wait for close */ }
+    }
+  }
+  return count
+}
+
 export function startHub(): WebSocketServer {
   if (!HUB_TOKEN) {
     console.error("[hub] MP_CC_HUB_TOKEN env required (use start_hub.sh)")
@@ -459,6 +473,40 @@ export function startHub(): WebSocketServer {
   const httpServer = createServer(async (req, res) => {
     const u = new URL(req.url ?? "", "http://localhost")
     const token = (req.headers["authorization"]?.replace("Bearer ", "")) || u.searchParams.get("token")
+    // 笔记本变更通知：gateway 是另一个进程，落盘后 POST 到这里，由 hub 转成 WS 帧。
+    // 单独放在 token 校验之前——gateway 手上不一定有 HUB_TOKEN(start_all.sh 只给 hub
+    // 和 CC 传)，所以这里额外接受「同机直连」。光看 remoteAddress 不够：nginx :8890 把
+    // /cc/ 剥前缀反代到 7890，外部请求进来 remoteAddress 也是回环——但那种请求必带
+    // X-Real-IP / X-Forwarded-For，据此把反代来的流量挡在门外。
+    if (u.pathname === "/internal/notify" && req.method === "POST") {
+      const viaProxy = !!(req.headers["x-real-ip"] || req.headers["x-forwarded-for"])
+      const tokenOk = !!HUB_TOKEN && token === HUB_TOKEN
+      if (!tokenOk && (viaProxy || !isLoopback(req.socket.remoteAddress))) {
+        res.writeHead(403); res.end("forbidden"); return
+      }
+      let body = ""
+      let tooBig = false
+      req.on("data", (c: Buffer) => {
+        // 一条通知就几十字节，超过 16KB 只可能是恶意/串台流量，直接断开别攒
+        if (body.length > 16 * 1024) { tooBig = true; req.destroy(); return }
+        body += c.toString()
+      })
+      req.on("end", () => {
+        if (tooBig) return
+        let n = 0
+        try {
+          const m = JSON.parse(body)
+          // 只认这一种帧，且字段自己重建——不把外来 JSON 原样转发给 App
+          if (m?.type === "notebook_changed") {
+            n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
+            console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
+          }
+        } catch { /* 坏 JSON：当没收到，通知本就是可丢的 */ }
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ ok: true, delivered: n }))
+      })
+      return
+    }
     if (token !== HUB_TOKEN) { res.writeHead(401); res.end("unauthorized"); return }
     const sess = u.searchParams.get("session") || TMUX_SESSION
     if (u.pathname === "/cc/status" && req.method === "GET") {
