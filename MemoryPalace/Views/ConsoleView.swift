@@ -11,6 +11,10 @@ import UIKit
 struct ConsoleView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \DailyContext.date, order: .reverse) private var allContexts: [DailyContext]
+    // 统一数据源：健康数据全部读本地 SwiftData（跟健康面板同一份）
+    @Query private var localMeds: [Medication]
+    @Query private var localMedLogs: [MedicationLog]
+    @Query(sort: \CycleDay.date, order: .reverse) private var localCycleDays: [CycleDay]
 
     @State private var healthKit = HealthKitService()
     @State private var vitalsData: VitalsResponse? = nil
@@ -208,18 +212,18 @@ struct ConsoleView: View {
                 }
                 trioDivider
                 trioCell(icon: "pills", label: "药物", gold: medsUntakenToday) {
-                    if let snap = medsData, !snap.meds.isEmpty {
-                        let took = !snap.today.isEmpty
-                        Text(took ? "已服" : "未服")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(took ? Self.green : Self.gold)
-                            .padding(.top, 5)
-                        Text("\(snap.meds.count) 种药").font(.system(size: 10.5)).foregroundColor(Self.textMuted)
-                            .lineLimit(1).padding(.top, 5)
+                    // 统一数据源：读本地 SwiftData（跟健康面板同一份）
+                    let (taken, total) = localMedProgress
+                    if total > 0 {
+                        bigNum("\(taken)", "/\(total)", size: 26)
+                        Text(taken == total ? "已服完" : "待服 \(total - taken)")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(taken == total ? Self.green : Self.gold)
+                            .lineLimit(1).padding(.top, 6)
                     } else {
                         Text("—").font(.system(size: 17, weight: .semibold))
                             .foregroundColor(Self.textFaint).padding(.top, 5)
-                        Text(medsData == nil ? "…" : "点击加药").font(.system(size: 10.5))
+                        Text("点击加药").font(.system(size: 10.5))
                             .foregroundColor(Self.textMuted).lineLimit(1).padding(.top, 5)
                     }
                 }
@@ -248,7 +252,18 @@ struct ConsoleView: View {
                 .onTapGesture { ensureTodayContext(); showSleep = true }
                 trioDivider
                 trioCell(icon: "calendar", label: "经期") {
-                    if let p = periodPred, p.hasData {
+                    // 统一数据源：本地 SwiftData 优先（跟健康面板同一份）
+                    if let local = localCycleStatus {
+                        if let dayNum = local.day {
+                            bigNum("\(dayNum)", "天", size: 26)
+                        } else {
+                            Text("—").font(.cormorant(26)).foregroundColor(Self.textPrimary)
+                        }
+                        Text(local.line)
+                            .font(.system(size: 10.5))
+                            .foregroundColor(local.onPeriod ? Self.gold : Self.greenDeep)
+                            .lineLimit(1).padding(.top, 6)
+                    } else if let p = periodPred, p.hasData {
                         if p.onPeriod, let d = p.currentCycleDay {
                             bigNum("\(d)", "天", size: 26)
                             Text("经期中").font(.system(size: 10.5)).foregroundColor(Self.gold).padding(.top, 6)
@@ -582,6 +597,33 @@ struct ConsoleView: View {
         }
         return todayCtx?.sleepDuration != nil ? "" : "未记录"
     }
+    /// 本地经期状态：nil = 无本地数据（回退网关预测）
+    private var localCycleStatus: (day: Int?, line: String, onPeriod: Bool)? {
+        let periods = HealthCycleStore.periods(days: localCycleDays)
+        let today = localCycleDays.first { Calendar.current.isDateInToday($0.date) }
+        let flow = today.flatMap { CycleFlow(rawValue: $0.flow) }
+        guard !periods.isEmpty || flow != nil else { return nil }
+        let line = HealthCycleStore.statusLine(todayFlow: flow, periods: periods, now: Date())
+        let day = HealthCycleStore.currentCycleDay(periods: periods, now: Date())
+        return (day, line, flow != nil)
+    }
+
+    /// 本地药物今日进度：(已服, 总计)
+    private var localMedProgress: (Int, Int) {
+        let now = Date()
+        let todayLogs = localMedLogs.filter { Calendar.current.isDateInToday($0.takenAt) }
+        var total = 0, taken = 0
+        for med in localMeds where !med.isArchived {
+            for slot in med.timesOfDay {
+                total += 1
+                if case .taken = HealthLogStore.medState(medication: med, minuteOfDay: slot, todayLogs: todayLogs, now: now) {
+                    taken += 1
+                }
+            }
+        }
+        return (taken, total)
+    }
+
     private var medsTaken: Bool { todayCtx?.medicationStatus == .taken || vitalsData?.meds.taken == true }
     private var medsUntakenToday: Bool {
         guard let snap = medsData else { return false }
