@@ -134,8 +134,8 @@ export async function callPeekScreen(): Promise<string> {
   }
   const triggerTs = Date.now();
   try {
-    // 主题带 ortolan 暗号（兔兔手机的「收到邮件」自动化按主题包含 ortolan 筛）
-    await sendMail(to, 'ortolan', 'peek ' + triggerTs);
+    // 主题带 PEEK 标记，iOS 自动化按主题包含 PEEK 来筛
+    await sendMail(to, 'PEEK', 'peek ' + triggerTs);
     console.log(`[peek] 📧 触发邮件已发送 → ${to} (等新截图 ts>${triggerTs})`);
   } catch (e: any) {
     console.log(`[peek] ❌ 触发邮件发送失败: ${e?.message || e}`);

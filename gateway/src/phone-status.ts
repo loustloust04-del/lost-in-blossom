@@ -50,7 +50,7 @@ export const PHONE_STATUS_TOOLS = [
     // 列表里这条无名，App 整条数组解码崩（"data couldn't be read"），且发给
     // Anthropic 时也是畸形 tool。callPhoneStatusTool 本就按扁平 name 匹配。
     name: "request_location",
-    description: "向兔兔的手机发送位置查询请求。兔兔的iPhone会自动回报当前位置、天气和电量。当你想知道她现在在哪、但phone_status里的数据太旧时使用。",
+    description: "向兔兔的手机发送状态查询请求。兔兔的iPhone会静默自动回报一整套当前状态：位置、天气、电量、是否在充电、当地时间。当你想知道她现在在哪/在什么环境、但 get_phone_status 里的数据太旧时使用。发送后稍等几秒再调 get_phone_status 读最新一条。",
     input_schema: { type: "object" as const, properties: { reason: { type: "string", description: "为什么想知道位置（如：好久没回消息了、想关心一下）" } } },
   },
   {
@@ -65,7 +65,7 @@ async function sendLocationRequest(reason?: string) {
   const { callGmailTool } = await import("./tools/gmail");
   const result = await callGmailTool("gmail_send", {
     to: "caelumbunny@gmail.com",
-    subject: "LOCATION_QUERY",
+    subject: "ortolan",
     body: reason || "想知道你在哪"
   });
   return result ? "已发送位置查询请求，兔兔的手机会在几秒内自动回报位置。稍等一下再用 get_phone_status 查看最新数据。" : "发送失败";
@@ -76,7 +76,7 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     const { callGmailTool } = await import('./tools/gmail');
     const result = await callGmailTool('gmail_send', {
       to: 'caelumbunny@gmail.com',
-      subject: 'LOCATION_QUERY',
+      subject: 'ortolan', // 暗号：兔兔手机「收到邮件」自动化按主题包含 ortolan 触发状态上报
       body: input?.reason || '想知道你在哪'
     });
     return result ? '已发送位置查询请求，兔兔的手机会自动回报位置。' : '发送失败';
@@ -127,8 +127,8 @@ export function phoneStatusRoutes(app: Hono) {
 
     data.records.push({
       battery: Number(body.battery) || 0,
-      is_charging: Boolean(body.is_charging),
-      current_time: body.current_time || undefined,
+      is_charging: body.is_charging === true || body.is_charging === 'true' || body.is_charging === 1 || body.is_charging === '1',
+      current_time: body['current-time'] || body.current_time || undefined,
       device_name: body.device_name || undefined,
       weather: body.Weather || body.weather || undefined,
       place: body.Place || body.place || undefined,
