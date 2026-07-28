@@ -120,6 +120,7 @@ export function phoneStatusRoutes(app: Hono) {
 
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
+    console.log('[phone] 🔎 keys=', JSON.stringify(Object.keys(body)));
 
     const data = await load();
     const now = new Date();
@@ -127,7 +128,7 @@ export function phoneStatusRoutes(app: Hono) {
 
     data.records.push({
       battery: Number(body.battery) || 0,
-      is_charging: (() => { const v = body.is_charging ?? body['is-charging'] ?? body.isCharging ?? body.charging; return v === true || v === 'true' || v === 1 || v === '1'; })(),
+      is_charging: (() => { const v = body.is_charging ?? body.in_charging ?? body['is-charging'] ?? body.isCharging ?? body.charging; // in_charging: 兔兔词典实测拼写 2026-07-29 return v === true || v === 'true' || v === 1 || v === '1'; })(),
       current_time: body['current-time'] || body.current_time || undefined,
       device_name: body.device_name || undefined,
       weather: body.Weather || body.weather || undefined,
