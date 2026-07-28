@@ -72,8 +72,6 @@ struct FileLibraryPanelView: View {
         }
     }
 
-    // MARK: - Source picker
-
     // MARK: - Header
 
     private var header: some View {
