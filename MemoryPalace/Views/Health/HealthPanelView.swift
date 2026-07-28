@@ -19,7 +19,9 @@ struct HealthPanelView: View {
     @Query private var cycleDays: [CycleDay]
     @Query private var intimacyDays: [IntimacyEntry]
 
-    @State private var editingMed: Medication? = nil
+    @State private var editingMed: Medication?
+    @State private var restockTarget: Medication?
+    @State private var restockInput = "" = nil
     @State private var showNewMed = false
     @State private var activeDetail: HealthDetail? = nil
     @State private var weightInput = ""
@@ -79,6 +81,27 @@ struct HealthPanelView: View {
         }
         .sheet(item: $editingMed) { med in
             MedEditorSheet(profileId: profileId, med: med)
+        }
+        .alert("补货", isPresented: Binding(
+            get: { restockTarget != nil },
+            set: { if !$0 { restockTarget = nil; restockInput = "" } }
+        ), presenting: restockTarget) { med in
+            TextField("加多少\(med.unit)", text: $restockInput)
+                .keyboardType(.decimalPad)
+            Button("取消", role: .cancel) { restockTarget = nil; restockInput = "" }
+            Button("加上") {
+                if let add = Double(restockInput.trimmingCharacters(in: .whitespaces)), add > 0 {
+                    med.remaining += add
+                    try? modelContext.save()
+                    // 同步给 Gateway，Caelum 那边库存也跟着涨
+                    if let gid = med.gatewayId {
+                        Task { await MedsClient.restock(id: gid, count: add) }
+                    }
+                }
+                restockTarget = nil; restockInput = ""
+            }
+        } message: { med in
+            Text("\(med.name) 现在剩 \(HealthPanelView.numText(med.remaining))\(med.unit)")
         }
         .sheet(isPresented: $showNewMed) {
             MedEditorSheet(profileId: profileId, med: nil)
@@ -158,10 +181,18 @@ struct HealthPanelView: View {
                 Text(med.name)
                     .font(.system(size: Theme.F.body, weight: .medium))
                     .foregroundColor(Theme.textPrimary)
-                if !med.dosage.isEmpty {
-                    Text(med.dosage)
-                        .font(.system(size: Theme.F.caption))
-                        .foregroundColor(Theme.textMuted)
+                HStack(spacing: 5) {
+                    if !med.dosage.isEmpty {
+                        Text(med.dosage)
+                            .font(.system(size: Theme.F.caption))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    if med.remaining > 0 {
+                        let low = med.remaining <= med.perDose * 3
+                        Text("剩 \(HealthPanelView.numText(med.remaining))\(med.unit)")
+                            .font(.system(size: Theme.F.caption))
+                            .foregroundColor(low ? Theme.favorite : Theme.textMuted)
+                    }
                 }
             }
             Spacer()
@@ -172,6 +203,14 @@ struct HealthPanelView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { editingMed = med }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                restockTarget = med
+            } label: {
+                Label("补货", systemImage: "shippingbox")
+            }
+            .tint(Theme.branchIndicator)
+        }
     }
 
     @ViewBuilder
@@ -473,6 +512,13 @@ struct HealthPanelView: View {
 
 // MARK: - 药物编辑 sheet（原生结构样板：CharacterCardEditor 同款）
 
+extension HealthPanelView {
+    /// 库存数字文本：整数不带小数点，小数保留一位
+    static func numText(_ v: Double) -> String {
+        v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
+    }
+}
+
 private struct MedEditorSheet: View {
     let profileId: String
     let med: Medication?          // nil = 新建
@@ -484,6 +530,9 @@ private struct MedEditorSheet: View {
     @State private var dosage: String
     @State private var times: [Date]
     @State private var reminderEnabled: Bool
+    @State private var remainingInput: String
+    @State private var unitInput: String
+    @State private var perDoseInput: String
 
     init(profileId: String, med: Medication?) {
         self.profileId = profileId
@@ -491,6 +540,9 @@ private struct MedEditorSheet: View {
         _name = State(initialValue: med?.name ?? "")
         _dosage = State(initialValue: med?.dosage ?? "")
         _reminderEnabled = State(initialValue: med?.reminderEnabled ?? true)
+        _remainingInput = State(initialValue: (med?.remaining ?? 0) > 0 ? HealthPanelView.numText(med!.remaining) : "")
+        _unitInput = State(initialValue: med?.unit ?? "片")
+        _perDoseInput = State(initialValue: HealthPanelView.numText(med?.perDose ?? 1))
         let minutes = med?.timesOfDay.sorted() ?? [8 * 60]
         _times = State(initialValue: minutes.map {
             Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval($0 * 60))
@@ -517,6 +569,48 @@ private struct MedEditorSheet: View {
                             .font(.system(size: Theme.F.body))
                             .multilineTextAlignment(.trailing)
                     }
+                }
+                .listRowBackground(Theme.mainBg)
+
+                Section {
+                    HStack {
+                        Text("剩余")
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textSecondary)
+                        TextField("0", text: $remainingInput)
+                            .font(.system(size: Theme.F.body))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                        TextField("片", text: $unitInput)
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textMuted)
+                            .frame(width: 44)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    HStack {
+                        Text("每次")
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textSecondary)
+                        TextField("1", text: $perDoseInput)
+                            .font(.system(size: Theme.F.body))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                        Text(unitInput.isEmpty ? "片" : unitInput)
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textMuted)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                    if let m = med, m.remaining > 0, m.perDose > 0 {
+                        let doses = Int(m.remaining / m.perDose)
+                        Text("按当前用量还能吃 \(doses) 次")
+                            .font(.system(size: Theme.F.caption))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                } header: {
+                    Text("库存")
+                } footer: {
+                    Text("Caelum 也能用工具补货和扣减，两边同步。")
+                        .font(.system(size: Theme.F.caption))
                 }
                 .listRowBackground(Theme.mainBg)
 
@@ -606,19 +700,29 @@ private struct MedEditorSheet: View {
 
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        let rem = Double(remainingInput.trimmingCharacters(in: .whitespaces)) ?? 0
+        let per = max(Double(perDoseInput.trimmingCharacters(in: .whitespaces)) ?? 1, 0.01)
+        let u = unitInput.trimmingCharacters(in: .whitespaces).isEmpty ? "片" : unitInput.trimmingCharacters(in: .whitespaces)
         if let med {
             med.name = trimmedName
             med.dosage = dosage.trimmingCharacters(in: .whitespaces)
             med.timesOfDay = minutesOfDay
             med.reminderEnabled = reminderEnabled
+            med.remaining = rem
+            med.unit = u
+            med.perDose = per
         } else {
-            modelContext.insert(Medication(
+            let m = Medication(
                 profileId: profileId,
                 name: trimmedName,
                 dosage: dosage.trimmingCharacters(in: .whitespaces),
                 timesOfDay: minutesOfDay,
                 reminderEnabled: reminderEnabled
-            ))
+            )
+            m.remaining = rem
+            m.unit = u
+            m.perDose = per
+            modelContext.insert(m)
         }
         try? modelContext.save()
         resyncReminders()
