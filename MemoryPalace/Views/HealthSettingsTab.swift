@@ -17,6 +17,8 @@ struct HealthSettingsTab: View {
         List {
             connectSection
             injectSection(health: $health)
+            // 手账闸门（体重/吃药/经期/亲密的显示与 AI 可见开关）——此前是孤儿 View，挂进设置健康页
+            HealthGatesSections(profileId: profileManager?.currentProfile.id ?? "")
             snapshotSection
             usageSection
         }
