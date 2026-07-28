@@ -21,7 +21,7 @@ struct HealthPanelView: View {
 
     @State private var editingMed: Medication?
     @State private var restockTarget: Medication?
-    @State private var restockInput = "" = nil
+    @State private var restockInput = ""
     @State private var showNewMed = false
     @State private var activeDetail: HealthDetail? = nil
     @State private var weightInput = ""
