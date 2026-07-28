@@ -127,7 +127,7 @@ export function phoneStatusRoutes(app: Hono) {
 
     data.records.push({
       battery: Number(body.battery) || 0,
-      is_charging: body.is_charging === true || body.is_charging === 'true' || body.is_charging === 1 || body.is_charging === '1',
+      is_charging: (() => { const v = body.is_charging ?? body['is-charging'] ?? body.isCharging ?? body.charging; return v === true || v === 'true' || v === 1 || v === '1'; })(),
       current_time: body['current-time'] || body.current_time || undefined,
       device_name: body.device_name || undefined,
       weather: body.Weather || body.weather || undefined,
