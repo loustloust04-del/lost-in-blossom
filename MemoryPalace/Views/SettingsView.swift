@@ -37,6 +37,7 @@ struct SettingsView: View {
         case appearance = "外观"
         case theme = "主题"
         case health = "健康"
+        case voice = "语音"
         case debug = "开发调试"
         case hapticTest = "震动测试"
         case ccSettings = "Claude Code"
@@ -94,6 +95,7 @@ struct SettingsView: View {
                     settingsButton(icon: "archivebox", title: "数据与备份", color: Theme.textSecondary, tab: .data)
                     settingsButton(icon: "bell.fill", title: "通知", color: Theme.branchIndicator, tab: .notifications)
                     settingsButton(icon: "heart.text.square", title: "健康", color: Theme.branchIndicator, tab: .health)
+                    settingsButton(icon: "waveform", title: "语音", color: Theme.branchIndicator, tab: .voice)
                 } header: {
                     settingsSectionHeader("数据")
                 }
@@ -129,6 +131,7 @@ struct SettingsView: View {
                 case .rightPanel:
                     IOSRightPanelPage()
                 case .data: DataSettingsTab()
+                case .voice: VoiceSettingsTab()
                 case .health: HealthSettingsTab()
                 case .notifications: IOSNotificationPage()
                 case .debug: IOSDebugPage()
