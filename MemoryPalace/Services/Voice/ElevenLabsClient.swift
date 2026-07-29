@@ -27,7 +27,9 @@ enum ElevenLabsError: Error {
 
 /// ElevenLabs REST 薄客户端（非流式）。语音条是短音频存文件，不碰 SSE。
 struct ElevenLabsClient {
-    static let apiBase = URL(string: "https://api.elevenlabs.io/v1")!
+    /// 走自家 VPS 的 nginx 反代（/xi/ → api.elevenlabs.io）：大陆蜂窝网络直连 ElevenLabs 不通，
+    /// 中转后音色列表和 TTS 合成全走 blossom；key 仍由 App 请求头自带，反代不存密钥。
+    static let apiBase = URL(string: "https://blossom.amberrib.com/xi/v1")!
     /// 测试经 URLProtocol mock 注入
     var session: URLSession = .shared
 
