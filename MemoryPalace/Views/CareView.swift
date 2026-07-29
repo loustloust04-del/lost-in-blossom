@@ -11,7 +11,7 @@ struct CareView: View {
 
     @Query private var localMeds: [Medication]
     @Query private var localMedLogs: [MedicationLog]
-    @Query(sort: \.date, order: .reverse) private var localCycleDays: [CycleDay]
+    @Query(sort: \CycleDay.date, order: .reverse) private var localCycleDays: [CycleDay]
 
     @Environment(\.dismiss) private var dismiss
 
