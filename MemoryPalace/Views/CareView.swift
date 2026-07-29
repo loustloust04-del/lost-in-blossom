@@ -46,9 +46,9 @@ struct CareView: View {
 
     private var ringsCard: some View {
         let t = today
-        let waterVal = Double(t?.waterCount ?? 0)
+        let waterVal = Double(max(t?.waterCount ?? 0, vitals?.water.count ?? 0))
         let waterGoal = Double(vitals?.water.goal ?? 6)
-        let foodVal = Double(t?.meals.count ?? vitals?.food.count ?? 0)   // 本地优先，跟主页 CARE 卡同口径
+        let foodVal = Double(max(t?.meals.count ?? 0, vitals?.food.count ?? 0))   // max 创可贴，跟主页同口径（正解=双向同步，DEBT-MAP）
         let foodGoal = Double(vitals?.food.goal ?? 3)
         let (medsTakenCount, medsTotal) = localMedProgress                // 本地 SwiftData，跟主页/健康面板同源
         let sleepVal = t?.sleepDuration ?? 0
@@ -57,7 +57,7 @@ struct CareView: View {
                 .font(.system(size: 13, weight: .semibold)).tracking(0.5)
                 .foregroundColor(ConsoleView.textSub)
             HStack(spacing: 8) {
-                ring("饮水", "\(t?.waterCount ?? 0)/\(Int(waterGoal))", waterVal / max(waterGoal, 1), ConsoleView.green, "drop.fill")
+                ring("饮水", "\(Int(waterVal))/\(Int(waterGoal))", waterVal / max(waterGoal, 1), ConsoleView.green, "drop.fill")
                 ring("进食", "\(Int(foodVal))/\(Int(foodGoal))", foodVal / max(foodGoal, 1), ConsoleView.green, "fork.knife")
                 ring("药物",
                      medsTotal > 0 ? "\(medsTakenCount)/\(medsTotal)" : "未服",

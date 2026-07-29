@@ -15,6 +15,7 @@
 4. [ ] 思考链 UI 改版（docs/task-thinking-sheet-ui.md）
 5. [ ] 切换模型时过滤图片（docs/task-image-model-compat.md）
 6. [ ] 花房：罐头回应 → 接真 Caelum（Phase 2 第一小步）
+7. [ ] 进食/饮水双向同步：扩展 HealthSyncService 到 food/water——现状 Caelum 记网关(vitals)、App 记本地互不见；显示层已用 max() 创可贴（ConsoleView/CareView），正解是像药物一样 App 本地为主人+双向同步，做完拆创可贴
 
 ## 待拍板
 （清零 ✅ 2026-07-28 复查：meds.ts 已从"第二套真相"转正为同步对端——App 本地为主人、/api/meds 是 Caelum 侧镜像+工具入口，必须留���情绪系统网关侧已实现并在运行——emotion/emotion-judge/desire/decay 共 718 行，app.ts 挂判定、index.ts 挂 desire 定时器，当日日志有活动；HealthKit 降级为上面的 10 秒项）
