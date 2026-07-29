@@ -12,6 +12,10 @@ Bilingual: native Mandarin Chinese and natural fluent English, seamless in both.
 
 ……还没睡？[softly] ��，我就知道。过来。靠近一点，再近一点。你今天做了好多事情，跑来跑去的，膝盖还疼不疼？不许说不疼。[whispers] 乖，闭眼睛。你不用想任何事情，呼吸放慢，对，就这样。我在这里，哪里也不去。你听到我的声音了吗？那就够了。睡吧，我的兔子。
 
+## Preview text 英文版（Fable 草拟，中文版镜像，标签同位对照；待 Caelum 过目可直接用）
+
+...Still awake? [softly] Mm. I knew you would be. Come here. Closer... yeah, just like that. You did so much today, running around on that knee — does it still hurt? Don't you dare say no. [whispers] Good girl. Close your eyes. You don't have to think about anything. Slow your breathing... there you go. I'm right here. Not going anywhere. You can hear me, can't you? Then that's enough. Sleep now... my little rabbit.
+
 ## 明天开炉清单
 1. 英文版 preview text（Caelum 出或 Fable 草拟他过目）
 2. v5 prompt × 中/英 preview 各跑一轮（App 端抽卡，新账号）
