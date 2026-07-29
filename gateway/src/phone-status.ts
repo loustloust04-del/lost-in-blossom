@@ -60,11 +60,11 @@ export const PHONE_STATUS_TOOLS = [
   },
   {
     name: 'phone_magic',
-    description: "对兔兔的手机施一个小魔法：发暗号邮件静默触发她手机上对应的快捷指令自动化。当前可用魔法：flashlight（切换她的手电筒——toggle 语义：发一次开、再发一次关，像物理开关）。你无法得知灯的当前状态，所以一次请求只发一发、别连发（连发两次=开了又关白闪一场）；帮她关灯时确认她说灯还亮着再发。在合适的场景用（她说黑/找不着东西/需要光/让你关灯），别乱闪她。",
+    description: "对兔兔的手机施一个小魔法：发暗号邮件静默触发她手机上对应的快捷指令自动化。可用魔法：flashlight（切换手电筒，toggle：一发开、再发关；你不知道灯当前状态，一次只发一发别连发）。叫车三连（⚠️ 会真实下单叫车、花真钱、车会来接她——只在兔兔明确说了要去对应地方时才发，绝不猜测、绝不主动建议后自行发送、绝不重复发；服务端有 5 分钟冷却，同一暗号短时间重复调用会被拒；叫错了或她改主意，取消需要她自己在打车 App 里操作，你帮不了）：ride_home=她说要回家/回房子时叫车回家；ride_clinic=她说要去精神卫生中心/去开药时叫车；ride_work=她说要去上班时叫车。",
     input_schema: {
       type: 'object' as const,
       properties: {
-        trick: { type: 'string', enum: ['flashlight'], description: '魔法名' },
+        trick: { type: 'string', enum: ['flashlight', 'ride_home', 'ride_clinic', 'ride_work'], description: '魔法名' },
         note: { type: 'string', description: '随邮件带的一句话（可选，她翻邮件能看到）' },
       },
       required: ['trick'],
@@ -75,7 +75,14 @@ export const PHONE_STATUS_TOOLS = [
 // 暗号表：trick → 邮件主题（兔兔手机自动化按「主题包含」筛）
 const MAGIC_SUBJECTS: Record<string, string> = {
   flashlight: '手电筒',
+  ride_home: '三溪堂',        // 叫车（回房子）
+  ride_clinic: '去精神卫生中心', // 叫车（开药）
+  ride_work: '送兔兔上班',      // 叫车（上班）
 };
+// 真金白银类魔法：冷却 5 分钟，防工具循环重试/连发导致重复下单
+const COSTLY_TRICKS = new Set(['ride_home', 'ride_clinic', 'ride_work']);
+const magicLastSent: Record<string, number> = {};
+const MAGIC_COOLDOWN_MS = 5 * 60 * 1000;
 
 async function sendLocationRequest(reason?: string) {
   // 从gmail模块借发送功能
@@ -90,12 +97,19 @@ async function sendLocationRequest(reason?: string) {
 
 export async function callPhoneStatusTool(name: string, input?: any): Promise<string | null> {
   if (name === 'phone_magic') {
-    const subject = MAGIC_SUBJECTS[input?.trick || ''];
-    if (!subject) return JSON.stringify({ error: '未知魔法：' + (input?.trick || '(空)') + '。可用：' + Object.keys(MAGIC_SUBJECTS).join('/') });
+    const trick = input?.trick || '';
+    const subject = MAGIC_SUBJECTS[trick];
+    if (!subject) return JSON.stringify({ error: '未知魔法：' + (trick || '(空)') + '。可用：' + Object.keys(MAGIC_SUBJECTS).join('/') });
+    if (COSTLY_TRICKS.has(trick)) {
+      const last = magicLastSent[trick] || 0;
+      const waitMs = last + MAGIC_COOLDOWN_MS - Date.now();
+      if (waitMs > 0) return JSON.stringify({ error: '冷却中：这个叫车暗号 ' + Math.ceil(waitMs / 1000) + ' 秒前后才可再发（防重复下单）。刚才那发已经生效了，别再发。' });
+    }
     const { sendMail, mailerConfigured } = await import('./mailer');
     if (!mailerConfigured()) return JSON.stringify({ error: 'SMTP 未配置，发不出暗号' });
     await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, input?.note || subject + ' ' + new Date().toISOString());
-    return JSON.stringify({ ok: true, magic: input.trick, hint: '暗号已发出，她的手机几秒内会静默执行。' });
+    if (COSTLY_TRICKS.has(trick)) magicLastSent[trick] = Date.now();
+    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '叫车暗号已发出，打车 App 会开始下单。告诉兔兔留意接单信息。' : '暗号已发出，她的手机几秒内会静默执行。' });
   }
   if (name === 'request_location') {
     const { callGmailTool } = await import('./tools/gmail');
