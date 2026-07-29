@@ -3,11 +3,15 @@ import SwiftData
 
 /// Care · 护理仪表盘（控制台 CARE 区点开）。
 /// 今日饮水/进食/药物/睡眠环形进度 + 经期周期环 + 近 7 天饮水/睡眠趋势。
-/// 只读汇总视图，数据来自 DailyContext 历史 + 网关 vitals + 经期预测。
+/// 只读汇总视图。药物/经期读本地 SwiftData（与主页 CARE 卡、健康面板同源）；饮水/进食本地优先、网关 vitals 只兜底目标值。
 struct CareView: View {
     let contexts: [DailyContext]        // 倒序（最新在前）
     let vitals: VitalsResponse?
-    let period: PeriodClient.Prediction?
+    let period: PeriodClient.Prediction?  // 已不用于渲染（经期改读本地预测）；留参免动调用方
+
+    @Query private var localMeds: [Medication]
+    @Query private var localMedLogs: [MedicationLog]
+    @Query(sort: \.date, order: .reverse) private var localCycleDays: [CycleDay]
 
     @Environment(\.dismiss) private var dismiss
 
@@ -20,7 +24,7 @@ struct CareView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 14) {
                     ringsCard
-                    if let p = period, p.hasData { cycleCard(p) }
+                    if let c = localCycle { cycleCard(c) }
                     trendsCard
                     Color.clear.frame(height: 24)
                 }
@@ -44,9 +48,9 @@ struct CareView: View {
         let t = today
         let waterVal = Double(t?.waterCount ?? 0)
         let waterGoal = Double(vitals?.water.goal ?? 6)
-        let foodVal = Double(vitals?.food.count ?? t?.meals.count ?? 0)
+        let foodVal = Double(t?.meals.count ?? vitals?.food.count ?? 0)   // 本地优先，跟主页 CARE 卡同口径
         let foodGoal = Double(vitals?.food.goal ?? 3)
-        let medsTaken = t?.medicationStatus == .taken || vitals?.meds.taken == true
+        let (medsTakenCount, medsTotal) = localMedProgress                // 本地 SwiftData，跟主页/健康面板同源
         let sleepVal = t?.sleepDuration ?? 0
         return VStack(alignment: .leading, spacing: 14) {
             Text("今日照顾")
@@ -55,7 +59,11 @@ struct CareView: View {
             HStack(spacing: 8) {
                 ring("饮水", "\(t?.waterCount ?? 0)/\(Int(waterGoal))", waterVal / max(waterGoal, 1), ConsoleView.green, "drop.fill")
                 ring("进食", "\(Int(foodVal))/\(Int(foodGoal))", foodVal / max(foodGoal, 1), ConsoleView.green, "fork.knife")
-                ring("药物", medsTaken ? "已服" : "未服", medsTaken ? 1 : 0, medsTaken ? ConsoleView.green : ConsoleView.gold, "pills.fill")
+                ring("药物",
+                     medsTotal > 0 ? "\(medsTakenCount)/\(medsTotal)" : "未服",
+                     medsTotal > 0 ? Double(medsTakenCount) / Double(medsTotal) : 0,
+                     medsTotal > 0 && medsTakenCount == medsTotal ? ConsoleView.green : ConsoleView.gold,
+                     "pills.fill")
                 ring("睡眠", sleepText(sleepVal), min(sleepVal / 8, 1), ConsoleView.greenDeep, "moon.fill")
             }
         }
@@ -82,9 +90,44 @@ struct CareView: View {
 
     // MARK: - 经期周期环
 
-    private func cycleCard(_ p: PeriodClient.Prediction) -> some View {
-        let day = p.currentCycleDay ?? 0
-        let pct = p.avgCycle > 0 ? min(1, Double(day) / Double(p.avgCycle)) : 0
+    /// 本地经期状态（HealthCycleStore，跟主页 LOG 卡、健康面板同源）
+    private struct LocalCycleInfo {
+        let day: Int?
+        let line: String
+        let avgCycle: Int?
+    }
+
+    private var localCycle: LocalCycleInfo? {
+        let periods = HealthCycleStore.periods(days: localCycleDays)
+        guard !periods.isEmpty else { return nil }
+        let now = Date()
+        let day = HealthCycleStore.currentCycleDay(periods: periods, now: now)
+        let todayFlow = localCycleDays.first { Calendar.current.isDateInToday($0.date) }.flatMap { CycleFlow(rawValue: $0.flow) }
+        let line = HealthCycleStore.statusLine(todayFlow: todayFlow, periods: periods, now: now)
+        let pred = HealthCycleStore.prediction(periods: periods)
+        return LocalCycleInfo(day: day, line: line, avgCycle: pred?.averageLength)
+    }
+
+    /// 本地药物今日进度：(已服, 总计)（跟主页 CARE 卡同款算法）
+    private var localMedProgress: (Int, Int) {
+        let now = Date()
+        let todayLogs = localMedLogs.filter { Calendar.current.isDateInToday($0.takenAt) }
+        var total = 0, taken = 0
+        for med in localMeds where !med.isArchived {
+            for slot in med.timesOfDay {
+                total += 1
+                if case .taken = HealthLogStore.medState(medication: med, minuteOfDay: slot, todayLogs: todayLogs, now: now) {
+                    taken += 1
+                }
+            }
+        }
+        return (taken, total)
+    }
+
+    private func cycleCard(_ c: LocalCycleInfo) -> some View {
+        let day = c.day ?? 0
+        let avg = c.avgCycle ?? 0
+        let pct = avg > 0 ? min(1, Double(day) / Double(avg)) : 0
         return HStack(spacing: 16) {
             ZStack {
                 Circle().stroke(ConsoleView.sink, lineWidth: 7)
@@ -99,12 +142,10 @@ struct CareView: View {
             .frame(width: 74, height: 74)
             VStack(alignment: .leading, spacing: 5) {
                 Text("经期周期").font(.system(size: 14, weight: .medium)).foregroundColor(ConsoleView.textPrimary)
-                Text(p.phase).font(.system(size: 12.5, weight: .medium)).foregroundColor(ConsoleView.greenDeep)
-                if let du = p.daysUntil {
-                    Text(du < 0 ? "已推迟 \(-du) 天" : (du == 0 ? "预计今天来潮" : "预计还有 \(du) 天来潮"))
-                        .font(.system(size: 12)).foregroundColor(ConsoleView.textMuted)
+                Text(c.line).font(.system(size: 12.5, weight: .medium)).foregroundColor(ConsoleView.greenDeep)
+                if let avg = c.avgCycle {
+                    Text("平均周期 \(avg) 天").font(.system(size: 11)).foregroundColor(ConsoleView.textFaint)
                 }
-                Text("平均周期 \(p.avgCycle) 天").font(.system(size: 11)).foregroundColor(ConsoleView.textFaint)
             }
             Spacer()
         }

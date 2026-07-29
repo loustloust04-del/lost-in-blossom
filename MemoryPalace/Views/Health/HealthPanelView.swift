@@ -72,6 +72,7 @@ struct HealthPanelView: View {
                 recentSection
             }
             .listStyle(.insetGrouped)
+            .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
         }
         .background(Theme.sidebarBg)
@@ -325,12 +326,12 @@ struct HealthPanelView: View {
                     .frame(width: 120)
                 }
             }
+            weightInputRow
             if chartWeights.count >= 2 {
                 weightChart
                     .contentShape(Rectangle())
                     .onTapGesture { activeDetail = .weight }
             }
-            weightInputRow
         } header: {
             detailHeader("体重", .weight)
         }
@@ -577,15 +578,19 @@ private struct MedEditorSheet: View {
                         Text("剩余")
                             .font(.system(size: Theme.F.body))
                             .foregroundColor(Theme.textSecondary)
+                        Spacer(minLength: 8)
                         TextField("0", text: $remainingInput)
                             .font(.system(size: Theme.F.body))
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
+                            .frame(width: 96)
+                            .contentShape(Rectangle())
                         TextField("片", text: $unitInput)
                             .font(.system(size: Theme.F.body))
                             .foregroundColor(Theme.textMuted)
-                            .frame(width: 44)
                             .multilineTextAlignment(.trailing)
+                            .frame(width: 56)
+                            .contentShape(Rectangle())
                     }
                     HStack {
                         Text("每次")
