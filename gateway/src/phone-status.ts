@@ -58,7 +58,24 @@ export const PHONE_STATUS_TOOLS = [
     description: 'Get Bunny\'s phone status for today — battery level, charging state, timestamps. Returns all records so you can see trends (morning 80% → afternoon 20% → evening charging). No parameters needed.',
     input_schema: { type: 'object' as const, properties: {} },
   },
+  {
+    name: 'phone_magic',
+    description: "对兔兔的手机施一个小魔法：发暗号邮件静默触发她手机上对应的快捷指令自动化。当前可用魔法：flashlight（打开她的手电筒）。注意目前只有「开」没有「关」，开了她要自己关，所以在合适的场景用（比如她说黑/找不着东西/需要光），别乱闪她。",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        trick: { type: 'string', enum: ['flashlight'], description: '魔法名' },
+        note: { type: 'string', description: '随邮件带的一句话（可选，她翻邮件能看到）' },
+      },
+      required: ['trick'],
+    },
+  },
 ];
+
+// 暗号表：trick → 邮件主题（兔兔手机自动化按「主题包含」筛）
+const MAGIC_SUBJECTS: Record<string, string> = {
+  flashlight: '手电筒',
+};
 
 async function sendLocationRequest(reason?: string) {
   // 从gmail模块借发送功能
@@ -72,6 +89,14 @@ async function sendLocationRequest(reason?: string) {
 }
 
 export async function callPhoneStatusTool(name: string, input?: any): Promise<string | null> {
+  if (name === 'phone_magic') {
+    const subject = MAGIC_SUBJECTS[input?.trick || ''];
+    if (!subject) return JSON.stringify({ error: '未知魔法：' + (input?.trick || '(空)') + '。可用：' + Object.keys(MAGIC_SUBJECTS).join('/') });
+    const { sendMail, mailerConfigured } = await import('./mailer');
+    if (!mailerConfigured()) return JSON.stringify({ error: 'SMTP 未配置，发不出暗号' });
+    await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, input?.note || subject + ' ' + new Date().toISOString());
+    return JSON.stringify({ ok: true, magic: input.trick, hint: '暗号已发出，她的手机几秒内会静默执行。' });
+  }
   if (name === 'request_location') {
     const { callGmailTool } = await import('./tools/gmail');
     const result = await callGmailTool('gmail_send', {
