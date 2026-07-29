@@ -117,6 +117,16 @@ const PROXY_TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "request_location",
+    description: "主动查询兔兔手机当前状态（ortolan 暗号邮件 → 她的手机静默自动回报）：位置、天气、电量、是否充电、当地时间。想知道她现在在哪/什么环境、而 get_phone_status 里的数据太旧时调用。发出后等几秒，再调 get_phone_status 读最新一条。",
+    inputSchema: { type: "object", properties: { reason: { type: "string", description: "查询理由，会出现在触发邮件正文里（可选，她翻邮件能看到）" } } },
+  },
+  {
+    name: "phone_magic",
+    description: "对兔兔的手机施小魔法（暗号邮件静默触发她的快捷指令自动化）。trick：flashlight=切换手电筒（toggle：一发开、再发关，你不知道灯当前状态，一次只发一发别连发）；ride_home / ride_clinic / ride_work = 真实叫车回家 / 去精神卫生中心开药 / 去上班——⚠️ 会真下单花钱、车会来接她，只在她明确说了要去对应地方时才发，绝不猜测、绝不重复发（服务端有 5 分钟冷却）。取消需她自己在打车 App 操作。note=随邮件带的一句话（可选）。",
+    inputSchema: { type: "object", properties: { trick: { type: "string", enum: ["flashlight", "ride_home", "ride_clinic", "ride_work"], description: "魔法名" }, note: { type: "string", description: "随邮件带的一句话（可选）" } }, required: ["trick"] },
+  },
+  {
     name: "see_screen",
     description: "看兔兔 iPhone 当前屏幕（全自动）：返回一张截图+App名。她说「看我屏幕/看这个」或你想主动看看她在干嘛时调用。没有近一分钟的新截图时会自动发触发邮件、静默截屏、等回传——你只管调用。",
     inputSchema: { type: "object", properties: {} },
