@@ -500,6 +500,19 @@ export function startHub(): WebSocketServer {
           if (m?.type === "notebook_changed") {
             n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
             console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
+          } else if (m?.type === "phone_event") {
+            // 手机事件（充电开始等）→ 注入 CC 一条 phone 频道消息；CC 自行决定要不要用 reply 跟用户说
+            const text = String(m.text ?? "").slice(0, 300)
+            if (text) {
+              const tag = `<channel source="phone" event="${String(m.event ?? "event").slice(0, 40)}" ts="${new Date().toISOString()}">${text}</channel>`
+              try {
+                realTmuxRunner.send(tag, TMUX_SESSION)
+                n = 1
+                console.log(`[hub] phone_event → CC: ${text.slice(0, 60)}`)
+              } catch (e: any) {
+                console.error(`[hub] phone_event 注入失败: ${e?.message}`)
+              }
+            }
           }
         } catch { /* 坏 JSON：当没收到，通知本就是可丢的 */ }
         res.writeHead(200, { "Content-Type": "application/json" })
