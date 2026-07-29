@@ -296,6 +296,11 @@ struct VoicePickerSheet: View {
             return
         }
         previewPlayer?.pause()
+        // 声明媒体播放身份：不然裸 AVPlayer 跟随侧边静音拨片，静音模式下试听无声（正式语音条的 VoiceMessagePlayer 已自带同款声明）
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
         previewPlayer = AVPlayer(url: url)
         previewPlayer?.play()
         previewingId = id
