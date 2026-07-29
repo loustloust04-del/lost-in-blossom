@@ -71,6 +71,7 @@ struct ElevenLabsClient {
         let body: [String: Any] = [
             "text": script,
             "model_id": "eleven_v3",
+            "language_code": "zh",  // 台词中文+标签英文，不声明语言让模型猜有判错风险（《非官方状态标签攻略》实测建议）
             "voice_settings": [
                 "stability": settings.stability,
                 "similarity_boost": settings.similarityBoost,
