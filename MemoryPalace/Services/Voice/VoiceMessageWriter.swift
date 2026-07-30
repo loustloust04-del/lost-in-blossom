@@ -308,6 +308,16 @@ enum VoiceMessageWriter {
                 pendingClear(nodeId: nodeId)
             } catch {
                 dbg("gx-catch-\(shortPhrase(error))")
+                // 网络类失败多半是「App 被切到后台，下载被系统掐断」（服务端实测已完整发出音频）。
+                // 这种不算终局：保留占位行 + 保留 pending，等回前台 resumePending 自动重试。
+                var isNetwork = false
+                if let e = error as? ElevenLabsError, case .network = e { isNetwork = true }
+                let attempts = (pendingLoad()[nodeId]?["n"] as? Int) ?? 0
+                if isNetwork && attempts < maxAttempts {
+                    dbg("gx-network-will-retry")
+                    ToastCenter.shared.show("语音条被打断了，回头自动重试（别急着切走 App）")
+                    return   // 占位行留着，pending 留着
+                }
                 // 先弹 toast：即使下面 node 捞不到，也不会再出现「什么都没发生」
                 ToastCenter.shared.show("语音条没成功（\(shortPhrase(error))）")
                 guard let node = fetchNode(nodeId, context: context) else { return }
