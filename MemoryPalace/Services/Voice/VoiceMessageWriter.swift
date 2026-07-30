@@ -18,6 +18,16 @@ enum VoiceMessageWriter {
     /// iOS 会在 App 进后台数秒后冻结进程：合成请求虽已返回，收尾代码却没机会跑，
     /// 占位行就永久卡住（兔兔发完就切走跟别人说话 = 每次必中）。
     /// 这里把 script 落 UserDefaults，回前台时续跑；配合 beginBackgroundTask 争取收尾时间。
+    /// 流水线埋点：只发步骤名（无脚本无内容），落 nginx access.log，用于定位卡死位置。
+    /// 排障期临时件，链路稳定后删。
+    static func dbg(_ step: String) {
+        let safe = step.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "x"
+        guard let url = URL(string: "https://blossom.amberrib.com/vdbg/\(safe)") else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 5
+        URLSession.shared.dataTask(with: req).resume()
+    }
+
     private static let pendingKey = "voice.pendingScripts"
     private static let maxAttempts = 3
 
@@ -111,6 +121,7 @@ enum VoiceMessageWriter {
         let script = firstScript(content: node.content, segments: segs) ?? ""
         let canGenerate = proactiveEnabledProvider()
             && !(key ?? "").isEmpty && !(voiceId ?? "").isEmpty && !script.isEmpty
+        dbg(canGenerate ? "p1-can-yes" : "p1-can-no")
 
         // 降级要说明理由：此前静默摊成台词文字，用户完全不知道差哪一步（"只出台词没语音条"）
         var degradeNote: String? = nil
@@ -262,8 +273,10 @@ enum VoiceMessageWriter {
             if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid }
         }
         #endif
+        dbg("g0-enter")
         Task { @MainActor in
             defer {
+                dbg("g9-defer")
                 inFlight.remove(nodeId)
                 #if canImport(UIKit)
                 if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid }
@@ -271,23 +284,30 @@ enum VoiceMessageWriter {
             }
             do {
                 let audio = try await client.synthesize(script: script, voiceId: voiceId, apiKey: apiKey)
+                dbg("g1-http-ok-\(audio.count)")
                 // 收尾时 node 可能已被删/换楼层。此前静默 return → 占位行永久卡住且零线索，
                 // 现在给可见反馈（音频已到手，只是挂不上去）。
                 guard let node = fetchNode(nodeId, context: context) else {
+                    dbg("g2-node-MISSING")
                     ToastCenter.shared.show("语音生成好了，但找不到那条消息")
                     return
                 }
+                dbg("g2-node-ok")
                 let (path, duration) = try persistAudio(audio, node: node, context: context)
+                dbg("g3-persist-ok")
                 var segs = node.segments ?? []
                 segs.append(.audioRef(
                     name: (path as NSString).lastPathComponent, mime: "audio/mpeg",
                     path: path, duration: duration, script: script
                 ))
                 node.setSegments(segs)
+                dbg("g4-seg-appended")
                 removePlaceholder(from: node)
                 try context.save()   // 不再 try?：落库失败要走 catch 出反馈，而不是假装成功
+                dbg("g5-SAVED")
                 pendingClear(nodeId: nodeId)
             } catch {
+                dbg("gx-catch-\(shortPhrase(error))")
                 // 先弹 toast：即使下面 node 捞不到，也不会再出现「什么都没发生」
                 ToastCenter.shared.show("语音条没成功（\(shortPhrase(error))）")
                 guard let node = fetchNode(nodeId, context: context) else { return }
