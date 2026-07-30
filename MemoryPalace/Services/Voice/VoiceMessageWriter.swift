@@ -36,35 +36,89 @@ enum VoiceMessageWriter {
     static func processChatIntents(nodeId: String, context: ModelContext, profiles: [Profile]) {
         let nodeDesc = FetchDescriptor<MessageNode>(predicate: #Predicate { $0.id == nodeId })
         guard let node = (try? context.fetch(nodeDesc))?.first,
-              node.role == "assistant",
-              node.content.contains("```voice") else { return }
+              node.role == "assistant" else { return }
 
-        let content = node.content
-        let ns = content as NSString
-        let matches = intentRegex.matches(in: content, range: NSRange(location: 0, length: ns.length))
-        guard !matches.isEmpty else { return }
+        // 块可能在两个容器：content（普通消息）和 segments 的 .text 段（工具轮/segmented 消息正文副本）。
+        // CC 走工具循环 → 回复几乎必为 segmented；只消费 content 会让渲染把残留块画成代码卡片 = 语音条出不来。
+        let segs = node.segments
+        let blockInContent = node.content.contains("```voice")
+        let blockInSegments = segs?.contains(where: {
+            if case .text(let t) = $0 { return t.contains("```voice") }
+            return false
+        }) ?? false
+        guard blockInContent || blockInSegments else { return }
 
         let profile = profiles.first { $0.id == node.profileId }
         let key = apiKeyProvider()
         let voiceId = profile?.elevenVoiceId
-        let script = String(ns.substring(with: matches[0].range(at: 1))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .prefix(scriptCap))
+        let script = firstScript(content: node.content, segments: segs) ?? ""
         let canGenerate = proactiveEnabledProvider()
             && !(key ?? "").isEmpty && !(voiceId ?? "").isEmpty && !script.isEmpty
 
-        // 倒序替换保 range 有效：首块 → 占位行（可生成）/ 脚本文字（降级）；多余块 → 脚本文字
-        var newContent = content
-        for (idx, m) in Array(matches.enumerated()).reversed() {
-            let body = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let replacement = (idx == 0 && canGenerate) ? placeholderLine : body
-            newContent = (newContent as NSString).replacingCharacters(in: m.range, with: replacement)
+        // 两容器同步消费
+        node.content = consumeVoiceBlocks(in: node.content, canGenerate: canGenerate)
+        if var segs2 = segs, blockInSegments {
+            for i in segs2.indices {
+                if case .text(let t) = segs2[i], t.contains("```voice") {
+                    segs2[i] = .text(consumeVoiceBlocks(in: t, canGenerate: canGenerate))
+                }
+            }
+            node.setSegments(segs2)
         }
-        node.content = newContent
         try? context.save()
 
         guard canGenerate, let key, let voiceId else { return }
         generate(script: script, nodeId: nodeId, voiceId: voiceId, apiKey: key, context: context)
+    }
+
+    /// 首块脚本：content 优先，没有再扫 segments 的 .text（两容器是同一文本的副本）
+    private static func firstScript(content: String, segments: [MessageSegment]?) -> String? {
+        var candidates = [content]
+        for seg in segments ?? [] {
+            if case .text(let t) = seg { candidates.append(t) }
+        }
+        for c in candidates {
+            let ns = c as NSString
+            let ms = intentRegex.matches(in: c, range: NSRange(location: 0, length: ns.length))
+            if let first = ms.first {
+                let body = String(ns.substring(with: first.range(at: 1))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .prefix(scriptCap))
+                if !body.isEmpty { return body }
+            }
+        }
+        return nil
+    }
+
+    /// 消费一段文本里的所有 voice 块：首块 → 占位行（可生成）/ 脚本文字（降级）；多余块 → 脚本文字。
+    /// 倒序替换保 range 有效。
+    private static func consumeVoiceBlocks(in text: String, canGenerate: Bool) -> String {
+        let ns = text as NSString
+        let matches = intentRegex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return text }
+        var out = text
+        for (idx, m) in Array(matches.enumerated()).reversed() {
+            let body = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let replacement = (idx == 0 && canGenerate) ? placeholderLine : body
+            out = (out as NSString).replacingCharacters(in: m.range, with: replacement)
+        }
+        return out
+    }
+
+    /// 在 content + segments 两容器里同时替换占位行（失败行/清占位共用）
+    @MainActor
+    private static func replacePlaceholderEverywhere(node: MessageNode, with replacement: String) {
+        node.content = node.content.replacingOccurrences(of: placeholderLine, with: replacement)
+        if var segs = node.segments {
+            var touched = false
+            for i in segs.indices {
+                if case .text(let t) = segs[i], t.contains(placeholderLine) {
+                    segs[i] = .text(t.replacingOccurrences(of: placeholderLine, with: replacement))
+                    touched = true
+                }
+            }
+            if touched { node.setSegments(segs) }
+        }
     }
 
     // MARK: - 换一版
@@ -145,7 +199,7 @@ enum VoiceMessageWriter {
                 guard let node = fetchNode(nodeId, context: context) else { return }
                 let quoted = script.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
                 let failLine = "> 🎤 语音条没成功（\(shortPhrase(error))）\n\(quoted)"
-                node.content = node.content.replacingOccurrences(of: placeholderLine, with: failLine)
+                replacePlaceholderEverywhere(node: node, with: failLine)
                 try? context.save()
             }
         }
@@ -171,10 +225,22 @@ enum VoiceMessageWriter {
 
     @MainActor
     private static func removePlaceholder(from node: MessageNode) {
-        var content = node.content.replacingOccurrences(of: placeholderLine, with: "")
+        replacePlaceholderEverywhere(node: node, with: "")
         // 清占位行留下的连续空行
+        var content = node.content
         while content.contains("\n\n\n") { content = content.replacingOccurrences(of: "\n\n\n", with: "\n\n") }
         node.content = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if var segs = node.segments {
+            var touched = false
+            for i in segs.indices {
+                if case .text(var t) = segs[i] {
+                    while t.contains("\n\n\n") { t = t.replacingOccurrences(of: "\n\n\n", with: "\n\n") }
+                    let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if case .text(let orig) = segs[i], orig != trimmed { segs[i] = .text(trimmed); touched = true }
+                }
+            }
+            if touched { node.setSegments(segs) }
+        }
     }
 
     private static func fetchNode(_ nodeId: String, context: ModelContext) -> MessageNode? {
