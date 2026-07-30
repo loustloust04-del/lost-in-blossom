@@ -87,7 +87,13 @@ struct ElevenLabsClient {
 
     private func run(_ req: URLRequest) async throws -> (Data, URLResponse) {
         do { return try await session.data(for: req) }
-        catch { throw ElevenLabsError.network }
+        catch {
+            // 此前一律吞成「网络不行」，真因(取消/连接断/超时/ATS)全丢。埋点带出 domain+code：
+            // NSURLErrorDomain -999=被取消 -1005=连接断 -1001=超时 -1009=没网
+            let ns = error as NSError
+            VoiceMessageWriter.dbg("net-\(ns.domain)-\(ns.code)")
+            throw ElevenLabsError.network
+        }
     }
 
     private static func check(_ resp: URLResponse) throws {
