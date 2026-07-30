@@ -1,6 +1,9 @@
 import Foundation
 import SwiftData
 import AVFoundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// 发语音条：```voice 意向协议（零新窄工具，模式同 AgentBookNoteWriter 的 ```book-note）。
 ///
@@ -10,6 +13,60 @@ import AVFoundation
 enum VoiceMessageWriter {
 
     static let placeholderLine = "🎤 语音条生成中…"
+
+    // MARK: - 待办登记（防后台冻结）
+    /// iOS 会在 App 进后台数秒后冻结进程：合成请求虽已返回，收尾代码却没机会跑，
+    /// 占位行就永久卡住（兔兔发完就切走跟别人说话 = 每次必中）。
+    /// 这里把 script 落 UserDefaults，回前台时续跑；配合 beginBackgroundTask 争取收尾时间。
+    private static let pendingKey = "voice.pendingScripts"
+    private static let maxAttempts = 3
+
+    private static func pendingLoad() -> [String: [String: Any]] {
+        (UserDefaults.standard.dictionary(forKey: pendingKey) as? [String: [String: Any]]) ?? [:]
+    }
+    private static func pendingPut(nodeId: String, script: String) {
+        var d = pendingLoad()
+        let attempts = (d[nodeId]?["n"] as? Int) ?? 0
+        d[nodeId] = ["script": script, "n": attempts]
+        UserDefaults.standard.set(d, forKey: pendingKey)
+    }
+    private static func pendingBumpAttempt(nodeId: String) {
+        var d = pendingLoad()
+        guard var item = d[nodeId] else { return }
+        item["n"] = ((item["n"] as? Int) ?? 0) + 1
+        d[nodeId] = item
+        UserDefaults.standard.set(d, forKey: pendingKey)
+    }
+    private static func pendingClear(nodeId: String) {
+        var d = pendingLoad()
+        d.removeValue(forKey: nodeId)
+        UserDefaults.standard.set(d, forKey: pendingKey)
+    }
+
+    /// App 回前台时调用：把被冻死的语音条续上（占位行还在的才跑）
+    @MainActor
+    static func resumePending(context: ModelContext) {
+        let pend = pendingLoad()
+        guard !pend.isEmpty else { return }
+        let profiles = profilesProvider()
+        let key = apiKeyProvider()
+        for (nodeId, item) in pend {
+            guard let script = item["script"] as? String, !script.isEmpty else { pendingClear(nodeId: nodeId); continue }
+            guard ((item["n"] as? Int) ?? 0) < maxAttempts else { pendingClear(nodeId: nodeId); continue }
+            guard let node = fetchNode(nodeId, context: context) else { pendingClear(nodeId: nodeId); continue }
+            // 占位行不在了 = 已经成功或已改成失败行，不重跑
+            let stillPending = node.content.contains(placeholderLine)
+                || (node.segments?.contains(where: {
+                    if case .text(let t) = $0 { return t.contains(placeholderLine) }
+                    return false
+                }) ?? false)
+            guard stillPending else { pendingClear(nodeId: nodeId); continue }
+            guard let voiceId = profiles.first(where: { $0.id == node.profileId })?.elevenVoiceId,
+                  !voiceId.isEmpty, let key, !key.isEmpty else { continue }
+            pendingBumpAttempt(nodeId: nodeId)
+            generate(script: script, nodeId: nodeId, voiceId: voiceId, apiKey: key, context: context)
+        }
+    }
     /// 脚本长度上限（攻略纪律 60–120 字；超长截断防误写整篇）
     static let scriptCap = 1000
 
@@ -180,8 +237,21 @@ enum VoiceMessageWriter {
     private static func generate(script: String, nodeId: String, voiceId: String, apiKey: String, context: ModelContext) {
         guard !inFlight.contains(nodeId) else { return }
         inFlight.insert(nodeId)
+        pendingPut(nodeId: nodeId, script: script)
+        // 向系统申请一段后台执行时间：切走跟别人聊天时也能把收尾跑完
+        #if canImport(UIKit)
+        var bgTask: UIBackgroundTaskIdentifier = .invalid
+        bgTask = UIApplication.shared.beginBackgroundTask(withName: "voice-tts") {
+            if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid }
+        }
+        #endif
         Task { @MainActor in
-            defer { inFlight.remove(nodeId) }
+            defer {
+                inFlight.remove(nodeId)
+                #if canImport(UIKit)
+                if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid }
+                #endif
+            }
             do {
                 let audio = try await client.synthesize(script: script, voiceId: voiceId, apiKey: apiKey)
                 // 收尾时 node 可能已被删/换楼层。此前静默 return → 占位行永久卡住且零线索，
@@ -199,6 +269,7 @@ enum VoiceMessageWriter {
                 node.setSegments(segs)
                 removePlaceholder(from: node)
                 try context.save()   // 不再 try?：落库失败要走 catch 出反馈，而不是假装成功
+                pendingClear(nodeId: nodeId)
             } catch {
                 // 先弹 toast：即使下面 node 捞不到，也不会再出现「什么都没发生」
                 ToastCenter.shared.show("语音条没成功（\(shortPhrase(error))）")
@@ -207,6 +278,7 @@ enum VoiceMessageWriter {
                 let failLine = "> 🎤 语音条没成功（\(shortPhrase(error))）\n\(quoted)"
                 replacePlaceholderEverywhere(node: node, with: failLine)
                 try? context.save()
+                pendingClear(nodeId: nodeId)
             }
         }
     }
