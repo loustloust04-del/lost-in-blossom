@@ -184,8 +184,12 @@ enum VoiceMessageWriter {
             defer { inFlight.remove(nodeId) }
             do {
                 let audio = try await client.synthesize(script: script, voiceId: voiceId, apiKey: apiKey)
-                // 收尾时 node 可能已被删/换楼层——fetch 不到就静默放弃（孤儿 mp3 不落盘）
-                guard let node = fetchNode(nodeId, context: context) else { return }
+                // 收尾时 node 可能已被删/换楼层。此前静默 return → 占位行永久卡住且零线索，
+                // 现在给可见反馈（音频已到手，只是挂不上去）。
+                guard let node = fetchNode(nodeId, context: context) else {
+                    ToastCenter.shared.show("语音生成好了，但找不到那条消息")
+                    return
+                }
                 let (path, duration) = try persistAudio(audio, node: node, context: context)
                 var segs = node.segments ?? []
                 segs.append(.audioRef(
@@ -194,8 +198,10 @@ enum VoiceMessageWriter {
                 ))
                 node.setSegments(segs)
                 removePlaceholder(from: node)
-                try? context.save()
+                try context.save()   // 不再 try?：落库失败要走 catch 出反馈，而不是假装成功
             } catch {
+                // 先弹 toast：即使下面 node 捞不到，也不会再出现「什么都没发生」
+                ToastCenter.shared.show("语音条没成功（\(shortPhrase(error))）")
                 guard let node = fetchNode(nodeId, context: context) else { return }
                 let quoted = script.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
                 let failLine = "> 🎤 语音条没成功（\(shortPhrase(error))）\n\(quoted)"
