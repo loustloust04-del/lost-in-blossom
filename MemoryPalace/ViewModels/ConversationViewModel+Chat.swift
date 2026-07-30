@@ -969,6 +969,9 @@ extension ConversationViewModel {
             }.count
             markConversationDirty()
             try? context.save()
+            // CC 用 reply 工具推来的消息不走 assistantTurnDidFinish 收口，
+            // 语音条/健康块必须在这里就地处理，否则块原样落地成文字（"只落下文字就走了"）
+            processCCIntents(nodeId: nodeId, content: content, context: context)
             scrollToNodeId = nodeId
             return
         }
@@ -1004,6 +1007,23 @@ extension ConversationViewModel {
         conversation.nodeCount += 1
         markConversationDirty()
         try? context.save()
+        processCCIntents(nodeId: nodeId, content: content, context: context)
+    }
+
+    /// CC 主动消息（reply 工具）的意向块就地处理：语音条 + 健康手账。
+    /// 走 App 发起的对话时这些由 assistantTurnDidFinish 收口负责；CC 推送不经那条路。
+    private func processCCIntents(nodeId: String, content: String, context: ModelContext) {
+        if content.contains("```health-log") {
+            HealthLogIntentWriter.processChatIntents(nodeId: nodeId, context: context)
+        }
+        if content.contains("```voice") {
+            Task { @MainActor in
+                VoiceMessageWriter.processChatIntents(
+                    nodeId: nodeId, context: context,
+                    profiles: VoiceMessageWriter.profilesProvider()
+                )
+            }
+        }
     }
 
     /// AUDN 记忆提取：每轮对话后异步调用便宜模型提取/更新/删除记忆。
