@@ -112,12 +112,21 @@ enum VoiceMessageWriter {
         let canGenerate = proactiveEnabledProvider()
             && !(key ?? "").isEmpty && !(voiceId ?? "").isEmpty && !script.isEmpty
 
+        // 降级要说明理由：此前静默摊成台词文字，用户完全不知道差哪一步（"只出台词没语音条"）
+        var degradeNote: String? = nil
+        if !canGenerate {
+            if !proactiveEnabledProvider() { degradeNote = "语音条没发出（设置→声音里「主动语音」还没开）" }
+            else if (key ?? "").isEmpty { degradeNote = "语音条没发出（还没填 ElevenLabs key）" }
+            else if (voiceId ?? "").isEmpty { degradeNote = "语音条没发出（这个楼层还没选音色——音色按楼层保存，要在跟他聊天的这层选）" }
+            else { degradeNote = "语音条没发出（脚本是空的）" }
+        }
+
         // 两容器同步消费
-        node.content = consumeVoiceBlocks(in: node.content, canGenerate: canGenerate)
+        node.content = consumeVoiceBlocks(in: node.content, canGenerate: canGenerate, degradeNote: degradeNote)
         if var segs2 = segs, blockInSegments {
             for i in segs2.indices {
                 if case .text(let t) = segs2[i], t.contains("```voice") {
-                    segs2[i] = .text(consumeVoiceBlocks(in: t, canGenerate: canGenerate))
+                    segs2[i] = .text(consumeVoiceBlocks(in: t, canGenerate: canGenerate, degradeNote: degradeNote))
                 }
             }
             node.setSegments(segs2)
@@ -149,14 +158,22 @@ enum VoiceMessageWriter {
 
     /// 消费一段文本里的所有 voice 块：首块 → 占位行（可生成）/ 脚本文字（降级）；多余块 → 脚本文字。
     /// 倒序替换保 range 有效。
-    private static func consumeVoiceBlocks(in text: String, canGenerate: Bool) -> String {
+    private static func consumeVoiceBlocks(in text: String, canGenerate: Bool, degradeNote: String? = nil) -> String {
         let ns = text as NSString
         let matches = intentRegex.matches(in: text, range: NSRange(location: 0, length: ns.length))
         guard !matches.isEmpty else { return text }
         var out = text
         for (idx, m) in Array(matches.enumerated()).reversed() {
             let body = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let replacement = (idx == 0 && canGenerate) ? placeholderLine : body
+            var replacement: String
+            if idx == 0 && canGenerate {
+                replacement = placeholderLine
+            } else if idx == 0, let note = degradeNote {
+                let quoted = body.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
+                replacement = "> 🎤 \(note)\n\(quoted)"
+            } else {
+                replacement = body
+            }
             out = (out as NSString).replacingCharacters(in: m.range, with: replacement)
         }
         return out
