@@ -1934,6 +1934,19 @@ struct BubbleView: View {
                     }
                     Divider()
                 }
+                if !isUser, !isStreaming {
+                    Button {
+                        SpeechService.shared.speak(nodeId: node.id, text: SpeechService.speakableText(from: node))
+                    } label: {
+                        Label("朗读", systemImage: "speaker.wave.2")
+                    }
+                    Button {
+                        SpeechService.shared.stop()
+                    } label: {
+                        Label("停止朗读", systemImage: "speaker.slash")
+                    }
+                    Divider()
+                }
                 if !groupMembers.isEmpty, let onGroupReply, !isStreaming {
                     Menu {
                         ForEach(groupMembers, id: \.id) { member in
