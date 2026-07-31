@@ -70,7 +70,10 @@ enum AttachmentStore {
 
         var candidate = "\(folderName)/\(dirName)/\(safe)"
         var index = 2
-        while FileLibraryStore.absoluteURL(candidate, profileId: profileId) != nil {
+        // ⚠️ absoluteURL 是纯路径解析（合法即非nil、不查存在）——此前拿它当存在性检查，
+        // 条件永真 → while 死循环 → 主线程冻死 → App 被系统击毙（语音条「全静默死亡」真凶）。
+        while let url = FileLibraryStore.absoluteURL(candidate, profileId: profileId),
+              FileManager.default.fileExists(atPath: url.path) {
             // 同名同字节 → 复用（幂等：tool loop 每轮 setSegments 重复外置同一附件不产生副本）
             if (try? FileLibraryStore.readData(candidate, profileId: profileId)) == data {
                 return candidate
