@@ -30,6 +30,23 @@ final class OpenAICompatibleProvider: BaseChatProvider {
     private var segmentedContentLength = 0
     /// OpenRouter 上的 Claude 系模型：cacheFriendly 时显式 per-block 挂 cache_control（system + 末 assistant），
     /// 动态段（[动态上下文] 伪 user）留在断点外。其他上游自动缓存，不需要它。
+    /// 模型认不认图片。黑名单式：只挡确定的纯文本模型，未知一律放行——
+    /// 误挡会让能看图的模型平白瞎掉，误放最多是模型自己报错（和现状持平）。
+    static func supportsVision(model: String) -> Bool {
+        let m = model.lowercased()
+        // 确定不认图的纯文本模型
+        let textOnly = [
+            "deepseek-chat", "deepseek-reasoner", "deepseek-coder", "deepseek-v3", "deepseek-r1",
+            "gpt-3.5", "text-davinci", "moonshot-v1-8k", "qwen-turbo",
+            "llama-3.1-8b", "llama-3.1-70b", "llama-3.3-70b",
+            "mistral-7b", "mixtral", "command-r", "yi-34b-chat",
+        ]
+        if textOnly.contains(where: { m.contains($0) }) { return false }
+        // o1-mini / o1-preview 早期推理模型不收图（o1 正式版收）
+        if m.contains("o1-mini") || m.contains("o1-preview") { return false }
+        return true
+    }
+
     static func wantsORCacheControl(baseURL: String, model: String, samplingParams: SamplingParams?) -> Bool {
         guard samplingParams?.cacheFriendly == true else { return false }
         let m = model.lowercased()
@@ -80,11 +97,17 @@ final class OpenAICompatibleProvider: BaseChatProvider {
                let data = msg.content.data(using: .utf8),
                let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
                 var visionContent: [[String: Any]] = []
+                let modelSeesImages = Self.supportsVision(model: model)
                 for block in blocks {
                     let type = block["type"] as? String ?? ""
                     if type == "image", let source = block["source"] as? [String: Any],
                        let b64 = source["data"] as? String,
                        let mediaType = source["media_type"] as? String {
+                        // 纯文本模型收到 image block 会整轮报错、对话卡死；降级成文字说明（同 document 分支的处理法）
+                        guard modelSeesImages else {
+                            visionContent.append(["type": "text", "text": "[图片 — 当前模型看不了图片，换成 Claude 或其它视觉模型可以看]"])
+                            continue
+                        }
                         visionContent.append(["type": "image_url", "image_url": ["url": "data:\(mediaType);base64,\(b64)"]])
                     } else if type == "text" {
                         visionContent.append(["type": "text", "text": block["text"] as? String ?? ""])
