@@ -38,16 +38,23 @@ struct VoiceMessageSettingsSection: View {
 struct VoiceMessageSettingsIOSSections: View {
     @AppStorage("assistantName") private var assistantName = "助手"
     @AppStorage(VoiceTuning.proactiveKey) private var proactiveEnabled = false
+    @AppStorage(VoiceTuning.providerKey) private var providerRaw = TTSProvider.elevenLabs.rawValue
+    private var currentProvider: TTSProvider { TTSProvider(rawValue: providerRaw) ?? .elevenLabs }
 
     var body: some View {
         Section {
+            Picker("语音服务", selection: $providerRaw) {
+                ForEach(TTSProvider.allCases) { p in
+                    Text(p.displayName).tag(p.rawValue)
+                }
+            }
             VoiceKeyField()
             Toggle("AI 主动发语音", isOn: $proactiveEnabled)
                 .tint(Theme.branchIndicator)
         } header: {
             Text("语音条")
         } footer: {
-            Text("开启后 \(assistantName) 会在想让你听见语气的时刻发语音条。需要填好 key 并在「通用」里给楼层选声音。")
+            Text("\(currentProvider.blurb)\n两家的 key 分开保存，换回来不用重填。开启后 \(assistantName) 会在想让你听见语气的时刻发语音条——还需在「通用」里给楼层选声音。")
         }
         Section {
             DisclosureGroup("声音效果") {
@@ -61,10 +68,12 @@ struct VoiceMessageSettingsIOSSections: View {
 struct VoiceKeyField: View {
     @State private var key = ""
     @State private var loaded = false
+    @AppStorage(VoiceTuning.providerKey) private var providerRaw = TTSProvider.elevenLabs.rawValue
+    private var provider: TTSProvider { TTSProvider(rawValue: providerRaw) ?? .elevenLabs }
 
     var body: some View {
         HStack(spacing: 8) {
-            SecureField("ElevenLabs API Key", text: $key)
+            SecureField("\(provider.displayName) API Key", text: $key)
                 .textFieldStyle(.plain)
                 .onSubmit { save() }
             if !key.isEmpty {
@@ -80,15 +89,19 @@ struct VoiceKeyField: View {
         }
         .onAppear {
             guard !loaded else { return }
-            key = KeychainStore.get(account: VoiceTuning.keychainAccount) ?? ""
+            key = KeychainStore.get(account: provider.keychainAccount) ?? ""
             loaded = true
+        }
+        .onChange(of: providerRaw) { _, _ in
+            // 切后端：先存回原来那家，再载入新家的（两家 key 各存各的）
+            key = KeychainStore.get(account: provider.keychainAccount) ?? ""
         }
         .onDisappear { save() }
     }
 
     private func save() {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        KeychainStore.set(trimmed.isEmpty ? nil : trimmed, account: VoiceTuning.keychainAccount, sync: false)
+        KeychainStore.set(trimmed.isEmpty ? nil : trimmed, account: provider.keychainAccount, sync: false)
     }
 }
 
@@ -273,7 +286,9 @@ struct VoicePickerSheet: View {
         loading = true
         errorPhrase = nil
         do {
-            voices = try await ElevenLabsClient().fetchVoices(apiKey: key)
+            // 跟随当前后端：EL 拉账号音色列表，MiniMax 用系统音色常量表
+            let backend: TTSBackend = VoiceTuning.provider == .miniMax ? MiniMaxClient() : ElevenLabsClient()
+            voices = try await backend.fetchVoices(apiKey: key)
         } catch {
             errorPhrase = (error as? ElevenLabsError)?.shortPhrase ?? "出了点问题"
         }

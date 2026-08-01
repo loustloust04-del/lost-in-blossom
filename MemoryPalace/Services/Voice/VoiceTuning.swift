@@ -6,6 +6,13 @@ enum VoiceTuning {
     static let stabilityKey = "voice_stability"
     static let styleKey = "voice_style"
     static let speedKey = "voice_speed"
+    static let providerKey = "voice_provider"
+
+    /// 当前 TTS 后端（默认 ElevenLabs，保持老用户行为不变）
+    static var provider: TTSProvider {
+        get { TTSProvider(rawValue: UserDefaults.standard.string(forKey: providerKey) ?? "") ?? .elevenLabs }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: providerKey) }
+    }
     /// 「AI 主动发语音」总开关
     static let proactiveKey = "voice_proactive_enabled"
     /// ElevenLabs key 的 Keychain account

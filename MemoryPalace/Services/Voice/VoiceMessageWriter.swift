@@ -104,8 +104,17 @@ enum VoiceMessageWriter {
     )
 
     // 测试注入点
-    static var client = ElevenLabsClient()
-    static var apiKeyProvider: () -> String? = { KeychainStore.get(account: VoiceTuning.keychainAccount) }
+    /// 当前后端实例（测试可注入）。默认按 VoiceTuning.provider 选，切后端不改调用方。
+    static var clientOverride: TTSBackend? = nil
+    static var client: TTSBackend {
+        if let clientOverride { return clientOverride }
+        switch VoiceTuning.provider {
+        case .elevenLabs: return ElevenLabsClient()
+        case .miniMax: return MiniMaxClient()
+        }
+    }
+    /// key 按后端分开存，切换不用重填
+    static var apiKeyProvider: () -> String? = { KeychainStore.get(account: VoiceTuning.provider.keychainAccount) }
     static var proactiveEnabledProvider: () -> Bool = { UserDefaults.standard.bool(forKey: VoiceTuning.proactiveKey) }
     /// 无 ProfileManager 引用的调用点（CC 主动消息 / 换一版）用；测试注入假楼层防污染真 UserDefaults
     static var profilesProvider: () -> [Profile] = { ProfileManager.loadProfiles() }
