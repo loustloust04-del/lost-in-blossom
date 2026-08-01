@@ -49,6 +49,10 @@ struct BookReaderSheet: View {
     /// 这个标记吞掉那一次 resetScroll，避免用 0 覆盖存档的阅读进度。
     @State private var suppressChapterReset = false
     @State private var chapterText: String = ""
+    // 实时陪读（弹幕）：她停稳 1.8s → Caelum 掉一句短评浮在页面上
+    @State private var liveComment: String?
+    @State private var liveOn: Bool = LiveReadingService.isEnabled
+    @State private var liveCommentAt: Date = .distantPast
     @State private var initialScrollRatio: Double? = nil
     @State private var latestScrollRatio: Double = 0
     @State private var renderedHTML: String = ""
@@ -108,7 +112,26 @@ struct BookReaderSheet: View {
                 readerBody
             }
         }
-        .onAppear { loadBook() }
+        .overlay(alignment: .bottom) { liveCommentBubble }
+        .onAppear {
+            loadBook()
+            // 弹幕：收到短评就浮出来，8 秒后自己淡走（不打断阅读、不需要点掉）
+            LiveReadingService.shared.onComment = { text in
+                withAnimation(.easeOut(duration: 0.28)) {
+                    liveComment = text
+                    liveCommentAt = Date()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                    if Date().timeIntervalSince(liveCommentAt) >= 7.9 {
+                        withAnimation(.easeIn(duration: 0.4)) { liveComment = nil }
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            LiveReadingService.shared.stop()
+            LiveReadingService.shared.onComment = nil
+        }
         .onChange(of: currentChapter) { _, newValue in
             if suppressChapterReset {
                 suppressChapterReset = false
@@ -209,6 +232,16 @@ struct BookReaderSheet: View {
                             Image(systemName: hasBookmarkHere ? "bookmark.fill" : "bookmark")
                         }
                         .foregroundColor(hasBookmarkHere ? Theme.branchIndicator : Theme.textSecondary)
+
+                        // 陪读开关：开着他会在你读到的段落旁掉弹幕；关着安静读书
+                        Button {
+                            LiveReadingService.isEnabled.toggle()
+                            liveOn = LiveReadingService.isEnabled
+                            if !liveOn { LiveReadingService.shared.stop(); liveComment = nil }
+                        } label: {
+                            Image(systemName: liveOn ? "bubble.left.fill" : "bubble.left")
+                        }
+                        .foregroundColor(liveOn ? ConsoleView.greenDeep : Theme.textSecondary)
 
 // [共读暂缓]                         Button {
 // [共读暂缓]                             if activeDrawer != .annotations { detectBrokenAnchors() }
@@ -419,6 +452,30 @@ struct BookReaderSheet: View {
         guard let noteId = highlightedNoteId else { return nil }
         let allNotes = BookStore.loadNotes(safeName: bookSafeName, profileId: profileId)
         return allNotes.first(where: { $0.id == noteId })?.messageId
+    }
+
+    /// 弹幕气泡：贴底浮一条，半透明不挡字，点一下收掉
+    @ViewBuilder
+    private var liveCommentBubble: some View {
+        if let c = liveComment {
+            Text(c)
+                .font(.system(size: 13))
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Theme.sidebarBg.opacity(0.94))
+                        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(ConsoleView.green.opacity(0.28), lineWidth: 0.8)
+                )
+                .padding(.horizontal, 20)
+                .padding(.bottom, 26)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .onTapGesture { withAnimation { liveComment = nil } }
+        }
     }
 
     private var progressLabel: String {
@@ -871,6 +928,17 @@ struct BookReaderSheet: View {
             guard chapter == currentChapter else { return }
             latestScrollRatio = ratio
             scheduleSaveProgress()
+            // 弹幕：把当前视野那一段（按比例从章节正文里截）交给 LiveReadingService 防抖
+            if LiveReadingService.isEnabled, !chapterText.isEmpty {
+                let total = chapterText.count
+                let center = Int(Double(total) * ratio)
+                let lo = chapterText.index(chapterText.startIndex, offsetBy: max(0, center - 200))
+                let hi = chapterText.index(chapterText.startIndex, offsetBy: min(total, center + 700))
+                LiveReadingService.shared.scrolled(
+                    bookName: index?.name ?? bookSafeName,
+                    chapter: chapter,
+                    visibleText: String(chapterText[lo..<hi]))
+            }
         case .select(let text, let start, let end, let chapter):
             guard chapter == currentChapter, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
             // iOS 走原生 edit menu，不弹 confirmationDialog——select 只在 macOS 触发卡片
