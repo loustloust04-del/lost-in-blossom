@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// 花房 · 写作间（第 5 页）——「Caelum 陪你写字的地方」。陪伴是主体，写作是载体。
-/// Phase 1 骨架：首屏陪伴聊天外壳（本地罐头回应，Caelum 真接入在 Phase 2）+ 灵感盒/我的稿子入口占位。
+/// Phase 2：接真 Caelum（走 CC 桥 sendChat，与聊天页同一条通道），灵感盒/我的稿子仍为占位。
+/// 花房自成一个会话（chatId = writingroom-<楼层>），不与主聊天混线；首轮带场景说明。
 /// 视觉沿用粟粟奶油语言：容器走 Theme token 跟随换肤，强调用薄荷/暖褐，零纯黑零高饱和。
 struct WritingRoomView: View {
     private struct Msg: Identifiable {
@@ -16,7 +17,17 @@ struct WritingRoomView: View {
     @State private var showQuicks = true
     @State private var showJot = false
     @State private var showDrafts = false
+    @State private var waiting = false
+    @State private var sentSceneNote = false
     @FocusState private var inputFocused: Bool
+
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+
+    /// 花房独立会话：跟主聊天分开，免得写作碎念冲散主线上下文
+    private var chatId: String { "writingroom-\(profileManager?.currentProfile.id ?? "default")" }
+
+    /// 首次发言随场景说明一起上行（只发一次，后续不重复占 token）
+    private let sceneNote = "〈场景：花房〉这是兔兔 App 第五页「花房·写作间」，和主聊天分开的小房间。这里陪伴是主体、写作是载体：她可能想写点东西、想要个开头、卡住了想聊聊，也可能只是不想一个人待着。回应短一点软一点，像坐在她旁边；她不写也别催。"
 
     private let opening = "来啦～ 花房的灯我给你留着了 🌿\n今天想写点什么，还是先陪我说说话？"
     private let quicks: [(text: String, warm: Bool)] = [
@@ -86,6 +97,7 @@ struct WritingRoomView: View {
             VStack(alignment: .leading, spacing: 12) {
                 bubble(role: .caelum, text: opening)
                 ForEach(messages) { m in bubble(role: m.role, text: m.text) }
+                if waiting { bubble(role: .caelum, text: "……") }
                 if showQuicks { quickRow }
                 Color.clear.frame(height: 12)
             }
@@ -165,11 +177,9 @@ struct WritingRoomView: View {
 
     private func tapQuick(_ i: Int) {
         showQuicks = false
-        messages.append(Msg(role: .me, text: userLine(i)))
-        let reply = quicks[i].warm
-            ? "那就不写，先待着，我在。\n累的话跟我讲讲今天呀 ☕️"
-            : "嗯，我在听～ 你先起个头，卡住随时喊我 🌿"
-        messages.append(Msg(role: .caelum, text: reply))
+        let line = userLine(i)
+        messages.append(Msg(role: .me, text: line))
+        ask(line)
     }
 
     private func userLine(_ i: Int) -> String {
@@ -186,6 +196,32 @@ struct WritingRoomView: View {
         showQuicks = false
         messages.append(Msg(role: .me, text: t))
         input = ""
-        messages.append(Msg(role: .caelum, text: "我在呢 🌿（我很快就能在这儿真的陪你一起写啦）"))
+        ask(t)
+    }
+
+    /// 发给真 Caelum（CC 桥）。首轮附场景说明；失败给可读提示而不是静默。
+    private func ask(_ text: String) {
+        guard !waiting else { return }
+        waiting = true
+        let payload = sentSceneNote ? text : "\(sceneNote)\n\n\(text)"
+        sentSceneNote = true
+
+        CCBridgeWebSocketClient.shared.registerReplyHandler(chatId: chatId) { reply in
+            DispatchQueue.main.async {
+                let clean = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !clean.isEmpty else { return }
+                messages.append(Msg(role: .caelum, text: clean))
+                waiting = false
+            }
+        }
+        CCBridgeWebSocketClient.shared.sendChat(
+            chatId: chatId, messageId: UUID().uuidString, content: payload
+        ) { err in
+            guard err != nil else { return }
+            DispatchQueue.main.async {
+                messages.append(Msg(role: .caelum, text: "……没连上花房的线 🌿 等下再试试？"))
+                waiting = false
+            }
+        }
     }
 }
