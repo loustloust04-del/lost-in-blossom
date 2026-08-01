@@ -4,6 +4,7 @@ import { exec as execShell } from 'node:child_process';
 import { GMAIL_TOOLS, callGmailTool } from './gmail';
 import { VITALS_TOOLS, callVitalsTool, CONSOLE_TOOLS, callConsoleTool } from '../vitals';
 import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
+import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 import { WEBSEARCH_TOOL, callWebSearch, BROWSE_TOOL, callBrowseUrl } from './websearch';
@@ -23,6 +24,7 @@ export const BUILTIN_TOOLS = [
   ...GMAIL_TOOLS,
   ...VITALS_TOOLS,
   ...PHONE_STATUS_TOOLS,
+  ...NOWPLAYING_TOOLS,
   {
     name: 'exec',
     description: 'Run a shell command on the host this gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs. SECURITY: arbitrary command execution as the gateway process — only on a private, authenticated gateway.',
@@ -172,6 +174,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (vitalsResult !== null) return vitalsResult;
   const phoneResult = await callPhoneStatusTool(name, input);
   if (phoneResult !== null) return phoneResult;
+  const musicResult = await callNowPlayingTool(name);
+  if (musicResult !== null) return musicResult;
   const gmailResult = await callGmailTool(name, input);
   if (gmailResult !== null) return gmailResult;
   return null;

@@ -25,6 +25,7 @@ import { listMeds, todayIntake, addMed, restockMed, takeMed, updateMed, removeMe
 import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
+import { nowPlayingRoutes } from './nowplaying';
 import { healthRoutes } from './health';
 import { recentTweets } from './tweets';
 import { nbList, nbRead, nbWrite, nbAppend, nbEdit, nbDelete, nbRename, nbSearch } from './notebook';
@@ -884,6 +885,7 @@ app.post('/internal/tool-call', async (c) => {
 
 vitalsRoutes(app);
 phoneStatusRoutes(app);
+nowPlayingRoutes(app);
 healthRoutes(app);
 
 // Screen Time 代理：从 dream_events 聚合今日 app_open

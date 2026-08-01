@@ -152,6 +152,11 @@ const PROXY_TOOLS = [
     inputSchema: { type: "object", properties: { limit: { type: "number" } } },
   },
   {
+    name: "now_playing",
+    description: "看兔兔在听什么歌：歌名、歌手、她随手说的话，以及这首歌你们之间的记录（听过几次、第一次是什么时候、以前听这首时她说过什么）。她提到音乐、或者你想知道她此刻的背景音时调用。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "reading_now",
     description: "看兔兔正在读的这一章：书名、第几章、章节标题、正文全文、她在这章划的线和写的笔记。她说「我在读这个」「这段你怎么看」时调用；你自己想知道她最近在读什么也可以调。没在读书会告诉你。",
     inputSchema: { type: "object", properties: {} },
