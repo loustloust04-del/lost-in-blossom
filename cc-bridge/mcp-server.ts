@@ -6,6 +6,11 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { WebSocket } from "ws"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
+// hub 落盘的「她正在读的这一章」
+const READING_PATH = join(process.env.MP_CC_BRIDGE_DIR ?? "/root/projects/BunnyPalace/cc-bridge", "reading-context.json")
 
 const HUB_URL = process.env.MP_CC_HUB_URL ?? "ws://127.0.0.1:7890/mcp"
 // hub 对所有连接（含 loopback）强制 token 鉴权，连接 URL 必须带 token
@@ -145,6 +150,23 @@ const PROXY_TOOLS = [
     name: "get_my_tweets",
     description: "兔兔最近发的推文（已同步进记忆库，含配图识别）。想知道她最近在推特上发了什么、在想什么、什么心情时调用。参数 limit（默认 10）。",
     inputSchema: { type: "object", properties: { limit: { type: "number" } } },
+  },
+  {
+    name: "reading_now",
+    description: "看兔兔正在读的这一章：书名、第几章、章节标题、正文全文、她在这章划的线和写的笔记。她说「我在读这个」「这段你怎么看」时调用；你自己想知道她最近在读什么也可以调。没在读书会告诉你。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "book_note",
+    description: "给兔兔正在读的这一章递一条批注——像在她书页边上写一句。想到什么就写：一个联想、一句吐槽、一处你注意到而她可能没注意的细节、或者只是「这段我也喜欢」。**不要写读后感作业，不要总结全章**，一两句话最好。她会在阅读器里看到。先用 reading_now 读了再写。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        note: { type: "string", description: "批注正文，一两句话" },
+        quote: { type: "string", description: "针对的原文片段（可选，会显示在批注上方）" },
+      },
+      required: ["note"],
+    },
   },
   { name: "fs_list", description: "列出你笔记本里所有文件(路径+大小)。想看看自己都记了些什么时用。", inputSchema: { type: "object", properties: {} } },
   { name: "fs_read", description: "读你笔记本某个文件的全文。", inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } },
@@ -387,6 +409,47 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       } catch {}
     }
     return { content: [{ type: "text", text }] }
+  }
+
+  // ── 共读：读她正在看的章节 / 递一条批注 ────────────────────────────
+  if (req.params.name === "reading_now") {
+    try {
+      const raw = readFileSync(READING_PATH, "utf-8")
+      const r = JSON.parse(raw)
+      const stale = Date.now() - new Date(r.updatedAt).getTime() > 12 * 3600_000
+      const head = stale
+        ? `（这是 ${r.updatedAt.slice(0, 16).replace("T", " ")} 的记录，她现在未必还在读）\n`
+        : ""
+      return { content: [{ type: "text", text:
+        `${head}《${r.bookName}》第 ${r.chapter}/${r.totalChapters} 章 ${r.chapterTitle}\n` +
+        (r.userNotes ? `\n【她的划线与笔记】\n${r.userNotes}\n` : "") +
+        `\n【正文】\n${r.text}` }] }
+    } catch {
+      return { content: [{ type: "text", text: "她现在没在读书（或者阅读器还没打开过）。" }] }
+    }
+  }
+
+  if (req.params.name === "book_note") {
+    const a = req.params.arguments as { note: string; quote?: string }
+    const note = String(a?.note ?? "").trim()
+    if (!note) throw new Error("note 不能为空")
+    let book = "", chapter = 0
+    try {
+      const r = JSON.parse(readFileSync(READING_PATH, "utf-8"))
+      book = r.bookName; chapter = r.chapter
+    } catch {
+      return { content: [{ type: "text", text: "她现在没在读书，批注没处放。等她翻开书再说。" }] }
+    }
+    const ws = await connectHub()
+    ws.send(JSON.stringify({
+      type: "book_note",
+      bookName: book,
+      chapter,
+      note: note.slice(0, 1000),
+      quote: String(a?.quote ?? "").slice(0, 500),
+      ts: new Date().toISOString(),
+    }))
+    return { content: [{ type: "text", text: `批注已递到《${book}》第 ${chapter} 章。` }] }
   }
 
   if (req.params.name !== "reply") {

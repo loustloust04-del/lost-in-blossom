@@ -188,6 +188,30 @@ interface OfflineMessage {
 }
 
 const OFFLINE_DIR = join(process.cwd(), "cc-bridge", "offline")
+
+// ── 共读：App 推来的「她正在读的这一章」──────────────────────────────
+// App 早就在推 reading_context，但 hub 从来没接过（线断在中间）。
+// 存成单文件而非追加：Caelum 关心的永远是"她现在读到哪"，历史无意义。
+const READING_PATH = join(process.cwd(), "cc-bridge", "reading-context.json")
+
+function saveReadingContext(m: any): void {
+  try {
+    mkdirSync(join(process.cwd(), "cc-bridge"), { recursive: true })
+    const payload = {
+      bookName: String(m.bookName ?? m.safeName ?? "").slice(0, 200),
+      chapter: Number(m.chapter ?? 0),
+      totalChapters: Number(m.totalChapters ?? 0),
+      chapterTitle: String(m.chapterTitle ?? "").slice(0, 200),
+      text: String(m.text ?? "").slice(0, 60_000),
+      userNotes: String(m.userNotes ?? "").slice(0, 8_000),
+      userName: String(m.userName ?? "兔兔").slice(0, 40),
+      updatedAt: new Date().toISOString(),
+    }
+    writeFileSync(READING_PATH, JSON.stringify(payload, null, 2), "utf-8")
+  } catch (e: any) {
+    console.error(`[hub] reading_context 落盘失败: ${e?.message}`)
+  }
+}
 const OFFLINE_MAX = 50
 
 function offlinePath(chatId: string): string {
@@ -461,6 +485,25 @@ function broadcastNotebookChanged(path: string, op: string): number {
   return count
 }
 
+/// Caelum 递来的书页批注 → 广播给 App（阅读器里展示）
+function broadcastBookNote(m: any): number {
+  const payload = JSON.stringify({
+    type: "book_note",
+    bookName: String(m.bookName ?? ""),
+    chapter: Number(m.chapter ?? 0),
+    note: String(m.note ?? "").slice(0, 1000),
+    quote: String(m.quote ?? "").slice(0, 500),
+    ts: String(m.ts ?? new Date().toISOString()),
+  })
+  let count = 0
+  for (const app of appClients) {
+    if (app.readyState === WebSocket.OPEN) {
+      try { app.send(payload); count++ } catch { /* dead */ }
+    }
+  }
+  return count
+}
+
 export function startHub(): WebSocketServer {
   if (!HUB_TOKEN) {
     console.error("[hub] MP_CC_HUB_TOKEN env required (use start_hub.sh)")
@@ -500,6 +543,9 @@ export function startHub(): WebSocketServer {
           if (m?.type === "notebook_changed") {
             n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
             console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
+          } else if (m?.type === "book_note") {
+            n = broadcastBookNote(m)
+            console.log(`[hub] 📖 book_note《${String(m.bookName ?? "").slice(0, 20)}》第${m.chapter}章 → ${n}/${appClients.size} App`)
           } else if (m?.type === "phone_event") {
             // 手机事件（充电开始等）→ 注入 CC 一条 phone 频道消息；CC 自行决定要不要用 reply 跟用户说
             const text = String(m.text ?? "").slice(0, 300)
@@ -789,6 +835,11 @@ export function startHub(): WebSocketServer {
         }
 
         // ── Focus / blur ──────────────────────────────────────────────────────
+        else if (msg.type === "reading_context") {
+          saveReadingContext(msg)
+          console.log(`[hub] 📖 reading_context: ${String(msg.bookName ?? "").slice(0, 30)} 第${msg.chapter}章`)
+        }
+
         else if (msg.type === "focus") {
           const chatId = typeof msg.chat_id === "string" ? msg.chat_id : null
           focusByClient.set(ws, chatId)
