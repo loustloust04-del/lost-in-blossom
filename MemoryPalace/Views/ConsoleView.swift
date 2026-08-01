@@ -89,6 +89,10 @@ struct ConsoleView: View {
             }
             // 健康桥：HealthKit/屏幕时间填好后把今日摘要报给网关（30 分钟节流）
             if let ctx = todayCtx { await HealthBridgeClient.report(from: ctx) }
+            // 饮水/进食双向同步：合并两边计数，回写本地（45s 节流）
+            if let pid = profileManager?.currentProfile.id {
+                await VitalsSyncService.sync(context: modelContext, profileId: pid)
+            }
             // Pocket Browser：若已开启，连上让 Caelum 能借手机浏览
             PocketClient.shared.startIfEnabled()
         }

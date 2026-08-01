@@ -131,10 +131,42 @@ export async function callConsoleTool(name: string, input: any, by = 'model'): P
   return `已记到今日控制台（第 ${notes.length} 条备注）`;
 }
 
-// API 路由（App 只读）
+// API 路由
 export function vitalsRoutes(app: Hono) {
   app.get('/api/vitals', async (c) => {
     const data = await load();
     return c.json(data);
+  });
+
+  /// App 侧合并上报：兔兔在 App 里记的饮水/进食推上来。
+  /// 合并语义取「较大者」而非覆盖——两边都是只增计数，谁记得多以谁为准，
+  /// 既不会把 Caelum 记的抹掉，也不会把兔兔自己点的抹掉。meals 按未见过的追加。
+  app.post('/api/vitals/merge', async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
+    const data = await load();
+    const now = new Date().toISOString();
+    let touched = false;
+
+    const water = Number(body.water_count);
+    if (Number.isFinite(water) && water > data.water.count) {
+      data.water.count = Math.min(water, 99);
+      data.water.lastUpdated = now;
+      touched = true;
+    }
+    const food = Number(body.food_count);
+    if (Number.isFinite(food) && food > data.food.count) {
+      data.food.count = Math.min(food, 20);
+      data.food.lastUpdated = now;
+      touched = true;
+    }
+    if (Array.isArray(body.meals)) {
+      for (const m of body.meals.slice(0, 20)) {
+        const name = String(m || '').slice(0, 80);
+        if (name && !data.food.meals.includes(name)) { data.food.meals.push(name); touched = true; }
+      }
+    }
+    if (touched) await save(data);
+    return c.json({ ok: true, water: data.water, food: data.food });
   });
 }
