@@ -547,6 +547,10 @@ private struct MedEditorSheet: View {
     @State private var reminderEnabled: Bool
     @State private var remainingInput: String
     @State private var unitInput: String
+    /// 库存三格的焦点：此前无焦点管理，单位框("片")紧贴数字框右侧，点数字右半即误落单位框，
+    /// 光标停在「片」前敲数字无反应（兔兔实测）。现在单位框改只读展示，点整行进数字框。
+    @FocusState private var stockFocus: StockField?
+    private enum StockField: Hashable { case remaining, perDose }
     @State private var perDoseInput: String
 
     init(profileId: String, med: Medication?) {
@@ -584,6 +588,14 @@ private struct MedEditorSheet: View {
                             .font(.system(size: Theme.F.body))
                             .multilineTextAlignment(.trailing)
                     }
+                    HStack {
+                        Text("单位")
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textSecondary)
+                        TextField("片", text: $unitInput)
+                            .font(.system(size: Theme.F.body))
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
                 .listRowBackground(Theme.mainBg)
 
@@ -598,14 +610,14 @@ private struct MedEditorSheet: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 96)
-                            .contentShape(Rectangle())
-                        TextField("片", text: $unitInput)
+                            .focused($stockFocus, equals: .remaining)
+                        Text(unitInput.isEmpty ? "片" : unitInput)
                             .font(.system(size: Theme.F.body))
                             .foregroundColor(Theme.textMuted)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 56)
-                            .contentShape(Rectangle())
+                            .frame(width: 40, alignment: .trailing)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { stockFocus = .remaining }
                     HStack {
                         Text("每次")
                             .font(.system(size: Theme.F.body))
@@ -614,11 +626,14 @@ private struct MedEditorSheet: View {
                             .font(.system(size: Theme.F.body))
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
+                            .focused($stockFocus, equals: .perDose)
                         Text(unitInput.isEmpty ? "片" : unitInput)
                             .font(.system(size: Theme.F.body))
                             .foregroundColor(Theme.textMuted)
-                            .frame(width: 44, alignment: .trailing)
+                            .frame(width: 40, alignment: .trailing)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { stockFocus = .perDose }
                     if let m = med, m.remaining > 0, m.perDose > 0 {
                         let doses = Int(m.remaining / m.perDose)
                         Text("按当前用量还能吃 \(doses) 次")
