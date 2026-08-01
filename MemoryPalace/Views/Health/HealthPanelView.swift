@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import Charts
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - page2 tool「健康」（plan-health-module §3）
 // P0：今日药卡（三态打卡）+ 体重卡（输入 + Charts 7/30 天）+ 最近流水。
@@ -73,6 +76,17 @@ struct HealthPanelView: View {
             }
             .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        #if canImport(UIKit)
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        #endif
+                    }
+                    .foregroundColor(Theme.branchIndicator)
+                }
+            }
             .scrollContentBackground(.hidden)
         }
         .background(Theme.sidebarBg)
@@ -676,9 +690,20 @@ private struct MedEditorSheet: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .background(Theme.sidebarBg)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(med == nil ? "添加药物" : "编辑药物")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // 数字键盘没有回车键：给一个「完成」把键盘收掉，否则下半页永远被埋（兔兔实测）
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        #if canImport(UIKit)
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        #endif
+                    }
+                    .foregroundColor(Theme.branchIndicator)
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                         .foregroundColor(Theme.textMuted)
