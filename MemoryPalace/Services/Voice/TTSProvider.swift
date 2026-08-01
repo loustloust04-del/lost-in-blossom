@@ -38,4 +38,9 @@ protocol TTSBackend {
     func fetchVoices(apiKey: String) async throws -> [ElevenVoice]
 }
 
-extension ElevenLabsClient: TTSBackend {}
+extension ElevenLabsClient: TTSBackend {
+    /// 协议要求三参签名；本体的 synthesize 带 settings 默认值，默认参数不满足协议一致性，这里转发。
+    func synthesize(script: String, voiceId: String, apiKey: String) async throws -> Data {
+        try await synthesize(script: script, voiceId: voiceId, apiKey: apiKey, settings: VoiceTuning.current())
+    }
+}
