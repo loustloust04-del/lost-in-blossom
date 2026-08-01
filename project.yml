@@ -69,6 +69,8 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes:
           - processing
+          # 音乐播放器：锁屏/切走后继续放（无此项一锁屏就停）
+          - audio
         BGTaskSchedulerPermittedIdentifiers:
           - com.bunny.lostinblossom.push-agent
         UIAppFonts:
