@@ -46,7 +46,9 @@ struct WritingRoomView: View {
         .sheet(isPresented: $showJot) {
             InspirationBoxView(profileId: profileManager?.currentProfile.id ?? "default") { showJot = false }
         }
-        .sheet(isPresented: $showDrafts) { placeholderSheet(icon: "doc.text", title: "我的稿子", sub: "你写的稿子会列在这里\n（马上就能用～）") { showDrafts = false } }
+        .sheet(isPresented: $showDrafts) {
+            DraftListView(profileId: profileManager?.currentProfile.id ?? "default") { showDrafts = false }
+        }
     }
 
     // MARK: - 顶部品牌 + chips

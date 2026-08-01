@@ -132,6 +132,7 @@ final class ProfileManager {
             CycleDay.self,
             IntimacyEntry.self,
         InspirationNote.self,
+        Draft.self,
         UserCard.self,
         ConversationTag.self,
         FavoriteItem.self,
