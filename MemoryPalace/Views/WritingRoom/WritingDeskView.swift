@@ -17,6 +17,8 @@ struct WritingDeskView: View {
     @State private var saveTimer: Timer?
     @State private var snapTimer: Timer?       // 过程录制：每 5 秒有变动记一帧
     @State private var showReplay = false
+    @State private var showPolish = false
+    @State private var showFindReplace = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -43,6 +45,9 @@ struct WritingDeskView: View {
                     } label: {
                         Label(focusMode ? "退出专注" : "专注模式", systemImage: "scope")
                     }
+                    Button { showPolish = true } label: { Label("顺一遍", systemImage: "wand.and.stars") }
+                    Button { showFindReplace = true } label: { Label("查找替换", systemImage: "magnifyingglass") }
+                    Divider()
                     Button {
                         DraftSnapshotStore.capture(draft: draft, context: context, pinned: true)
                         showReplay = true
@@ -67,6 +72,13 @@ struct WritingDeskView: View {
         }
         .fullScreenCover(isPresented: $showReplay) {
             DraftReplayView(draft: draft) { showReplay = false }
+        }
+        .sheet(isPresented: $showPolish) {
+            PolishSheet(draft: draft) { showPolish = false }
+        }
+        .sheet(isPresented: $showFindReplace) {
+            FindReplaceSheet(draft: draft) { showFindReplace = false }
+                .presentationDetents([.medium])
         }
         .sheet(isPresented: $showChat) {
             WritingDeskChatSheet(draft: draft) { showChat = false }
