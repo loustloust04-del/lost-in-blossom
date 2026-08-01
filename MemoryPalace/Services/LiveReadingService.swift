@@ -65,8 +65,8 @@ final class LiveReadingService {
         let payload = """
         〈陪读〉她在读《\(bookName)》第 \(chapter) 章，眼睛正落在下面这段上。
 
-        你在她旁边。想说什么就说——一个念头、一句吐槽、注意到的一个细节、或者只是"这句好"。
-        这里是书页边的耳语，不是书评：短一点，像人随口说的那样。
+        你在她旁边。\(ReadingModePrefs.mode.scene)\(ReadingModePrefs.length.hint)
+        这里是书页边的耳语，不是书评——像人随口说的那样。
         没什么想说的，就回一个字：跳。（她在读书，沉默也是一种陪。）
 
         \(t.prefix(1200))

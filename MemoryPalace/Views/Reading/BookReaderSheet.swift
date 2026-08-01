@@ -52,6 +52,7 @@ struct BookReaderSheet: View {
     // 实时陪读（弹幕）：她停稳 1.8s → Caelum 掉一句短评浮在页面上
     @State private var liveComment: String?
     @State private var liveOn: Bool = LiveReadingService.isEnabled
+    @State private var showCompanionSheet = false
     @State private var liveCommentAt: Date = .distantPast
     @State private var initialScrollRatio: Double? = nil
     @State private var latestScrollRatio: Double = 0
@@ -113,6 +114,19 @@ struct BookReaderSheet: View {
             }
         }
         .overlay(alignment: .bottom) { liveCommentBubble }
+        .sheet(isPresented: $showCompanionSheet) {
+            ReadingCompanionSheet(
+                bookEntry: bookEntryForCompanion,
+                bookName: index?.name ?? bookSafeName,
+                currentChapter: currentChapter,
+                todayNotes: todayNotesDigest,
+                onFinishToday: {
+                    if !hasBookmarkHere { toggleBookmarkHere() }
+                    saveProgressNow()
+                },
+                onClose: { showCompanionSheet = false; liveOn = LiveReadingService.isEnabled }
+            )
+        }
         .onAppear {
             loadBook()
             // 弹幕：收到短评就浮出来，8 秒后自己淡走（不打断阅读、不需要点掉）
@@ -242,6 +256,7 @@ struct BookReaderSheet: View {
                             Image(systemName: liveOn ? "bubble.left.fill" : "bubble.left")
                         }
                         .foregroundColor(liveOn ? ConsoleView.greenDeep : Theme.textSecondary)
+                        .simultaneousGesture(LongPressGesture().onEnded { _ in showCompanionSheet = true })
 
 // [共读暂缓]                         Button {
 // [共读暂缓]                             if activeDrawer != .annotations { detectBrokenAnchors() }
@@ -1183,6 +1198,31 @@ struct BookReaderSheet: View {
     }
 
     /// debounce 1s 写 index.json + 更新 BookEntry
+    /// 陪读 sheet 用：本书的 BookEntry（完成态/补课进度都记在它上面）
+    private var bookEntryForCompanion: BookEntry? {
+        let sn = bookSafeName
+        let desc = FetchDescriptor<BookEntry>(predicate: #Predicate { $0.id == sn })
+        return try? modelContext.fetch(desc).first
+    }
+
+    /// 今日痕迹摘要（读书日记的素材）：本章她划的线和写的批注
+    private var todayNotesDigest: String {
+        chapterNotes
+            .filter { $0.role == "user" && Calendar.current.isDateInToday($0.createdAt) }
+            .map { n in
+                let q = n.anchorText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let t = n.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                return q.isEmpty ? "· \(t)" : (t.isEmpty ? "· 「\(q)」" : "· 「\(q)」→ \(t)")
+            }
+            .joined(separator: "\n")
+    }
+
+    /// 立刻落盘进度（「今天看到这里」用，不等防抖）
+    private func saveProgressNow() {
+        saveTask?.cancel()
+        saveProgress()
+    }
+
     private func scheduleSaveProgress() {
         saveTask?.cancel()
         saveTask = Task { @MainActor in

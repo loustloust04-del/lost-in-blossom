@@ -167,7 +167,7 @@ struct BookshelfView: View {
     private var bookGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 14) {
-                ForEach(entries) { entry in
+                ForEach(entries.filter { $0.finishedAt == nil }) { entry in
                     BookCard(entry: entry)
                         .onTapGesture {
                             openingBookSafeName = entry.id
@@ -181,6 +181,34 @@ struct BookshelfView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
+
+            // 读完了：折叠在下面，不占在读的位置，但也不让它消失
+            let finished = entries.filter { $0.finishedAt != nil }
+            if !finished.isEmpty {
+                DisclosureGroup {
+                    LazyVGrid(columns: columns, spacing: 14) {
+                        ForEach(finished) { entry in
+                            BookCard(entry: entry)
+                                .opacity(0.72)
+                                .onTapGesture { openingBookSafeName = entry.id }
+                                .contextMenu {
+                                    Button("重新在读") {
+                                        entry.finishedAt = nil
+                                        try? modelContext.save()
+                                    }
+                                    Button("删除", role: .destructive) { pendingDelete = entry }
+                                }
+                        }
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Text("读完了 · \(finished.count)")
+                        .font(.system(size: Theme.F.caption))
+                        .foregroundColor(Theme.textMuted)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+            }
         }
     }
 

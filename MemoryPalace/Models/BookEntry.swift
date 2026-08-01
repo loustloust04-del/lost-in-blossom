@@ -28,6 +28,10 @@ final class BookEntry {
 
     var addedAt: Date
     var lastReadAt: Date?
+    /// 读完了（书架分区用）。自动进度记录之外，需要一个"我读完了"的主动动作。
+    var finishedAt: Date?
+    /// Caelum 追到第几章（补课机制：她跳读时他可能落在后面）
+    var companionChapter: Int = 0
     var updateTime: Date                       // LWW 用，跟 Conversation 同义
 
     /// 列表卡片用的小封面（thumbnail，建议 < 50KB）。原图（如有）在文件库目录里。
