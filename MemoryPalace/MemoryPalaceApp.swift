@@ -134,6 +134,7 @@ final class ProfileManager {
         InspirationNote.self,
         Draft.self,
         DraftSnapshot.self,
+        WorkCard.self,
         UserCard.self,
         ConversationTag.self,
         FavoriteItem.self,

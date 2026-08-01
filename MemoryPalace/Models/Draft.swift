@@ -4,7 +4,7 @@ import SwiftData
 /// 花房的一篇稿子。刻意极简：正文 + 标题 + 时间 + 今日字数账。
 /// 不做文件夹/标签/版本树——那些是"写作软件"的东西，花房要的是一张白纸。
 @Model
-final class Draft {
+final class Draft: Identifiable {
     #Index<Draft>([\.profileId], [\.profileId, \.updatedAt])
 
     var id: String = UUID().uuidString

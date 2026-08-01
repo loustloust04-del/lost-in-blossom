@@ -19,6 +19,9 @@ struct WritingRoomView: View {
     @State private var showDrafts = false
     @State private var waiting = false
     @State private var sentSceneNote = false
+    @State private var showWorkCard = false
+    @State private var openedDraft: Draft?
+    @State private var dailyDish: String?      // 每日一菜：他从旧碎念里端出的写作提案
     @FocusState private var inputFocused: Bool
 
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
@@ -48,6 +51,18 @@ struct WritingRoomView: View {
         }
         .sheet(isPresented: $showDrafts) {
             DraftListView(profileId: profileManager?.currentProfile.id ?? "default") { showDrafts = false }
+        }
+        .sheet(isPresented: $showWorkCard) {
+            WorkCardSheet(
+                profileId: profileManager?.currentProfile.id ?? "default",
+                conversationTail: messages.suffix(12).map { "\($0.role == .me ? "兔兔" : "你")：\($0.text)" }
+                    .joined(separator: "\n"),
+                onOpenDraft: { d in showWorkCard = false; openedDraft = d },
+                onClose: { showWorkCard = false }
+            )
+        }
+        .fullScreenCover(item: $openedDraft) { d in
+            NavigationStack { WritingDeskView(draft: d) { openedDraft = nil } }
         }
     }
 
@@ -102,6 +117,20 @@ struct WritingRoomView: View {
                 bubble(role: .caelum, text: opening)
                 ForEach(messages) { m in bubble(role: m.role, text: m.text) }
                 if waiting { bubble(role: .caelum, text: "……") }
+                // 聊够两轮才浮出来：一上来就问「要不要开工」太像推销
+                if messages.count >= 4, !waiting {
+                    Button { showWorkCard = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 11))
+                            Text("把这个变成开工卡")
+                        }
+                        .font(.system(size: Theme.F.caption, weight: .medium))
+                        .foregroundColor(ConsoleView.greenDeep)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Capsule().fill(ConsoleView.green.opacity(0.14)))
+                    }
+                    .buttonStyle(.plain)
+                }
                 if showQuicks { quickRow }
                 Color.clear.frame(height: 12)
             }
