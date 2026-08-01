@@ -64,17 +64,15 @@ enum VitalsSyncService {
     private static let throttle: TimeInterval = 45
 
     @MainActor
-    static func sync(context: ModelContext, profileId: String, force: Bool = false) async {
+    static func sync(context: ModelContext, profileId: String = "", force: Bool = false) async {
         if !force {
             let last = UserDefaults.standard.double(forKey: lastKey)
             guard Date().timeIntervalSince1970 - last > throttle else { return }
         }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
 
-        let today = Calendar.current.startOfDay(for: Date())
-        let desc = FetchDescriptor<DailyContext>(
-            predicate: #Predicate { $0.profileId == profileId && $0.date == today })
-        guard let ctx = try? context.fetch(desc).first else { return }
+        // DailyContext 按日期全局唯一（不分楼层），复用 DailyContextStore 的取法
+        guard let ctx = DailyContextStore.ensureToday(context: context) else { return }
 
         let localMeals = ctx.meals.map(\.description).filter { !$0.isEmpty }
         guard let merged = await VitalsClient.merge(
