@@ -10,13 +10,10 @@
 
 ## 待写码
 
-> 2026-08-01 大扫除：账面 10 项经逐条核实，7 项其实早已完成（兔兔记性 > 文档）。销账清单见文末。
-
-1. [ ] **切换模型时过滤图片**（docs/task-image-model-compat.md）——唯一幸存的老小刀，只有任务文档零实现
-2. [ ] **进食/饮水双向同步**：扩展 HealthSyncService 到 food/water，做完拆掉 ConsoleView/CareView 的 max() 创可贴
-3. [ ] **花房 Phase 2 第一小步**：罐头回应 → 接真 Caelum
-4. [ ] **朗读升级到真人声**（等 MiniMax key）：朗读走 MiniMax（便宜管够），语音条留 ElevenLabs（标签表演）
-5. [ ] 音色试听 preview_url 走 Google CDN，/xi/ 反代不覆盖——App 内试听大陆网络无声，暂用网页端/盲测；根治需 URL 重写走通用代理
+1. [ ] **朗读升级到真人声**（等 MiniMax key）：朗读走 MiniMax（便宜管够），语音条留 ElevenLabs
+2. [ ] 音色试听 preview_url 走 Google CDN，/xi/ 反代不覆盖——App 内试听大陆网络无声，暂用网页端/盲测
+3. [ ] 花房锦上添花项（设计方案步骤 6-7）：每日一菜（他挑旧碎念端写作提案）、督促节奏（温和/可关）、灵感盒热力图、打字机模式
+4. [ ] 拆 vitals 的 max() 创可贴（真同步已上线 276b5c3，验收通过后拆）
 
 ## 卡在兔兔（各一次性操作）
 - [ ] MiniMax 注册拿 key（platform.minimaxi.com，国内手机号）→ 设置-语音-语音服务切 MiniMax + 填 key
