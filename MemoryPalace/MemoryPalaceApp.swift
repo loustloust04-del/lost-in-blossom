@@ -133,6 +133,7 @@ final class ProfileManager {
             IntimacyEntry.self,
         InspirationNote.self,
         Draft.self,
+        DraftSnapshot.self,
         UserCard.self,
         ConversationTag.self,
         FavoriteItem.self,

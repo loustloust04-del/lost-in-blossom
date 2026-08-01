@@ -15,6 +15,8 @@ struct WritingDeskView: View {
     @State private var showTotal = false      // 字数胶囊：今日 ↔ 总字数
     @State private var focusMode = false      // 专注模式：淡化非当前段
     @State private var saveTimer: Timer?
+    @State private var snapTimer: Timer?       // 过程录制：每 5 秒有变动记一帧
+    @State private var showReplay = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -42,6 +44,10 @@ struct WritingDeskView: View {
                         Label(focusMode ? "退出专注" : "专注模式", systemImage: "scope")
                     }
                     Button {
+                        DraftSnapshotStore.capture(draft: draft, context: context, pinned: true)
+                        showReplay = true
+                    } label: { Label("写作回放", systemImage: "clock.arrow.circlepath") }
+                    Button {
                         editorFocused = false
                     } label: { Label("收起键盘", systemImage: "keyboard.chevron.compact.down") }
                 } label: {
@@ -52,8 +58,16 @@ struct WritingDeskView: View {
         .onAppear {
             draft.rollBaselineIfNeeded()
             try? context.save()
+            startRecorder()
         }
-        .onDisappear { save() }
+        .onDisappear {
+            save()
+            DraftSnapshotStore.capture(draft: draft, context: context)   // 收尾帧
+            snapTimer?.invalidate(); snapTimer = nil
+        }
+        .fullScreenCover(isPresented: $showReplay) {
+            DraftReplayView(draft: draft) { showReplay = false }
+        }
         .sheet(isPresented: $showChat) {
             WritingDeskChatSheet(draft: draft) { showChat = false }
                 .presentationDetents([.medium, .large])
@@ -119,6 +133,16 @@ struct WritingDeskView: View {
                 .shadow(color: ConsoleView.greenDeep.opacity(0.18), radius: 5, y: 2)
         }
         .buttonStyle(.plain)
+    }
+
+    /// 过程录制：定时轮询而非监听每次输入——5 秒一帧，内容没变就不记（capture 内部去重）
+    private func startRecorder() {
+        snapTimer?.invalidate()
+        snapTimer = Timer.scheduledTimer(withTimeInterval: DraftSnapshotStore.interval, repeats: true) { _ in
+            Task { @MainActor in
+                DraftSnapshotStore.capture(draft: draft, context: context)
+            }
+        }
     }
 
     // MARK: - 存盘（打字停 1.2s 落库，不每键都写）
