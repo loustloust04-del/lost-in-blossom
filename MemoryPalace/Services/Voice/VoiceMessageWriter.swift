@@ -18,6 +18,24 @@ enum VoiceMessageWriter {
     /// iOS 会在 App 进后台数秒后冻结进程：合成请求虽已返回，收尾代码却没机会跑，
     /// 占位行就永久卡住（兔兔发完就切走跟别人说话 = 每次必中）。
     /// 这里把 script 落 UserDefaults，回前台时续跑；配合 beginBackgroundTask 争取收尾时间。
+    /// 这条消息是否处于「语音条生成中」（渲染层据此画成型态胶囊，而非露出占位文字）
+    @MainActor
+    static func isPending(node: MessageNode) -> Bool {
+        if node.content.contains(placeholderLine) { return true }
+        return node.segments?.contains(where: {
+            if case .text(let t) = $0 { return t.contains(placeholderLine) }
+            return false
+        }) ?? false
+    }
+
+    /// 从展示文本里摘掉占位行（它已由胶囊代言）
+    static func strippedForDisplay(_ text: String) -> String {
+        guard text.contains(placeholderLine) else { return text }
+        var out = text.replacingOccurrences(of: placeholderLine, with: "")
+        while out.contains("\n\n\n") { out = out.replacingOccurrences(of: "\n\n\n", with: "\n\n") }
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 流水线埋点：只发步骤名（无脚本无内容），落 nginx access.log，用于定位卡死位置。
     /// 排障期临时件，链路稳定后删。
     static func dbg(_ step: String) {

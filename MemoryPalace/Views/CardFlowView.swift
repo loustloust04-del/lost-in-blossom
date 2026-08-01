@@ -1656,7 +1656,7 @@ struct BubbleView: View {
                 let sourceText = isStreaming && !streamingContentText.isEmpty ? streamingContentText : node.content
                 let rawCleaned = ContentCleaner.clean(sourceText, cacheKey: "\(node.id)_\(sourceText.count)")
                 let thinkingResult = isUser ? nil : ContentCleaner.extractThinking(from: rawCleaned)
-                let cleaned = thinkingResult?.content ?? rawCleaned
+                let cleaned = VoiceMessageWriter.strippedForDisplay(thinkingResult?.content ?? rawCleaned)
                 // CC 思考链：content 已嵌入 [thinking]…[/thinking] 时由下方 ThinkingBlockView 渲染；
                 // 只有 streaming 中 content 尚未嵌入时才用 CCThinkingView（isLastAssistant 限定）。
                 // isCCBridgeProvider 防止切换 provider 后 latestThinking 残留导致重复显示。
@@ -1825,6 +1825,11 @@ struct BubbleView: View {
                                          nodeId: node.id, profileId: node.profileId, isUser: isUser)
                             .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
                     }
+                }
+                // 生成中：画同形胶囊的「成型态」，而不是让占位行以纯文字露脸
+                if !isUser, VoiceMessageWriter.isPending(node: node) {
+                    VoicePendingCapsuleView()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if !isUser && !isStreaming, let artifact = ArtifactDetector.find(in: cleaned) {
                     ArtifactCodeFoldView(

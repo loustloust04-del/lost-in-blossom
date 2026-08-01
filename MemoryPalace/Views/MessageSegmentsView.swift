@@ -144,7 +144,8 @@ struct MessageSegmentsView: View {
             let seg = segments[i]
             switch seg {
             case .text(let s):
-                result.append(.text(s))
+                // 占位行由胶囊代言，正文里摘掉（否则文字与胶囊同时出现）
+                result.append(.text(VoiceMessageWriter.strippedForDisplay(s)))
                 i += 1
             case .thinking(let text, _):
                 result.append(.thinking(text))
