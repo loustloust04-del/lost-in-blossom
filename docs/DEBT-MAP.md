@@ -8,17 +8,29 @@
 - [ ] C2 顺手项：设置→Token 统计，缓存命中率不是 0
 - [ ] HealthKit 10 秒项：健康页点「重新授权/刷新」+ 下拉，「今日快照」出数据即可（步数/屏幕时间的代理上报链路本来就在跑，只差 App 内直连这一下）
 
-## 待写码（按顺序，都是小刀）
-1. [ ] 语音设置孤儿挂载：`VoiceSettingsSection` 挂进设置页（同 gates 同款病）+ 兔兔注册 ElevenLabs 填 key
-2. [ ] 文件选择器修复（docs/task-fix-file-picker.md）
-3. [ ] 双击文本选取（docs/task-text-select-sheet.md）
-4. [ ] 思考链 UI 改版（docs/task-thinking-sheet-ui.md）
-5. [ ] 切换模型时过滤图片（docs/task-image-model-compat.md）
-6. [ ] 花房：罐头回应 → 接真 Caelum（Phase 2 第一小步）
-7. [ ] CC 主动消息路径补 voice/health 收口：Caelum 主动发起的消息落库不过 CVM 收口，语音块/健康块不渲染（output-style 已嘱其暂勿在主动消息用语音；接通后解禁并更新教学）
-8. [ ] TTS 后端可插拔评估：MiniMax Speech-02 作第二后端（中文自然度/价格 1/4/国内直连；代价=失去 v3 内联标签表演体系，教学需按后端分叉）
-9. [ ] 音色试听 preview_url 走 Google CDN，/xi/ 反代不覆盖——App 内试听大陆网络下无声，暂用网页端试听/盲测；如要根治需 URL 重写走通用代理
-10. [ ] 进食/饮水双向同步：扩展 HealthSyncService 到 food/water——现状 Caelum 记网关(vitals)、App 记本地互不见；显示层已用 max() 创可贴（ConsoleView/CareView），正解是像药物一样 App 本地为主人+双向同步，做完拆创可贴
+## 待写码
+
+> 2026-08-01 大扫除：账面 10 项经逐条核实，7 项其实早已完成（兔兔记性 > 文档）。销账清单见文末。
+
+1. [ ] **切换模型时过滤图片**（docs/task-image-model-compat.md）——唯一幸存的老小刀，只有任务文档零实现
+2. [ ] **进食/饮水双向同步**：扩展 HealthSyncService 到 food/water，做完拆掉 ConsoleView/CareView 的 max() 创可贴
+3. [ ] **花房 Phase 2 第一小步**：罐头回应 → 接真 Caelum
+4. [ ] **朗读升级到真人声**（等 MiniMax key）：朗读走 MiniMax（便宜管够），语音条留 ElevenLabs（标签表演）
+5. [ ] 音色试听 preview_url 走 Google CDN，/xi/ 反代不覆盖——App 内试听大陆网络无声，暂用网页端/盲测；根治需 URL 重写走通用代理
+
+## 卡在兔兔（各一次性操作）
+- [ ] MiniMax 注册拿 key（platform.minimaxi.com，国内手机号）→ 设置-语音-语音服务切 MiniMax + 填 key
+- [ ] 两把 ElevenLabs key 后台重新生成（曾发给 Fable 排障，换锁是好习惯）
+
+## 已销账（2026-07-30~08-01 核实）
+- ✅ 语音设置孤儿挂载（44228e0 已挂）
+- ✅ 文件选择器修复（c85fb24 换 UIKit DocumentPicker）
+- ✅ 双击文本选取（090d200 最终方案=移除双击手势让原生选取生效）
+- ✅ 思考链 UI 改版（df7115d 折叠/弹窗双模式）
+- ✅ CC 主动消息补 voice/health 收口（2773e7e）
+- ✅ TTS 双后端（a071997 + d9d8f0a：TTSBackend 协议/MiniMaxClient/方言映射/双 key/设置页选择器）
+- ✅ 语音条全链路七层雷（反代→两容器→静默失败→后台冻结→降级不说理由→reply 通道→AttachmentStore 死循环 4ba95dd）
+- ✅ 朗读键上线（6dd9be5，含 TCC 闪退拆雷）
 
 ## 待拍板
 （清零 ✅ 2026-07-28 复查：meds.ts 已从"第二套真相"转正为同步对端——App 本地为主人、/api/meds 是 Caelum 侧镜像+工具入口，必须留���情绪系统网关侧已实现并在运行——emotion/emotion-judge/desire/decay 共 718 行，app.ts 挂判定、index.ts 挂 desire 定时器，当日日志有活动；HealthKit 降级为上面的 10 秒项）
