@@ -131,6 +131,7 @@ final class ProfileManager {
             MedicationLog.self,
             CycleDay.self,
             IntimacyEntry.self,
+        InspirationNote.self,
         UserCard.self,
         ConversationTag.self,
         FavoriteItem.self,
@@ -482,6 +483,12 @@ struct MemoryPalaceApp: App {
                         Task { await DesireInboxService.shared.checkUnread() }
                         // 语音条续跑：被后台冻结掐断的合成，回前台补完
                         VoiceMessageWriter.resumePending(context: ModelContext(profileManager.container))
+                        // 灵感盒：补推没同步成功的碎念（Caelum 侧笔记本保持最新）
+                        Task { @MainActor in
+                            await InspirationSync.pushPending(
+                                context: ModelContext(profileManager.container),
+                                profileId: profileManager.currentProfile.id)
+                        }
                         // PR-4: 启动/回前台对齐本地与网关记忆（仅在后端记忆开关开启时，每进程一次）
                         Task { await MemorySync.shared.alignOnLaunch(container: profileManager.container, profileId: profileManager.currentProfile.id) }
                     default:

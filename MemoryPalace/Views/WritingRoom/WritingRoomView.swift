@@ -43,7 +43,9 @@ struct WritingRoomView: View {
             composer
         }
         .background(Theme.sidebarBg.ignoresSafeArea())
-        .sheet(isPresented: $showJot) { placeholderSheet(icon: "lightbulb", title: "灵感盒", sub: "随手记下的念头会汇到这里\n（马上就能用～）") { showJot = false } }
+        .sheet(isPresented: $showJot) {
+            InspirationBoxView(profileId: profileManager?.currentProfile.id ?? "default") { showJot = false }
+        }
         .sheet(isPresented: $showDrafts) { placeholderSheet(icon: "doc.text", title: "我的稿子", sub: "你写的稿子会列在这里\n（马上就能用～）") { showDrafts = false } }
     }
 
