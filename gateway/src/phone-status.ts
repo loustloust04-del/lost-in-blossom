@@ -82,7 +82,7 @@ const MAGIC_SUBJECTS: Record<string, string> = {
 // 真金白银类魔法：冷却 5 分钟，防工具循环重试/连发导致重复下单
 const COSTLY_TRICKS = new Set(['ride_home', 'ride_clinic', 'ride_work']);
 const magicLastSent: Record<string, number> = {};
-const MAGIC_COOLDOWN_MS = 5 * 60 * 1000;
+const MAGIC_COOLDOWN_MS = 90 * 1000;  // 防连发足够；5min 太长会卡住正常的「再试一次」
 
 // ── 充电事件推送（→ hub 注入 CC 聊天）───────────────────────────────
 const HUB_NOTIFY_URL = process.env.MP_CC_HUB_NOTIFY_URL || 'http://127.0.0.1:7890/internal/notify';
@@ -126,7 +126,7 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     if (COSTLY_TRICKS.has(trick)) {
       const last = magicLastSent[trick] || 0;
       const waitMs = last + MAGIC_COOLDOWN_MS - Date.now();
-      if (waitMs > 0) return JSON.stringify({ error: '冷却中：这个叫车暗号 ' + Math.ceil(waitMs / 1000) + ' 秒前后才可再发（防重复下单）。刚才那发已经生效了，别再发。' });
+      if (waitMs > 0) return JSON.stringify({ error: '冷却中：这个叫车暗号还要等 ' + Math.ceil(waitMs / 1000) + ' 秒（防重复下单）。上一发已经送到她手机了——如果她说没反应，让她看看打车 App，别急着重发。' });
     }
     const { sendMail, mailerConfigured } = await import('./mailer');
     if (!mailerConfigured()) return JSON.stringify({ error: 'SMTP 未配置，发不出暗号' });
