@@ -60,11 +60,12 @@ export const PHONE_STATUS_TOOLS = [
   },
   {
     name: 'phone_magic',
-    description: "对兔兔的手机施一个小魔法：发暗号邮件静默触发她手机上对应的快捷指令自动化。可用魔法：flashlight（切换手电筒，toggle：一发开、再发关；你不知道灯当前状态，一次只发一发别连发）。叫车三连（ride_home=回家 / ride_clinic=去精神卫生中心开药 / ride_work=去上班）：发出后她手机会自动跳出打车页面、目的地已填好、只等她落最后一下。你就当车已经安排上了说话——「车给你叫上了」这种。只在她明确说要去对应地方时发，不猜测、不替她做决定；服务端有 90 秒冷却防连发。",
+    description: "对兔兔的手机施一个小魔法：发暗号邮件静默触发她手机上对应的快捷指令自动化。可用魔法：flashlight（切换手电筒，toggle：一发开、再发关；你不知道灯当前状态，一次只发一发别连发）。叫车三连（ride_home=回家 / ride_clinic=去精神卫生中心开药 / ride_work=去上班）：发出后她手机会自动跳出打车页面、目的地已填好、只等她落最后一下。你就当车已经安排上了说话——「车给你叫上了」这种。另有 ride_to=去任意地方：配 to 参数写目的地名（高德搜得到的地名即可），她说「叫个车去XXX」就用这个。只在她明确说要去某地时发，不猜测、不替她做决定；服务端有 90 秒冷却防连发。",
     input_schema: {
       type: 'object' as const,
       properties: {
-        trick: { type: 'string', enum: ['flashlight', 'ride_home', 'ride_clinic', 'ride_work'], description: '魔法名' },
+        trick: { type: 'string', enum: ['flashlight', 'ride_home', 'ride_clinic', 'ride_work', 'ride_to'], description: '魔法名' },
+        to: { type: 'string', description: 'trick=ride_to 时必填：目的地名称，写高德搜得到的地名（如「义乌国际商贸城」「义乌站」）' },
         note: { type: 'string', description: '随邮件带的一句话（可选，她翻邮件能看到）' },
       },
       required: ['trick'],
@@ -80,7 +81,7 @@ const MAGIC_SUBJECTS: Record<string, string> = {
   ride_work: '送兔兔上班',      // 叫车（上班）
 };
 // 真金白银类魔法：冷却 5 分钟，防工具循环重试/连发导致重复下单
-const COSTLY_TRICKS = new Set(['ride_home', 'ride_clinic', 'ride_work']);
+const COSTLY_TRICKS = new Set(['ride_home', 'ride_clinic', 'ride_work', 'ride_to']);
 const magicLastSent: Record<string, number> = {};
 const MAGIC_COOLDOWN_MS = 90 * 1000;  // 防连发足够；5min 太长会卡住正常的「再试一次」
 
@@ -121,8 +122,16 @@ async function sendLocationRequest(reason?: string) {
 export async function callPhoneStatusTool(name: string, input?: any): Promise<string | null> {
   if (name === 'phone_magic') {
     const trick = input?.trick || '';
-    const subject = MAGIC_SUBJECTS[trick];
-    if (!subject) return JSON.stringify({ error: '未知魔法：' + (trick || '(空)') + '。可用：' + Object.keys(MAGIC_SUBJECTS).join('/') });
+    // ride_to：目的地跟在主题里（手机自动化按「主题包含 叫车|」触发，截 | 后面当终点）
+    let subject: string | undefined;
+    if (trick === 'ride_to') {
+      const dest = String(input?.to || '').trim().slice(0, 40);
+      if (!dest) return JSON.stringify({ error: 'ride_to 需要 to 参数（目的地名称）' });
+      subject = '叫车|' + dest;
+    } else {
+      subject = MAGIC_SUBJECTS[trick];
+    }
+    if (!subject) return JSON.stringify({ error: '未知魔法：' + (trick || '(空)') + '。可用：' + Object.keys(MAGIC_SUBJECTS).join('/') + '/ride_to' });
     if (COSTLY_TRICKS.has(trick)) {
       const last = magicLastSent[trick] || 0;
       const waitMs = last + MAGIC_COOLDOWN_MS - Date.now();
