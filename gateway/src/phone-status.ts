@@ -139,7 +139,11 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     }
     const { sendMail, mailerConfigured } = await import('./mailer');
     if (!mailerConfigured()) return JSON.stringify({ error: 'SMTP 未配置，发不出暗号' });
-    await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, input?.note || subject + ' ' + new Date().toISOString());
+    // ride_to：正文只放目的地本身（手机端「快捷指令输入」取正文最稳，不必再拆主题）
+    const body = trick === 'ride_to'
+      ? String(input?.to || '').trim()
+      : (input?.note || subject + ' ' + new Date().toISOString());
+    await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, body);
     if (COSTLY_TRICKS.has(trick)) magicLastSent[trick] = Date.now();
     return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '叫车暗号已发出，打车 App 会开始下单。告诉兔兔留意接单信息。' : '暗号已发出，她的手机几秒内会静默执行。' });
   }
