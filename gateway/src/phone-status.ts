@@ -145,7 +145,7 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
       : (input?.note || subject + ' ' + new Date().toISOString());
     await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, body);
     if (COSTLY_TRICKS.has(trick)) magicLastSent[trick] = Date.now();
-    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '叫车暗号已发出，打车 App 会开始下单。告诉兔兔留意接单信息。' : '暗号已发出，她的手机几秒内会静默执行。' });
+    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '车已经给她安排上了：高德会自己跳出来、目的地已填好，她落最后一下就走。' : '暗号已发出，她的手机几秒内会静默执行。' });
   }
   if (name === 'request_location') {
     // 一条龙：发 ortolan 暗号 → 轮询等手机静默回报（链路实测 ≈8–25s）→ 直接返回全套状态
