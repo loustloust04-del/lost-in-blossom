@@ -113,5 +113,6 @@ final class RightPanelToolManager {
         RightPanelTool(id: "fileLibrary", name: "文件库",  icon: "folder.fill",                     order: 8),
         RightPanelTool(id: "browser",     name: "浏览器",  icon: "safari",                              order: 9),
         RightPanelTool(id: "reading",     name: "读书",    icon: "book.fill",                           order: 10),
+        RightPanelTool(id: "music",       name: "音乐",    icon: "music.note",                          order: 11),
     ]
 }
