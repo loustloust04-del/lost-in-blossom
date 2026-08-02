@@ -84,6 +84,7 @@ enum HealthLogStore {
             context.insert(WeightEntry(profileId: profileId, date: day, weightKg: weightKg))
         }
         try? context.save()
+        LivelineReporter.report(.weight, "兔兔记了体重 · \(String(format: "%.1f", weightKg)) kg")
     }
 
     static func deleteWeight(context: ModelContext, entry: WeightEntry) {
@@ -111,6 +112,7 @@ enum HealthLogStore {
             let dose = medication.perDose
             Task { await MedsClient.take(id: gid, amount: dose) }
         }
+        LivelineReporter.report(.meds, "兔兔吃药了 · \(medication.name) \(medication.dosage)")
     }
 
     /// 撤销打卡 = 删对应计划时刻的当日 log。
@@ -148,6 +150,8 @@ enum HealthLogStore {
             return false
         }
         upsertIntimacy(context: context, profileId: profileId, date: now)
+        // 私密口径同注入：只报「发生了」，note 一个字不带
+        LivelineReporter.report(.intimacy, "兔兔在亲密卡上点了今天。")
         return true
     }
 

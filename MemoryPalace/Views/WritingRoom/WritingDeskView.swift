@@ -170,6 +170,10 @@ struct WritingDeskView: View {
         saveTimer?.invalidate()
         draft.updatedAt = Date()
         try? context.save()
+        // 写作进度报给他（网关侧 20 分钟节流，不会刷屏）
+        if draft.todayCount > 0 {
+            LivelineReporter.report(.writing, "兔兔在写《\(draft.displayTitle)》，今天已经 \(draft.todayCount) 字了")
+        }
     }
 }
 

@@ -189,6 +189,7 @@ struct InspirationBoxView: View {
         draft = ""
         inputFocused = false
         Task { await InspirationSync.push(note: note, context: context) }
+        LivelineReporter.report(.note, "兔兔在灵感盒记了一条：\(t.prefix(60))")
     }
 }
 

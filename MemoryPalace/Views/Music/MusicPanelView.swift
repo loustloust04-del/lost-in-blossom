@@ -52,6 +52,7 @@ struct MusicPanelView: View {
                 s.lastPlayedAt = Date()
                 try? context.save()
                 Task { await NowPlayingReporter.report(song: s) }
+                LivelineReporter.report(.music, "兔兔在听《\(s.title)》— \(s.displayArtist)")
             }
         }
     }
