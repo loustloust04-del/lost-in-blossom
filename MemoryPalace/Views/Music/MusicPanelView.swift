@@ -12,6 +12,7 @@ struct MusicPanelView: View {
     @State private var player = MusicPlayer.shared
     @State private var showImporter = false
     @State private var showLyrics = false
+    @State private var tab = 0          // 0=云端曲库 1=本地导入
 
     private var songs: [Song] {
         allSongs.filter { $0.profileId == profileId }
@@ -20,7 +21,18 @@ struct MusicPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if songs.isEmpty { emptyState } else { list }
+            Picker("", selection: $tab) {
+                Text("我的音乐").tag(0)
+                Text("导入的").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 14).padding(.top, 10)
+
+            if tab == 0 {
+                CloudMusicView(profileId: profileId)
+            } else {
+                if songs.isEmpty { emptyState } else { list }
+            }
             if player.currentSong != nil { miniPlayer }
         }
         .background(Theme.sidebarBg.ignoresSafeArea())
