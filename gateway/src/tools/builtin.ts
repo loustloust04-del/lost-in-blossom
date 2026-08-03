@@ -6,6 +6,7 @@ import { VITALS_TOOLS, callVitalsTool, CONSOLE_TOOLS, callConsoleTool } from '..
 import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
 import { INTIMACY_TOOLS, callIntimacyTool } from '../intimacy';
+import { HOWISSHE_TOOLS, callHowIsSheTool } from '../howisshe';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 import { WEBSEARCH_TOOL, callWebSearch, BROWSE_TOOL, callBrowseUrl } from './websearch';
@@ -26,6 +27,7 @@ export const BUILTIN_TOOLS = [
   ...VITALS_TOOLS,
   ...PHONE_STATUS_TOOLS,
   ...NOWPLAYING_TOOLS,
+  ...HOWISSHE_TOOLS,
   ...INTIMACY_TOOLS,
   {
     name: 'exec',
@@ -180,6 +182,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (musicResult !== null) return musicResult;
   const intimacyResult = await callIntimacyTool(name, input);
   if (intimacyResult !== null) return intimacyResult;
+  const howResult = await callHowIsSheTool(name);
+  if (howResult !== null) return howResult;
   const gmailResult = await callGmailTool(name, input);
   if (gmailResult !== null) return gmailResult;
   return null;

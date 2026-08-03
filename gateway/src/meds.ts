@@ -135,7 +135,7 @@ export const MEDS_TOOLS = [
   },
   {
     name: 'meds_add',
-    description: "往药箱加一种药（或给已有的药补货）。兔兔说「我买了X药，多少片」时用。已存在同名则累加数量。",
+    description: "往药箱加药：新药就建一条，已经有的就累加数量（补货也用这个）。",
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -157,18 +157,6 @@ export const MEDS_TOOLS = [
         amount: { type: 'number', description: '吃了几个，省略=每次剂量' },
       },
       required: ['name'],
-    },
-  },
-  {
-    name: 'meds_restock',
-    description: "给药箱里某个药补货（加数量）。兔兔说「X药我又买了N片」时用。",
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: '药名（模糊匹配）' },
-        count: { type: 'number', description: '补充的数量' },
-      },
-      required: ['name', 'count'],
     },
   },
 ];

@@ -54,11 +54,6 @@ export const VITALS_TOOLS = [
     description: 'Record that Bunny ate a meal. Call with what she ate.',
     input_schema: { type: 'object', properties: { meal: { type: 'string', description: 'what she ate, e.g. "早餐：面包牛奶"' } }, required: ['meal'] },
   },
-  {
-    name: 'vitals_meds',
-    description: 'Record that Bunny took her medication (右佐匹克隆/扎来普隆). Call when she confirms she took it.',
-    input_schema: { type: 'object', properties: { name: { type: 'string', description: 'medication name' } } },
-  },
 ];
 
 export async function callVitalsTool(name: string, input: any): Promise<string | null> {
