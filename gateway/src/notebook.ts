@@ -147,7 +147,7 @@ export const NOTEBOOK_TOOLS = [
   { name: 'fs_list', description: '列出你笔记本里所有文件(路径+大小)，不读内容。想看看自己都记了些什么时用。', input_schema: P() },
   { name: 'fs_read', description: '读你笔记本某个文件的全文。', input_schema: { type: 'object' as const, properties: { path: { type: 'string', description: '相对路径，如 diary/2026-07-16.md' } }, required: ['path'] } },
   { name: 'fs_write', description: '新建或整篇覆盖写入一个笔记文件。', input_schema: { type: 'object' as const, properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
-  { name: 'fs_append', description: '在文件末尾追加内容；文件不存在则创建。写日记、续记时用它，别整篇覆盖。', input_schema: { type: 'object' as const, properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
+  { name: 'fs_append', description: '在文件末尾追加内容；文件不存在则创建。写日记、续记时用它。', input_schema: { type: 'object' as const, properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
   { name: 'fs_edit', description: '把文件里唯一命中的 old_string 换成 new_string(局部修改)。', input_schema: { type: 'object' as const, properties: { path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' } }, required: ['path', 'old_string', 'new_string'] } },
   { name: 'fs_search', description: '在所有笔记里按关键词搜索，返回命中的文件与行。', input_schema: { type: 'object' as const, properties: { keyword: { type: 'string' } }, required: ['keyword'] } },
   { name: 'fs_rename', description: '重命名或移动笔记文件；目标已存在则失败。', input_schema: { type: 'object' as const, properties: { old_path: { type: 'string' }, new_path: { type: 'string' } }, required: ['old_path', 'new_path'] } },
