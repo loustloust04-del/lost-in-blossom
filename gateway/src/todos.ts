@@ -68,7 +68,7 @@ export async function clearDone(): Promise<number> {
 export const TODO_TOOLS = [
   {
     name: 'todo_add',
-    description: "Add a to-do item to Bunny's console. Use when she asks you to remember a task, or when you commit to doing something for her (e.g. a morning check-in). Shows up in her console To Do list.",
+    description: "往兔兔的控制台加一条待办。她让我记着某件事、或者我答应了她要做什么时用，会出现在她控制台的 To Do 里。",
     input_schema: {
       type: 'object' as const,
       properties: { text: { type: 'string', description: '待办内容，一句话' } },
@@ -77,12 +77,12 @@ export const TODO_TOOLS = [
   },
   {
     name: 'todo_list',
-    description: "List the to-do items on Bunny's console (both done and pending). Call before adding to avoid duplicates, or when she asks what's on her list.",
+    description: "看控制台上的待办，做完的和没做的都在。",
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
     name: 'todo_done',
-    description: "Mark a to-do item done by its id (get ids from todo_list). Use when Bunny says she finished something.",
+    description: "把某条待办标记成做完了（id 从 todo_list 拿）。",
     input_schema: {
       type: 'object' as const,
       properties: { id: { type: 'string', description: 'todo id（来自 todo_list）' } },

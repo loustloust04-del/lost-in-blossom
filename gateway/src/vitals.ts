@@ -46,12 +46,12 @@ async function save(data: VitalsData): Promise<void> {
 export const VITALS_TOOLS = [
   {
     name: 'vitals_water',
-    description: 'Record that Bunny drank water. Call this when she drinks water or you remind her to drink. Each call adds 1 cup.',
+    description: "记一杯水。她喝了、或者我提醒完她喝了，就记一次，一次一杯。",
     input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'vitals_food',
-    description: 'Record that Bunny ate a meal. Call with what she ate.',
+    description: "记一顿饭，写上她吃了什么。",
     input_schema: { type: 'object', properties: { meal: { type: 'string', description: 'what she ate, e.g. "早餐：面包牛奶"' } }, required: ['meal'] },
   },
 ];
@@ -90,12 +90,12 @@ export async function callVitalsTool(name: string, input: any): Promise<string |
 export const CONSOLE_TOOLS = [
   {
     name: 'console_read',
-    description: "Read today's care console: Bunny's water/food/meds status and any notes written today. Call when you want to know how she is doing today or before reminding her about water/food/meds.",
+    description: "看今天的控制台：兔兔喝了几杯水、吃了几顿、药吃了没，以及今天写在上面的备注。",
     input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'console_write',
-    description: "Write a note onto today's care console (plan, mood, observation, anything worth tracking today). Both CC and API models share this console.",
+    description: "往今天的控制台写一条备注——今天的计划、她的状态、观察到的什么。只属于今天，明天清零；想留下来的话去留言板（board_post）。",
     input_schema: {
       type: 'object',
       properties: { text: { type: 'string', description: '要记的内容，一句完整的话' } },

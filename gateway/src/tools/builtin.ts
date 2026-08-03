@@ -31,7 +31,7 @@ export const BUILTIN_TOOLS = [
   ...INTIMACY_TOOLS,
   {
     name: 'exec',
-    description: 'Run a shell command on the host this gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs. SECURITY: arbitrary command execution as the gateway process — only on a private, authenticated gateway.',
+    description: '在网关所在的这台服务器上跑一条 shell 命令，返回 stdout 和 stderr。60 秒超时，长任务用 nohup。',
     input_schema: {
       type: 'object',
       properties: { command: { type: 'string', description: 'shell command' } },
@@ -40,7 +40,7 @@ export const BUILTIN_TOOLS = [
   },
   {
     name: 'recall',
-    description: 'Search long-term memory and return full entries. exact=true does verbatim full-text search over past messages (good for an exact past quote; needs 3+ chars); otherwise semantic search over memories.',
+    description: '翻长期记忆，返回完整条目。exact=true 是在过往消息里逐字全文搜（想找一句原话时用，至少 3 个字）；否则是语义搜索。',
     input_schema: {
       type: 'object',
       properties: {
@@ -52,7 +52,7 @@ export const BUILTIN_TOOLS = [
   },
   {
     name: 'remember',
-    description: 'Store one piece of information into long-term memory right now. Use this the moment something worth keeping comes up in conversation (a preference, fact, relationship detail, goal, or context) — do not wait for passive end-of-conversation extraction. The entry is embedded and persisted; it will surface again via recall.',
+    description: '把一件事存进长期记忆。聊天里冒出值得留下的东西时用——她的偏好、一个事实、关系里的细节、目标、某段上下文。存进去会被向量化，以后 recall 能翻到。',
     input_schema: {
       type: 'object',
       properties: {

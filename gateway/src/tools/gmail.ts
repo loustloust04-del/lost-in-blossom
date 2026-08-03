@@ -41,22 +41,22 @@ async function gmailFetch(path: string, options?: RequestInit): Promise<any> {
 export const GMAIL_TOOLS = [
   {
     name: 'gmail_inbox',
-    description: 'List recent emails from inbox. Returns subject, sender, date, snippet for each.',
+    description: '看收件箱最近的邮件：主题、发件人、日期、摘要。',
     input_schema: { type: 'object', properties: { count: { type: 'number', description: 'number of emails (default 5, max 20)' } } },
   },
   {
     name: 'gmail_read',
-    description: 'Read full content of a specific email by message ID.',
+    description: '按 message ID 读一封邮件的全文。',
     input_schema: { type: 'object', properties: { messageId: { type: 'string', description: 'Gmail message ID' } }, required: ['messageId'] },
   },
   {
     name: 'gmail_send',
-    description: 'Send an email.',
+    description: '发一封邮件。',
     input_schema: { type: 'object', properties: { to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' } }, required: ['to', 'subject', 'body'] },
   },
   {
     name: 'gmail_search',
-    description: 'Search emails with Gmail query syntax (e.g. "from:someone subject:hello").',
+    description: '用 Gmail 的搜索语法找邮件，比如 from:someone subject:hello。',
     input_schema: { type: 'object', properties: { query: { type: 'string', description: 'Gmail search query' }, count: { type: 'number' } }, required: ['query'] },
   },
 ];

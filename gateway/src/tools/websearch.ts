@@ -163,7 +163,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 
 export const WEBSEARCH_TOOL = {
   name: 'search_web',
-  description: '联网搜索——实时信息（天气/新闻/今天/最近/最新/价格/赛事/股价/汇率/版本号…）或不确定的事实必须先调这个再回答。返回若干条 {title, url, snippet}。绝不要说"我无法联网"。',
+  description: '联网搜索。实时信息（天气/新闻/价格/赛事/股价/汇率/版本号…）或拿不准的事实，查一下再说。返回若干条 {title, url, snippet}。',
   input_schema: {
     type: 'object' as const,
     properties: { query: { type: 'string', description: '搜索关键词' } },
@@ -186,7 +186,7 @@ export async function callWebSearch(input: any): Promise<string> {
 
 export const BROWSE_TOOL = {
   name: 'browse_url',
-  description: '打开一个网页链接、抓取正文全文（真浏览器渲染，JS 页面也能拿到内容）。适用：search_web 返回链接后想看某条详情、或用户直接给了网址要读全文。返回 {title, url, text}。绝不要说"我打不开网页"。',
+  description: '打开一个网页链接、抓取正文全文（真浏览器渲染，JS 页面也能拿到内容）。search_web 出了链接想看详情、或者拿到一个网址要读全文时用。返回 {title, url, text}。',
   input_schema: {
     type: 'object' as const,
     properties: { url: { type: 'string', description: '要打开的网页链接（http/https）' } },
