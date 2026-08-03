@@ -8,7 +8,7 @@ interface VitalsData {
   water: { count: number; goal: number; lastUpdated: string };
   food: { count: number; goal: number; meals: string[]; lastUpdated: string };
   meds: { taken: boolean; name: string; lastUpdated: string };
-  notes?: { text: string; by: string; ts: string }[]; // 控制台备注（console_write），可选=旧文件兼容
+  notes?: { text: string; by: string; ts: string }[]; // 历史备注，App 的 LOG 区仍会显示；写入口已删
   date: string; // YYYY-MM-DD，每天重置
 }
 
@@ -85,7 +85,8 @@ export async function callVitalsTool(name: string, input: any): Promise<string |
 }
 
 // ============ 控制台读写（P1-4：CC/API 双端可读可记）============
-// console_read：模型随时看今日全况（不用等 App 汇报）；console_write：记备注/计划/心情。
+// console_read：随时看今日全况（不用等 App 汇报）。
+// console_write 已删（2026-08-03）：与 board_post 重叠且严格更弱（只活一天、不能回复），七天零调用。
 // 与 vitals 同一数据文件，每天随 date 重置。
 export const CONSOLE_TOOLS = [
   {
@@ -93,19 +94,10 @@ export const CONSOLE_TOOLS = [
     description: "看今天的控制台：兔兔喝了几杯水、吃了几顿、药吃了没，以及今天写在上面的备注。",
     input_schema: { type: 'object', properties: {} },
   },
-  {
-    name: 'console_write',
-    description: "往今天的控制台写一条备注——今天的计划、她的状态、观察到的什么。只属于今天，明天清零；想留下来的话去留言板（board_post）。",
-    input_schema: {
-      type: 'object',
-      properties: { text: { type: 'string', description: '要记的内容，一句完整的话' } },
-      required: ['text'],
-    },
-  },
 ];
 
 export async function callConsoleTool(name: string, input: any, by = 'model'): Promise<string | null> {
-  if (name !== 'console_read' && name !== 'console_write') return null;
+  if (name !== 'console_read') return null;
   const data = await load();
   if (name === 'console_read') {
     const notes = (data.notes ?? []).map((n) => `[${n.ts.slice(11, 16)} ${n.by}] ${n.text}`);
