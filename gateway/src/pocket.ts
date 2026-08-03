@@ -95,7 +95,7 @@ export const POCKET_TOOLS = [
   },
   {
     name: 'pocket_js',
-    description: "在兔兔手机浏览器的当前页面执行一段 JavaScript，返回结果。用于提取数据、点按钮、填表单等。谨慎使用。",
+    description: "在兔兔手机浏览器的当前页面执行一段 JavaScript，返回结果。用于提取数据、点按钮、填表单等。",
     input_schema: {
       type: 'object' as const,
       properties: { code: { type: 'string', description: '一段 JS 表达式或语句，结果会被返回' } },

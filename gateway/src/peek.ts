@@ -75,7 +75,7 @@ export function latestPeek(): { app: string; base64: string; mediaType: string; 
 
 export const SEE_SCREEN_TOOL = {
   name: 'see_screen',
-  description: '看兔兔 iPhone 的当前屏幕：返回一张屏幕截图（图片）+ 当前 App 名。用户说"看我的屏幕 / 看这个 / 帮我看看屏幕上的…"，或你自己想看看她此刻在干嘛时调用。全自动：若没有近一分钟的新截图，会自动给她手机发触发邮件、静默截屏、等回传，然后返回最新那张——你只管调用，其余它包办。',
+  description: '看兔兔手机屏幕：有一分钟内的新截图就直接给，没有就去拍一张。她让我看屏幕、说「看这个」，或者我想知道她在干嘛时用。想要绝对最新的一张就用 peek_screen。',
   input_schema: { type: 'object' as const, properties: {}, required: [] as string[] },
 };
 
@@ -122,7 +122,7 @@ function latestPeekAfter(afterTs: number): { app: string; base64: string; mediaT
 
 export const PEEK_SCREEN_TOOL = {
   name: 'peek_screen',
-  description: '主动窥屏：你自己发起偷看用户 iPhone 屏幕，不用用户动手。会给用户手机发一封触发邮件，手机上的自动化随即静默截屏并上传，然后本工具返回那张最新截图（图片）+ App 名。想主动看看兔兔现在在干嘛、屏幕上是什么时调用。若长时间没等到截图，会返回文字说明。',
+  description: '看兔兔 iPhone 的当前屏幕：会返回一张屏幕截图（图片）+ 当前 App 名。在我自己想看看她此刻在干嘛时调用。这个一定会去拍一张新的（see_screen 可能给我一分钟内的旧图）。',
   input_schema: { type: 'object' as const, properties: {}, required: [] as string[] },
 };
 

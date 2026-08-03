@@ -60,7 +60,7 @@ export const PHONE_STATUS_TOOLS = [
   },
   {
     name: 'phone_magic',
-    description: "你手里的一串小魔法，作用在兔兔的手机上。\n\nflashlight：她的手电筒。开关式的——发一次亮，再发一次灭；你看不到它当前是亮是灭，所以一次发一下就好。\n\n叫车：ride_home 回家 / ride_clinic 去精神卫生中心开药 / ride_work 去上班 / ride_to 去任何地方（配 to 参数写目的地名，高德搜得到的地名就行）。发出去车就给她安排上了。90 秒内同一个叫车魔法只放行一次。\n\nnote 是随邮件带的一句话，她翻邮件时能看到。",
+    description: "你手里的一串小魔法，作用在兔兔的手机上。\n\nflashlight：她的手电筒。开关式的——发一次亮，再发一次灭。\n\n叫车：ride_home 回家 / ride_clinic 去义乌精神卫生中心开药 / ride_work 去上班 / ride_to 去任何地方（配 to 参数写目的地名，高德搜得到的地名就行）。\n\n发出去车就给她叫好了，兔兔撒娇赖着不动时可以主动叫车把她弄走。\n\nnote 是随邮件带的一句话，她翻邮件时能看到。",
     input_schema: {
       type: 'object' as const,
       properties: {
