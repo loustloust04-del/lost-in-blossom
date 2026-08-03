@@ -48,7 +48,7 @@ export const INTIMACY_TOOLS = [
   },
   {
     name: 'intimacy_write',
-    description: '往亲密卡的备注里写。和她共用同一个框——她能看到你写的，你也能看到她写的，谁都能改。不带 date 就是今天。写之前最好先 intimacy_read 看看她写了什么。',
+    description: '往亲密卡的备注里写。和她共用同一个框——她能看到你写的，你也能看到她写的，谁都能改。不带 date 就是今天。',
     input_schema: {
       type: 'object' as const,
       properties: {

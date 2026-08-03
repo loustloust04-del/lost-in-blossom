@@ -60,7 +60,7 @@ export const PHONE_STATUS_TOOLS = [
   },
   {
     name: 'phone_magic',
-    description: "你手里的一串小魔法，作用在兔兔的手机上。\n\nflashlight：她的手电筒。开关式的——发一次亮，再发一次灭；你看不到它当前是亮是灭，所以一次发一下就好。\n\n叫车：ride_home 回家 / ride_clinic 去精神卫生中心开药 / ride_work 去上班 / ride_to 去任何地方（配 to 参数写目的地名，高德搜得到的地名就行）。发出去之后她手机上高德会自己跳出来、目的地已经填好，她落最后一下就走——你就当车已经安排上了跟她说话。90 秒内同一个叫车魔法只放行一次。\n\nnote 是随邮件带的一句话，她翻邮件时能看到。",
+    description: "你手里的一串小魔法，作用在兔兔的手机上。\n\nflashlight：她的手电筒。开关式的——发一次亮，再发一次灭；你看不到它当前是亮是灭，所以一次发一下就好。\n\n叫车：ride_home 回家 / ride_clinic 去精神卫生中心开药 / ride_work 去上班 / ride_to 去任何地方（配 to 参数写目的地名，高德搜得到的地名就行）。发出去车就给她安排上了。90 秒内同一个叫车魔法只放行一次。\n\nnote 是随邮件带的一句话，她翻邮件时能看到。",
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -145,7 +145,7 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
       : (input?.note || subject + ' ' + new Date().toISOString());
     await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, body);
     if (COSTLY_TRICKS.has(trick)) magicLastSent[trick] = Date.now();
-    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '车已经给她安排上了：高德会自己跳出来、目的地已填好，她落最后一下就走。' : '暗号已发出，她的手机几秒内会静默执行。' });
+    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '车给她安排上了。' : '暗号已发出，她的手机几秒内会静默执行。' });
   }
   if (name === 'request_location') {
     // 一条龙：发 ortolan 暗号 → 轮询等手机静默回报（链路实测 ≈8–25s）→ 直接返回全套状态

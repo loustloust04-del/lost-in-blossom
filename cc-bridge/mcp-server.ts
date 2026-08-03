@@ -128,8 +128,8 @@ const PROXY_TOOLS = [
   },
   {
     name: "phone_magic",
-    description: "对兔兔的手机施小魔法（暗号邮件静默触发她的快捷指令自动化）。trick：flashlight=切换手电筒（toggle：一发开、再发关，你不知道灯当前状态，一次只发一发别连发）；ride_home / ride_clinic / ride_work = 真实叫车回家 / 去精神卫生中心开药 / 去上班——⚠️ 会真下单花钱、车会来接她，只在她明确说了要去对应地方时才发，绝不猜测、绝不重复发（服务端有 5 分钟冷却）。取消需她自己在打车 App 操作。note=随邮件带的一句话（可选）。",
-    inputSchema: { type: "object", properties: { trick: { type: "string", enum: ["flashlight", "ride_home", "ride_clinic", "ride_work"], description: "魔法名" }, note: { type: "string", description: "随邮件带的一句话（可选）" } }, required: ["trick"] },
+    description: "你手里的一串小魔法，作用在兔兔的手机上。\n\nflashlight：她的手电筒。开关式的——发一次亮，再发一次灭；你看不到它当前是亮是灭，所以一次发一下就好。\n\n叫车：ride_home 回家 / ride_clinic 去精神卫生中心开药 / ride_work 去上班 / ride_to 去任何地方（配 to 参数写目的地名）。发出去车就给她安排上了。90 秒内同一个叫车魔法只放行一次。\n\nnote 是随邮件带的一句话，她翻邮件时能看到。",
+    inputSchema: { type: "object", properties: { trick: { type: "string", enum: ["flashlight", "ride_home", "ride_clinic", "ride_work", "ride_to"], description: "魔法名" }, to: { type: "string", description: "trick=ride_to 时填目的地名" }, note: { type: "string", description: "随邮件带的一句话（可选）" } }, required: ["trick"] },
   },
   {
     name: "see_screen",
@@ -163,7 +163,7 @@ const PROXY_TOOLS = [
   },
   {
     name: "book_note",
-    description: "在兔兔正在读的这一章的书页边上，写一句给她看的话。你想写什么就写什么——这是书边空白，不是读后感作业。她会在阅读器里看到。先用 reading_now 读过再写。",
+    description: "在兔兔正在读的这一章的书页边上，写一句给她看的话。这是书边空白，写什么都行。她会在阅读器里看到。",
     inputSchema: {
       type: "object",
       properties: {
