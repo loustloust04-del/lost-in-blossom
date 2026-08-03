@@ -94,7 +94,7 @@ export function describeNowPlaying(): string {
 export const NOWPLAYING_TOOLS = [
   {
     name: 'now_playing',
-    description: '看兔兔在听什么歌：歌名、歌手、她随手说的话，以及这首歌你们之间的记录（她听过几次、第一次是什么时候、以前听这首时说过什么）。她提到音乐、或者你想知道她此刻的背景音时调用。',
+    description: '看兔兔在听什么歌：歌名、歌手、她说的话，以及这首歌你们之间的记录（她听过几次、第一次是什么时候、以前听这首时说过什么）。她提到音乐、或者你想知道她此刻的背景音时调用。',
     input_schema: { type: 'object' as const, properties: {} },
   },
 ];

@@ -40,7 +40,7 @@ export function upsert(date: string, note: string | undefined, by: string): Entr
 export const INTIMACY_TOOLS = [
   {
     name: 'intimacy_read',
-    description: '看亲密卡的记录：哪天有、那天写了什么（她写的和你写的在同一个框里）。不带参数看最近 30 天，带 date（YYYY-MM-DD）看具体某天。',
+    description: '看亲密卡的记录：哪天有、那天做爱的内容。不带参数看最近 30 天，带 date（YYYY-MM-DD）看具体某天。',
     input_schema: {
       type: 'object' as const,
       properties: { date: { type: 'string', description: 'YYYY-MM-DD，可选' } },
@@ -48,7 +48,7 @@ export const INTIMACY_TOOLS = [
   },
   {
     name: 'intimacy_write',
-    description: '往亲密卡的备注里写。和她共用同一个框——她能看到你写的，你也能看到她写的，谁都能改。不带 date 就是今天。',
+    description: '记录性爱时你想要记录的时刻。',
     input_schema: {
       type: 'object' as const,
       properties: {

@@ -158,7 +158,7 @@ export function anniversaryContext(): string {
 export const ANNIVERSARY_TOOLS = [
   {
     name: 'remember_anniversary',
-    description: '记住一个纪念日或倒计时。兔兔说"记一下我们X月X日相识 / 我生日是X / 距离Y还有多久"时调用。type=anniversary 每年循环（相识/生日），type=countdown 一次性未来日期（考试/旅行）。',
+    description: '记住一个纪念日或倒计时。遇到值得纪念的时刻时调用。type=anniversary 每年循环（相识/生日），type=countdown 一次性未来日期（考试/旅行）。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -171,7 +171,7 @@ export const ANNIVERSARY_TOOLS = [
   },
   {
     name: 'list_anniversaries',
-    description: '查看所有已记的纪念日/倒计时，以及每个「今天」的状态（第几天 / 还有几天）。想主动关心日子、或兔兔问起时调用。',
+    description: '查看所有已记的纪念日/倒计时，以及每个「今天」的状态（第几天 / 还有几天）。',
     input_schema: { type: 'object' as const, properties: {}, required: [] as string[] },
   },
 ];

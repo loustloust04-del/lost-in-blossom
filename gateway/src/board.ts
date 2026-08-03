@@ -95,12 +95,12 @@ export async function boardContext(): Promise<string> {
 export const BOARD_TOOLS = [
   {
     name: 'board_list',
-    description: "看兔兔留言板上的帖子和回复（你俩的双人小纸条）。想看看她贴了啥、或要回复前先读一下时调用。",
+    description: "看兔兔留言板上的帖子和回复。在想看看她贴了什么、或要回复前先读一下时调用。",
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
     name: 'board_post',
-    description: "在兔兔的留言板贴一张小纸条（一条新帖）。想给她留句话、放个念头、写点心里话时用。会出现在她控制台的留言板上。",
+    description: "在兔兔的留言板贴一张小纸条。",
     input_schema: {
       type: 'object' as const,
       properties: { text: { type: 'string', description: '纸条内容' } },
@@ -109,7 +109,7 @@ export const BOARD_TOOLS = [
   },
   {
     name: 'board_reply',
-    description: "回复留言板上某条帖子（用 board_list 拿 post id）。兔兔贴了纸条、你想接话时用。",
+    description: "回复留言板上某条帖子（用 board_list 拿 post id）。可以跟兔兔在留言板上互相回复。",
     input_schema: {
       type: 'object' as const,
       properties: {
