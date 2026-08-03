@@ -158,17 +158,19 @@ const PROXY_TOOLS = [
   },
   {
     name: "reading_now",
-    description: "看兔兔正在读的这一章：书名、第几章、章节标题、正文全文、她在这章划的线和写的笔记。她说「我在读这个」「这段你怎么看」时调用；你自己想知道她最近在读什么也可以调。没在读书会告诉你。",
+    description: "看兔兔正在读的这一章：书名、第几章、章节标题、正文全文、她在这章划的线和写的笔记。当你想知道她最近在读什么的时候调用。",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "book_note",
-    description: "在兔兔正在读的这一章的书页边上，写一句给她看的话。这是书边空白，写什么都行。她会在阅读器里看到。",
+    description: "在兔兔正在读的这一章的边空白写一句给她看的话。不带 chapter 就写在她当前读的那章；也可以指定 book + chapter 写到别处——比如我先读完了几章，在前面留好批注等她追上来。",
     inputSchema: {
       type: "object",
       properties: {
-        note: { type: "string", description: "批注正文，一两句话" },
+        note: { type: "string", description: "批注正文" },
         quote: { type: "string", description: "针对的原文片段（可选，会显示在批注上方）" },
+        book: { type: "string", description: "书名（可选，不填=她当前在读的那本）" },
+        chapter: { type: "number", description: "第几章（可选，不填=她当前读的那章）" },
       },
       required: ["note"],
     },
@@ -435,15 +437,20 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 
   if (req.params.name === "book_note") {
-    const a = req.params.arguments as { note: string; quote?: string }
+    const a = req.params.arguments as { note: string; quote?: string; book?: string; chapter?: number }
     const note = String(a?.note ?? "").trim()
     if (!note) throw new Error("note 不能为空")
-    let book = "", chapter = 0
-    try {
-      const r = JSON.parse(readFileSync(READING_PATH, "utf-8"))
-      book = r.bookName; chapter = r.chapter
-    } catch {
-      return { content: [{ type: "text", text: "她现在没在读书，批注没处放。等她翻开书再说。" }] }
+    // 不指定就写她当前在读的那章；指定了就写到那本那章（可以走在她前面留批注）
+    let book = String(a?.book ?? "").trim()
+    let chapter = Number(a?.chapter ?? 0)
+    if (!book || !chapter) {
+      try {
+        const r = JSON.parse(readFileSync(READING_PATH, "utf-8"))
+        if (!book) book = r.bookName
+        if (!chapter) chapter = r.chapter
+      } catch {
+        return { content: [{ type: "text", text: "不知道往哪本书上写——她现在没在读书，也没给我 book / chapter。" }] }
+      }
     }
     const ws = await connectHub()
     ws.send(JSON.stringify({
