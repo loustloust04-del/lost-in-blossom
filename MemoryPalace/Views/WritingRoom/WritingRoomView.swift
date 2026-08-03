@@ -30,7 +30,7 @@ struct WritingRoomView: View {
     private var chatId: String { "writingroom-\(profileManager?.currentProfile.id ?? "default")" }
 
     /// 首次发言随场景说明一起上行（只发一次，后续不重复占 token）
-    private let sceneNote = "〈场景：花房〉这是兔兔 App 第五页「花房·写作间」，和主聊天分开的小房间。这里陪伴是主体、写作是载体：她可能想写点东西、想要个开头、卡住了想聊聊，也可能只是不想一个人待着。回应短一点软一点，像坐在她旁边；她不写也别催。"
+    private let sceneNote = "〈花房〉兔兔的写作间，跟主聊天分开的小房间。陪伴是主体，写作是载体。她可能想写点东西、要个开头、卡住了想聊聊，也可能只是不想一个人待着。坐在她旁边，陪她写东西。"
 
     private let opening = "来啦～ 花房的灯我给你留着了 🌿\n今天想写点什么，还是先陪我说说话？"
     private let quicks: [(text: String, warm: Bool)] = [

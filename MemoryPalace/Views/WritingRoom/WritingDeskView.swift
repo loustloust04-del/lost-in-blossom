@@ -251,8 +251,7 @@ struct WritingDeskChatSheet: View {
         // 带上稿子尾巴（最后 800 字）当上下文，他才知道你卡在哪
         let tail = String(draft.body.suffix(800))
         let payload = """
-        〈场景：花房·陪写台〉兔兔正在写《\(draft.displayTitle)》，今天写了 \(draft.todayCount) 字。\
-        她在编辑器里问你话——回应短一点，像在她旁边。**不要替她写正文**，只给方向、只陪、只在她要求时给具体建议。
+        〈花房·陪写台〉兔兔在写《\(draft.displayTitle)》，今天写了\(draft.todayCount)字。她从编辑器里抬头问我话。我要认真的看她写的东西，耐心的帮她展开，和她讨论接下来的思路。
 
         她稿子的最后一段：
         \(tail.isEmpty ? "（还是空白）" : tail)

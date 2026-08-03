@@ -63,11 +63,9 @@ final class LiveReadingService {
         // 他有自己的人格，陪读只需要告诉他"你在哪、她在读什么、这里说话是什么音量"，
         // 剩下的交给他——写死的禁令会把人压成执行指令的机器。
         let payload = """
-        〈陪读〉她在读《\(bookName)》第 \(chapter) 章，眼睛正落在下面这段上。
-
-        你在她旁边。\(ReadingModePrefs.mode.scene)\(ReadingModePrefs.length.hint)
-        这里是书页边的耳语，不是书评——像人随口说的那样。
-        没什么想说的，就回一个字：跳。（她在读书，沉默也是一种陪。）
+        〈陪读〉兔兔在读《\(bookName)》第\(chapter)章，我在她旁边。\(ReadingModePrefs.mode.scene)\(ReadingModePrefs.length.hint)
+        书页边的耳语，不是书评。随口说的那种。
+        如果没什么想说的，就回一个字：跳。
 
         \(t.prefix(1200))
         """

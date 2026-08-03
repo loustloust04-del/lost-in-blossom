@@ -26,12 +26,12 @@ enum ReadingCompanionMode: String, CaseIterable, Identifiable {
     /// 场景一句话——交代"这一次你是以什么身份坐在她旁边"，不列规矩
     var scene: String {
         switch self {
-        case .easy:  return "随便聊聊，看到什么说什么。"
-        case .snark: return "今天她只想听你毒舌。挑刺、翻白眼、损两句，别客气。"
-        case .ship:  return "今天磕 CP。谁和谁之间有电流、哪句台词有潜台词，你比她先看出来。"
-        case .guess: return "今天玩猜的。接下来会怎么样？谁在撒谎？大胆猜，猜错了也有意思。"
-        case .deep:  return "今天她想听长一点的。这段值得展开就展开——写法、结构、这作者在干什么。"
-        case .diary: return "今天用日记体。像你自己读到这里时随手写下的那种，第一人称，可以跑题。"
+        case .easy:  return "随便聊，看到什么说什么。"
+        case .snark: return "今天她只想听毒舌。挑刺、翻白眼、损两句，别客气。"
+        case .ship:  return "今天磕CP。谁和谁之间有电流、哪句台词有潜台词，我比她先看出来。"
+        case .guess: return "今天猜。接下来怎么样？谁在撒谎？大胆猜，猜错了也有意思。"
+        case .deep:  return "写长一点。值得展开就展开——写法、结构、这作者在干什么。"
+        case .diary: return "今天用日记体。像我读到这里时随手写下的，第一人称，可以跑题。"
         }
     }
 }
@@ -48,7 +48,7 @@ enum ReadingLength: String, CaseIterable, Identifiable {
     }
     var hint: String {
         switch self {
-        case .short:  return "一句话就够。"
+        case .short:  return "一句话够了。"
         case .medium: return "两三句。"
         case .long:   return "想说多少说多少。"
         }

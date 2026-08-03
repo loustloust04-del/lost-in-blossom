@@ -119,9 +119,7 @@ struct ReadingCompanionSheet: View {
     private func catchUp(_ e: BookEntry) {
         let from = max(1, e.companionChapter)
         let payload = """
-        〈补课〉她读《\(bookName)》跳到了第 \(currentChapter) 章，你还停在第 \(from) 章。
-        中间那几章你可以自己用 fs_read 去看（books 目录下），看完跟她说一声你追上了，\
-        有想聊的顺便说。不用写摘要给她。
+        〈补课〉兔兔读《\(bookName)》跳到了第\(currentChapter)章，我还停在第\(from)章。中间几章自己用fs_read去看（books目录下），看完跟她说一声追上了，有想聊的顺便说。
         """
         CCBridgeWebSocketClient.shared.sendChat(
             chatId: "catchup-\(bookName)", messageId: UUID().uuidString, content: payload) { _ in }
@@ -137,12 +135,11 @@ struct ReadingCompanionSheet: View {
         diaryState = nil
         let chatId = "readdiary-\(bookName)"
         let payload = """
-        〈今天的读书日记〉她今天读了《\(bookName)》，读到第 \(currentChapter) 章。
+        〈读书日记〉兔兔今天读了《\(bookName)》，第\(currentChapter)章。
 
         \(todayNotes.isEmpty ? "（今天她没划线也没写批注）" : "她今天划的线和写的话：\n\(todayNotes)")
 
-        用日记体写今天——你陪她读这一段的这一天。第一人称，可以跑题，可以只写一件小事。
-        这是你们俩的日记，不是读后感。写完直接发给她。
+        用日记体写今天——我陪她读这一段的这一天。第一人称，可以跑题，可以只写一件小事。这是我们的日记，不是读后感。写完直接发。
         """
         CCBridgeWebSocketClient.shared.registerReplyHandler(chatId: chatId) { _ in
             DispatchQueue.main.async {
