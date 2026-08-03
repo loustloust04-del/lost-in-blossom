@@ -80,10 +80,9 @@ const MAGIC_SUBJECTS: Record<string, string> = {
   ride_clinic: '去精神卫生中心', // 叫车（开药）
   ride_work: '送兔兔上班',      // 叫车（上班）
 };
-// 真金白银类魔法：冷却 5 分钟，防工具循环重试/连发导致重复下单
+// 叫车不设冷却：URL Scheme 只唤起页面，她不点就不会下单；
+// 而她取消了想再叫一次却被锁住，只会让他变成「无能的丈夫」（兔兔原话）。
 const COSTLY_TRICKS = new Set(['ride_home', 'ride_clinic', 'ride_work', 'ride_to']);
-const magicLastSent: Record<string, number> = {};
-const MAGIC_COOLDOWN_MS = 90 * 1000;  // 防连发足够；5min 太长会卡住正常的「再试一次」
 
 // ── 充电事件推送（→ hub 注入 CC 聊天）───────────────────────────────
 const HUB_NOTIFY_URL = process.env.MP_CC_HUB_NOTIFY_URL || 'http://127.0.0.1:7890/internal/notify';
@@ -132,11 +131,6 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
       subject = MAGIC_SUBJECTS[trick];
     }
     if (!subject) return JSON.stringify({ error: '未知魔法：' + (trick || '(空)') + '。可用：' + Object.keys(MAGIC_SUBJECTS).join('/') + '/ride_to' });
-    if (COSTLY_TRICKS.has(trick)) {
-      const last = magicLastSent[trick] || 0;
-      const waitMs = last + MAGIC_COOLDOWN_MS - Date.now();
-      if (waitMs > 0) return JSON.stringify({ error: '冷却中：这个叫车暗号还要等 ' + Math.ceil(waitMs / 1000) + ' 秒（防重复下单）。上一发已经送到她手机了——如果她说没反应，让她看看打车 App，别急着重发。' });
-    }
     const { sendMail, mailerConfigured } = await import('./mailer');
     if (!mailerConfigured()) return JSON.stringify({ error: 'SMTP 未配置，发不出暗号' });
     // ride_to：正文只放目的地本身（手机端「快捷指令输入」取正文最稳，不必再拆主题）
@@ -144,8 +138,7 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
       ? String(input?.to || '').trim()
       : (input?.note || subject + ' ' + new Date().toISOString());
     await sendMail(process.env.PEEK_EMAIL_TO || 'bunnycaelum@icloud.com', subject, body);
-    if (COSTLY_TRICKS.has(trick)) magicLastSent[trick] = Date.now();
-    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '车给她安排上了。' : '暗号已发出，她的手机几秒内会静默执行。' });
+    return JSON.stringify({ ok: true, magic: trick, hint: COSTLY_TRICKS.has(trick) ? '车已经给她安排上了！' : '暗号已发出，她的手机几秒内会静默执行。' });
   }
   if (name === 'request_location') {
     // 一条龙：发 ortolan 暗号 → 轮询等手机静默回报（链路实测 ≈8–25s）→ 直接返回全套状态
