@@ -24,17 +24,17 @@ function runBB(args: string[]): Promise<string> {
 export const TWITTER_TOOLS = [
   {
     name: 'twitter_notifications',
-    description: "获取兔兔 Twitter 账号的最新通知（点赞、转发、回复、关注、提及）。在她问起推特动态、粉丝互动时调用。",
+    description: "兔兔 Twitter 账号的最新通知：点赞、转发、回复、关注、提及。实时抓的。",
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
     name: 'twitter_bookmarks',
-    description: "获取兔兔 Twitter 书签列表。她想看存过的推文时调用。",
+    description: "兔兔 Twitter 里存的书签。实时抓的。",
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
     name: 'twitter_user',
-    description: "获取指定 Twitter 用户的 profile（简介、粉丝数等）。",
+    description: "某个 Twitter 用户的资料：简介、粉丝数那些。",
     input_schema: {
       type: 'object' as const,
       properties: { username: { type: 'string', description: 'Twitter 用户名（不含 @）' } },
@@ -43,7 +43,7 @@ export const TWITTER_TOOLS = [
   },
   {
     name: 'twitter_search',
-    description: "搜索 Twitter 上的推文。",
+    description: "在 Twitter 上搜推文。",
     input_schema: {
       type: 'object' as const,
       properties: { query: { type: 'string', description: '搜索关键词或短语' } },
@@ -52,7 +52,7 @@ export const TWITTER_TOOLS = [
   },
   {
     name: 'twitter_command',
-    description: "在兔兔的 Twitter 上执行任意操作（发推、回复、点赞、关注等）——运行任意 bb-browser 命令。示例：'site twitter/post 内容' 发推、'site twitter/reply <推文链接> 内容' 回复。需要动手做点什么(不只是读)时用。",
+    description: "用兔兔的 Twitter 做点什么：发推、回复、点赞、关注——运行任意 bb-browser 命令。示例：'site twitter/post 内容' 发推、'site twitter/reply <推文链接> 内容' 回复。",
     input_schema: {
       type: 'object' as const,
       properties: { command: { type: 'string', description: "bb-browser 命令参数（不含 bb-browser 前缀），如 site twitter/post 你好世界" } },

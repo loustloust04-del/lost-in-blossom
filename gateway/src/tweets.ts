@@ -60,7 +60,7 @@ export function tweetCountToday(): number {
 export const TWEETS_TOOLS = [
   {
     name: 'get_my_tweets',
-    description: "兔兔最近发的推文（已同步进记忆库，含配图识别）。想知道她最近在推特上发了什么、在想什么、什么心情时调用。参数 limit（默认 10，最多 50）。",
+    description: "兔兔最近发的推文——读的是记忆库里的存档（不是实时抓）。想知道她最近发了什么、在想什么、什么心情时看这个。参数 limit（默认 10，最多 50）。",
     input_schema: { type: 'object' as const, properties: { limit: { type: 'number', description: '取几条，默认 10' } }, required: [] as string[] },
   },
 ];
