@@ -28,6 +28,7 @@ import { phoneStatusRoutes } from './phone-status';
 import { nowPlayingRoutes } from './nowplaying';
 import { musicRoutes } from './music';
 import { livelineRoutes } from './liveline';
+import { intimacyRoutes } from './intimacy';
 import { healthRoutes } from './health';
 import { recentTweets } from './tweets';
 import { nbList, nbRead, nbWrite, nbAppend, nbEdit, nbDelete, nbRename, nbSearch } from './notebook';
@@ -890,6 +891,7 @@ phoneStatusRoutes(app);
 nowPlayingRoutes(app);
 musicRoutes(app);
 livelineRoutes(app);
+intimacyRoutes(app);
 healthRoutes(app);
 
 // Screen Time 代理：从 dream_events 聚合今日 app_open

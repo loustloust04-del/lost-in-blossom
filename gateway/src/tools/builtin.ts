@@ -5,6 +5,7 @@ import { GMAIL_TOOLS, callGmailTool } from './gmail';
 import { VITALS_TOOLS, callVitalsTool, CONSOLE_TOOLS, callConsoleTool } from '../vitals';
 import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
+import { INTIMACY_TOOLS, callIntimacyTool } from '../intimacy';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
 import { WEBSEARCH_TOOL, callWebSearch, BROWSE_TOOL, callBrowseUrl } from './websearch';
@@ -25,6 +26,7 @@ export const BUILTIN_TOOLS = [
   ...VITALS_TOOLS,
   ...PHONE_STATUS_TOOLS,
   ...NOWPLAYING_TOOLS,
+  ...INTIMACY_TOOLS,
   {
     name: 'exec',
     description: 'Run a shell command on the host this gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs. SECURITY: arbitrary command execution as the gateway process — only on a private, authenticated gateway.',
@@ -176,6 +178,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (phoneResult !== null) return phoneResult;
   const musicResult = await callNowPlayingTool(name);
   if (musicResult !== null) return musicResult;
+  const intimacyResult = await callIntimacyTool(name, input);
+  if (intimacyResult !== null) return intimacyResult;
   const gmailResult = await callGmailTool(name, input);
   if (gmailResult !== null) return gmailResult;
   return null;

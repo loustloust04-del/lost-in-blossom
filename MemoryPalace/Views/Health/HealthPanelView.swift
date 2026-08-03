@@ -71,7 +71,10 @@ struct HealthPanelView: View {
                 medsSection
                 cycleSection
                 weightSection
-                if showIntimacy { intimacySection }
+                if showIntimacy {
+                intimacySection
+                    .task { await IntimacySyncService.pull(context: context, profileId: profileId) }
+            }
                 recentSection
             }
             .listStyle(.insetGrouped)

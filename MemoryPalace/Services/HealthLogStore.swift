@@ -139,6 +139,7 @@ enum HealthLogStore {
             context.insert(IntimacyEntry(profileId: profileId, date: day, note: note ?? ""))
         }
         try? context.save()
+        if let note { IntimacySyncService.push(date: day, note: note) }
     }
 
     /// 心形点按语义：今天有=取消，没有=记。返回操作后今天是否有记录。
@@ -147,6 +148,7 @@ enum HealthLogStore {
         if let existing = fetchIntimacy(context: context, profileId: profileId, date: now) {
             context.delete(existing)
             try? context.save()
+            IntimacySyncService.push(date: now, note: "", deleted: true)
             return false
         }
         upsertIntimacy(context: context, profileId: profileId, date: now)
@@ -258,9 +260,11 @@ enum HealthLogStore {
             let seg = HealthCycleStore.injectionLine(todayFlow: todayFlow, periods: periods, now: now)
             if !seg.isEmpty { parts.append(seg) }
         }
-        // 亲密口径拍板：只报当天，不带历史/频率/距离，note 不注入
-        if intimacyGateEnabled, fetchIntimacy(context: context, profileId: profileId, date: now) != nil {
-            parts.append("今天有亲密记录。")
+        // 亲密口径：只报当天，不带历史/频率/距离。
+        // note 原为「一字不注」，兔兔 2026-08-02 拍板改为带上——备注她和 Caelum 共用一个框，她要他看得到。
+        if intimacyGateEnabled, let e = fetchIntimacy(context: context, profileId: profileId, date: now) {
+            let n = e.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            parts.append(n.isEmpty ? "今天有亲密记录。" : "今天有亲密记录，备注：\(n)")
         }
         return parts.joined(separator: "")
     }
