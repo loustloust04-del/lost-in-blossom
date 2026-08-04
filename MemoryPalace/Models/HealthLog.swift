@@ -80,7 +80,14 @@ final class IntimacyEntry: Identifiable {
 
     var profileId: String
     var date: Date          // startOfDay 归一
+    /// 主备注：Caelum 写的（保留换行原样）
     var note: String = ""
+    /// 副备注：兔兔视角的补充，可选
+    var myNote: String = ""
+    /// 标签（自定义、自动去重）
+    var tags: [String] = []
+    /// 里程碑：「第一次…」之类，卡片上出徽章
+    var milestone: String = ""
     var createdAt: Date = Date()
 
     init(profileId: String, date: Date, note: String = "") {

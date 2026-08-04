@@ -114,5 +114,6 @@ final class RightPanelToolManager {
         RightPanelTool(id: "browser",     name: "浏览器",  icon: "safari",                              order: 9),
         RightPanelTool(id: "reading",     name: "读书",    icon: "book.fill",                           order: 10),
         RightPanelTool(id: "music",       name: "音乐",    icon: "music.note",                          order: 11),
+        RightPanelTool(id: "marks",       name: "刻痕",    icon: "heart.text.square",                   order: 12),
     ]
 }

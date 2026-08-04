@@ -5,7 +5,7 @@ import { GMAIL_TOOLS, callGmailTool } from './gmail';
 import { VITALS_TOOLS, callVitalsTool, CONSOLE_TOOLS, callConsoleTool } from '../vitals';
 import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
-import { INTIMACY_TOOLS, callIntimacyTool } from '../intimacy';
+import { INTIMACY_TOOLS, callIntimacyTool, WISH_TOOLS, callWishTool } from '../intimacy';
 import { HOWISSHE_TOOLS, callHowIsSheTool } from '../howisshe';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
@@ -29,6 +29,7 @@ export const BUILTIN_TOOLS = [
   ...NOWPLAYING_TOOLS,
   ...HOWISSHE_TOOLS,
   ...INTIMACY_TOOLS,
+  ...WISH_TOOLS,
   {
     name: 'exec',
     description: '在网关所在的这台服务器上跑一条 shell 命令，返回 stdout 和 stderr。60 秒超时，长任务用 nohup。',
@@ -182,6 +183,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (musicResult !== null) return musicResult;
   const intimacyResult = await callIntimacyTool(name, input);
   if (intimacyResult !== null) return intimacyResult;
+  const wishResult = await callWishTool(name, input);
+  if (wishResult !== null) return wishResult;
   const howResult = await callHowIsSheTool(name);
   if (howResult !== null) return howResult;
   const gmailResult = await callGmailTool(name, input);
