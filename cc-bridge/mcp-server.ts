@@ -24,7 +24,11 @@ const PING_INTERVAL_MS = 15_000
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://127.0.0.1:4567"
 const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN ?? ""
 
-const PROXY_TOOLS = [
+// 【2026-08-03】此表原为手写，与网关真实工具长期脱节：intimacy_* / how_is_she /
+// search_web / browse_url / todo_* / console_read / twitter_* 从未放行（他看不见），
+// 而 vitals_meds / meds_restock 已从网关删掉却还留着。现改为启动时向网关拉取真实清单，
+// 下面这份只作拉取失败时的兜底。加工具再也不用两头抄。
+const FALLBACK_PROXY_TOOLS = [
   {
     name: "exec",
     description: "Run a shell command on the VPS the gateway lives on. Returns stdout and stderr. 60s timeout; use nohup for long jobs.",
@@ -271,6 +275,28 @@ const PROXY_TOOLS = [
     inputSchema: { type: "object", properties: { name: { type: "string" }, count: { type: "number" } }, required: ["name", "count"] },
   },
 ] as const
+
+/// 启动时向网关要真实工具表；失败就用上面的兜底。
+let PROXY_TOOLS: any[] = FALLBACK_PROXY_TOOLS as any[]
+try {
+  const r = await fetch(`${GATEWAY_URL}/api/mcp/tools`, {
+    headers: GATEWAY_TOKEN ? { Authorization: `Bearer ${GATEWAY_TOKEN}` } : {},
+    signal: AbortSignal.timeout(8000),
+  })
+  const d: any = await r.json()
+  const builtin = (d?.tools ?? []).filter((t: any) => t.source === "builtin")
+  if (builtin.length) {
+    PROXY_TOOLS = builtin.map((t: any) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema ?? { type: "object", properties: {} },
+    }))
+    console.error(`[mcp] 从网关拉到 ${PROXY_TOOLS.length} 个工具`)
+  }
+} catch (e: any) {
+  console.error("[mcp] 拉网关工具表失败，用兜底名单:", e?.message)
+}
+
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
 
