@@ -485,6 +485,23 @@ function broadcastNotebookChanged(path: string, op: string): number {
   return count
 }
 
+// 共读取章：CC 要某章 → 转给 App → App 回 chapter_result → 原样转回 CC（按 req_id 认领）
+function requestChapter(m: any): number {
+  const payload = JSON.stringify({
+    type: "fetch_chapter",
+    req_id: String(m.req_id ?? ""),
+    book: String(m.book ?? ""),
+    chapter: Number(m.chapter ?? 0),
+  })
+  let n = 0
+  for (const app of appClients) {
+    if (app.readyState === WebSocket.OPEN) {
+      try { app.send(payload); n++ } catch { /* dead */ }
+    }
+  }
+  return n
+}
+
 /// Caelum 递来的书页批注 → 广播给 App（阅读器里展示）
 function broadcastBookNote(m: any): number {
   const payload = JSON.stringify({
@@ -543,6 +560,9 @@ export function startHub(): WebSocketServer {
           if (m?.type === "notebook_changed") {
             n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
             console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
+          } else if (m?.type === "fetch_chapter") {
+            n = requestChapter(m)
+            console.log(`[hub] 📖 fetch_chapter ${String(m.book ?? "").slice(0,20)} 第${m.chapter}章 → ${n} App`)
           } else if (m?.type === "book_note") {
             n = broadcastBookNote(m)
             console.log(`[hub] 📖 book_note《${String(m.bookName ?? "").slice(0, 20)}》第${m.chapter}章 → ${n}/${appClients.size} App`)
@@ -835,6 +855,14 @@ export function startHub(): WebSocketServer {
         }
 
         // ── Focus / blur ──────────────────────────────────────────────────────
+        else if (msg.type === "chapter_result") {
+          // App 把书回来了 → 原样转给等着的 CC（mcp-server 侧按 req_id 认领）
+          const raw = JSON.stringify(msg)
+          for (const c of mcpClients) {
+            if (c.readyState === WebSocket.OPEN) { try { c.send(raw) } catch { /* dead */ } }
+          }
+        }
+
         else if (msg.type === "reading_context") {
           saveReadingContext(msg)
           console.log(`[hub] 📖 reading_context: ${String(msg.bookName ?? "").slice(0, 30)} 第${msg.chapter}章`)

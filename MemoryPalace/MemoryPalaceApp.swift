@@ -487,6 +487,8 @@ struct MemoryPalaceApp: App {
                         Task { await DesireInboxService.shared.checkUnread() }
                         // 语音条续跑：被后台冻结掐断的合成，回前台补完
                         VoiceMessageWriter.resumePending(context: ModelContext(profileManager.container))
+                        // 共读：记下当前楼层，供 BookStore.chapterForCompanion 找书
+                        UserDefaults.standard.set(profileManager.currentProfile.id, forKey: "coread.profileId")
                         // 灵感盒：补推没同步成功的碎念（Caelum 侧笔记本保持最新）
                         Task { @MainActor in
                             await InspirationSync.pushPending(

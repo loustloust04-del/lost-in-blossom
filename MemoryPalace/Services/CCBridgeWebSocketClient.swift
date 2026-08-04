@@ -566,6 +566,24 @@ final class CCBridgeWebSocketClient: NSObject {
         case "ack":
             // v1 no-op；后续版本可用于确认送达
             break
+        case "fetch_chapter":
+            // 共读：他想读兔兔还没翻到的章（走在她前面留批注用）。现取现给，不预传整本。
+            let reqId = (obj["req_id"] as? String) ?? ""
+            let bookName = (obj["book"] as? String) ?? ""
+            let chapter = (obj["chapter"] as? Int) ?? 0
+            DispatchQueue.main.async { [weak self] in
+                let (text, meta) = BookStore.chapterForCompanion(bookName: bookName, chapterNo: chapter)
+                self?.send([
+                    "type": "chapter_result",
+                    "req_id": reqId,
+                    "book": meta.book,
+                    "chapter": meta.chapter,
+                    "total": meta.total,
+                    "title": meta.title,
+                    "text": text ?? "",
+                    "error": text == nil ? "没找到这本书或这一章" : "",
+                ]) { _ in }
+            }
         case "notebook_changed":
             // CC 那边改了笔记本。这一帧只是个"去刷新"的口信，不带内容——
             // 谁在展示笔记本谁自己去重拉 /api/notebook，省掉手动下拉。

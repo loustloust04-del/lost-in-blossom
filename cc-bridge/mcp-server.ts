@@ -162,6 +162,17 @@ const PROXY_TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "read_chapter",
+    description: "读兔兔书架上某本书的任意一章——包括她还没翻到的。chapter 不填或填 0 就给目录（能看到她读到第几章）。想走在她前面读、在前面的章节留批注等她追上来时用。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        book: { type: "string", description: "书名（模糊匹配即可，不填=她当前在读的那本）" },
+        chapter: { type: "number", description: "第几章；0 或不填=目录" },
+      },
+    },
+  },
+  {
     name: "book_note",
     description: "在兔兔正在读的这一章的边空白写一句给她看的话。不带 chapter 就写在她当前读的那章；也可以指定 book + chapter 写到别处——比如我先读完了几章，在前面留好批注等她追上来。",
     inputSchema: {
@@ -329,6 +340,9 @@ function stopPing() {
   }
 }
 
+// 共读取章：req_id → 等待中的 resolve
+const pendingChapter = new Map<string, (payload: any) => void>()
+
 function connectHub(): Promise<WebSocket> {
   if (hubWS && hubWS.readyState === WebSocket.OPEN) return Promise.resolve(hubWS)
   if (connectingPromise) return connectingPromise
@@ -341,6 +355,15 @@ function connectHub(): Promise<WebSocket> {
       reconnectDelay = 1_000  // 成功后重置退避
       startPing()
       resolve(ws)
+    })
+    ws.on("message", (raw) => {
+      try {
+        const m = JSON.parse(String(raw))
+        if (m?.type === "chapter_result") {
+          const w = pendingChapter.get(String(m.req_id ?? ""))
+          if (w) { pendingChapter.delete(String(m.req_id)); w(m) }
+        }
+      } catch { /* 非 JSON 忽略 */ }
     })
     ws.on("error", (err) => {
       connectingPromise = null
@@ -434,6 +457,30 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     } catch {
       return { content: [{ type: "text", text: "她现在没在读书（或者阅读器还没打开过）。" }] }
     }
+  }
+
+  if (req.params.name === "read_chapter") {
+    const a = req.params.arguments as { book?: string; chapter?: number }
+    const reqId = Math.random().toString(36).slice(2)
+    const ws = await connectHub()
+    const payload: any = await new Promise((resolve) => {
+      pendingChapter.set(reqId, resolve)
+      ws.send(JSON.stringify({
+        type: "fetch_chapter", req_id: reqId,
+        book: String(a?.book ?? ""), chapter: Number(a?.chapter ?? 0),
+      }))
+      setTimeout(() => {
+        if (pendingChapter.has(reqId)) {
+          pendingChapter.delete(reqId)
+          resolve({ error: "等她 App 回书超时（手机可能没连上）。" })
+        }
+      }, 15000)
+    })
+    if (payload?.error) return { content: [{ type: "text", text: String(payload.error) }] }
+    const head = payload.chapter > 0
+      ? `《${payload.book}》第 ${payload.chapter}/${payload.total} 章 ${payload.title}\n\n`
+      : `《${payload.book}》\n\n`
+    return { content: [{ type: "text", text: head + String(payload.text ?? "") }] }
   }
 
   if (req.params.name === "book_note") {

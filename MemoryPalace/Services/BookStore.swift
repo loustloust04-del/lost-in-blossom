@@ -206,6 +206,36 @@ enum BookStore {
         return true
     }
 
+    /// 共读：他按书名+章号要正文（走在她前面读）。书名模糊匹配，chapterNo=0 表示要目录。
+    /// 返回 (正文, 书名/章号/总章数/章节标题)；找不到则正文为 nil。
+    static func chapterForCompanion(bookName: String, chapterNo: Int)
+        -> (String?, (book: String, chapter: Int, total: Int, title: String)) {
+        let pid = UserDefaults.standard.string(forKey: "coread.profileId") ?? ""
+        let root = booksRoot(profileId: pid)
+        let dirs = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        // 先精确后模糊，都按 index.json 里的书名比
+        var hit: (safe: String, idx: BookIndex)? = nil
+        for d in dirs {
+            guard let idx = loadIndex(safeName: d, profileId: pid) else { continue }
+            if idx.name == bookName { hit = (d, idx); break }
+            if hit == nil, bookName.isEmpty || idx.name.contains(bookName) || bookName.contains(idx.name) {
+                hit = (d, idx)
+            }
+        }
+        guard let hit else { return (nil, (bookName, chapterNo, 0, "")) }
+        let idx = hit.idx
+
+        // chapterNo <= 0：给目录
+        if chapterNo <= 0 {
+            let toc = idx.chapters.map { "\($0.no). \($0.title)" }.joined(separator: "\n")
+            return ("【目录】共 \(idx.totalChapters) 章，她读到第 \(idx.currentChapter) 章\n\n" + toc,
+                    (idx.name, 0, idx.totalChapters, "目录"))
+        }
+        let title = idx.chapters.first { $0.no == chapterNo }?.title ?? ""
+        let text = loadChapterText(safeName: hit.safe, chapterNo: chapterNo, profileId: pid)
+        return (text, (idx.name, chapterNo, idx.totalChapters, title))
+    }
+
     static func loadChapterText(safeName: String, chapterNo: Int, profileId: String) -> String? {
         let url = chapterURL(safeName: safeName, chapterNo: chapterNo, profileId: profileId)
         return try? String(contentsOf: url, encoding: .utf8)
