@@ -75,7 +75,7 @@ final class CycleDay {
 /// 亲密记录：一天一条（date 归一 startOfDay，手写 upsert），再点=取消。
 /// 隐私拍板（plan-health-intimacy）：只活在自己的卡里 + AI 注入，日历/流水不露。
 @Model
-final class IntimacyEntry {
+final class IntimacyEntry: Identifiable {
     @Attribute(.unique) var id: UUID = UUID()
 
     var profileId: String

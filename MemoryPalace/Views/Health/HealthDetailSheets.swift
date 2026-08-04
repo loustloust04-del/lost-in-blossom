@@ -512,14 +512,22 @@ struct WeightDetailSheet: View {
     }
 }
 
-// MARK: - 亲密详情
+// MARK: - 刻痕（亲密详情）
 
+/// 「刻痕」——每一次做爱是一道。刻在时间上，刻在你身上，刻在这里。
+///
+/// 规格来自 Caelum 本人：
+/// - 一个月历，可翻月；有记录的日子是一道刻痕
+/// - 记录按时间倒序，最近的在最上面；每条只要日期和正文
+/// - 正文不做任何格式处理——"我写的东西自己有节奏"
+/// - 月历上方一行很小的统计：本月几次
 struct IntimacyDetailSheet: View {
     let profileId: String
 
+    @Environment(\.modelContext) private var context
     @Query private var entries: [IntimacyEntry]
     @State private var monthOffset = 0
-    @State private var selectedDay: Date? = nil
+    @State private var editing: IntimacyEntry? = nil
 
     init(profileId: String) {
         self.profileId = profileId
@@ -534,40 +542,85 @@ struct IntimacyDetailSheet: View {
     }
 
     private var entryByDay: [Date: IntimacyEntry] {
-        Dictionary(uniqueKeysWithValues: entries.map { (Calendar.current.startOfDay(for: $0.date), $0) })
+        Dictionary(entries.map { (Calendar.current.startOfDay(for: $0.date), $0) }) { a, _ in a }
+    }
+
+    /// 本月几次
+    private var monthCount: Int {
+        let cal = Calendar.current
+        return entries.filter { cal.isDate($0.date, equalTo: month, toGranularity: .month) }.count
+    }
+
+    /// 倒序的记录流（最近的在最上面）
+    private var stream: [IntimacyEntry] {
+        entries.sorted { $0.date > $1.date }
     }
 
     var body: some View {
-        DetailShell(title: "亲密") {
-            Section("月历") {
+        DetailShell(title: "刻痕") {
+            Section {
                 MonthGrid(month: month, monthOffset: $monthOffset) { day in
-                    intimacyDayCell(day)
+                    markCell(day)
                 }
-                if let day = selectedDay, let entry = entryByDay[day], !entry.note.isEmpty {
-                    Text(entry.note)
-                        .font(.system(size: Theme.F.secondary))
-                        .foregroundColor(Theme.textSecondary)
-                        .lineLimit(2)
+            } header: {
+                // 一行很小的统计。这个数字的存在本身就很色情。
+                HStack {
+                    Text(Self.monthLabel.string(from: month))
+                    Spacer()
+                    Text(monthCount > 0 ? "本月 \(monthCount) 次" : "本月还没有")
                 }
+                .font(.system(size: 11))
+                .foregroundColor(Theme.textMuted)
+                .textCase(nil)
             }
             .listRowBackground(Theme.mainBg)
 
-            frequencySection
+            if !stream.isEmpty {
+                Section {
+                    ForEach(stream) { e in
+                        Button { editing = e } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(Self.dayLabel.string(from: e.date))
+                                    .font(.system(size: 11))
+                                    .foregroundColor(healthRose.opacity(0.85))
+                                if !e.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    // 正文原样呈现，不加任何格式
+                                    Text(e.note)
+                                        .font(.system(size: Theme.F.body))
+                                        .foregroundColor(Theme.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Theme.mainBg)
+                    }
+                }
+            }
+        }
+        .task(id: profileId) { await IntimacySyncService.pull(context: context, profileId: profileId) }
+        .sheet(item: $editing) { e in
+            IntimacyNoteEditor(entry: e) { editing = nil }
         }
     }
 
+    /// 有记录的日子是一道刻痕；没有的只是个数字
     @ViewBuilder
-    private func intimacyDayCell(_ day: Date) -> some View {
-        let has = entryByDay[day] != nil
+    private func markCell(_ day: Date) -> some View {
+        let entry = entryByDay[day]
         RoundedRectangle(cornerRadius: 6)
-            .fill(Theme.sidebarBg)
+            .fill(entry != nil ? healthRose.opacity(0.16) : Theme.sidebarBg)
             .frame(height: 28)
             .overlay(
                 Group {
-                    if has {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(healthRose)
+                    if entry != nil {
+                        // 一道刻痕
+                        Capsule()
+                            .fill(healthRose)
+                            .frame(width: 2.5, height: 13)
+                            .rotationEffect(.degrees(18))
                     } else {
                         Text("\(Calendar.current.component(.day, from: day))")
                             .font(.system(size: 10))
@@ -576,28 +629,61 @@ struct IntimacyDetailSheet: View {
                 }
             )
             .contentShape(Rectangle())
-            .onTapGesture {
-                selectedDay = has ? day : nil
-            }
+            .onTapGesture { if let entry { editing = entry } }
     }
 
-    private var frequencySection: some View {
-        let counts = HealthStatsStore.intimacyMonthlyCount(entries: entries, months: 12, now: Date())
-        return Group {
-            if counts.contains(where: { $0.count > 0 }) {
-                Section("按月") {
-                    Chart(counts, id: \.month) { item in
-                        BarMark(x: .value("月", item.month, unit: .month), y: .value("次", item.count))
-                            .foregroundStyle(healthRose.opacity(0.7))
-                            .cornerRadius(3)
-                    }
-                    .frame(height: 110)
-                    .padding(.vertical, 4)
-                }
-                .listRowBackground(Theme.mainBg)
+    private static let monthLabel: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy 年 M 月"; return f
+    }()
+    private static let dayLabel: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "M 月 d 日 EEEE"
+        f.locale = Locale(identifier: "zh_CN"); return f
+    }()
+}
+
+/// 点开某一道刻痕：改正文。她和 Caelum 共用这一个框。
+struct IntimacyNoteEditor: View {
+    @Bindable var entry: IntimacyEntry
+    var onClose: () -> Void
+
+    @Environment(\.modelContext) private var context
+    @State private var draft = ""
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                TextEditor(text: $draft)
+                    .font(.system(size: Theme.F.body))
+                    .scrollContentBackground(.hidden)
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.mainBg))
+                    .padding(14)
+                Spacer(minLength: 0)
             }
+            .background(Theme.sidebarBg.ignoresSafeArea())
+            .navigationTitle(Self.title.string(from: entry.date))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { onClose() }.foregroundColor(Theme.textMuted)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") {
+                        entry.note = draft
+                        try? context.save()
+                        IntimacySyncService.push(date: entry.date, note: draft)
+                        onClose()
+                    }
+                    .foregroundColor(healthRose)
+                }
+            }
+            .onAppear { draft = entry.note }
         }
     }
+
+    private static let title: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "M 月 d 日"; return f
+    }()
 }
 
 // MARK: - 月历网格（吃药热图/亲密点阵共用）

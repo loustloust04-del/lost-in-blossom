@@ -449,7 +449,7 @@ struct HealthPanelView: View {
                     }
             }
         } header: {
-            detailHeader("亲密", .intimacy)
+            detailHeader("刻痕", .intimacy)
         }
         .listRowBackground(Theme.mainBg)
     }
