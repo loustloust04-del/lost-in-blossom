@@ -308,7 +308,7 @@ enum HealthLogStore {
         if intimacyOn {
             lines += "\n亲密记录用 {\"type\": \"intimacy\"}（date/note 可选）。"
         }
-        lines += "\n系统会真实落库并把块变成结果行。只在她明确说了才记，不要猜测。"
+        lines += "\n系统会真实落库并把块变成结果行。"
         return lines
     }
 
