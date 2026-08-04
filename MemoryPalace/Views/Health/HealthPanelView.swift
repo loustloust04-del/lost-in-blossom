@@ -79,20 +79,21 @@ struct HealthPanelView: View {
             }
             .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("完成") {
-                        #if canImport(UIKit)
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        #endif
-                    }
-                    .foregroundColor(Theme.branchIndicator)
-                }
-            }
             .scrollContentBackground(.hidden)
         }
         .background(Theme.sidebarBg)
+        // 键盘工具栏挂最外层：挂在里层 List 上会因为外面还包着 VStack+header 而飘在半空（兔兔实测）
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") {
+                    #if canImport(UIKit)
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    #endif
+                }
+                .foregroundColor(Theme.branchIndicator)
+            }
+        }
         .task {
             // 健康数据双向同步（本地 SwiftData ↔ Gateway 药品柜 ↔ Caelum）
             await HealthSyncService.sync(context: modelContext, profileId: profileId)
