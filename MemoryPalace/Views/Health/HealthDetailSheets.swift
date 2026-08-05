@@ -688,7 +688,8 @@ struct IntimacyNoteEditor: View {
 
 // MARK: - 月历网格（吃药热图/亲密点阵共用）
 
-private struct MonthGrid<Cell: View>: View {
+/// 月历网格：吃药热图 / 刻痕月历 共用（原为 private，刻痕独立成页后需跨文件使用）
+struct MonthGrid<Cell: View>: View {
     let month: Date
     @Binding var monthOffset: Int
     @ViewBuilder let cell: (Date) -> Cell
