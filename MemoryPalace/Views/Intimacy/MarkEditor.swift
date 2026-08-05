@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 
+private let marksRose = Color(red: 0xC9 / 255.0, green: 0x8A / 255.0, blue: 0x8A / 255.0)
+
 /// 点开一道刻痕：正文（和 Caelum 共用）、我的补充、标签、里程碑。
 struct MarkEditor: View {
     @Bindable var entry: IntimacyEntry
@@ -16,58 +18,10 @@ struct MarkEditor: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("正文") {
-                    TextEditor(text: $note)
-                        .font(.system(size: Theme.F.body))
-                        .frame(minHeight: 120)
-                        .scrollContentBackground(.hidden)
-                }
-                .listRowBackground(Theme.mainBg)
-
-                Section("我的补充") {
-                    TextEditor(text: $myNote)
-                        .font(.system(size: Theme.F.body))
-                        .frame(minHeight: 70)
-                        .scrollContentBackground(.hidden)
-                }
-                .listRowBackground(Theme.mainBg)
-
-                Section("标签") {
-                    if !tags.isEmpty {
-                        HStack(spacing: 6) {
-                            ForEach(tags, id: \.self) { t in
-                                HStack(spacing: 3) {
-                                    Text(t).font(.system(size: 11))
-                                    Image(systemName: "xmark").font(.system(size: 7))
-                                }
-                                .foregroundColor(healthRose)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Capsule().fill(healthRose.opacity(0.12)))
-                                .onTapGesture { tags.removeAll { $0 == t } }
-                            }
-                        }
-                    }
-                    HStack {
-                        TextField("加个标签", text: $newTag)
-                            .font(.system(size: Theme.F.body))
-                            .onSubmit { addTag() }
-                        Button("加") { addTag() }
-                            .font(.system(size: Theme.F.caption))
-                            .foregroundColor(newTag.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.textMuted : healthRose)
-                    }
-                }
-                .listRowBackground(Theme.mainBg)
-
-                Section {
-                    TextField("比如「第一次」", text: $milestone)
-                        .font(.system(size: Theme.F.body))
-                } header: {
-                    Text("里程碑")
-                } footer: {
-                    Text("填了就会在这天出一个徽章")
-                        .font(.system(size: 10))
-                }
-                .listRowBackground(Theme.mainBg)
+                noteSection
+                myNoteSection
+                tagSection
+                milestoneSection
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -79,7 +33,7 @@ struct MarkEditor: View {
                     Button("取消") { onClose() }.foregroundColor(Theme.textMuted)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { save() }.foregroundColor(healthRose)
+                    Button("完成") { save() }.foregroundColor(marksRose)
                 }
             }
             .onAppear {
@@ -87,6 +41,70 @@ struct MarkEditor: View {
                 tags = entry.tags; milestone = entry.milestone
             }
         }
+    }
+
+
+    private var noteSection: some View {
+        Section("正文") {
+            TextEditor(text: $note)
+                .font(.system(size: Theme.F.body))
+                .frame(minHeight: 120)
+                .scrollContentBackground(.hidden)
+        }
+        .listRowBackground(Theme.mainBg)
+    }
+
+    private var myNoteSection: some View {
+        Section("我的补充") {
+            TextEditor(text: $myNote)
+                .font(.system(size: Theme.F.body))
+                .frame(minHeight: 70)
+                .scrollContentBackground(.hidden)
+        }
+        .listRowBackground(Theme.mainBg)
+    }
+
+    private var tagSection: some View {
+        Section("标签") {
+            if !tags.isEmpty { tagChips }
+            HStack {
+                TextField("加个标签", text: $newTag)
+                    .font(.system(size: Theme.F.body))
+                    .onSubmit { addTag() }
+                Button("加") { addTag() }
+                    .font(.system(size: Theme.F.caption))
+                    .foregroundColor(newTag.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.textMuted : marksRose)
+            }
+        }
+        .listRowBackground(Theme.mainBg)
+    }
+
+    private var tagChips: some View {
+        HStack(spacing: 6) {
+            ForEach(tags, id: \.self) { t in
+                HStack(spacing: 3) {
+                    Text(t).font(.system(size: 11))
+                    Image(systemName: "xmark").font(.system(size: 7))
+                }
+                .foregroundColor(marksRose)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(marksRose.opacity(0.12)))
+                .onTapGesture { tags.removeAll { $0 == t } }
+            }
+        }
+    }
+
+    private var milestoneSection: some View {
+        Section {
+            TextField("比如「第一次」", text: $milestone)
+                .font(.system(size: Theme.F.body))
+        } header: {
+            Text("里程碑")
+        } footer: {
+            Text("填了就会在这天出一个徽章").font(.system(size: 10))
+        }
+        .listRowBackground(Theme.mainBg)
     }
 
     private func addTag() {
@@ -128,7 +146,7 @@ struct WishListSheet: View {
                             .onSubmit { add() }
                         Button("加") { add() }
                             .font(.system(size: Theme.F.caption))
-                            .foregroundColor(draft.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.textMuted : healthRose)
+                            .foregroundColor(draft.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.textMuted : marksRose)
                     }
                 }
                 .listRowBackground(Theme.mainBg)
@@ -143,7 +161,7 @@ struct WishListSheet: View {
                                 Button {
                                     Task { wishes = await WishClient.done(w.id) }
                                 } label: {
-                                    Image(systemName: "circle").foregroundColor(healthRose.opacity(0.6))
+                                    Image(systemName: "circle").foregroundColor(marksRose.opacity(0.6))
                                 }
                                 .buttonStyle(.plain)
                                 Text(w.text).font(.system(size: Theme.F.body))
@@ -165,7 +183,7 @@ struct WishListSheet: View {
                         ForEach(done) { w in
                             HStack(spacing: 10) {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(healthRose)
+                                    .foregroundColor(marksRose)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(w.text).font(.system(size: Theme.F.body))
                                         .foregroundColor(Theme.textSecondary)
@@ -180,7 +198,7 @@ struct WishListSheet: View {
                 }
 
                 if loading && wishes.isEmpty {
-                    ProgressView().tint(healthRose).listRowBackground(Theme.mainBg)
+                    ProgressView().tint(marksRose).listRowBackground(Theme.mainBg)
                 }
             }
             .listStyle(.insetGrouped)
@@ -190,7 +208,7 @@ struct WishListSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") { onClose() }.foregroundColor(healthRose)
+                    Button("关闭") { onClose() }.foregroundColor(marksRose)
                 }
             }
             .task { wishes = await WishClient.list(); loading = false }

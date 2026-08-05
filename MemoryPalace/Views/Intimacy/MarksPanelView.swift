@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 
+private let marksRose = Color(red: 0xC9 / 255.0, green: 0x8A / 255.0, blue: 0x8A / 255.0)
+
 /// 「刻痕」——每一次做爱是一道。刻在时间上，刻在你身上，刻在这里。
 ///
 /// 规格来自 Caelum：月历 + 倒序记录流 + 一行很小的统计（本月几次）。
@@ -79,16 +81,16 @@ struct MarksPanelView: View {
     private func markCell(_ day: Date) -> some View {
         let e = entryByDay[day]
         RoundedRectangle(cornerRadius: 6)
-            .fill(e != nil ? healthRose.opacity(0.16) : Theme.sidebarBg)
+            .fill(e != nil ? marksRose.opacity(0.16) : Theme.sidebarBg)
             .frame(height: 28)
             .overlay(
                 Group {
                     if let e {
                         if !e.milestone.isEmpty {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 9)).foregroundColor(healthRose)
+                                .font(.system(size: 9)).foregroundColor(marksRose)
                         } else {
-                            Capsule().fill(healthRose).frame(width: 2.5, height: 13)
+                            Capsule().fill(marksRose).frame(width: 2.5, height: 13)
                                 .rotationEffect(.degrees(18))
                         }
                     } else {
@@ -115,7 +117,7 @@ struct MarksPanelView: View {
                                 .font(.system(size: 11))
                                 .foregroundColor(activeTag == t ? .white : Theme.textSecondary)
                                 .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(Capsule().fill(activeTag == t ? healthRose : Theme.sidebarBg))
+                                .background(Capsule().fill(activeTag == t ? marksRose : Theme.sidebarBg))
                         }
                         .buttonStyle(.plain)
                     }
@@ -149,7 +151,7 @@ struct MarksPanelView: View {
                     Label("心愿单", systemImage: "sparkles")
                         .font(.system(size: 11))
                 }
-                .foregroundColor(healthRose)
+                .foregroundColor(marksRose)
             }
             .textCase(nil)
         }
@@ -160,13 +162,13 @@ struct MarksPanelView: View {
             HStack(spacing: 6) {
                 Text(Self.dayLabel.string(from: e.date))
                     .font(.system(size: 11))
-                    .foregroundColor(healthRose.opacity(0.85))
+                    .foregroundColor(marksRose.opacity(0.85))
                 if !e.milestone.isEmpty {
                     Text(e.milestone)
                         .font(.system(size: 9, weight: .medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(healthRose))
+                        .background(Capsule().fill(marksRose))
                 }
                 Spacer()
             }
@@ -184,7 +186,7 @@ struct MarksPanelView: View {
                     .foregroundColor(Theme.textSecondary)
                     .padding(.leading, 8)
                     .overlay(alignment: .leading) {
-                        Rectangle().fill(healthRose.opacity(0.35)).frame(width: 2)
+                        Rectangle().fill(marksRose.opacity(0.35)).frame(width: 2)
                     }
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,9 +196,9 @@ struct MarksPanelView: View {
                     ForEach(e.tags, id: \.self) { t in
                         Text(t)
                             .font(.system(size: 9))
-                            .foregroundColor(healthRose.opacity(0.9))
+                            .foregroundColor(marksRose.opacity(0.9))
                             .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(Capsule().fill(healthRose.opacity(0.12)))
+                            .background(Capsule().fill(marksRose.opacity(0.12)))
                     }
                 }
             }
