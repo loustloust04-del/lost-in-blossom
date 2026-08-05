@@ -849,7 +849,7 @@ struct BookReaderSheet: View {
             return
         }
         chapterText = text
-        LivelineReporter.report(.reading, "兔兔在读《\(index?.name ?? bookSafeName)》第 \(chapterNo) 章")
+        LivelineReporter.report(.reading, "兔兔在读《\(index?.name ?? bookSafeName)》第 \(no) 章")
         // 刷新整书 notes（如果用户在其他章节有过改动）+ 切出本章用于着色
         let all = BookStore.loadNotes(safeName: bookSafeName, profileId: profileId)
         allNotes = all
