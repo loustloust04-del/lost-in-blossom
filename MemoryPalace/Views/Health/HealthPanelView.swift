@@ -81,7 +81,7 @@ struct HealthPanelView: View {
         .background(Theme.sidebarBg)
         // 每次进面板都拉一次他写的（他随时可能在亲密卡上留话）。
         // 原本挂在 intimacySection 上：只有开着显示开关才渲染、且 .task 只跑首次 —— 兔兔因此看不见他写的。
-        .task(id: profileId) { await IntimacySyncService.pull(context: context, profileId: profileId) }
+        .task(id: profileId) { await IntimacySyncService.pull(context: modelContext, profileId: profileId) }
         // 键盘工具栏挂最外层：挂在里层 List 上会因为外面还包着 VStack+header 而飘在半空（兔兔实测）
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
