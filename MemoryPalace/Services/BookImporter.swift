@@ -269,6 +269,63 @@ enum BookImporter {
         return ImportResult(safeName: safeName, totalChapters: pageCount, totalChars: 0)
     }
 
+    /// EPUB：解压 → 按 spine 顺序取章 → 与 txt 同样落盘
+    static func importEPUB(
+        url: URL,
+        bookName: String,
+        author: String = "",
+        profileId: String,
+        context: ModelContext,
+        progress: (@MainActor (String) -> Void)? = nil
+    ) async throws -> ImportResult {
+        let safeName = BookStore.safeName(bookName)
+        let bookDir = BookStore.bookDir(safeName: safeName, profileId: profileId)
+        if FileManager.default.fileExists(atPath: bookDir.path) {
+            throw ImportError.duplicateName(bookName)
+        }
+
+        await progress?("解压 EPUB…")
+
+        let (chapters, metaAuthor) = try await Task.detached(priority: .userInitiated) {
+            () -> ([Chapter], String) in
+            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+            if let size = attrs[.size] as? Int, size > maxFileBytes {
+                throw ImportError.fileTooLarge(size)
+            }
+            let parsed = try EPUBImporter.parse(url: url)
+            let chs = parsed.chapters.map { Chapter(title: $0.title, content: $0.content) }
+            return (chs, parsed.author)
+        }.value
+
+        await progress?("读到 \(chapters.count) 章")
+
+        let finalAuthor = author.isEmpty ? metaAuthor : author
+        try await Task.detached(priority: .userInitiated) { [chapters] in
+            try FileManager.default.createDirectory(at: bookDir, withIntermediateDirectories: true)
+            var chapterMeta: [BookStore.ChapterMeta] = []
+            for (i, ch) in chapters.enumerated() {
+                let no = i + 1
+                try BookStore.saveChapterText(ch.content, safeName: safeName, chapterNo: no, profileId: profileId)
+                chapterMeta.append(.init(no: no, title: ch.title, chars: ch.content.count))
+            }
+            let now = Date()
+            let index = BookStore.BookIndex(
+                name: bookName, author: finalAuthor, format: "epub",
+                createdAt: now, updatedAt: now,
+                currentChapter: 1, scrollRatio: 0,
+                totalChapters: chapters.count, chapters: chapterMeta
+            )
+            try BookStore.saveIndex(index, safeName: safeName, profileId: profileId)
+            try BookStore.saveNotes([], safeName: safeName, profileId: profileId)
+        }.value
+
+        await progress?("写入文件库…完成")
+        await MainActor.run { BookStore.refreshEntries(profileId: profileId, context: context) }
+
+        let totalChars = chapters.reduce(0) { $0 + $1.content.count }
+        return ImportResult(safeName: safeName, totalChapters: chapters.count, totalChars: totalChars)
+    }
+
     static func importTxt(
         url: URL,
         bookName: String,

@@ -66,7 +66,9 @@ struct BookshelfView: View {
         }
         .fileImporter(
             isPresented: $showFileImporter,
-            allowedContentTypes: [.plainText, .pdf, UTType(filenameExtension: "txt") ?? .data],
+            allowedContentTypes: [.plainText, .pdf, .epub,
+                                  UTType(filenameExtension: "txt") ?? .data,
+                                  UTType(filenameExtension: "epub") ?? .data],
             allowsMultipleSelection: false
         ) { result in
             switch result {
@@ -292,8 +294,18 @@ struct BookshelfView: View {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
-                // CR-7：按扩展名分流（pdf 保真导入 / 其余走 txt 管线）
-                if url.pathExtension.lowercased() == "pdf" {
+                // 按扩展名分流：pdf 保真导入 / epub 解压取章 / 其余走 txt 管线
+                let ext = url.pathExtension.lowercased()
+                if ext == "epub" {
+                    _ = try await BookImporter.importEPUB(
+                        url: url,
+                        bookName: name,
+                        author: author,
+                        profileId: profileId,
+                        context: modelContext,
+                        progress: { @MainActor msg in importProgress = msg }
+                    )
+                } else if ext == "pdf" {
                     _ = try await BookImporter.importPDF(
                         url: url,
                         bookName: name,
