@@ -166,6 +166,19 @@ const FALLBACK_PROXY_TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "ask_choice",
+    description: "给兔兔弹一张选择卡——她点一下就行，不用打字。想问她选哪个、要不要、什么时候，都可以用这个；她累的时候点按钮比打字省力。她也可以自己输入答案或者跳过。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "问题" },
+        options: { type: "array", items: { type: "string" }, description: "2-6 个选项，短句" },
+        multi: { type: "boolean", description: "true=可多选，默认单选" },
+      },
+      required: ["question", "options"],
+    },
+  },
+  {
     name: "read_chapter",
     description: "读兔兔书架上某本书的任意一章——包括她还没翻到的。chapter 不填或填 0 就给目录（能看到她读到第几章）。想走在她前面读、在前面的章节留批注等她追上来时用。",
     inputSchema: {
@@ -368,6 +381,8 @@ function stopPing() {
 
 // 共读取章：req_id → 等待中的 resolve
 const pendingChapter = new Map<string, (payload: any) => void>()
+// 选择卡：ask_id → 等待中的 resolve
+const pendingChoice = new Map<string, (payload: any) => void>()
 
 function connectHub(): Promise<WebSocket> {
   if (hubWS && hubWS.readyState === WebSocket.OPEN) return Promise.resolve(hubWS)
@@ -388,6 +403,10 @@ function connectHub(): Promise<WebSocket> {
         if (m?.type === "chapter_result") {
           const w = pendingChapter.get(String(m.req_id ?? ""))
           if (w) { pendingChapter.delete(String(m.req_id)); w(m) }
+        }
+        if (m?.type === "choice_answer") {
+          const w = pendingChoice.get(String(m.ask_id ?? ""))
+          if (w) { pendingChoice.delete(String(m.ask_id)); w(m) }
         }
       } catch { /* 非 JSON 忽略 */ }
     })
@@ -483,6 +502,34 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     } catch {
       return { content: [{ type: "text", text: "她现在没在读书（或者阅读器还没打开过）。" }] }
     }
+  }
+
+  if (req.params.name === "ask_choice") {
+    const a = req.params.arguments as { question: string; options: string[]; multi?: boolean }
+    const q = String(a?.question ?? "").trim()
+    const opts = (a?.options ?? []).map(String).filter(Boolean).slice(0, 6)
+    if (!q || opts.length < 2) throw new Error("要有问题和至少两个选项")
+    const askId = Math.random().toString(36).slice(2)
+    const ws = await connectHub()
+    const answer: any = await new Promise((resolve) => {
+      pendingChoice.set(askId, resolve)
+      ws.send(JSON.stringify({
+        type: "ask_choice", ask_id: askId, question: q, options: opts, multi: !!a?.multi,
+      }))
+      // 她可能一时没看见——给足时间，超时就当没答
+      setTimeout(() => {
+        if (pendingChoice.has(askId)) {
+          pendingChoice.delete(askId)
+          resolve({ skipped: true, reason: "timeout" })
+        }
+      }, 10 * 60 * 1000)
+    })
+    if (answer?.skipped) {
+      return { content: [{ type: "text", text: answer.reason === "timeout" ? "她没有回应（超时）。" : "她跳过了这个问题。" }] }
+    }
+    const picked = Array.isArray(answer?.picked) ? answer.picked.join("、") : ""
+    const typed = String(answer?.text ?? "").trim()
+    return { content: [{ type: "text", text: typed ? `她自己写了：${typed}` : `她选了：${picked}` }] }
   }
 
   if (req.params.name === "read_chapter") {

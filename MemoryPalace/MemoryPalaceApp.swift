@@ -465,6 +465,7 @@ struct MemoryPalaceApp: App {
             // @Model instance 被 destroy，view tree 不论怎么 dismount 都不 crash。
             // Plan: docs/plan-unified-container.md
             ContentView()
+                .modifier(ChoiceCardHost())
                 .preferredColorScheme(themeManager.preferredColorScheme)
                 .environment(themeManager)
                 .environment(profileManager)
