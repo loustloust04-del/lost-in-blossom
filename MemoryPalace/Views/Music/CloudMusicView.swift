@@ -168,9 +168,14 @@ struct CloudMusicView: View {
             guard let d = await MusicLibraryClient.detail(songId: r.id), let url = d.url else { return }
             let song = Song(profileId: profileId, title: r.title, artist: r.artist, album: r.album,
                             source: url, isRemote: true, durationSec: Double(r.duration), lyrics: d.lyric)
+            song.remoteId = r.id
             context.insert(song)
             try? context.save()
-            player.play(song: song, in: [song]) { s in URL(string: s.source) }
+            // 边听边存，下次就是本地文件
+            if let remote = URL(string: url) { MusicCache.store(songId: r.id, from: remote) }
+            player.play(song: song, in: [song]) { s in
+                MusicCache.localURL(songId: s.remoteId) ?? URL(string: s.source)
+            }
         }
     }
 }

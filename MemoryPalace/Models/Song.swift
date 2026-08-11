@@ -13,9 +13,12 @@ final class Song {
     var title: String = ""
     var artist: String = ""
     var album: String = ""
-    /// 文件库相对路径（本地文件）或远端直链（音源服务器）
+    /// 文件库相对路径（本地文件）；远端歌这里存的是**上次的直链**，仅作兜底
     var source: String = ""
     var isRemote: Bool = false
+    /// 远端歌的曲库 ID。直链有时效（几小时失效），所以真正该留的是这个——
+    /// 播放时先看本地缓存，没有再拿 ID 去换一条新链接。
+    var remoteId: String = ""
     var durationSec: Double = 0
     /// LRC 歌词原文（可空）
     var lyrics: String = ""

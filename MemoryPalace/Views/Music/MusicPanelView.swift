@@ -78,8 +78,8 @@ struct MusicPanelView: View {
         List {
             ForEach(songs) { s in
                 Button {
-                    let pid = profileId
-                    player.play(song: s, in: songs) { MusicPanelView.resolve($0, profileId: pid) }
+                    MusicPanelView.playRemoteSafely(s, list: songs, profileId: profileId,
+                                                    player: player, context: context)
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: player.currentSong?.id == s.id
@@ -182,8 +182,36 @@ struct MusicPanelView: View {
         try? context.save()
     }
 
+    /// 本地缓存优先 → 本地文件 → 上次的直链（可能已过期，由 refreshIfStale 兜底换新）
     static func resolve(_ s: Song, profileId: String) -> URL? {
-        s.isRemote ? URL(string: s.source) : FileLibraryStore.absoluteURL(s.source, profileId: profileId)
+        if s.isRemote {
+            if let cached = MusicCache.localURL(songId: s.remoteId) { return cached }
+            return URL(string: s.source)
+        }
+        return FileLibraryStore.absoluteURL(s.source, profileId: profileId)
+    }
+
+    /// 远端歌且没缓存时，去换一条新直链再播（直链有时效，隔天点会没声音）
+    static func playRemoteSafely(_ s: Song, list: [Song], profileId: String,
+                                 player: MusicPlayer, context: ModelContext) {
+        if !s.isRemote || MusicCache.has(songId: s.remoteId) {
+            player.play(song: s, in: list) { resolve($0, profileId: profileId) }
+            return
+        }
+        Task {
+            if !s.remoteId.isEmpty, let d = await MusicLibraryClient.detail(songId: s.remoteId),
+               let fresh = d.url {
+                await MainActor.run {
+                    s.source = fresh
+                    if !d.lyric.isEmpty { s.lyrics = d.lyric }
+                    try? context.save()
+                }
+                MusicCache.store(songId: s.remoteId, from: URL(string: fresh)!)
+            }
+            await MainActor.run {
+                player.play(song: s, in: list) { resolve($0, profileId: profileId) }
+            }
+        }
     }
 }
 
