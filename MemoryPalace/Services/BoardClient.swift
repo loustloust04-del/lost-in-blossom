@@ -4,13 +4,13 @@ import Foundation
 /// GET /api/board · POST /api/board · POST /:id/reply · DELETE /:id · DELETE /:id/reply/:rid
 /// 复用控制台约定：UserDefaults "gatewayBaseURL" / "gatewayAuthToken"。
 enum BoardClient {
-    struct Reply: Decodable, Identifiable, Hashable {
+    struct Reply: Codable, Identifiable, Hashable {
         let id: String
         let text: String
         let by: String            // "bunny" | "caelum"
         let ts: String
     }
-    struct Post: Decodable, Identifiable, Hashable {
+    struct Post: Codable, Identifiable, Hashable, Equatable {
         let id: String
         let text: String
         let by: String
@@ -39,7 +39,29 @@ enum BoardClient {
         return req
     }
 
+    private static let cacheKey = "board-posts"
+
+    /// 先给缓存（立刻），再给新的
+    static func fetchCached(_ onValue: @MainActor @escaping ([Post], Bool) -> Void) async {
+        await GatewayCache.fetch(key: cacheKey, remote: { await fetchRemote() }, onValue: onValue)
+    }
+
+    private static func fetchRemote() async -> [Post]? {
+        guard let req = request("/api/board") else { return nil }
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let arr = json["posts"],
+              let d = try? JSONSerialization.data(withJSONObject: arr) else { return nil }
+        return try? JSONDecoder().decode([Post].self, from: d)
+    }
+
     static func fetch() async -> [Post] {
+        if let fresh = await fetchRemote() { GatewayCache.save(cacheKey, fresh); return fresh }
+        return GatewayCache.load(cacheKey, as: [Post].self) ?? []
+    }
+
+    private static func fetchLegacy() async -> [Post] {
         guard let req = request("/api/board") else { return [] }
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200,

@@ -41,8 +41,8 @@ struct AnniversaryManageSheet: View {
     }
 
     private func reload() async {
-        loading = true
-        items = await AnniversaryClient.fetch()
+        // 先亮出上次的（秒开），网关回来了再无声替换
+        await AnniversaryClient.fetchCached { list, _ in items = list; loading = false }
         loading = false
     }
 

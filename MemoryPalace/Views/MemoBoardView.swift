@@ -51,7 +51,8 @@ struct MemoBoardView: View {
     }
 
     private func reload() async {
-        posts = await BoardClient.fetch()
+        // 先亮出上次的（秒开），网关回来了再无声替换
+        await BoardClient.fetchCached { list, _ in posts = list; loading = false }
         loading = false
     }
 

@@ -4,7 +4,7 @@ import Foundation
 /// GET/POST/DELETE {gatewayBaseURL}/api/anniversaries
 /// 复用控制台约定：UserDefaults "gatewayBaseURL" / "gatewayAuthToken"。
 enum AnniversaryClient {
-    struct Item: Identifiable, Decodable {
+    struct Item: Identifiable, Codable, Equatable {
         let id: String
         let name: String
         let date: String          // YYYY-MM-DD
@@ -35,14 +35,26 @@ enum AnniversaryClient {
         return req
     }
 
-    static func fetch() async -> [Item] {
-        guard let req = request("/api/anniversaries") else { return [] }
+    private static let cacheKey = "anniversaries"
+
+    private static func fetchRemote() async -> [Item]? {
+        guard let req = request("/api/anniversaries") else { return nil }
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let arr = json["anniversaries"] else { return [] }
-        guard let itemsData = try? JSONSerialization.data(withJSONObject: arr) else { return [] }
-        return (try? JSONDecoder().decode([Item].self, from: itemsData)) ?? []
+              let arr = json["anniversaries"],
+              let itemsData = try? JSONSerialization.data(withJSONObject: arr) else { return nil }
+        return try? JSONDecoder().decode([Item].self, from: itemsData)
+    }
+
+    static func fetch() async -> [Item] {
+        if let fresh = await fetchRemote() { GatewayCache.save(cacheKey, fresh); return fresh }
+        return GatewayCache.load(cacheKey, as: [Item].self) ?? []
+    }
+
+    /// 先给缓存（立刻），再给新的
+    static func fetchCached(_ onValue: @MainActor @escaping ([Item], Bool) -> Void) async {
+        await GatewayCache.fetch(key: cacheKey, remote: { await fetchRemote() }, onValue: onValue)
     }
 
     static func add(name: String, date: String, type: String) async -> Bool {

@@ -17,12 +17,25 @@ enum WishClient {
         UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
     }
 
-    static func list() async -> [Wish] {
-        guard let url = URL(string: "\(base)/api/intimacy/wishes?key=bunny-lib-2026") else { return [] }
+    private static let cacheKey = "intimacy-wishes"
+
+    /// 只拉远端（缓存流程见 listCached）
+    private static func fetchRemote() async -> [Wish]? {
+        guard let url = URL(string: "\(base)/api/intimacy/wishes?key=bunny-lib-2026") else { return nil }
         var req = URLRequest(url: url); req.timeoutInterval = 10
         guard let (d, _) = try? await URLSession.shared.data(for: req),
-              let w = try? JSONDecoder().decode(Wrap.self, from: d) else { return [] }
+              let w = try? JSONDecoder().decode(Wrap.self, from: d) else { return nil }
         return w.wishes
+    }
+
+    static func list() async -> [Wish] {
+        if let fresh = await fetchRemote() { GatewayCache.save(cacheKey, fresh); return fresh }
+        return GatewayCache.load(cacheKey, as: [Wish].self) ?? []
+    }
+
+    /// 先给缓存（立刻），再给新的
+    static func listCached(_ onValue: @MainActor @escaping ([Wish], Bool) -> Void) async {
+        await GatewayCache.fetch(key: cacheKey, remote: fetchRemote, onValue: onValue)
     }
 
     @discardableResult
@@ -35,6 +48,7 @@ enum WishClient {
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (d, _) = try? await URLSession.shared.data(for: req),
               let w = try? JSONDecoder().decode(Wrap.self, from: d) else { return [] }
+        GatewayCache.save(cacheKey, w.wishes)
         return w.wishes
     }
 

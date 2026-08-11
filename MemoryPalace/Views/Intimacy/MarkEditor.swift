@@ -211,7 +211,11 @@ struct WishListSheet: View {
                     Button("关闭") { onClose() }.foregroundColor(marksRose)
                 }
             }
-            .task { wishes = await WishClient.list(); loading = false }
+            .task {
+                // 先亮出上次的（秒开），网关回来了再无声替换
+                await WishClient.listCached { list, _ in wishes = list; loading = false }
+                loading = false
+            }
         }
     }
 
