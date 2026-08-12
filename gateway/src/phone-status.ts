@@ -205,7 +205,7 @@ export function phoneStatusRoutes(app: Hono) {
 
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
-    console.log('[phone] 🔎 keys=', JSON.stringify(Object.keys(body)));
+    console.log('[phone] 🔎 keys=', JSON.stringify(Object.keys(body)), '| in_charging=', JSON.stringify(body.in_charging), '| is_charging=', JSON.stringify(body.is_charging));
 
     const data = await load();
     const now = new Date();
