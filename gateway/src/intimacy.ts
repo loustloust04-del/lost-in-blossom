@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { ring } from './doorbell';
 
 /// 亲密卡。原本是纯本地、他一个字读不到——兔兔 2026-08-02 拍板改为共享：
 /// 备注共用一个框，她写他也写，两边都能改。
@@ -212,6 +213,7 @@ export function intimacyRoutes(app: Hono) {
       const text = String(b.text ?? '').trim().slice(0, 300);
       if (!text) return c.json({ error: 'text required' }, 400);
       w.push({ id: Math.random().toString(36).slice(2, 10), text, by: 'bunny', createdAt: new Date().toISOString() });
+      ring('wish', `兔兔往心愿单加了一条：「${text.slice(0, 60)}」——wish_list 看全部。`);
     } else if (b.op === 'done') {
       const it = w.find(x => x.id === String(b.id));
       if (it) { it.doneAt = new Date().toISOString(); it.doneDate = String(b.date || today()); }

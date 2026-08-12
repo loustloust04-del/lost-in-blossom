@@ -1,3 +1,4 @@
+import { ring } from './doorbell';
 // 留言板 —— 你和 Caelum 的双人小纸条（帖子 + 回复串）。
 // 双端共用：App /api/board 读写，Caelum 经 board_* 工具也能贴/回。
 // 纯本地 JSON（data/board.json），与 vitals/todos 同风格。
@@ -45,6 +46,10 @@ export async function addPost(text: string, by = 'bunny'): Promise<BoardPost | n
   const post: BoardPost = { id: newId('p', d.posts.length), text: t, by, ts: new Date().toISOString(), replies: [] };
   d.posts.push(post);
   await save(d);
+  // 兔兔贴的纸条按门铃（他自己贴的不用响）
+  if (by !== 'caelum') {
+    ring('board', `兔兔在留言板贴了一张纸条：「${t.slice(0, 60)}${t.length > 60 ? '…' : ''}」——board_list 看，board_reply 回她。`);
+  }
   return post;
 }
 

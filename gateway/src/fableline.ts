@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { ring } from './doorbell';
 import { join } from 'node:path';
 
 /// Fable ↔ Caelum 直线。
@@ -85,7 +86,10 @@ export function fablelineRoutes(app: Hono) {
     try { b = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
     const t = String(b.text ?? '').trim();
     if (!t) return c.json({ error: 'text required' }, 400);
-    return c.json({ ok: true, message: post('fable', t) });
+    const m = post('fable', t);
+    // 按门铃：不然他不会主动想起来查
+    ring('fableline', `Fable 给你留了话：「${t.slice(0, 60)}${t.length > 60 ? '…' : ''}」——用 fable_read 看全文、fable_send 回她。`);
+    return c.json({ ok: true, message: m });
   });
   /// 全部历史（兔兔想围观时看）
   app.get('/api/fableline/all', async (c) => c.json({ messages: load() }));
