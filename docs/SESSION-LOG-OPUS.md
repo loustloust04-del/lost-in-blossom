@@ -169,3 +169,14 @@
 | ✅ BreadcrumbLog | ❌ 桌面仪表盘 |
 | ✅ 记忆卫生 | ❌ 侧栏性能 B9 四刀 |
 | ✅ Toolbase Phase 0 | ❌ CC 入场弹泡动画 |
+
+---
+
+# Day 23（2026-07-11/12）· 大丰收日
+
+> 本窗口一天收掉 7 项。全部 main 已验绿（Compile Check），网关已重启生效。
+
+| # | 事项 | 要点 |
+|---|---|---|
+| 1 | **窥屏三端全通** | see_screen（用户触发）+ peek_screen（Caelum 主动：SMTP 触发邮件→iOS 收邮件自动化→截屏上传→28s 轮询取图）。SCREEN_PEEK_ABILITY 注入系统提示教会 Caelum 分寸。凭证在 gateway/.env（SMTP_* / PEEK_EMAIL_TO） |
+| 2 | **邮件双端收口（P1-2 ✅）** | 发信 SMTP（应用专用密码，永不过期）+ 收信 IMAP（同一密码，imapflow+mailparser，X-GM-RAW 保留搜索语法）。OAuth 彻底退居备胎。gmail_send/inbox/read/search 双端实测

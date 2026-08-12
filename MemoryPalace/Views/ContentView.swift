@@ -35,7 +35,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
     @State private var showTrash = false
-    // 当前 iOS page：0=chat, 1=dashboard, 2=archive。侧边栏走 ZStack overlay 不再是 paging page。@State 与 PagingContainerView.currentPage binding，
+    // 当前 iOS page：0=chat, 1=dashboard, 2=写作间（花房）。console/archive 两页 2026-08-12 删除（内容已并入主页/纯无用）。侧边栏走 ZStack overlay 不再是 paging page。@State 与 PagingContainerView.currentPage binding，
     // UIKit UIScrollView paging 完成后通过 binding 回写。
     @State private var iOSPage: Int = 0
     // iOSPageDragOffset removed — ScrollView handles drag natively
@@ -282,8 +282,6 @@ struct ContentView: View {
                     PagingContainerView(
                         chatPage: AnyView(injectPagingEnv(iOSChatPage)),
                         dashPage: AnyView(injectPagingEnv(iOSDashboardPage)),
-                        consolePage: AnyView(injectPagingEnv(iOSConsolePage)),
-                        archivePage: AnyView(injectPagingEnv(iOSArchivePage)),
                         writingPage: AnyView(injectPagingEnv(iOSWritingPage)),
                         currentPage: $iOSPage,
                         disableScroll: stickerVM.isEditingStickers,
@@ -456,10 +454,10 @@ struct ContentView: View {
 
     // MARK: - iOS Page indicator (debug-mode aware)
 
-    /// 页面指示点：chat(0) / dashboard(1) / console(2) / archive(3) 四个点
+    /// 页面指示点：chat(0) / dashboard(1) / 花房(2)
     private var pageIndicatorDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<5) { i in
+            ForEach(0..<3) { i in
                 Circle()
                     .fill(iOSPage == i ? Theme.branchIndicator : Theme.textMuted.opacity(0.3))
                     .frame(width: 6, height: 6)
@@ -772,17 +770,6 @@ struct ContentView: View {
             .background(Theme.sidebarBg.ignoresSafeArea())
     }
 
-    /// 右滑 page 3: Console
-    private var iOSConsolePage: some View {
-        ConsoleView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    /// 右滑 page 4: The Archive（记忆馆）
-    private var iOSArchivePage: some View {
-        ArchivePageView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
     private var iOSWritingPage: some View {
         WritingRoomView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
