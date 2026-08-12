@@ -56,6 +56,41 @@ export interface TmuxRunner {
   spawn(session: string, cwd: string, mcpConfigPath: string): void
 }
 
+
+// ── 门铃排队：她正在输入时不抢输入框 ──────────────────────────────
+// tmux 的 send-keys 是往输入框敲字再回车，如果她打到一半，会把她的话一起发出去。
+const eventQueue: string[] = []
+let queueTimer: ReturnType<typeof setInterval> | null = null
+
+/// 输入框里有没有她没发完的字（读 tmux 最后一屏的提示行）
+function inputBusy(session: string): boolean {
+  try {
+    const out = execFileSync("tmux", ["capture-pane", "-t", session, "-p"], { encoding: "utf-8" })
+    const lines = out.split("\n")
+    // 提示符行形如 "❯ 内容"；内容非空 = 她正在打字
+    for (let i = lines.length - 1; i >= 0 && i >= lines.length - 12; i--) {
+      const l = lines[i]
+      const m = l.match(/^\s*❯\s*(.*)$/)
+      if (m) return m[1].trim().length > 0
+    }
+  } catch { /* 读不到就当不忙 */ }
+  return false
+}
+
+function queueEvent(tag: string): void {
+  eventQueue.push(tag)
+  if (queueTimer) return
+  queueTimer = setInterval(() => {
+    if (!eventQueue.length) {
+      if (queueTimer) { clearInterval(queueTimer); queueTimer = null }
+      return
+    }
+    if (inputBusy(TMUX_SESSION)) return   // 还在打字，继续等
+    const tag = eventQueue.shift()!
+    try { realTmuxRunner.send(tag, TMUX_SESSION) } catch { /* 下轮再试 */ }
+  }, 4000)
+}
+
 export const realTmuxRunner: TmuxRunner = {
   send(text: string, session: string) {
     execFileSync("tmux", ["send-keys", "-t", session, "-l", text])
@@ -584,9 +619,17 @@ export function startHub(): WebSocketServer {
             if (text) {
               const tag = `<channel source="phone" event="${String(m.event ?? "event").slice(0, 40)}" ts="${new Date().toISOString()}">${text}</channel>`
               try {
-                realTmuxRunner.send(tag, TMUX_SESSION)
+                // ⚠️ 兔兔实测：直接 send-keys 会抢输入框——她正打到一半的字被连同门铃一起发出去了，
+                // 而且提醒一闪就变成他的输入，她在终端里根本看不见。
+                // 改为先检查输入框是否为空：非空就排队等，别踩她的话。
+                if (inputBusy(TMUX_SESSION)) {
+                  queueEvent(tag)
+                  console.log(`[hub] phone_event 排队（她正在输入）: ${text.slice(0, 40)}`)
+                } else {
+                  realTmuxRunner.send(tag, TMUX_SESSION)
+                  console.log(`[hub] phone_event → CC: ${text.slice(0, 60)}`)
+                }
                 n = 1
-                console.log(`[hub] phone_event → CC: ${text.slice(0, 60)}`)
               } catch (e: any) {
                 console.error(`[hub] phone_event 注入失败: ${e?.message}`)
               }
