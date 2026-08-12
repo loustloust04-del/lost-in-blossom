@@ -134,6 +134,27 @@ export const MEDS_TOOLS = [
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
+    name: 'meds_set',
+    description: "直接设定某个药还剩多少（覆盖，不是累加）。数错了、要修正、或者清零时用。",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: '药名（模糊匹配）' },
+        count: { type: 'number', description: '设成多少' },
+      },
+      required: ['name', 'count'],
+    },
+  },
+  {
+    name: 'meds_delete',
+    description: "从药箱里彻底删掉一条药。",
+    input_schema: {
+      type: 'object' as const,
+      properties: { name: { type: 'string', description: '药名（模糊匹配）或 id' } },
+      required: ['name'],
+    },
+  },
+  {
     name: 'meds_add',
     description: "往药箱加药：新药就建一条，已经有的就累加数量（补货也用这个）。",
     input_schema: {
@@ -162,6 +183,23 @@ export const MEDS_TOOLS = [
 ];
 
 export async function callMedsTool(name: string, input: any): Promise<string | null> {
+  if (name === 'meds_set') {
+    const d = await load();
+    const med = findMed(d, String(input?.name ?? ''));
+    if (!med) return `药箱里没找到「${input?.name}」。`;
+    const n = Math.max(0, Number(input?.count ?? 0));
+    med.remaining = n;
+    await save(d);
+    return `${med.name} 设成 ${n} ${med.unit}。`;
+  }
+  if (name === 'meds_delete') {
+    const d = await load();
+    const med = findMed(d, String(input?.name ?? ''));
+    if (!med) return `药箱里没找到「${input?.name}」。`;
+    d.meds = d.meds.filter((m) => m.id !== med.id);
+    await save(d);
+    return `已从药箱删掉 ${med.name}。`;
+  }
   if (name === 'meds_list') {
     const meds = await listMeds();
     if (!meds.length) return '药箱还是空的。兔兔可以说「我有X药，多少片」让你记。';

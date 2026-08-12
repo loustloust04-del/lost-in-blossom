@@ -140,6 +140,15 @@ export const WISH_TOOLS = [
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
+    name: 'wish_delete',
+    description: '从心愿单删掉一条（id 从 wish_list 拿）。',
+    input_schema: {
+      type: 'object' as const,
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+    },
+  },
+  {
     name: 'wish_done',
     description: '把某条心愿标成实现了（id 从 wish_list 拿），可以带上是哪天实现的（date，YYYY-MM-DD）。',
     input_schema: {
@@ -171,6 +180,14 @@ export async function callWishTool(name: string, input?: any): Promise<string | 
     if (open.length) lines.push('还没实现：\n' + open.map(x => `· [${x.id}] ${x.text}${x.by === 'bunny' ? '（她写的）' : ''}`).join('\n'));
     if (done.length) lines.push('已经实现：\n' + done.map(x => `· ${x.text}${x.doneDate ? '（' + x.doneDate + '）' : ''}`).join('\n'));
     return lines.join('\n\n');
+  }
+  if (name === 'wish_delete') {
+    const w = loadWishes();
+    const i = w.findIndex(x => x.id === String(input?.id ?? ''));
+    if (i < 0) return '没找到这条心愿。';
+    const [gone] = w.splice(i, 1);
+    saveWishes(w);
+    return `删掉了：${gone.text}`;
   }
   if (name === 'wish_done') {
     const w = loadWishes();
