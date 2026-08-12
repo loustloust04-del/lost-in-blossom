@@ -558,6 +558,7 @@ private struct MedEditorSheet: View {
     /// 库存三格的焦点：此前无焦点管理，单位框("片")紧贴数字框右侧，点数字右半即误落单位框，
     /// 光标停在「片」前敲数字无反应（兔兔实测）。现在单位框改只读展示，点整行进数字框。
     @FocusState private var stockFocus: StockField?
+    @State private var showDeleteConfirm = false
     private enum StockField: Hashable { case remaining, perDose }
     @State private var perDoseInput: String
 
@@ -715,6 +716,12 @@ private struct MedEditorSheet: View {
             .background(Theme.sidebarBg)
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(med == nil ? "添加药物" : "编辑药物")
+            .confirmationDialog("彻底删除这条药？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("删除，包括打卡记录", role: .destructive) { deleteForever() }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("找不回来。只是停药的话选「停药归档」，记录会留着。")
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // 数字键盘没有回车键：给一个「完成」把键盘收掉，否则下半页永远被埋（兔兔实测）
