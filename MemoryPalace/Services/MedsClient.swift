@@ -3,7 +3,7 @@ import Foundation
 /// 药箱 — 网关同一份数据（Caelum 的 meds_* 工具管的就是它）。
 /// GET /api/meds · POST /api/meds · POST /:id/take · POST /:id/restock · PATCH /:id · DELETE /:id
 enum MedsClient {
-    struct Med: Decodable, Identifiable, Hashable {
+    struct Med: Codable, Identifiable, Hashable, Equatable {
         let id: String
         let name: String
         let remaining: Double
@@ -11,7 +11,7 @@ enum MedsClient {
         let perDose: Double
         let note: String?
     }
-    struct Intake: Decodable, Identifiable, Hashable {
+    struct Intake: Codable, Identifiable, Hashable, Equatable {
         let date: String
         let medId: String
         let name: String
@@ -19,7 +19,7 @@ enum MedsClient {
         let ts: String
         var id: String { ts + medId }
     }
-    struct Snapshot: Decodable {
+    struct Snapshot: Codable, Equatable {
         let meds: [Med]
         let today: [Intake]
     }
@@ -44,7 +44,20 @@ enum MedsClient {
         return req
     }
 
+    private static let cacheKey = "meds"
+
+    /// 有缓存先给缓存（秒开），同时后台取新的
     static func fetch() async -> Snapshot? {
+        if let fresh = await fetchRemote() { GatewayCache.save(cacheKey, fresh); return fresh }
+        return GatewayCache.load(cacheKey, as: Snapshot.self)
+    }
+
+    /// 先旧后新：onValue 可能被调两次
+    static func fetchCached(_ onValue: @MainActor @escaping (Snapshot, Bool) -> Void) async {
+        await GatewayCache.fetch(key: cacheKey, remote: { await fetchRemote() }, onValue: onValue)
+    }
+
+    private static func fetchRemote() async -> Snapshot? {
         guard let req = request("/api/meds") else { return nil }
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }

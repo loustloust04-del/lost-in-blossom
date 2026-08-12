@@ -47,7 +47,7 @@ struct PeriodSheet: View {
     }
 
     private func reload() async {
-        snap = await PeriodClient.fetch()
+        await PeriodClient.fetchCached { s, _ in snap = s }
         loading = false
     }
 

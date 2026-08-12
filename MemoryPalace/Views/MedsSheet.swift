@@ -56,7 +56,7 @@ struct MedsSheet: View {
     }
 
     private func reload() async {
-        snap = await MedsClient.fetch()
+        await MedsClient.fetchCached { s, _ in snap = s }
         loading = false
     }
 

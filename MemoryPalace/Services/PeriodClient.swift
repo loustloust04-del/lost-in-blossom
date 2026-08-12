@@ -11,7 +11,7 @@ enum PeriodClient {
         var id: String { date }
     }
 
-    struct Prediction: Decodable {
+    struct Prediction: Codable, Equatable {
         let hasData: Bool
         let avgCycle: Int
         let avgPeriodLen: Int
@@ -26,7 +26,7 @@ enum PeriodClient {
         let phase: String
     }
 
-    struct Snapshot: Decodable {
+    struct Snapshot: Codable, Equatable {
         let events: [Event]
         let prediction: Prediction
     }
@@ -53,7 +53,20 @@ enum PeriodClient {
     }
 
     /// 拉当前记录 + 预测。
+    private static let cacheKey = "period"
+
+    /// 有缓存先给缓存（秒开），同时后台取新的
     static func fetch() async -> Snapshot? {
+        if let fresh = await fetchRemote() { GatewayCache.save(cacheKey, fresh); return fresh }
+        return GatewayCache.load(cacheKey, as: Snapshot.self)
+    }
+
+    /// 先旧后新：onValue 可能被调两次
+    static func fetchCached(_ onValue: @MainActor @escaping (Snapshot, Bool) -> Void) async {
+        await GatewayCache.fetch(key: cacheKey, remote: { await fetchRemote() }, onValue: onValue)
+    }
+
+    private static func fetchRemote() async -> Snapshot? {
         guard let req = request("/api/period") else { return nil }
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
