@@ -214,7 +214,16 @@ export function phoneStatusRoutes(app: Hono) {
     const prevRec = data.records[data.records.length - 1];
     data.records.push({
       battery: Number(body.battery) || 0,
-      is_charging: (() => { const v = body.is_charging ?? body.in_charging ?? body['is-charging'] ?? body.isCharging ?? body.charging; /* in_charging: 兔兔词典实测拼写 2026-07-29 */ return v === true || v === 'true' || v === 1 || v === '1'; })(),
+      // in_charging: 兔兔词典实测拼写（2026-07-29）；值是中文「是/否」（2026-08-12 实测，
+      // 此前只认 true/1，所以插上电也判成没充电，106 次上报 0 次触发充电推送）
+      is_charging: (() => {
+        const v = body.is_charging ?? body.in_charging ?? body['is-charging'] ?? body.isCharging ?? body.charging;
+        if (typeof v === 'string') {
+          const t = v.trim().toLowerCase();
+          return t === '是' || t === 'true' || t === '1' || t === 'yes' || t === 'on';
+        }
+        return v === true || v === 1;
+      })(),
       current_time: body['current-time'] || body.current_time || undefined,
       device_name: body.device_name || undefined,
       weather: body.Weather || body.weather || undefined,
