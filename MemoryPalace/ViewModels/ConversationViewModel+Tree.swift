@@ -448,7 +448,10 @@ extension ConversationViewModel {
         cachedRootId = data.rootId
         mainPathIds = data.mainPathIds
         bubbledBranches = data.bubbledBranches
+        let prevCount = currentPath.count
         currentPath = data.pathNodeIds.compactMap { nodeMap[$0] }
+        // 换了一条对话（长度骤变）就收回渲染窗口；同一对话追加消息时保持窗口，免得视野跳
+        if abs(currentPath.count - prevCount) > 5 { resetRenderWindow() }
 
         // Build branchInfoMap (needs actual MessageNode objects)
         branchInfoMap.removeAll()

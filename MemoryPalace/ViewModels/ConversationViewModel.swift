@@ -20,6 +20,29 @@ final class ConversationViewModel {
     /// providerManager（那条路径没有）。存一份最近一次可用的，让 CC proactive 回复也能提取。
     var ccProviderManager: ProviderManager?
     var currentPath: [MessageNode] = []   // The currently displayed path of cards
+
+    /// 渲染窗口：只画尾部这么多条，往上滑再扩。
+    /// 此前 ForEach 直接吃整条 currentPath——聊到上千条时每条都要参与布局与几何测量，
+    /// 于是白屏、左右滑卡死、连打字都卡（兔兔实测）。LazyVStack 只省绘制不省布局。
+    static let renderWindowStep = 60
+    var renderWindow: Int = renderWindowStep
+
+    /// 实际交给 ForEach 的那一段
+    var visiblePath: [MessageNode] {
+        guard currentPath.count > renderWindow else { return currentPath }
+        return Array(currentPath.suffix(renderWindow))
+    }
+
+    var hasMoreAbove: Bool { currentPath.count > renderWindow }
+
+    /// 往上滑到顶时扩窗
+    func expandRenderWindow() {
+        guard hasMoreAbove else { return }
+        renderWindow = min(renderWindow + Self.renderWindowStep, currentPath.count)
+    }
+
+    /// 切对话 / 重建路径时收回窗口
+    func resetRenderWindow() { renderWindow = Self.renderWindowStep }
     var branchChoices: [String: Int] = [:] // nodeId -> chosen child index
     var isLoading: Bool = false
 

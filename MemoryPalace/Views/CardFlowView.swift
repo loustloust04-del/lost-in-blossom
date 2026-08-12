@@ -192,7 +192,26 @@ struct CardFlowView: View {
                         // 详见 docs/plan-sticker-pan-relationship-fix-2026-04-25.md 方案 2 v2。
                         ZStack(alignment: .topLeading) {
                             LazyVStack(spacing: bubbleSpacing) {
-                                ForEach(viewModel.currentPath, id: \.id) { node in
+                                // 只渲染尾部窗口，滑到顶自动往前扩一段。
+                                // 整条 path 直接喂 ForEach 时，上千条消息全都要参与布局与几何测量，
+                                // LazyVStack 只省绘制不省布局 —— 白屏/滑动卡死/打字卡都是这么来的。
+                                if viewModel.hasMoreAbove {
+                                    Button {
+                                        withAnimation(.none) { viewModel.expandRenderWindow() }
+                                    } label: {
+                                        Text("看更早的消息")
+                                            .font(.system(size: Theme.F.caption))
+                                            .foregroundColor(Theme.textMuted)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 10)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onAppear {
+                                        // 滑到顶就自动扩，不用真去点
+                                        viewModel.expandRenderWindow()
+                                    }
+                                }
+                                ForEach(viewModel.visiblePath, id: \.id) { node in
                                     makeBubbleView(for: node)
                                         .id(node.id)
                                         .transition(.opacity.combined(with: .move(edge: .bottom)))
