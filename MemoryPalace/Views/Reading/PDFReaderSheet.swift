@@ -766,6 +766,8 @@ struct PDFReaderSheet: View {
                 userName = profile.userName
             }
         }
+        // 直播线：txt/epub 那边有，PDF 漏了——所以她读 PDF 时他完全不知道（兔兔实测）
+        LivelineReporter.report(.reading, "兔兔在读《\(index?.name ?? bookSafeName)》第 \(page) 页")
         CCBridgeWebSocketClient.shared.send([
             "type": "reading_context",
             "floorId": profileId,
