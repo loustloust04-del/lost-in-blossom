@@ -162,7 +162,7 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (medsResult !== null) return medsResult;
   const anniResult = callAnniversaryTool(name, input);
   if (anniResult !== null) return anniResult;
-  const healthResult = await callHealthTool(name);
+  const healthResult = await callHealthTool(name, input);
   if (healthResult !== null) return healthResult;
   const tweetsResult = callTweetsTool(name, input);
   if (tweetsResult !== null) return tweetsResult;

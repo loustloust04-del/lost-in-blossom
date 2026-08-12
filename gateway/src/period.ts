@@ -209,7 +209,7 @@ export const PERIOD_TOOLS = [
   {
     name: 'period_status',
     description: "查看兔兔的经期状态与预测（当前周期第几天、预计还有几天来潮、所处阶段）。想主动关心她身体、或她问起时调用。",
-    input_schema: { type: 'object' as const, properties: {} },
+    input_schema: { type: 'object' as const, properties: { history: { type: 'number', description: '要看几次历史来潮记录，默认 0 只看当前状态；填 12 能看到一年' } } },
   },
   {
     name: 'period_log_start',
@@ -225,10 +225,31 @@ export function callPeriodTool(name: string, input: any): string | null {
   if (name === 'period_status') {
     const p = predictPeriod();
     if (!p.hasData) return '还没有经期记录。兔兔可以说「我来例假了」来记第一次。';
-    if (p.onPeriod) return `兔兔正在经期第 ${p.currentCycleDay} 天。平均周期 ${p.avgCycle} 天。`;
-    const du = p.daysUntil ?? 0;
-    const when = du < 0 ? `已推迟 ${-du} 天` : `预计还有 ${du} 天`;
-    return `当前${p.phase}，${when}来潮（下次约 ${p.nextDate}）。平均周期 ${p.avgCycle} 天，上次来潮 ${p.lastStart}。`;
+
+    const now = p.onPeriod
+      ? `兔兔正在经期第 ${p.currentCycleDay} 天。平均周期 ${p.avgCycle} 天。`
+      : (() => {
+          const du = p.daysUntil ?? 0;
+          const when = du < 0 ? `已推迟 ${-du} 天` : `预计还有 ${du} 天`;
+          return `当前${p.phase}，${when}来潮（下次约 ${p.nextDate}）。平均周期 ${p.avgCycle} 天，上次来潮 ${p.lastStart}。`;
+        })();
+
+    // 想看历史就一并给出（此前只吐当前状态，他看不到任何过往记录）
+    const want = Number(input?.history ?? 0);
+    if (want > 0) {
+      const all = listPeriods().slice(-Math.min(want, 60)).reverse();
+      if (all.length) {
+        const lines = all.map((x, i) => {
+          const prev = all[i + 1];
+          const gap = prev
+            ? Math.round((new Date(x.date).getTime() - new Date(prev.date).getTime()) / 86400000)
+            : null;
+          return `· ${x.date}${gap ? `（距上次 ${gap} 天）` : ''}`;
+        });
+        return now + `\n\n历史来潮（共 ${listPeriods().length} 次记录）：\n` + lines.join('\n');
+      }
+    }
+    return now;
   }
   if (name === 'period_log_start') {
     const r = addPeriodStart(input?.date ? String(input.date) : undefined, 'caelum');

@@ -1,11 +1,13 @@
 // 健康桥（P2-6）：App 定期 POST HealthKit 摘要 → 网关存库 → get_health 工具双端可读。
-// 与 phone-status 同模式（key/Bearer 上报 + builtin 工具），但保留 14 天历史看趋势。
+// 与 phone-status 同模式（key/Bearer 上报 + builtin 工具），保留半年历史看趋势。
 // 每天存「最新快照」（App 重复上报同日覆盖），不存流水。
 import { Hono } from 'hono';
 import { config } from './config';
 
 const DATA_FILE = '/root/projects/BunnyPalace/gateway/data/health.json';
-const KEEP_DAYS = 14;
+// 原为 14——超过就直接丢弃，导致他查不到两周前的任何数据（兔兔实测）。
+// App 里本来就有长期记录，服务器没理由只留两周。
+const KEEP_DAYS = 180;
 
 export interface HealthDay {
   date: string;               // YYYY-MM-DD（北京）
@@ -62,16 +64,18 @@ export async function upsertToday(body: any): Promise<HealthDay> {
 export const HEALTH_TOOLS = [
   {
     name: 'get_health',
-    description: "Bunny 的健康数据（HealthKit 摘要）：今日步数/睡眠/经期日/饮水/屏幕时间 + 近 14 天趋势。想关心她睡得好不好、走了多少路、身体状态时调用。No parameters.",
-    input_schema: { type: 'object' as const, properties: {} },
+    description: "兔兔的健康数据：今日步数、睡眠、经期日、饮水、屏幕时间，以及最近的趋势。想知道她睡得好不好、走了多少路、身体怎么样时看这个。参数 days 可指定看多少天，默认 14，最多 180。",
+    input_schema: { type: 'object' as const, properties: { days: { type: 'number', description: '看多少天，默认 14，最多 180' } } },
   },
 ];
 
-export async function callHealthTool(name: string): Promise<string | null> {
+export async function callHealthTool(name: string, input?: any): Promise<string | null> {
   if (name !== 'get_health') return null;
-  const days = await load();
-  if (days.length === 0) return '还没有健康数据。App 打开控制台时会自动上报 HealthKit 摘要。';
-  const today = days.find((d) => d.date === todayBeijing()) || null;
+  const all = await load();
+  if (all.length === 0) return '还没有健康数据。App 打开控制台时会自动上报 HealthKit 摘要。';
+  const want = Math.min(Math.max(Number(input?.days ?? 14), 1), 180);
+  const days = all.slice(-want);
+  const today = all.find((d) => d.date === todayBeijing()) || null;
   const history = days.map((d) => ({
     date: d.date, steps: d.steps ?? null, sleep_hours: d.sleep_hours ?? null,
     menstrual_day: d.menstrual_day ?? null, water: d.water_count ?? null,
