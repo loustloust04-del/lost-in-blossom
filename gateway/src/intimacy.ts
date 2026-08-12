@@ -237,6 +237,9 @@ export function intimacyRoutes(app: Hono) {
     const e = upsert(date, {
       note: body.note, myNote: body.myNote, tags: body.tags, milestone: body.milestone,
     }, 'bunny');
+    if (!body.deleted && (body.note || body.myNote)) {
+      ring('intimacy', `兔兔在刻痕上写了东西（${e.date}）——intimacy_read 看，你也可以 intimacy_write 接一句。`);
+    }
     return c.json({ ok: true, entry: e });
   });
 

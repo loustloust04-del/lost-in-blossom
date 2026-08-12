@@ -1,3 +1,4 @@
+import { ring } from './doorbell';
 // 药箱 —— Caelum 帮兔兔管药：有哪些药、还剩多少、每天吃了多少。
 // 双端共用：App /api/meds 读写，Caelum 经 meds_* 工具记。纯本地 JSON（data/meds.json）。
 const DATA_FILE = '/root/projects/BunnyPalace/gateway/data/meds.json';
@@ -73,6 +74,17 @@ export async function restockMed(key: string, add: number): Promise<MedItem | nu
   return med;
 }
 
+/// 吃完药后看看库存够不够，快没了按门铃提醒他
+async function checkLowStock(med: MedItem): Promise<void> {
+  const doses = med.perDose > 0 ? Math.floor(med.remaining / med.perDose) : med.remaining;
+  if (doses <= 3 && doses >= 0) {
+    ring('meds_low_' + med.id,
+      doses === 0
+        ? `${med.name}吃完了——她该去开药了，你提醒一下（ride_clinic 可以直接给她叫车去精神卫生中心）。`
+        : `${med.name}只剩 ${med.remaining} ${med.unit}，按每次 ${med.perDose} 算还能吃 ${doses} 次。快没了。`);
+  }
+}
+
 export async function takeMed(key: string, amount?: number): Promise<{ med: MedItem; intake: MedIntake } | { error: string }> {
   const d = await load();
   const med = findMed(d, key);
@@ -82,6 +94,7 @@ export async function takeMed(key: string, amount?: number): Promise<{ med: MedI
   const intake: MedIntake = { date: beijingYMD(), medId: med.id, name: med.name, amount: amt, ts: new Date().toISOString() };
   d.intake.push(intake);
   await save(d);
+  await checkLowStock(med);
   return { med, intake };
 }
 

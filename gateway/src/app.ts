@@ -894,6 +894,14 @@ musicRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);
 fablelineRoutes(app);
+// 门铃总开关：吵到了就关
+app.post('/api/doorbell', async (c) => {
+  let b: any = {};
+  try { b = await c.req.json(); } catch {}
+  const { setEnabled, isEnabled } = await import('./doorbell');
+  if (typeof b.on === 'boolean') setEnabled(b.on);
+  return c.json({ on: isEnabled() });
+});
 healthRoutes(app);
 
 // Screen Time 代理：从 dream_events 聚合今日 app_open

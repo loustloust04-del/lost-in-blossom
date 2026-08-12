@@ -18,7 +18,13 @@ const COOLDOWN: Record<string, number> = {
 const lastRang: Record<string, number> = {};
 
 /// kind 用来节流；text 是他会看到的那句话（写成「有什么等着你 + 怎么拿」）
+/// 总开关：吵到了就关（POST /api/doorbell {"on":false}）
+let enabled = true;
+export function setEnabled(v: boolean): void { enabled = v; }
+export function isEnabled(): boolean { return enabled; }
+
 export function ring(kind: string, text: string): boolean {
+  if (!enabled) return false;
   const gap = COOLDOWN[kind] ?? COOLDOWN.default;
   if (gap > 0 && Date.now() - (lastRang[kind] || 0) < gap) return false;
   lastRang[kind] = Date.now();
