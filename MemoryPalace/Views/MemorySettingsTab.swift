@@ -198,11 +198,12 @@ struct IOSMemoryPage: View {
                     let text = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !text.isEmpty else { return }
                     let store = SwiftDataMemoryStore()
-                    try? store.add(
+                    // 原为 try?：存不进去她不知道（审查报告 Views P0 #4）
+                    do { try store.add(
                         content: text, category: "fact", keywords: [],
                         profileId: profileId, isUserExplicit: true, extractedBy: "manual",
                         sourceConversationId: nil, context: modelContext
-                    )
+                    ) } catch { ToastCenter.shared.show("这条记忆没存上，再试一次？"); return }
                     newNoteText = ""
                     refreshMemories()
                 } label: {
@@ -324,7 +325,8 @@ struct IOSMemoryPage: View {
                         .font(.caption).foregroundColor(Theme.textMuted).buttonStyle(.plain)
                     Button("保存") {
                         let store = SwiftDataMemoryStore()
-                        try? store.update(id: memory.id, content: editingNoteText, keywords: memory.keywords, context: modelContext)
+                        do { try store.update(id: memory.id, content: editingNoteText, keywords: memory.keywords, context: modelContext) }
+                        catch { ToastCenter.shared.show("改动没保存上"); return }
                         editingNoteId = nil
                         refreshMemories()
                     }

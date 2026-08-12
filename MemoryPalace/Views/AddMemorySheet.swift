@@ -69,11 +69,17 @@ struct AddMemorySheet: View {
     private func commit() {
         guard !trimmed.isEmpty else { return }
         let store = SwiftDataMemoryStore()
-        try? store.add(
-            content: trimmed, category: category, keywords: [],
-            profileId: profileId, isUserExplicit: true, extractedBy: "manual",
-            sourceConversationId: nil, context: modelContext
-        )
+        // 原为 try?：存不进去她完全不知道，记忆就这么没了（审查报告 Views P0 #2）
+        do {
+            try store.add(
+                content: trimmed, category: category, keywords: [],
+                profileId: profileId, isUserExplicit: true, extractedBy: "manual",
+                sourceConversationId: nil, context: modelContext
+            )
+        } catch {
+            ToastCenter.shared.show("这条记忆没存上，再试一次？")
+            return
+        }
         onAdded()
         dismiss()
     }
