@@ -310,6 +310,15 @@ try {
   console.error("[mcp] 拉网关工具表失败，用兜底名单:", e?.message)
 }
 
+// CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
+// 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now"])
+for (const t of FALLBACK_PROXY_TOOLS as any[]) {
+  if (LOCAL_ONLY.has(t.name) && !PROXY_TOOLS.some(x => x.name === t.name)) {
+    PROXY_TOOLS.push(t)
+  }
+}
+
 
 const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
 
