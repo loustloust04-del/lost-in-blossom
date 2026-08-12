@@ -702,7 +702,7 @@ update 可选带 "quote"，同样要求逐字。
                     if dup.sourceQuote == nil, let validQuote {
                         dup.sourceQuote = validQuote
                         dup.sourceNodeId = nodeId
-                        try? context.save()
+                        context.saveOrReport("记忆")
                     }
                     continue
                 }
@@ -750,20 +750,20 @@ extension SwiftDataMemoryStore {
         memory.isUserExplicit.toggle()
         if memory.isUserExplicit { memory.decayWeight = 1.0 }
         if touchUpdatedAt { memory.updatedAt = Date() }
-        try? context.save()
+        context.saveOrReport("记忆")
     }
 
     /// 按对象删除
     func delete(_ memory: Memory, context: ModelContext) {
         context.delete(memory)
-        try? context.save()
+        context.saveOrReport("记忆")
     }
 
     /// 复活已 supersede 的记忆（清 supersededAt + 刷新时间戳）
     func revive(_ memory: Memory, context: ModelContext) {
         memory.supersededAt = nil
         memory.updatedAt = Date()
-        try? context.save()
+        context.saveOrReport("记忆")
     }
 
     /// 用户手动新增（钉住语义：isUserExplicit + decayWeight 1.0）
@@ -779,7 +779,7 @@ extension SwiftDataMemoryStore {
         )
         memory.decayWeight = 1.0
         context.insert(memory)
-        try? context.save()
+        context.saveOrReport("记忆")
         return memory
     }
 }

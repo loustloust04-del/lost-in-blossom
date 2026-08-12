@@ -54,7 +54,7 @@ enum HealthSyncService {
                 med.lastSyncedAt = Date()
             }
         }
-        try? context.save()
+        context.saveOrReport("药物同步", notifyUser: false)
     }
 
     // MARK: - 下行
@@ -122,7 +122,7 @@ enum HealthSyncService {
             context.insert(log)
         }
 
-        try? context.save()
+        context.saveOrReport("药物同步", notifyUser: false)
     }
 
     // MARK: - 工具

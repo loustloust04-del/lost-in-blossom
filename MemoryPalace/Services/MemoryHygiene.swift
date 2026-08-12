@@ -71,7 +71,7 @@ enum MemoryHygiene {
         for m in all where toDelete.contains(m.id) {
             context.delete(m)
         }
-        if !toDelete.isEmpty { try? context.save() }
+        if !toDelete.isEmpty { context.saveOrReport("记忆") }
 
         return Report(merged: toDelete.count, remaining: all.count - toDelete.count)
     }

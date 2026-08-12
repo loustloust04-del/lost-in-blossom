@@ -336,7 +336,9 @@ ${recentMemory ? '最近的记忆：' + recentMemory : ''}`;
     if (stdout && stdout.length > 100) {
       const { saveMemory } = await import('./store');
       const summary = `[自主探索] 搜索了"${topic}"，找到了一些内容。下次跟兔兔聊天时可以提到这个话题。`;
-      await saveMemory(summary, 'exploration', 2);
+      // 修：原为位置参数 saveMemory(summary, 'exploration', 2)，而 store.saveMemory 收的是对象——
+      // tier/category 全部错位，一直在写垃圾数据（审查报告 2026-08-12 Gateway P0 #1）
+      await saveMemory({ content: summary, category: 'exploration', tier: 2, source: 'desire' });
       console.log('[desire] 📝 exploration saved to memory');
     }
   } catch (err: any) {

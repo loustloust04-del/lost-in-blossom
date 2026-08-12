@@ -688,7 +688,11 @@ export function startHub(): WebSocketServer {
     // remoteAddress 也是 loopback——若 loopback 免鉴权，token 形同虚设。
     const remote = req.socket.remoteAddress
     const provided = reqUrl.searchParams.get("token")
-    if (HUB_TOKEN && provided !== HUB_TOKEN && pathname !== "/mcp") {
+    // /mcp 原本整个跳过鉴权（审查报告 2026-08-12 cc-bridge P0 #3）：
+    // hub 一旦改绑非 loopback，任何人都能连上来注入 reply。
+    // 现在 /mcp 也要 token，只有 hub 确实绑在 127.0.0.1 时才免（同机 mcp-server 走这条）。
+    const mcpExempt = pathname === "/mcp" && HUB_HOST === "127.0.0.1"
+    if (HUB_TOKEN && provided !== HUB_TOKEN && !mcpExempt) {
       console.warn(`[hub] auth failed from ${remote} (path=${pathname})`)
       ws.close(1008, "auth")
       return

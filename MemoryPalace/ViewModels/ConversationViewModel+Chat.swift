@@ -677,7 +677,7 @@ extension ConversationViewModel {
                     assistantNode.usageCacheCreationTokens = usage.cacheCreationInputTokens
                     assistantNode.usageOutputTokens = usage.outputTokens
                 }
-                try? context.save()
+                context.saveOrReport("这条消息")
                 // 健康手账：回复里有 ```health-log 块 → 落库、块变结果行（三路共用本收口，无块零成本）
                 HealthLogIntentWriter.processChatIntents(nodeId: assistantNode.id, context: context)
                 // 语音条：回复里有 ```voice 块 → 提取脚本、TTS 生成 mp3、挂 audioRef
@@ -843,7 +843,7 @@ extension ConversationViewModel {
             if let id = ccTurnNodeId, let node = nodeMap[id],
                node.role == "assistant", node.content.isEmpty {
                 node.content = "（已停止）"
-                try? context.save()
+                context.saveOrReport("这条消息")
             }
             finishCCTurn()
             return
@@ -864,7 +864,7 @@ extension ConversationViewModel {
         if let id = streamingNodeId, let node = nodeMap[id],
            node.role == "assistant", node.content.isEmpty {
             node.content = streamingText.isEmpty ? "（已停止）" : streamingText
-            try? context.save()
+            context.saveOrReport("这条消息")
         }
         streamingText = ""
         streamingThinkingText = ""
@@ -968,7 +968,7 @@ extension ConversationViewModel {
                 ($0.role == "user" || $0.role == "assistant") && !$0.content.isEmpty
             }.count
             markConversationDirty()
-            try? context.save()
+            context.saveOrReport("这条消息")
             // CC 用 reply 工具推来的消息不走 assistantTurnDidFinish 收口，
             // 语音条/健康块必须在这里就地处理，否则块原样落地成文字（"只落下文字就走了"）
             processCCIntents(nodeId: nodeId, content: content, context: context)
@@ -1006,7 +1006,7 @@ extension ConversationViewModel {
         conversation.updateTime = Date()
         conversation.nodeCount += 1
         markConversationDirty()
-        try? context.save()
+        context.saveOrReport("这条消息")
         processCCIntents(nodeId: nodeId, content: content, context: context)
     }
 
@@ -1237,7 +1237,7 @@ extension ConversationViewModel {
                 streamingText = ""
                 streamingThinkingText = ""
                 isThinking = false
-                try? context.save()
+                context.saveOrReport("这条消息")
                 scrollToNodeId = assistantNodeId
                 self.commitBudgetSpend(providerManager: providerManager, model: model, usage: usage)
 
@@ -1445,7 +1445,7 @@ extension ConversationViewModel {
             parentNode = node
         }
         conversation.currentNodeId = parentId
-        try? context.save()
+        context.saveOrReport("这条消息")
         return conversation
     }
 
@@ -1477,7 +1477,7 @@ extension ConversationViewModel {
             profileId: profileId
         )
         context.insert(rootNode)
-        try? context.save()
+        context.saveOrReport("这条消息")
 
         return conversation
     }
