@@ -28,6 +28,9 @@ struct HealthPanelView: View {
     @State private var showNewMed = false
     @State private var activeDetail: HealthDetail? = nil
     @State private var weightInput = ""
+    /// 面板里有没有输入框正被编辑——只有编辑时才挂键盘「完成」按钮。
+    /// 否则那个按钮会跟着视图层级跑到聊天页去（兔兔实测截图）。
+    @FocusState private var panelInputFocused: Bool
     @State private var chartDays = 30
     @State private var intimacyNoteInput = ""
     // 设置-健康页改单位/亲密卡开关后面板即时刷新（⚙ sheet 已退役，改 @AppStorage 订阅）
@@ -84,14 +87,13 @@ struct HealthPanelView: View {
         .task(id: profileId) { await IntimacySyncService.pull(context: modelContext, profileId: profileId) }
         // 键盘工具栏挂最外层：挂在里层 List 上会因为外面还包着 VStack+header 而飘在半空（兔兔实测）
         .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("完成") {
-                    #if canImport(UIKit)
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    #endif
+            // 只在本面板的输入框被编辑时才挂——否则按钮会跟着视图层级跑到聊天页
+            if panelInputFocused {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { panelInputFocused = false }
+                        .foregroundColor(Theme.branchIndicator)
                 }
-                .foregroundColor(Theme.branchIndicator)
             }
         }
         .task {
@@ -106,6 +108,7 @@ struct HealthPanelView: View {
             set: { if !$0 { restockTarget = nil; restockInput = "" } }
         ), presenting: restockTarget) { med in
             TextField("加多少\(med.unit)", text: $restockInput)
+                .focused($panelInputFocused)
                 .keyboardType(.decimalPad)
             Button("取消", role: .cancel) { restockTarget = nil; restockInput = "" }
             Button("加上") {
@@ -378,6 +381,7 @@ struct HealthPanelView: View {
     private var weightInputRow: some View {
         HStack(spacing: 8) {
             TextField("今天：\(unit == .kg ? "52.3" : "115.0")", text: $weightInput)
+                .focused($panelInputFocused)
                 .font(.system(size: Theme.F.body))
                 .textFieldStyle(.plain)
                 .keyboardType(.decimalPad)
@@ -714,14 +718,12 @@ private struct MedEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // 数字键盘没有回车键：给一个「完成」把键盘收掉，否则下半页永远被埋（兔兔实测）
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("完成") {
-                        #if canImport(UIKit)
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        #endif
+                if stockFocus != nil {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("完成") { stockFocus = nil }
+                            .foregroundColor(Theme.branchIndicator)
                     }
-                    .foregroundColor(Theme.branchIndicator)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
