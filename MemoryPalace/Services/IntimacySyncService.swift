@@ -44,6 +44,12 @@ enum IntimacySyncService {
             guard r.updatedBy == "caelum", let d = stamp.date(from: r.date) else { continue }
             let day = Calendar.current.startOfDay(for: d)
             if let existing = HealthLogStore.fetchIntimacy(context: context, profileId: profileId, date: day) {
+                // 本地刚改过、还没推上去 → 以本地为准，别被服务器旧值冲掉（同药物同步那个坑）
+                if let edited = existing.localEditedAt,
+                   let remoteAt = ISO8601DateFormatter().date(from: r.updatedAt),
+                   edited > remoteAt {
+                    continue
+                }
                 if existing.note != r.note { existing.note = r.note; changed = true }
                 if let t = r.tags, existing.tags != t { existing.tags = t; changed = true }
                 if let ms = r.milestone, existing.milestone != ms { existing.milestone = ms; changed = true }

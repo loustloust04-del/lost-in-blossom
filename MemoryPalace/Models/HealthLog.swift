@@ -91,6 +91,9 @@ final class IntimacyEntry: Identifiable {
     var tags: [String] = []
     /// 里程碑：「第一次…」之类，卡片上出徽章
     var milestone: String = ""
+    /// 本地最后一次改动时间。拉取时用它挡住覆盖——同药物那个坑：
+    /// 她刚在 App 里改完还没推上去，服务器的旧值就把她的修改冲掉了。
+    var localEditedAt: Date? = nil
     var createdAt: Date = Date()
 
     init(profileId: String, date: Date, note: String = "") {

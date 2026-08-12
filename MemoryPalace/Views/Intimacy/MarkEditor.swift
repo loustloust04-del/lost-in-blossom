@@ -118,6 +118,7 @@ struct MarkEditor: View {
         entry.myNote = myNote
         entry.tags = tags
         entry.milestone = milestone
+        entry.localEditedAt = Date()
         try? context.save()
         IntimacySyncService.push(date: entry.date, note: note, myNote: myNote,
                                  tags: tags, milestone: milestone)
