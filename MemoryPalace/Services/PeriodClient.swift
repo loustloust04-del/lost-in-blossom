@@ -4,7 +4,7 @@ import Foundation
 /// GET /api/period · POST /start · POST /end · POST /sync · DELETE /:date
 /// 复用控制台约定：UserDefaults "gatewayBaseURL" / "gatewayAuthToken"。
 enum PeriodClient {
-    struct Event: Decodable, Identifiable {
+    struct Event: Codable, Equatable, Identifiable {
         let date: String          // 来潮日 YYYY-MM-DD
         let end: String?
         let source: String?
