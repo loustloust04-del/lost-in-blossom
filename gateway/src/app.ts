@@ -899,6 +899,19 @@ musicRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);
 fablelineRoutes(app);
+// 存盘失败黑匣子：兔兔曾被静默的 try? context.save() 吞掉过两个聊天窗口且查无可查
+app.post('/api/save-failure', async (c) => {
+  let b: any = {};
+  try { b = await c.req.json(); } catch {}
+  const line = `[${new Date().toISOString()}] ${String(b.what ?? '?')}: ${String(b.detail ?? '').slice(0, 500)}`;
+  console.error('[save-failure] 💾❌', line);
+  try {
+    const { appendFileSync, mkdirSync } = await import('node:fs');
+    mkdirSync('data', { recursive: true });
+    appendFileSync('data/save-failures.log', line + '\n');
+  } catch { /* 记不下就算了 */ }
+  return c.json({ ok: true });
+});
 // 门铃总开关：吵到了就关
 app.post('/api/doorbell', async (c) => {
   let b: any = {};
