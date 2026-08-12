@@ -791,6 +791,22 @@ private struct MedEditorSheet: View {
         dismiss()
     }
 
+    /// 彻底删除：这条药和它的打卡记录一起消失
+    private func deleteForever() {
+        guard let m = med else { return }
+        if let gid = m.gatewayId {
+            Task { _ = await MedsClient.remove(id: gid) }
+        }
+        let mid = m.id
+        let logDesc = FetchDescriptor<MedicationLog>(
+            predicate: #Predicate<MedicationLog> { $0.medicationId == mid })
+        for log in ((try? modelContext.fetch(logDesc)) ?? []) { modelContext.delete(log) }
+        modelContext.delete(m)
+        modelContext.saveOrReport("删除药物")
+        resyncReminders()
+        dismiss()
+    }
+
     private func archive() {
         med?.isArchived = true
         med?.localEditedAt = Date()
