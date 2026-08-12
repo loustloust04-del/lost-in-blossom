@@ -212,6 +212,15 @@ export const PERIOD_TOOLS = [
     input_schema: { type: 'object' as const, properties: { history: { type: 'number', description: '要看几次历史来潮记录，默认 0 只看当前状态；填 12 能看到一年' } } },
   },
   {
+    name: 'period_delete',
+    description: '删掉某一天的来潮记录（记错了、手滑了用）。date 填 YYYY-MM-DD。',
+    input_schema: {
+      type: 'object' as const,
+      properties: { date: { type: 'string', description: 'YYYY-MM-DD' } },
+      required: ['date'],
+    },
+  },
+  {
     name: 'period_log_start',
     description: "记录兔兔来月经了（一次来潮）。兔兔说「我来例假了 / 姨妈来了」时调用。date 省略则记今天。",
     input_schema: {
@@ -250,6 +259,16 @@ export function callPeriodTool(name: string, input: any): string | null {
       }
     }
     return now;
+  }
+  if (name === 'period_delete') {
+    const date = String(input?.date ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '日期要写成 YYYY-MM-DD。';
+    const all = listPeriods();
+    const hit = all.find(p => p.date === date);
+    if (!hit) return `${date} 本来就没有记录（可能当时没写进去）。`;
+    const rest = all.filter(p => p.date !== date);
+    save(rest);
+    return `删掉了 ${date} 那条来潮记录。现在共 ${rest.length} 条。`;
   }
   if (name === 'period_log_start') {
     const r = addPeriodStart(input?.date ? String(input.date) : undefined, 'caelum');
