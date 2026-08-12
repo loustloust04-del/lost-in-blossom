@@ -45,6 +45,9 @@ enum VitalsClient {
         // merge 返回 {ok, water, food}，补上 notes/date 后复用 VitalsResponse 解码
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let water = obj["water"], let food = obj["food"] else { return nil }
+        // ⚠️ meds/notes/date 是**占位无效值**，只为凑 VitalsResponse 的解码结构。
+        // merge 的唯一消费方（VitalsSyncService.sync）只读 water/food，不碰这几个字段。
+        // 若将来有人读 merged.meds，请改成从 HealthSyncService 取真数据（审查报告 Services P0 #2）。
         let shaped: [String: Any] = [
             "water": water, "food": food,
             "meds": ["taken": false, "name": "", "lastUpdated": ""],

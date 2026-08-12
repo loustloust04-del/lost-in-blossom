@@ -8,6 +8,24 @@
 - [ ] C2 顺手项：设置→Token 统计，缓存命中率不是 0
 - [ ] HealthKit 10 秒项：健康页点「重新授权/刷新」+ 下拉，「今日快照」出数据即可（步数/屏幕时间的代理上报链路本来就在跑，只差 App 内直连这一下）
 
+## 代码审查（2026-08-12）· 已修与留账
+
+**已修（af9ac174 / 8966ff61 / d4b28bfb）**
+- ✅ 静默存盘 → 新增 `context.saveOrReport()`，替换 16 处最关键的（药物同步/聊天消息/记忆）
+- ✅ `desire.ts saveMemory` 位置参数调对象签名 → 一直在写垃圾数据，已修
+- ✅ `/mcp` 端点跳过鉴权 → 仅 hub 绑 127.0.0.1 时免密
+- ✅ cc-bridge 全局异常完全静默 → 落 `/tmp/mcp-server-errors.log`（不碰 stderr，保命设计保留）
+- ✅ iconv shell 注入面 → 改 execFileSync
+- ✅ 记忆写入/更新静默失败 → do-catch + toast
+
+**留账（报告自评「可不改」，当前运行正常）**
+- [ ] SyncEngine 后台线程创建 ModelContext —— Swift 6 strict concurrency 下会报错，迁移前必修
+- [ ] ChatService base class 用 fatalError —— 三个子类都 override 了，直接实例化才崩
+- [ ] HealthBridgeClient 非 200 不记 log —— 半小时窗口内不丢数据，只是延迟
+- [ ] 其余 ~80 处 `try?` —— 多在冷门路径，碰到再改
+- [ ] CareView 的 max() 双源创可贴 —— 真同步已上线，验收通过后拆
+- [ ] P1 27 条 / P2 38 条 —— 详见 `docs/audit-*.md` 四份报告
+
 ## 待写码
 
 1. [ ] **朗读升级到真人声**（等 MiniMax key）：朗读走 MiniMax（便宜管够），语音条留 ElevenLabs
