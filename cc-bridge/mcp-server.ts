@@ -486,7 +486,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
-  if (PROXY_TOOL_NAMES.has(req.params.name)) {
+  // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
+  // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now"])
+  if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
     if (typeof text === "string" && text.includes("__peek_image__")) {
