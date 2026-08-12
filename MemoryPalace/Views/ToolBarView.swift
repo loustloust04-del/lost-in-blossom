@@ -14,7 +14,10 @@ struct ToolBarView: View {
         toolManager?.pinnedTools ?? []
     }
 
-    private let springAnim: Animation = .spring(response: 0.45, dampingFraction: 0.75)
+    /// 切页动画：原 0.45s 弹簧，点一下要等近半秒才见反应（兔兔实测「反应不过来」）。
+    /// 拖拽重排仍用弹簧手感，纯切页用短促的 easeOut。
+    private let springAnim: Animation = .spring(response: 0.32, dampingFraction: 0.82)
+    private let switchAnim: Animation = .easeOut(duration: 0.2)
 
     var body: some View {
         HStack(spacing: 0) {
@@ -23,9 +26,9 @@ struct ToolBarView: View {
             ForEach(pinnedTools) { tool in
                 let isSelected = tool.id == selectedToolId
                 Button {
-                    withAnimation(springAnim) {
-                        selectedToolId = tool.id
-                    }
+                    // 先无动画置位（内容立刻切过去），样式变化交给短动画——
+                    // 否则要等整条弹簧跑完才看到新页面
+                    selectedToolId = tool.id
                 } label: {
                     HStack(spacing: isSelected ? 5 : 0) {
                         Image(systemName: tool.icon)
@@ -47,6 +50,7 @@ struct ToolBarView: View {
                             .fill(Theme.branchIndicator.opacity(isSelected ? 0.14 : 0))
                     )
                     .opacity(draggingToolId == tool.id ? 0.3 : 1)
+                    .animation(switchAnim, value: isSelected)
                 }
                 .buttonStyle(.plain)
                 .onDrag {
