@@ -151,7 +151,12 @@ app.get('/v1/desires', auth, async (c) => {
 });
 
 // ============ iOS Shortcuts 事件上报（PR-3）============
-app.post('/api/events', async (c) => {
+// GET 也放行：快捷指令的「获取 URL 内容」默认发 GET，之前只开 POST 导致屏幕时间上报 404
+//（兔兔实测小红书那条报错；中文 App 名还需在快捷指令里勾选 URL 编码，否则 nginx 直接 400）
+app.get('/api/events', async (c) => handleEvent(c));
+app.post('/api/events', async (c) => handleEvent(c));
+
+async function handleEvent(c: any) {
   // token：Authorization: Bearer xxx 或 ?key=xxx（Shortcuts 友好）
   const h = c.req.header('Authorization');
   const headerTok = h?.startsWith('Bearer ') ? h.slice(7) : '';
@@ -186,7 +191,7 @@ app.post('/api/events', async (c) => {
   // app_open 已存本地文件，Supabase 失败不影响
     const ok = (type === 'app_open') ? true : res.ok;
     return c.json({ ok, ...(res.error && type !== 'app_open' ? { error: res.error } : {}) });
-});
+}
 
 // ============ 偷看屏幕（Peek）：快捷指令截屏上传 → App 拉取注入 Caelum 对话 ============
 app.post('/api/peek', async (c) => {
