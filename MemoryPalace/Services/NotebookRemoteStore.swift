@@ -11,7 +11,7 @@ import Foundation
 /// 离线可用；这个存在服务器上、全局一本、CC 和 App 共享。两套互不相通，
 /// 文件库面板把它们并列成两个来源，让人自己选看哪边。
 enum NotebookRemoteStore {
-    struct FileMeta: Identifiable {
+    struct FileMeta: Identifiable, Codable, Equatable {
         let path: String
         let bytes: Int
         var id: String { path }

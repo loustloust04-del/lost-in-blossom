@@ -188,22 +188,33 @@ struct FileLibraryPanelView: View {
             remoteError = "还没配网关 token，连不上服务器笔记本"
             return
         }
-        isLoadingRemote = true
+        // 先亮出上次的列表（秒开），再去拉新的
+        if let cached: [NotebookRemoteStore.FileMeta] = GatewayCache.load("notebook-list", as: [NotebookRemoteStore.FileMeta].self) {
+            remoteFiles = cached
+            if let cachedPreviews: [String: String] = GatewayCache.load("notebook-previews", as: [String: String].self) {
+                previews = cachedPreviews
+            }
+        }
+        isLoadingRemote = remoteFiles.isEmpty
         Task {
             do {
                 let list = try await NotebookRemoteStore.list()
-                var p: [String: String] = [:]
-                for meta in list {
-                    if let content = try? await NotebookRemoteStore.read(meta.path) {
-                        p[meta.path] = String(content.prefix(280))
-                    }
-                }
                 await MainActor.run {
                     remoteFiles = list
-                    previews = p
                     remoteError = nil
                     isLoadingRemote = false
+                    GatewayCache.save("notebook-list", list)
                 }
+                // 预览改成后台慢慢补：原来是进页面就把每个文件全文读一遍，
+                // 文件多了就是几十次串行网络请求，这才是「点进去要等一会儿」的真凶
+                var p: [String: String] = GatewayCache.load("notebook-previews", as: [String: String].self) ?? [:]
+                for meta in list where p[meta.path] == nil {
+                    if let content = try? await NotebookRemoteStore.read(meta.path) {
+                        p[meta.path] = String(content.prefix(280))
+                        await MainActor.run { previews = p }
+                    }
+                }
+                GatewayCache.save("notebook-previews", p)
             } catch {
                 await MainActor.run {
                     remoteError = error.localizedDescription
