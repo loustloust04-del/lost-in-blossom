@@ -35,6 +35,9 @@ final class Medication {
     var timesOfDay: [Int]       // 每日提醒时刻，分钟数 [480, 1260] = 8:00 / 21:00
     var reminderEnabled: Bool = true
     var isArchived: Bool = false
+    /// 本地最后一次手动改动的时间。同步时用它判断该听谁的——
+    /// 原来 pullRemote 无条件「以 Gateway 为准」，兔兔在 App 里改的数量会被冲回去。
+    var localEditedAt: Date? = nil
     var note: String = ""
     var createdAt: Date = Date()
 

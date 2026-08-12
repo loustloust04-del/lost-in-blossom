@@ -109,6 +109,15 @@ enum MedsClient {
     }
 
     @discardableResult
+    /// 直接设定库存（本地手动改完推上去，覆盖服务器）
+    static func setRemaining(id: String, count: Double) async -> Bool {
+        guard var req = request("/api/meds/\(id)", method: "PATCH") else { return false }
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["remaining": count])
+        guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
+        return (resp as? HTTPURLResponse)?.statusCode == 200
+    }
+
     static func remove(id: String) async -> Bool {
         guard let req = request("/api/meds/\(id)", method: "DELETE") else { return false }
         guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }

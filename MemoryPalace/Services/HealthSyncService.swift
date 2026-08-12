@@ -42,6 +42,7 @@ enum HealthSyncService {
         )
         let locals = (try? context.fetch(desc)) ?? []
 
+        // 新药：建到 Gateway
         for med in locals where med.gatewayId == nil {
             if let remoteId = await MedsClient.addReturningId(
                 name: med.name,
@@ -51,6 +52,29 @@ enum HealthSyncService {
                 note: med.note
             ) {
                 med.gatewayId = remoteId
+                med.lastSyncedAt = Date()
+                med.localEditedAt = nil
+            }
+        }
+
+        // 本地改过数量的：推上去覆盖服务器（原来只推新药，她改的数量根本不推，
+        // 下一轮 pullRemote 又把旧值冲回来——这就是「改完过一会儿又变回去」）
+        for med in locals where med.gatewayId != nil {
+            guard let edited = med.localEditedAt,
+                  edited > (med.lastSyncedAt ?? .distantPast) else { continue }
+            if await MedsClient.setRemaining(id: med.gatewayId!, count: med.remaining) {
+                med.lastSyncedAt = Date()
+                med.localEditedAt = nil
+            }
+        }
+
+        // 归档的：从 Gateway 删掉，否则 pullRemote 会把它当「Caelum 新加的药」又拉回来
+        let archivedDesc = FetchDescriptor<Medication>(
+            predicate: #Predicate<Medication> { $0.profileId == pid && $0.isArchived }
+        )
+        for med in ((try? context.fetch(archivedDesc)) ?? []) where med.gatewayId != nil {
+            if await MedsClient.remove(id: med.gatewayId!) {
+                med.gatewayId = nil
                 med.lastSyncedAt = Date()
             }
         }
@@ -69,7 +93,11 @@ enum HealthSyncService {
 
         for remote in snap.meds {
             if let local = locals.first(where: { $0.gatewayId == remote.id }) {
-                // 已绑定：库存以 Gateway 为准（Caelum 可能 restock 过）
+                // 已绑定：库存以 Gateway 为准（Caelum 可能 restock 过），
+                // 但本地有未推送的手动改动时以本地为准——否则她刚改的数字会被冲掉
+                if let edited = local.localEditedAt, edited > (local.lastSyncedAt ?? .distantPast) {
+                    continue
+                }
                 local.remaining = remote.remaining
                 local.unit = remote.unit
                 local.perDose = remote.perDose

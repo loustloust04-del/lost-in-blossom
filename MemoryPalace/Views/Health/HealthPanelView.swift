@@ -762,6 +762,7 @@ private struct MedEditorSheet: View {
             med.remaining = rem
             med.unit = u
             med.perDose = per
+            med.localEditedAt = Date()   // 标记本地改动，同步时以本地为准
         } else {
             let m = Medication(
                 profileId: profileId,
@@ -775,15 +776,21 @@ private struct MedEditorSheet: View {
             m.perDose = per
             modelContext.insert(m)
         }
-        try? modelContext.save()
+        modelContext.saveOrReport("药物")
         resyncReminders()
+        // 立刻推一次，别等 45 秒节流（否则她会看到数字变回去）
+        let pid = profileId
+        Task { await HealthSyncService.sync(context: modelContext, profileId: pid, force: true) }
         dismiss()
     }
 
     private func archive() {
         med?.isArchived = true
-        try? modelContext.save()
+        med?.localEditedAt = Date()
+        modelContext.saveOrReport("归档药物")
         resyncReminders()
+        let pid = profileId
+        Task { await HealthSyncService.sync(context: modelContext, profileId: pid, force: true) }
         dismiss()
     }
 
