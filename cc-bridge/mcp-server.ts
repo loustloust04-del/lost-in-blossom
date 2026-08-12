@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { WebSocket } from "ws"
-import { readFileSync } from "node:fs"
+import { readFileSync, appendFileSync } from "node:fs"
 import { join } from "node:path"
 
 // hub 落盘的「她正在读的这一章」
@@ -349,8 +349,16 @@ let reconnectDelay = 1_000  // 1s → 2 → 4 → 8 → 16 → 30 (capped)
 
 // 永不 throw、永不喷 stderr：CC 的 MCP host 看到 stderr 可能判定 unhealthy
 // 然后 disable + kill 这个子进程。要不计代价保持 silent + alive。
-process.on("uncaughtException", () => { /* swallow */ })
-process.on("unhandledRejection", () => { /* swallow */ })
+// 但完全不留痕迹 = 排查黑洞（审查报告 cc-bridge P0 #1）：进程可能半死不活，
+// CC 收到莫名其妙的结果却查无可查。改为写日志文件——不碰 stderr，保命的同时留线索。
+function logFatal(kind: string, err: any): void {
+  try {
+    const line = `[${new Date().toISOString()}] ${kind}: ${err?.stack ?? err?.message ?? String(err)}\n`
+    appendFileSync("/tmp/mcp-server-errors.log", line)
+  } catch { /* 日志都写不了就真没辙了 */ }
+}
+process.on("uncaughtException", (e) => logFatal("uncaughtException", e))
+process.on("unhandledRejection", (e) => logFatal("unhandledRejection", e))
 
 function scheduleReconnect() {
   if (reconnectTimer) return

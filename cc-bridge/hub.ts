@@ -3,7 +3,7 @@ import { createServer } from "node:http"
 import { getStatus, forge, startAutoForge } from "./session-manager.ts"
 import { execFileSync, spawn } from "node:child_process"
 import type { ChildProcessWithoutNullStreams } from "node:child_process"
-import { mkdtempSync, unlinkSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync, statSync } from "node:fs"
+import { mkdtempSync, unlinkSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync, statSync, renameSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, basename, extname } from "node:path"
 import { sendPush } from "./apns.ts"
@@ -369,7 +369,10 @@ function saveInboundFiles(chatId: string, files: any[]): string[] {
           if (text.includes('�')) {
             // 有乱码，尝试用iconv转码
             const { execSync } = require('child_process')
-            execSync(`iconv -f GBK -t UTF-8 '${p}' -o '${p}.utf8' && mv '${p}.utf8' '${p}'`)
+            // 原为 shell 模板拼 execSync（审查报告 cc-bridge P0 #2）：文件名带单引号即注入。
+            // 当前 safeName 过滤了引号所以风险低，但过滤规则一改就漏——改走 execFileSync 不经 shell。
+            execFileSync("iconv", ["-f", "GBK", "-t", "UTF-8", p, "-o", `${p}.utf8`])
+            renameSync(`${p}.utf8`, p)
             console.log('[hub] converted', safeName, 'from GBK to UTF-8')
           }
         } catch {}
