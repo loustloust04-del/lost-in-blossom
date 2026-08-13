@@ -206,6 +206,19 @@ enum BookStore {
         return true
     }
 
+    /// 按书名找 safeName（模糊匹配）。Caelum 递批注时只给书名，这里换成目录名。
+    static func safeNameMatching(bookName: String, profileId: String) -> String? {
+        let root = booksRoot(profileId: profileId)
+        let dirs = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        var fuzzy: String? = nil
+        for d in dirs {
+            guard let idx = loadIndex(safeName: d, profileId: profileId) else { continue }
+            if idx.name == bookName { return d }
+            if fuzzy == nil, idx.name.contains(bookName) || bookName.contains(idx.name) { fuzzy = d }
+        }
+        return fuzzy
+    }
+
     /// 共读：他按书名+章号要正文（走在她前面读）。书名模糊匹配，chapterNo=0 表示要目录。
     /// 返回 (正文, 书名/章号/总章数/章节标题)；找不到则正文为 nil。
     static func chapterForCompanion(bookName: String, chapterNo: Int)

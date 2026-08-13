@@ -15,6 +15,8 @@ extension Notification.Name {
     static let ccNotebookChanged = Notification.Name("ccNotebookChanged")
     /// Caelum 弹了一张选择卡
     static let ccAskChoice = Notification.Name("ccAskChoice")
+    /// Caelum 递来一条书页批注
+    static let bookNoteArrived = Notification.Name("bookNoteArrived")
 }
 
 /// CC 执行任务时推送过来的一段思考链（来自 hub 的 cc_thinking 广播）。
@@ -590,6 +592,34 @@ final class CCBridgeWebSocketClient: NSObject {
                         userInfo: ["askId": askId, "question": question,
                                    "options": options, "multi": multi])
                 }
+            }
+        case "book_note":
+            // Caelum 递来的书页批注。此前只做了发送端，App 侧没有处理器——
+            // hub 明明转发成功（日志 1/1 App），她却在阅读器里怎么也找不到（兔兔实测）。
+            let bookName = (obj["bookName"] as? String) ?? ""
+            let chapter = (obj["chapter"] as? Int) ?? 0
+            let noteText = (obj["note"] as? String) ?? ""
+            let quote = (obj["quote"] as? String) ?? ""
+            guard !bookName.isEmpty, chapter > 0, !noteText.isEmpty else { break }
+            DispatchQueue.main.async {
+                let pid = UserDefaults.standard.string(forKey: "coread.profileId") ?? ""
+                guard let safe = BookStore.safeNameMatching(bookName: bookName, profileId: pid) else { return }
+                var notes = BookStore.loadNotes(safeName: safe, profileId: pid)
+                notes.append(BookStore.Note(
+                    id: UUID().uuidString,
+                    chapter: chapter,
+                    anchorText: quote,
+                    anchorStart: 0,
+                    anchorEnd: 0,
+                    kind: "aiBubble",
+                    content: noteText,
+                    role: "ai",
+                    messageId: nil,
+                    createdAt: Date()
+                ))
+                try? BookStore.saveNotes(notes, safeName: safe, profileId: pid)
+                NotificationCenter.default.post(name: .bookNoteArrived, object: nil,
+                                                userInfo: ["safeName": safe, "chapter": chapter])
             }
         case "fetch_chapter":
             // 共读：他想读兔兔还没翻到的章（走在她前面留批注用）。现取现给，不预传整本。

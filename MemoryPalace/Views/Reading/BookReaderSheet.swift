@@ -114,6 +114,13 @@ struct BookReaderSheet: View {
             }
         }
         .overlay(alignment: .bottom) { liveCommentBubble }
+        .onReceive(NotificationCenter.default.publisher(for: .bookNoteArrived)) { note in
+            // 他递了新批注 → 重载本章批注，让她当场看到
+            guard let sn = note.userInfo?["safeName"] as? String, sn == bookSafeName else { return }
+            let all = BookStore.loadNotes(safeName: bookSafeName, profileId: profileId)
+            allNotes = all
+            chapterNotes = all.filter { $0.chapter == currentChapter }
+        }
         .sheet(isPresented: $showCompanionSheet) {
             ReadingCompanionSheet(
                 bookEntry: bookEntryForCompanion,
