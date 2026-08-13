@@ -611,12 +611,6 @@ export function startHub(): WebSocketServer {
           if (m?.type === "notebook_changed") {
             n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
             console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
-          } else if (m?.type === "fetch_chapter") {
-            n = requestChapter(m)
-            console.log(`[hub] 📖 fetch_chapter ${String(m.book ?? "").slice(0,20)} 第${m.chapter}章 → ${n} App`)
-          } else if (m?.type === "book_note") {
-            n = broadcastBookNote(m)
-            console.log(`[hub] 📖 book_note《${String(m.bookName ?? "").slice(0, 20)}》第${m.chapter}章 → ${n}/${appClients.size} App`)
           } else if (m?.type === "phone_event") {
             // 手机事件（充电开始等）→ 注入 CC 一条 phone 频道消息；CC 自行决定要不要用 reply 跟用户说
             const text = String(m.text ?? "").slice(0, 300)
@@ -923,6 +917,18 @@ export function startHub(): WebSocketServer {
           for (const c of mcpClients) {
             if (c.readyState === WebSocket.OPEN) { try { c.send(raw) } catch {} }
           }
+        }
+
+        else if (msg.type === "fetch_chapter") {
+          // ⚠️ 同 ask_choice：原本错加在 HTTP /internal/notify 分支里，
+          // 而 mcp-server 走 WebSocket —— 所以 read_chapter 一直超时（他根本取不到书）。
+          const n = requestChapter(msg)
+          console.log(`[hub] 📖 fetch_chapter ${String(msg.book ?? "").slice(0, 20)} 第${msg.chapter}章 → ${n} App`)
+        }
+
+        else if (msg.type === "book_note") {
+          const n = broadcastBookNote(msg)
+          console.log(`[hub] 📖 book_note《${String(msg.bookName ?? "").slice(0, 20)}》第${msg.chapter}章 → ${n}/${appClients.size} App`)
         }
 
         else if (msg.type === "ask_choice") {
