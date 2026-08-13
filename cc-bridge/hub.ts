@@ -227,7 +227,12 @@ const OFFLINE_DIR = join(process.cwd(), "cc-bridge", "offline")
 // ── 共读：App 推来的「她正在读的这一章」──────────────────────────────
 // App 早就在推 reading_context，但 hub 从来没接过（线断在中间）。
 // 存成单文件而非追加：Caelum 关心的永远是"她现在读到哪"，历史无意义。
-const READING_PATH = join(process.cwd(), "cc-bridge", "reading-context.json")
+// ⚠️ 原为 join(process.cwd(), "cc-bridge", ...)——hub 本来就跑在 cc-bridge 目录里，
+// 于是写到了 cc-bridge/cc-bridge/ 下，而 mcp-server 去 cc-bridge/ 找，永远读不到。
+// 兔兔实测「PDF 推上去了但他看不到」就是这个：内容一直在，只是写错了地方。
+const READING_PATH = process.env.MP_CC_BRIDGE_DIR
+  ? join(process.env.MP_CC_BRIDGE_DIR, "reading-context.json")
+  : "/root/projects/BunnyPalace/cc-bridge/reading-context.json"
 
 function saveReadingContext(m: any): void {
   try {
