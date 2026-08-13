@@ -7,6 +7,7 @@ import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
 import { INTIMACY_TOOLS, callIntimacyTool, WISH_TOOLS, callWishTool } from '../intimacy';
 import { FABLELINE_TOOLS, callFablelineTool } from '../fableline';
+import { PREREAD_TOOLS, callPrereadTool } from '../preread';
 import { HOWISSHE_TOOLS, callHowIsSheTool } from '../howisshe';
 import { retrieveMemories, searchMessages } from '../memory/retriever';
 import { saveMemory } from '../memory/store';
@@ -32,6 +33,7 @@ export const BUILTIN_TOOLS = [
   ...INTIMACY_TOOLS,
   ...WISH_TOOLS,
   ...FABLELINE_TOOLS,
+  ...PREREAD_TOOLS,
   {
     name: 'exec',
     description: '在网关所在的这台服务器上跑一条 shell 命令，返回 stdout 和 stderr。60 秒超时，长任务用 nohup。',
@@ -189,6 +191,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (wishResult !== null) return wishResult;
   const fableResult = await callFablelineTool(name, input);
   if (fableResult !== null) return fableResult;
+  const prereadResult = await callPrereadTool(name, input);
+  if (prereadResult !== null) return prereadResult;
   const howResult = await callHowIsSheTool(name);
   if (howResult !== null) return howResult;
   const gmailResult = await callGmailTool(name, input);

@@ -243,6 +243,19 @@ function saveReadingContext(m: any): void {
       updatedAt: new Date().toISOString(),
     }
     writeFileSync(READING_PATH, JSON.stringify(payload, null, 2), "utf-8")
+    // 让预读台账知道她追到哪了（他好知道自己领先多少章）
+    try {
+      const bookName = payload.bookName
+      const chapter = payload.chapter
+      if (bookName && chapter) {
+        fetch("http://127.0.0.1:4567/api/preread/her-chapter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ book: bookName, chapter }),
+          signal: AbortSignal.timeout(3000),
+        }).catch(() => { /* 台账没跟上不影响读书 */ })
+      }
+    } catch { /* ignore */ }
   } catch (e: any) {
     console.error(`[hub] reading_context 落盘失败: ${e?.message}`)
   }

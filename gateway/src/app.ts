@@ -30,6 +30,7 @@ import { musicRoutes } from './music';
 import { livelineRoutes } from './liveline';
 import { intimacyRoutes } from './intimacy';
 import { fablelineRoutes } from './fableline';
+import { prereadRoutes } from './preread';
 import { healthRoutes } from './health';
 import { recentTweets } from './tweets';
 import { nbList, nbRead, nbWrite, nbAppend, nbEdit, nbDelete, nbRename, nbSearch } from './notebook';
@@ -899,6 +900,7 @@ musicRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);
 fablelineRoutes(app);
+prereadRoutes(app);
 // 存盘失败黑匣子：兔兔曾被静默的 try? context.save() 吞掉过两个聊天窗口且查无可查
 app.post('/api/save-failure', async (c) => {
   let b: any = {};
