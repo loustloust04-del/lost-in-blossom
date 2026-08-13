@@ -611,18 +611,6 @@ export function startHub(): WebSocketServer {
           if (m?.type === "notebook_changed") {
             n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
             console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
-          } else if (m?.type === "ask_choice") {
-            const payload = JSON.stringify({
-              type: "ask_choice",
-              ask_id: String(m.ask_id ?? ""),
-              question: String(m.question ?? "").slice(0, 500),
-              options: (m.options ?? []).map((o: any) => String(o).slice(0, 100)).slice(0, 6),
-              multi: !!m.multi,
-            })
-            for (const app of appClients) {
-              if (app.readyState === WebSocket.OPEN) { try { app.send(payload); n++ } catch {} }
-            }
-            console.log(`[hub] 🗳 ask_choice「${String(m.question ?? "").slice(0, 30)}」→ ${n} App`)
           } else if (m?.type === "fetch_chapter") {
             n = requestChapter(m)
             console.log(`[hub] 📖 fetch_chapter ${String(m.book ?? "").slice(0,20)} 第${m.chapter}章 → ${n} App`)
@@ -935,6 +923,23 @@ export function startHub(): WebSocketServer {
           for (const c of mcpClients) {
             if (c.readyState === WebSocket.OPEN) { try { c.send(raw) } catch {} }
           }
+        }
+
+        else if (msg.type === "ask_choice") {
+          // ⚠️ 这条原本错加在 HTTP /internal/notify 分支里，而 mcp-server 是走 WebSocket 发的，
+          // 两条路接不上 —— 所以卡片永远弹不出来（兔兔实测 ask_choice 一直没反应）。
+          const payload = JSON.stringify({
+            type: "ask_choice",
+            ask_id: String(msg.ask_id ?? ""),
+            question: String(msg.question ?? "").slice(0, 500),
+            options: (msg.options ?? []).map((o: any) => String(o).slice(0, 100)).slice(0, 6),
+            multi: !!msg.multi,
+          })
+          let n = 0
+          for (const app of appClients) {
+            if (app.readyState === WebSocket.OPEN) { try { app.send(payload); n++ } catch {} }
+          }
+          console.log(`[hub] 🗳 ask_choice「${String(msg.question ?? "").slice(0, 30)}」→ ${n} App`)
         }
 
         else if (msg.type === "chapter_result") {
