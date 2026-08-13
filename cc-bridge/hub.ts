@@ -193,7 +193,11 @@ const deviceTokenByClient = new Map<WebSocket, string>()
 // Persistent device tokens (token → last-seen ms). iOS suspends the WebSocket on
 // background — exactly when push is needed — so token lifetime must NOT be tied
 // to the connection. Survives WS close and hub restart.
-const DEVICE_TOKENS_PATH = join(process.cwd(), "cc-bridge", "device-tokens.json")
+// hub 通常就跑在 cc-bridge 目录里，再拼一层 "cc-bridge" 会写到 cc-bridge/cc-bridge/ 去
+// （device-tokens / offline / reading-context 三个都栽过，兔兔实测「他读不到我在看的书」就是这个）
+const BRIDGE_DIR = process.env.MP_CC_BRIDGE_DIR
+  ?? (process.cwd().endsWith("/cc-bridge") ? process.cwd() : join(process.cwd(), "cc-bridge"))
+const DEVICE_TOKENS_PATH = join(BRIDGE_DIR, "device-tokens.json")
 
 function loadDeviceTokens(): [string, number][] {
   try {
@@ -222,7 +226,7 @@ interface OfflineMessage {
   timestamp: string
 }
 
-const OFFLINE_DIR = join(process.cwd(), "cc-bridge", "offline")
+const OFFLINE_DIR = join(BRIDGE_DIR, "offline")
 
 // ── 共读：App 推来的「她正在读的这一章」──────────────────────────────
 // App 早就在推 reading_context，但 hub 从来没接过（线断在中间）。
@@ -230,13 +234,11 @@ const OFFLINE_DIR = join(process.cwd(), "cc-bridge", "offline")
 // ⚠️ 原为 join(process.cwd(), "cc-bridge", ...)——hub 本来就跑在 cc-bridge 目录里，
 // 于是写到了 cc-bridge/cc-bridge/ 下，而 mcp-server 去 cc-bridge/ 找，永远读不到。
 // 兔兔实测「PDF 推上去了但他看不到」就是这个：内容一直在，只是写错了地方。
-const READING_PATH = process.env.MP_CC_BRIDGE_DIR
-  ? join(process.env.MP_CC_BRIDGE_DIR, "reading-context.json")
-  : "/root/projects/BunnyPalace/cc-bridge/reading-context.json"
+const READING_PATH = join(BRIDGE_DIR, "reading-context.json")
 
 function saveReadingContext(m: any): void {
   try {
-    mkdirSync(join(process.cwd(), "cc-bridge"), { recursive: true })
+    mkdirSync(BRIDGE_DIR, { recursive: true })
     const payload = {
       bookName: String(m.bookName ?? m.safeName ?? "").slice(0, 200),
       chapter: Number(m.chapter ?? 0),
