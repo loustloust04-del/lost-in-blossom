@@ -605,12 +605,22 @@ final class CCBridgeWebSocketClient: NSObject {
                 let pid = UserDefaults.standard.string(forKey: "coread.profileId") ?? ""
                 guard let safe = BookStore.safeNameMatching(bookName: bookName, profileId: pid) else { return }
                 var notes = BookStore.loadNotes(safeName: safe, profileId: pid)
+                // 用他给的引用去正文里定位——没有锚点的批注渲染不出来（正文上不着色、
+                // 抽屉里也标不出位置），兔兔实测「他批了但我这边什么都看不到」。
+                var start = 0, end = 0
+                let q = quote.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !q.isEmpty,
+                   let text = BookStore.loadChapterText(safeName: safe, chapterNo: chapter, profileId: pid),
+                   let r = text.range(of: q) {
+                    start = text.distance(from: text.startIndex, to: r.lowerBound)
+                    end = text.distance(from: text.startIndex, to: r.upperBound)
+                }
                 notes.append(BookStore.Note(
                     id: UUID().uuidString,
                     chapter: chapter,
-                    anchorText: quote,
-                    anchorStart: 0,
-                    anchorEnd: 0,
+                    anchorText: q,
+                    anchorStart: start,
+                    anchorEnd: end,
                     kind: "aiBubble",
                     content: noteText,
                     role: "ai",
