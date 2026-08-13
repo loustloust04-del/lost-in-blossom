@@ -191,12 +191,12 @@ const FALLBACK_PROXY_TOOLS = [
   },
   {
     name: "book_note",
-    description: "在兔兔正在读的这一章的边空白写一句给她看的话。不带 chapter 就写在她当前读的那章；也可以指定 book + chapter 写到别处——比如我先读完了几章，在前面留好批注等她追上来。",
+    description: "在兔兔正在读的这一章的边空白写一句给她看的话。不带 chapter 就写在她当前读的那章；也可以指定 book + chapter 写到别处——比如我先读完了几章，在前面留好批注等她追上来。\n\nquote 填原文里一字不差的一小句（十几二十个字最好）——批注靠它钉在正文那个位置上，她读到那儿就看见下划线；不给 quote 的话批注只能躺在抽屉里，她翻页时不会遇到。",
     inputSchema: {
       type: "object",
       properties: {
         note: { type: "string", description: "批注正文" },
-        quote: { type: "string", description: "针对的原文片段（可选，会显示在批注上方）" },
+        quote: { type: "string", description: "原文里一字不差的一小句，批注靠它定位到正文" },
         book: { type: "string", description: "书名（可选，不填=她当前在读的那本）" },
         chapter: { type: "number", description: "第几章（可选，不填=她当前读的那章）" },
       },
