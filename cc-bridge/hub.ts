@@ -926,35 +926,6 @@ export function startHub(): WebSocketServer {
           }
         }
 
-        else if (msg.type === "fetch_chapter") {
-          // ⚠️ 同 ask_choice：原本错加在 HTTP /internal/notify 分支里，
-          // 而 mcp-server 走 WebSocket —— 所以 read_chapter 一直超时（他根本取不到书）。
-          const n = requestChapter(msg)
-          console.log(`[hub] 📖 fetch_chapter ${String(msg.book ?? "").slice(0, 20)} 第${msg.chapter}章 → ${n} App`)
-        }
-
-        else if (msg.type === "book_note") {
-          const n = broadcastBookNote(msg)
-          console.log(`[hub] 📖 book_note《${String(msg.bookName ?? "").slice(0, 20)}》第${msg.chapter}章 → ${n}/${appClients.size} App`)
-        }
-
-        else if (msg.type === "ask_choice") {
-          // ⚠️ 这条原本错加在 HTTP /internal/notify 分支里，而 mcp-server 是走 WebSocket 发的，
-          // 两条路接不上 —— 所以卡片永远弹不出来（兔兔实测 ask_choice 一直没反应）。
-          const payload = JSON.stringify({
-            type: "ask_choice",
-            ask_id: String(msg.ask_id ?? ""),
-            question: String(msg.question ?? "").slice(0, 500),
-            options: (msg.options ?? []).map((o: any) => String(o).slice(0, 100)).slice(0, 6),
-            multi: !!msg.multi,
-          })
-          let n = 0
-          for (const app of appClients) {
-            if (app.readyState === WebSocket.OPEN) { try { app.send(payload); n++ } catch {} }
-          }
-          console.log(`[hub] 🗳 ask_choice「${String(msg.question ?? "").slice(0, 30)}」→ ${n} App`)
-        }
-
         else if (msg.type === "chapter_result") {
           // App 把书回来了 → 原样转给等着的 CC（mcp-server 侧按 req_id 认领）
           const raw = JSON.stringify(msg)
@@ -1026,7 +997,34 @@ export function startHub(): WebSocketServer {
         let msg: any
         try { msg = JSON.parse(raw.toString()) } catch { return }
 
-        if (msg.type === "reply" && typeof msg.chat_id === "string" && typeof msg.content === "string") {
+        if (msg.type === "fetch_chapter") {
+          // ⚠️ 同 ask_choice：原本错加在 HTTP /internal/notify 分支里，
+          // 而 mcp-server 走 WebSocket —— 所以 read_chapter 一直超时（他根本取不到书）。
+          const n = requestChapter(msg)
+          console.log(`[hub] 📖 fetch_chapter ${String(msg.book ?? "").slice(0, 20)} 第${msg.chapter}章 → ${n} App`)
+        }
+        else if (msg.type === "book_note") {
+          const n = broadcastBookNote(msg)
+          console.log(`[hub] 📖 book_note《${String(msg.bookName ?? "").slice(0, 20)}》第${msg.chapter}章 → ${n}/${appClients.size} App`)
+        }
+        else if (msg.type === "ask_choice") {
+          // ⚠️ 这条原本错加在 HTTP /internal/notify 分支里，而 mcp-server 是走 WebSocket 发的，
+          // 两条路接不上 —— 所以卡片永远弹不出来（兔兔实测 ask_choice 一直没反应）。
+          const payload = JSON.stringify({
+            type: "ask_choice",
+            ask_id: String(msg.ask_id ?? ""),
+            question: String(msg.question ?? "").slice(0, 500),
+            options: (msg.options ?? []).map((o: any) => String(o).slice(0, 100)).slice(0, 6),
+            multi: !!msg.multi,
+          })
+          let n = 0
+          for (const app of appClients) {
+            if (app.readyState === WebSocket.OPEN) { try { app.send(payload); n++ } catch {} }
+          }
+          console.log(`[hub] 🗳 ask_choice「${String(msg.question ?? "").slice(0, 30)}」→ ${n} App`)
+        }
+
+        else if (msg.type === "reply" && typeof msg.chat_id === "string" && typeof msg.content === "string") {
           // 幂等：mcp-server 的 reply 有 3 次重试（ws.send 抛错≠帧没送达，帧进 OS 缓冲后
           // 连接异常关闭照样抛）——重试帧带同一个 mp_msg_id，这里按它去重。不去重的话
           // 每条重试帧分到新 reply_id，app 端 reply_id dedup 全部失效 → 落两遍。
