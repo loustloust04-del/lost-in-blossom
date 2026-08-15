@@ -9,6 +9,26 @@ if [ ! -f "$CRED_FILE" ]; then
     exit 1
 fi
 
+# 只在快过期时才刷——原来每 30 分钟无脑刷，把 Anthropic 的刷新接口刷到 rate_limit，
+# 于是 token 真过期时反而刷不回来（兔兔实测：他开始报 401 和莫名其妙的 content filtering）
+EXPIRES_AT=$(python3 -c "
+import json
+d = json.load(open('$CRED_FILE'))
+oauth = d.get('claudeAiOauth') or {}
+print(oauth.get('expiresAt') or d.get('expiresAt') or 0)
+" 2>/dev/null)
+
+if [ -n "$EXPIRES_AT" ] && [ "$EXPIRES_AT" != "0" ]; then
+    NOW_MS=$(( $(date +%s) * 1000 ))
+    LEFT=$(( (EXPIRES_AT - NOW_MS) / 60000 ))
+    # 还剩 30 分钟以上就不刷
+    if [ "$LEFT" -gt 30 ]; then
+        echo "[refresh] token 还有 ${LEFT} 分钟，跳过"
+        exit 0
+    fi
+    echo "[refresh] token 剩 ${LEFT} 分钟，开始刷新"
+fi
+
 REFRESH_TOKEN=$(python3 -c "import json; print(json.load(open('$CRED_FILE')).get('refreshToken',''))")
 
 if [ -z "$REFRESH_TOKEN" ]; then
