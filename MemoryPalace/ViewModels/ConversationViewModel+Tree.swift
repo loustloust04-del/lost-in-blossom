@@ -468,6 +468,16 @@ extension ConversationViewModel {
 
         conversation.nodeCount = data.displayableCount
         isLoading = false
+
+        // 路径已就绪 → 把等着的 CC 消息补插进来（它们当时因为拿不到 parent 而排队，
+        // 见 appendCCMessage 的 guard；不排队的话会造新根把历史绕过去）
+        if !pendingCCMessages.isEmpty {
+            let queued = pendingCCMessages
+            pendingCCMessages.removeAll()
+            for item in queued where item.chatId == conversation.id {
+                appendCCMessage(chatId: item.chatId, content: item.content, context: context)
+            }
+        }
         refreshBranchOffMainCount()
 
         // Fire pending scroll after tree is loaded — must be next runloop turn

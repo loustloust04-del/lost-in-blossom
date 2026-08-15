@@ -934,9 +934,29 @@ extension ConversationViewModel {
     /// 把一条 CC 消息作为独立 assistant 节点插入对应对话。
     /// 当前打开的对话 → 同步更新 currentPath/nodeMap，UI 直接长出新气泡；
     /// 其他对话 → 直接持久化，下次打开可见。
-    private func appendCCMessage(chatId: String, content: String, context: ModelContext) {
+    func appendCCMessage(chatId: String, content: String, context: ModelContext) {
         if let conversation = selectedConversation, conversation.id == chatId {
-            let parentId = currentPath.last?.id
+            // ⚠️ 兔兔实测「聊天记录被整个吞掉」的真凶：
+            // App 从后台回来时 currentPath 可能还没重建完（空的），这时他的消息一到，
+            // parentId=nil → 这条消息成了新的根节点 → currentPath 只剩它一条
+            // → conversation.currentNodeId 指向新根 → 整条历史被绕过，看起来就是「全没了」。
+            // 历史其实还在库里，但路径断了。所以：拿不到 parent 时，回退到对话记录的当前节点；
+            // 再拿不到就先重建路径，绝不在空路径上插根。
+            var parentId = currentPath.last?.id
+            if parentId == nil, let saved = conversation.currentNodeId, nodeMap[saved] != nil {
+                parentId = saved
+            }
+            if parentId == nil, let saved = conversation.currentNodeId, !saved.isEmpty {
+                // 路径还没加载完，但对话记录里有当前节点——直接挂在它后面。
+                // 挂不上就宁可不插（下面 guard），也不能在空路径上插根把历史绕过去。
+                parentId = saved
+            }
+            guard parentId != nil || conversation.currentNodeId == nil else {
+                // 这是一条有历史的对话，但路径和当前节点都拿不到 → 状态没准备好。
+                // 落进待插队列，等 loadConversation 完成后补，绝不在这里造新根。
+                pendingCCMessages.append((chatId: chatId, content: content))
+                return
+            }
             let nodeId = UUID().uuidString
             let node = MessageNode(
                 id: nodeId,
