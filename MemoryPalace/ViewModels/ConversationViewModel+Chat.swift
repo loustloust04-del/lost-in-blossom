@@ -943,17 +943,14 @@ extension ConversationViewModel {
             // 历史其实还在库里，但路径断了。所以：拿不到 parent 时，回退到对话记录的当前节点；
             // 再拿不到就先重建路径，绝不在空路径上插根。
             var parentId = currentPath.last?.id
-            if parentId == nil, let saved = conversation.currentNodeId, nodeMap[saved] != nil {
-                parentId = saved
+            let savedNodeId = conversation.currentNodeId   // 非可选 String，空串表示没有
+            if parentId == nil, !savedNodeId.isEmpty {
+                // 路径还没重建完，但对话记录里存着当前节点——挂在它后面
+                parentId = savedNodeId
             }
-            if parentId == nil, let saved = conversation.currentNodeId, !saved.isEmpty {
-                // 路径还没加载完，但对话记录里有当前节点——直接挂在它后面。
-                // 挂不上就宁可不插（下面 guard），也不能在空路径上插根把历史绕过去。
-                parentId = saved
-            }
-            guard parentId != nil || conversation.currentNodeId == nil else {
-                // 这是一条有历史的对话，但路径和当前节点都拿不到 → 状态没准备好。
-                // 落进待插队列，等 loadConversation 完成后补，绝不在这里造新根。
+            // 有历史（存过 currentNodeId）却仍拿不到 parent → 状态没准备好，排队等路径重建，
+            // 绝不在空路径上造新根（那会让整条历史被绕过）
+            if parentId == nil, !savedNodeId.isEmpty {
                 pendingCCMessages.append((chatId: chatId, content: content))
                 return
             }
