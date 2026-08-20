@@ -48,6 +48,8 @@ jobs:
       - name: Resolve Swift package dependencies
         run: |
           xcodebuild -resolvePackageDependencies \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS
 
@@ -107,6 +109,8 @@ jobs:
       - name: Archive (signed)
         run: |
           xcodebuild archive \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS \
             -destination 'generic/platform=iOS' \

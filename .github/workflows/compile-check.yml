@@ -31,6 +31,8 @@ jobs:
       - name: Resolve packages
         run: |
           xcodebuild -resolvePackageDependencies \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS
 
@@ -38,6 +40,8 @@ jobs:
         run: |
           set +e
           xcodebuild build \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             -project MemoryPalace.xcodeproj \
             -scheme MemoryPalaceIOS \
             -destination 'generic/platform=iOS' \
