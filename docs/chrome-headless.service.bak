@@ -1,11 +1,12 @@
 [Unit]
 Description=Chrome Headless Browser
-After=network.target
+After=network.target xvfb.service
+Requires=xvfb.service
 
 [Service]
+Environment=DISPLAY=:99
 Type=simple
 ExecStart=/usr/bin/google-chrome-stable \
-  --headless=new \
   --no-sandbox --disable-gpu \
   --user-data-dir=/root/chrome-profile \
   --remote-debugging-port=19825 --remote-debugging-address=0.0.0.0 \
