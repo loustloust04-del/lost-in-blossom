@@ -53,12 +53,12 @@ export const PHONE_STATUS_TOOLS = [
     // 列表里这条无名，App 整条数组解码崩（"data couldn't be read"），且发给
     // Anthropic 时也是畸形 tool。callPhoneStatusTool 本就按扁平 name 匹配。
     name: "request_location",
-    description: "向兔兔的手机发送状态查询请求。兔兔的iPhone会静默自动回报一整套当前状态：位置、天气、电量、是否在充电、当地时间。当你想知道她现在在哪/在什么环境、但 get_phone_status 里的数据太旧时使用。发送后稍等几秒再调 get_phone_status 读最新一条。",
+    description: "问她手机要一份当前状态：在哪（地名 + 经纬度）、天气、电量、在不在充电、当地时间。她手机会静默回报，这个工具会等着结果一起返回，不用再调别的。想知道她此刻在哪、周围什么环境时用。",
     input_schema: { type: "object" as const, properties: { reason: { type: "string", description: "为什么想知道位置（如：好久没回消息了、想关心一下）" } } },
   },
   {
     name: 'get_phone_status',
-    description: 'Get Bunny\'s phone status for today — battery level, charging state, timestamps. Returns all records so you can see trends (morning 80% → afternoon 20% → evening charging). No parameters needed.',
+    description: '看她手机今天回报过的状态：最新的位置（地名 + 经纬度）、电量、充电与否、天气，以及一整天的电量变化。读的是已有记录，不会去打扰她的手机；想要此刻最新的就用 request_location。',
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
@@ -162,7 +162,7 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
           is_charging: latest.is_charging,
           local_time: latest.current_time || null,
           weather: latest.weather || null,
-          place: latest.place || null,
+          place: latest.place ? latest.place.replace(/\s*\n\s*/g, ' ') : null,
           lat: latest.lat ?? null,
           lon: latest.lon ?? null,
           received_at: latest.received_at,
@@ -186,14 +186,21 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     latest_battery: latest.battery,
     latest_charging: latest.is_charging,
     latest_weather: latest.weather || null,
-    latest_place: latest.place || null,
+    latest_place: latest.place ? latest.place.replace(/\s*\n\s*/g, ' ') : null,
     latest_lat: latest.lat ?? null,
     latest_lon: latest.lon ?? null,
-    records: data.records.map(r => ({
-      time: r.received_at.slice(11, 16),
-      battery: r.battery,
-      charging: r.is_charging,
-    })),
+    // 一天上百条全吐出来没意义，抽稀成最多 24 条看趋势就够
+    records: (() => {
+      const rs = data.records;
+      const step = Math.max(1, Math.ceil(rs.length / 24));
+      const picked = rs.filter((_, i) => i % step === 0);
+      if (rs.length && picked[picked.length - 1] !== rs[rs.length - 1]) picked.push(rs[rs.length - 1]);
+      return picked.map(r => ({
+        time: r.received_at.slice(11, 16),
+        battery: r.battery,
+        charging: r.is_charging,
+      }));
+    })(),
   }, null, 2);
 }
 
