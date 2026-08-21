@@ -1,0 +1,22 @@
+[Unit]
+Description=Chrome Headless Browser
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/google-chrome-stable \
+  --headless=new \
+  --no-sandbox --disable-gpu \
+  --user-data-dir=/root/chrome-profile \
+  --remote-debugging-port=19825 --remote-debugging-address=0.0.0.0 \
+  --window-size=1440,900 \
+  --lang=zh-CN \
+  --accept-lang=zh-CN,zh;q=0.9 \
+  --user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" \
+  --disable-blink-features=AutomationControlled \
+  --disable-features=IsolateOrigins,site-per-process
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
