@@ -12,6 +12,9 @@ interface PhoneRecord {
   device_name?: string;
   weather?: string;
   place?: string;
+  /// 经纬度：兔兔 2026-08-21 在快捷指令里加的 Latitude/Longitude
+  lat?: number;
+  lon?: number;
   received_at: string; // ISO string
 }
 
@@ -160,6 +163,8 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
           local_time: latest.current_time || null,
           weather: latest.weather || null,
           place: latest.place || null,
+          lat: latest.lat ?? null,
+          lon: latest.lon ?? null,
           received_at: latest.received_at,
         }, null, 2);
       }
@@ -182,6 +187,8 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     latest_charging: latest.is_charging,
     latest_weather: latest.weather || null,
     latest_place: latest.place || null,
+    latest_lat: latest.lat ?? null,
+    latest_lon: latest.lon ?? null,
     records: data.records.map(r => ({
       time: r.received_at.slice(11, 16),
       battery: r.battery,
@@ -228,6 +235,17 @@ export function phoneStatusRoutes(app: Hono) {
       device_name: body.device_name || undefined,
       weather: body.Weather || body.weather || undefined,
       place: body.Place || body.place || undefined,
+      // 经纬度（快捷指令里叫 Latitude/Longitude，也兼容小写与 lat/lon 写法）
+      lat: (() => {
+        const v = body.Latitude ?? body.latitude ?? body.lat;
+        const n = typeof v === 'string' ? parseFloat(v) : v;
+        return Number.isFinite(n) ? n : undefined;
+      })(),
+      lon: (() => {
+        const v = body.Longitude ?? body.longitude ?? body.lon ?? body.lng;
+        const n = typeof v === 'string' ? parseFloat(v) : v;
+        return Number.isFinite(n) ? n : undefined;
+      })(),
       received_at: beijingNow.toISOString(),
     });
     await save(data);
@@ -239,7 +257,7 @@ export function phoneStatusRoutes(app: Hono) {
       notifyChargeEvent(newRec);
     }
 
-    console.log(`[phone] 📱 battery=${body.battery}% charging=${body.is_charging} place=${body.Place || "?"} weather=${body.Weather || "?"} (${data.records.length} records today)`);
+    console.log(`[phone] 📱 battery=${body.battery}% charging=${body.is_charging} place=${body.Place || "?"} lat=${body.Latitude ?? "-"} lon=${body.Longitude ?? "-"} weather=${body.Weather || "?"} (${data.records.length} records today)`);
     return c.json({ ok: true });
   });
 
