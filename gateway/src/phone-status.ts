@@ -2,6 +2,7 @@
 // 存本地 JSON 文件（跟 vitals.ts 一样），每天自动清空
 import { Hono } from 'hono';
 import { config } from './config';
+import { wgs84ToGcj02 } from './geo';
 
 const DATA_FILE = '/root/projects/BunnyPalace/gateway/data/phone-status.json';
 
@@ -53,7 +54,7 @@ export const PHONE_STATUS_TOOLS = [
     // 列表里这条无名，App 整条数组解码崩（"data couldn't be read"），且发给
     // Anthropic 时也是畸形 tool。callPhoneStatusTool 本就按扁平 name 匹配。
     name: "request_location",
-    description: "问她手机要一份当前状态：在哪（地名 + 经纬度）、天气、电量、在不在充电、当地时间。她手机会静默回报，这个工具会等着结果一起返回，不用再调别的。想知道她此刻在哪、周围什么环境时用。",
+    description: "问她手机要一份当前状态：在哪（地名 + 经纬度）、天气、电量、在不在充电、当地时间。坐标给两组：lat/lon 是 GPS 原始值；要查高德/腾讯/百度、要填叫车起点用 amap_lat/amap_lon（国内地图坐标系不同，用前一组会偏半公里）。她手机会静默回报，这个工具会等着结果一起返回，不用再调别的。想知道她此刻在哪、周围什么环境时用。",
     input_schema: { type: "object" as const, properties: { reason: { type: "string", description: "为什么想知道位置（如：好久没回消息了、想关心一下）" } } },
   },
   {
@@ -165,6 +166,10 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
           place: latest.place ? latest.place.replace(/\s*\n\s*/g, ' ') : null,
           lat: latest.lat ?? null,
           lon: latest.lon ?? null,
+          amap_lat: latest.lat != null && latest.lon != null
+            ? Number(wgs84ToGcj02(latest.lat, latest.lon).lat.toFixed(6)) : null,
+          amap_lon: latest.lat != null && latest.lon != null
+            ? Number(wgs84ToGcj02(latest.lat, latest.lon).lng.toFixed(6)) : null,
           received_at: latest.received_at,
         }, null, 2);
       }
@@ -187,8 +192,14 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     latest_charging: latest.is_charging,
     latest_weather: latest.weather || null,
     latest_place: latest.place ? latest.place.replace(/\s*\n\s*/g, ' ') : null,
+    // 手机给的是 GPS 坐标（WGS-84）；国内地图要 GCJ-02，差 500-2000 米且不报错，
+    // 所以两组都给：看位置用 lat/lon，送高德/腾讯/百度用 amap_ 那组
     latest_lat: latest.lat ?? null,
     latest_lon: latest.lon ?? null,
+    latest_amap_lat: latest.lat != null && latest.lon != null
+      ? Number(wgs84ToGcj02(latest.lat, latest.lon).lat.toFixed(6)) : null,
+    latest_amap_lon: latest.lat != null && latest.lon != null
+      ? Number(wgs84ToGcj02(latest.lat, latest.lon).lng.toFixed(6)) : null,
     // 一天上百条全吐出来没意义，抽稀成最多 24 条看趋势就够
     records: (() => {
       const rs = data.records;
