@@ -212,7 +212,15 @@ export function phoneStatusRoutes(app: Hono) {
 
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
-    console.log('[phone] 🔎 keys=', JSON.stringify(Object.keys(body)), '| in_charging=', JSON.stringify(body.in_charging), '| is_charging=', JSON.stringify(body.is_charging));
+
+    // URL 参数兜底：词典里绑变量容易绑不上（兔兔实测经纬度死活发不出来），
+    // 拼进 URL 反而一眼看得见有没有绑上。两种写法都认，body 优先。
+    for (const [qk, bk] of [['Latitude', 'Latitude'], ['Longitude', 'Longitude'], ['lat', 'Latitude'], ['lon', 'Longitude'], ['lng', 'Longitude']] as const) {
+      const qv = c.req.query(qk);
+      if (qv != null && qv !== '' && body[bk] == null) body[bk] = qv;
+    }
+
+    console.log('[phone] 🔎 keys=', JSON.stringify(Object.keys(body)), '| in_charging=', JSON.stringify(body.in_charging), '| lat=', JSON.stringify(body.Latitude), '| lon=', JSON.stringify(body.Longitude));
 
     const data = await load();
     const now = new Date();
