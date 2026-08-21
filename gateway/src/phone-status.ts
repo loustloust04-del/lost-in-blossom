@@ -166,6 +166,12 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
           place: latest.place ? latest.place.replace(/\s*\n\s*/g, ' ') : null,
           lat: latest.lat ?? null,
           lon: latest.lon ?? null,
+          ...(await (async () => {
+            if (latest.lat == null || latest.lon == null) return {};
+            const { reverseGeocode } = await import('./geo');
+            const info = await reverseGeocode(latest.lat, latest.lon);
+            return info ? { amap_address: info.address, nearby: info.nearby } : {};
+          })()),
           amap_lat: latest.lat != null && latest.lon != null
             ? Number(wgs84ToGcj02(latest.lat, latest.lon).lat.toFixed(6)) : null,
           amap_lon: latest.lat != null && latest.lon != null
@@ -196,6 +202,12 @@ export async function callPhoneStatusTool(name: string, input?: any): Promise<st
     // 所以两组都给：看位置用 lat/lon，送高德/腾讯/百度用 amap_ 那组
     latest_lat: latest.lat ?? null,
     latest_lon: latest.lon ?? null,
+    ...(await (async () => {
+      if (latest.lat == null || latest.lon == null) return {};
+      const { reverseGeocode } = await import('./geo');
+      const info = await reverseGeocode(latest.lat, latest.lon);
+      return info ? { amap_address: info.address, nearby: info.nearby } : {};
+    })()),
     latest_amap_lat: latest.lat != null && latest.lon != null
       ? Number(wgs84ToGcj02(latest.lat, latest.lon).lat.toFixed(6)) : null,
     latest_amap_lon: latest.lat != null && latest.lon != null
