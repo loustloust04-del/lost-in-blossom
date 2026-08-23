@@ -40,7 +40,13 @@ final class CCBridgeWebSocketClient: NSObject {
     /// 改为字典后，每条会话各自保留自己的思考链，不会被后到的新 thinking 覆盖。
     private(set) var thinkingBlocks: [String: CCThinkingBlock] = [:]
 
-    /// 最新一条 thinking 的快捷访问（向后兼容）。@Observable 计算属性，随 thinkingBlocks 变化更新。
+    /// ⚠️ 已废弃（2026-08-24），UI 不得再用。
+    /// 这是 pendingThinking 之前的旧实现残骸。它取全局时间戳最大者、不区分对话，
+    /// 且背后的 thinkingBlocks 只写不清 → 会把上一轮/别的窗口的思考链串给当前气泡。
+    /// 思考链的唯一正路是 pendingThinking + consumePendingThinking()：
+    /// reply 到达时消费一次、嵌入该条自己的 content，取完即空。
+    /// 保留仅供调试查看，任何 View 都不要读它。
+    @available(*, deprecated, message: "会串台。用 consumePendingThinking() 走 content 嵌入")
     var latestThinking: CCThinkingBlock? {
         thinkingBlocks.values.max(by: { $0.timestamp < $1.timestamp })
     }
