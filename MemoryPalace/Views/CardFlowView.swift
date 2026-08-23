@@ -666,6 +666,7 @@ struct InConversationSearchBar: View {
 // MARK: - Chat Input Bar
 
 struct ChatInputBar: View {
+    @AppStorage("assistantName") private var assistantName = "助手"
     var viewModel: ConversationViewModel
     var modelContext: ModelContext
     var profileManager: ProfileManager?
@@ -697,7 +698,7 @@ struct ChatInputBar: View {
     }
 
     private var inputPlaceholder: String {
-        viewModel.selectedConversation?.kind == "group" ? "在群里说点什么…" : "Reply to Caelum"
+        viewModel.selectedConversation?.kind == "group" ? "在群里说点什么…" : "跟 \(assistantName) 说点什么…"
     }
 
     var body: some View {
@@ -1781,14 +1782,7 @@ struct BubbleView: View {
                         ? RegexEngine.apply(scripts: regexScripts, text: rawDisplay, messagePlacement: 2, isMarkdown: true)
                         : rawDisplay
                     if displayText.isEmpty && isStreaming {
-                        HStack(spacing: 4) {
-                            ForEach(0..<3, id: \.self) { i in
-                                Circle()
-                                    .fill(Theme.textMuted.opacity(0.5))
-                                    .frame(width: 5, height: 5)
-                            }
-                        }
-                        .padding(.vertical, 4)
+                        TypingDotsView()
                     } else if !displayText.isEmpty {
                         let needsWebView = displayText.contains("{color:")
                         if needsWebView {
