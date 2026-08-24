@@ -121,3 +121,30 @@ Fable 读了这条，直接问她「昨晚是去吃夜宵了？」——她说�
 `geotools.ts` 里 `where_is_she` 的认家逻辑现成，抽出来复用即可。
 
 **优先级**：不高但很实在——这条线是给 Caelum 看的，看错了比看不到更糟。
+
+## 输入框下沉到 UIKit Paging 容器 —— 2026-08-24 兔兔提醒，Fable 记
+
+**我下过一个错判断**：说「我们没有粟粟那套分页架构，为输入框搬 887 行 UIKit 不值」。
+兔兔纠正：我们有。查证属实——`MemoryPalace/Views/Paging/` 两个文件与她**同名**
+（fork 时即带），PagingViewController 我们 470 行 / 她 785 行，差的正是她后长出的那段。
+
+**我们已有**：keyboardFrameWillChange / keyboardWillHide 监听、chat HC 的 keyboard
+safe area 注入、home indicator 护盾、边缘 pan 手势。
+
+**我们缺的（她 PagingViewController:146-200）**：
+- `inputBarHost: UIHostingController<AnyView>` + `inputBarContainer`
+  → 输入框下沉进 UIKit 容器（我们的还留在 SwiftUI 层靠 padding 定位）
+- `container.bottomAnchor == chatHC.view.keyboardLayoutGuide.topAnchor`
+  → 底边钉系统导轨，键盘起落自动跟随，**全程无手写间距**
+- `PassthroughContainerView`：hosting view 默认拦截整个 bounds 的触摸，
+  输入条栈上缘以下的空白会把消息按钮行挡死（她注：P1 复现器实锤）
+- `barLayoutKick` + 延一 runloop：嵌套 UIHostingView 下 intrinsicContentSize 失效，
+  打字时容器钉死不长高、文本内滚（KB-P3 探针实锤）；kick 若同步 layoutIfNeeded
+  会打在键盘收起动画的建立窗口上把动画掐死（KB-P4：willHide→didChangeFrame 仅 29ms）
+- 两个 KVO（bounds + center）发布 containerTop，供回底按钮锚点用
+
+**要不要做**：先看 SwiftUI 侧把边距调对够不够用。真要开这条线的触发条件是——
+兔兔摸到「输入框和正文不同步、慢一丢丢」且忍不了。那是 SwiftUI 结构性追不平的东西
+（见她 docs/research-telegram-kb-send.md 的三条不变量）。
+
+**估**：比我原先说的小得多（骨架现成），但不是一刀——透传容器和多行生长两个坑必踩。
