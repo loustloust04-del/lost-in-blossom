@@ -1187,7 +1187,6 @@ private struct InputFieldContainer: View {
             HStack(spacing: 6) {
                 Spacer()
             styleMenu
-            }
                 // 模型胶囊（吸粟粟实调：10pt 字 + 5×5 状态点 + 中间截断，超长名不撑爆）
                 Button(action: onModelTap) {
                     HStack(spacing: 4) {
