@@ -883,6 +883,8 @@ private struct InputFieldContainer: View {
     @AppStorage("slimInputBar") private var slimInputBar = true
     /// 输入框全屏展开（参照 ChatGPT App）——细输入框最多 6 行，长消息看不全前文
     @State private var expandedInput = false
+    /// 输入框是否已经换行/长到多行——决定右上角展开按钮出不出现
+    private var isMultilineInput: Bool { text.contains("\n") || text.count > 18 }
     /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
     /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
     /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
@@ -1097,19 +1099,6 @@ private struct InputFieldContainer: View {
                     .padding(.leading, 6)
                 }
 
-                // 展开成全屏编辑（长消息用）——有内容才出现，空态不占位置
-                if !text.isEmpty {
-                    Button { expandedInput = true } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Theme.textMuted.opacity(0.5))
-                            .frame(width: 28, height: 28)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.opacity)
-                }
-
                 // 旧版排法：模型/✨ 回到框内（细版下它们在框外那条）
                 if !slimInputBar {
                     Button(action: onModelTap) {
@@ -1141,6 +1130,8 @@ private struct InputFieldContainer: View {
                     .focused($isFocused)
                     .padding(.leading, 6)
                     .padding(.vertical, 10)
+                    // 多行时右上角浮着展开按钮，给首行末尾让出位置，否则压字
+                    .padding(.trailing, isMultilineInput ? 26 : 0)
                 }
 
                 // 发送 / 停止 / 语音占位 —— 同一个按钮换图标，不做 if/else 两个按钮
@@ -1180,6 +1171,25 @@ private struct InputFieldContainer: View {
         // 她 CardFlowView:2047 就一行纯材质，没有描边也没有投影。
         // 我原先加的 mainBg 打底 + strokeBorder + shadow 正是框看着比她「重」的原因。
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        // 展开成全屏编辑：挂框内右上角（ChatGPT 那样）。
+        // 只在已经换行/写长时出现——单行时框才 44pt 高，「右上角」就是右边，会撞发送键；
+        // 而且单行本来也不需要展开。阈值 18 是按 13pt 字、可用宽度约 288pt 估的，
+        // 中文一行约 22 字，留了余量。
+        .overlay(alignment: .topTrailing) {
+            if isMultilineInput {
+                Button { expandedInput = true } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Theme.textMuted.opacity(0.55))
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+                .padding(.top, 2)
+                .transition(.opacity)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 20))
         .onTapGesture { isFocused = true }
         )
