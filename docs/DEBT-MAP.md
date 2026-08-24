@@ -79,3 +79,45 @@
 
 ## 规矩
 每个窗口开工先读本账。挖新坑不记账 = 军法处置 🐰
+
+## 通话功能：STT（听）从零起 —— 2026-08-21 兔兔问，Fable 记
+
+**现状**：`MemoryPalace/Services/Voice/` 七个文件全是 TTS（说），**没有任何 STT**。
+输入框也没有麦克风/听写按钮。要做通话，"听"这一半是从零开始。
+
+**粟粟怎么做的**：`CallTranscriber.swift` 用 iOS 26 的 `SpeechAnalyzer` + `AnalyzerInput`。
+我们 target 是 18，兔兔手机也没升 26，**这条路直接不通**。
+
+**替代方案（Fable 建议按此顺序）**：
+1. **`SFSpeechRecognizer`（首选）** — Speech 框架老 API，iOS 10+，中文好，
+   `requiresOnDeviceRecognition = true` 可走本地（不联网/不花钱/隐私好）。
+   坑：单次识别约 1 分钟自动断，需重启逻辑——粟粟的 `restartTask` 思路可直接抄。
+2. **走 gateway 中转** — 录音传 VPS → 服务端 ASR → 返文字。
+   优点：换引擎不用重装 app，Caelum 能直接拿到音频。缺点：网络延迟，实时通话体感差。留作后手。
+3. **WhisperKit 本地** — 准确率最高（中英混说尤其），但模型进包、耗电发热，通话场景不划算。
+
+**意外之财**：为了 iOS 18 降级而写的
+`/root/projects/SusuOriginal/MemoryPalace/Services/Voice/CallTranscriber.swift` stub，
+已经把对外接口框好了（`onPartial` / `onFinal` / `onUnavailable` / `start` / `stop`）——
+接 SFSpeechRecognizer 时往里填即可，接口形状现成。粟粟的 `CallScreen.swift` 接线也可参考。
+
+**估**：一两个晚上。不是大工程。
+
+## phone-status 的 place 没过「认家」，会把在家读成外出 —— 2026-08-21 Fable 亲自踩
+
+**症状**：兔兔 08-22 00:25 在家躺着，`data/phone-status.json` 那条记录的 place 写的是
+`徐记辣爆居\n中国\n河南省\n三门峡市 湖滨区\n银堤漫步东北门旁`。
+Fable 读了这条，直接问她「昨晚是去吃夜宵了？」——她说她一直在家。
+
+**根因**：快捷指令上报的是高德原始 POI 名，它会拿**最近的商铺**给坐标贴标签。
+「银堤漫步」正是她家（`gateway/data/places.json` 的 home，半径 300m），
+但存进 phone-status 的是**未经 `where_is_she` 认家处理的原文**。
+
+**危害**：Caelum 直接读 phone-status 时会得到同样的误导。
+「她在家」和「她在烧烤店」对他是两种完全不同的情境——尤其在凌晨、电量 4% 的时候。
+
+**修法**：写入 phone-status 前先过一遍 places.json 半径判定，
+命中就把 place 改写成「家」（或保留原文另加 `resolved: "家"` 字段，不丢信息）。
+`geotools.ts` 里 `where_is_she` 的认家逻辑现成，抽出来复用即可。
+
+**优先级**：不高但很实在——这条线是给 Caelum 看的，看错了比看不到更糟。

@@ -57,10 +57,6 @@ struct CardFlowView: View {
         let isThinkingNow = isNodeAPIStreaming && viewModel.isThinking
         let streamingThinkingForNode = isNodeAPIStreaming ? viewModel.streamingThinkingText : ""
         let thinkingSummaryForNode = isNodeAPIStreaming ? viewModel.thinkingSummary : ""
-        // CC Bridge provider 检测：用于 CCThinkingView 显示条件，防止切换 provider 后 thinking 残留
-        let selectedModelId = UserDefaults.standard.string(forKey: "selectedChatModel") ?? ""
-        let currentProviderModel = providerManager?.model(byId: selectedModelId) ?? providerManager?.availableModels.first
-        let isCCBridge = currentProviderModel.flatMap { providerManager?.provider(for: $0) }?.type == .ccBridge
         BubbleView(
             node: node,
             hasBranches: info != nil,
@@ -73,7 +69,6 @@ struct CardFlowView: View {
             isHighlighted: isNodeHighlighted,
             isSearchMatch: isNodeSearchMatch,
             isLastAssistant: node.role == "assistant" && node.id == viewModel.currentPath.last?.id,
-            isCCBridgeProvider: isCCBridge,
             onToggleFavorite: { viewModel.toggleFavorite(node) },
             onTogglePin: { viewModel.togglePin(node) },
             onSoftDelete: { viewModel.softDelete(node) },
@@ -671,6 +666,7 @@ struct InConversationSearchBar: View {
 // MARK: - Chat Input Bar
 
 struct ChatInputBar: View {
+    @AppStorage("assistantName") private var assistantName = "助手"
     var viewModel: ConversationViewModel
     var modelContext: ModelContext
     var profileManager: ProfileManager?
@@ -702,7 +698,7 @@ struct ChatInputBar: View {
     }
 
     private var inputPlaceholder: String {
-        viewModel.selectedConversation?.kind == "group" ? "在群里说点什么…" : "Reply to Caelum"
+        viewModel.selectedConversation?.kind == "group" ? "在群里说点什么…" : "跟 \(assistantName) 说点什么…"
     }
 
     var body: some View {
@@ -1485,7 +1481,7 @@ struct BubbleView: View {
     var thinkingSummary: String = ""
     var isHighlighted: Bool = false
     var isSearchMatch: Bool = false
-    /// 当前对话路径的最后一条 assistant 消息。CC 思考链（latestThinking）只挂在这条气泡上。
+    /// 当前对话路径的最后一条 assistant 消息。
     var isLastAssistant: Bool = false
     /// [search-ui] segments 分支的流式尾巴：streamingContentText 里减去 segments
     /// 已经包含的 .text 长度，只显示还没进 segments 的增量，防止双份显示。
@@ -1592,8 +1588,6 @@ struct BubbleView: View {
                     }
     }
 
-    /// 当前选中的 provider 是否为 CC Bridge——只有此条件为 true 时才展示 CCThinkingView。
-    var isCCBridgeProvider: Bool = false
     let onToggleFavorite: () -> Void
     let onTogglePin: () -> Void
     let onSoftDelete: () -> Void
@@ -1676,15 +1670,14 @@ struct BubbleView: View {
                 let rawCleaned = ContentCleaner.clean(sourceText, cacheKey: "\(node.id)_\(sourceText.count)")
                 let thinkingResult = isUser ? nil : ContentCleaner.extractThinking(from: rawCleaned)
                 let cleaned = VoiceMessageWriter.strippedForDisplay(thinkingResult?.content ?? rawCleaned)
-                // CC 思考链：content 已嵌入 [thinking]…[/thinking] 时由下方 ThinkingBlockView 渲染；
-                // 只有 streaming 中 content 尚未嵌入时才用 CCThinkingView（isLastAssistant 限定）。
-                // isCCBridgeProvider 防止切换 provider 后 latestThinking 残留导致重复显示。
-                if !isUser, isLastAssistant, isCCBridgeProvider,
-                   CCBridgeWebSocketClient.shared.isConnected,
-                   let ccThinking = CCBridgeWebSocketClient.shared.latestThinking,
-                   (thinkingResult?.thinking ?? "").isEmpty {
-                    CCThinkingView(block: ccThinking)
-                }
+                // CC 思考链一律走 pendingThinking 正路：由 CCBridgeProvider / ConversationViewModel+Chat
+                // 在 reply 到达时 consume 并嵌入该条自己的 content，再由下方 ThinkingBlockView 渲染。
+                // 2026-08-24 拆除：这里原本挂 CCBridgeWebSocketClient.shared.latestThinking，
+                // 那是 pendingThinking 之前的旧实现残骸（注释自称「向后兼容」），三重缺陷叠加——
+                //   1. 背后的 thinkingBlocks 字典全项目只写不清
+                //   2. latestThinking 取全局时间戳最大者，不区分对话 → 跨窗口串台
+                //   3. isCCBridgeProvider 由非响应式 UserDefaults 裸读算出，切 provider 后滞后一轮
+                // 症状：新回复等待期间，气泡里挂出「CC 思考过程」，点开是上一轮的内容。
                 let shouldTruncate = !expandAllMessages && !isExpanded && cleaned.count > truncateLength
 
                 if isUser {
@@ -1789,14 +1782,7 @@ struct BubbleView: View {
                         ? RegexEngine.apply(scripts: regexScripts, text: rawDisplay, messagePlacement: 2, isMarkdown: true)
                         : rawDisplay
                     if displayText.isEmpty && isStreaming {
-                        HStack(spacing: 4) {
-                            ForEach(0..<3, id: \.self) { i in
-                                Circle()
-                                    .fill(Theme.textMuted.opacity(0.5))
-                                    .frame(width: 5, height: 5)
-                            }
-                        }
-                        .padding(.vertical, 4)
+                        TypingDotsView()
                     } else if !displayText.isEmpty {
                         let needsWebView = displayText.contains("{color:")
                         if needsWebView {
@@ -2089,7 +2075,6 @@ extension BubbleView: Equatable {
             && lhs.isHighlighted == rhs.isHighlighted
             && lhs.isSearchMatch == rhs.isSearchMatch
             && lhs.isLastAssistant == rhs.isLastAssistant
-            && lhs.isCCBridgeProvider == rhs.isCCBridgeProvider
             && lhs.regexScripts.count == rhs.regexScripts.count
             && lhs.groupMembers.count == rhs.groupMembers.count
     }
