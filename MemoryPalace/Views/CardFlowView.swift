@@ -881,6 +881,8 @@ private struct InputFieldContainer: View {
     /// 只切「排法」，不切修复——TextField 自适应高度、发送键 branchIndicator 配色、
     /// 单按钮换图标、玻璃背景，两种排法共享同一份代码。
     @AppStorage("slimInputBar") private var slimInputBar = true
+    /// 输入框全屏展开（参照 ChatGPT App）——细输入框最多 6 行，长消息看不全前文
+    @State private var expandedInput = false
     /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
     /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
     /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
@@ -1095,6 +1097,19 @@ private struct InputFieldContainer: View {
                     .padding(.leading, 6)
                 }
 
+                // 展开成全屏编辑（长消息用）——有内容才出现，空态不占位置
+                if !text.isEmpty {
+                    Button { expandedInput = true } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity)
+                }
+
                 // 旧版排法：模型/✨ 回到框内（细版下它们在框外那条）
                 if !slimInputBar {
                     Button(action: onModelTap) {
@@ -1216,6 +1231,16 @@ private struct InputFieldContainer: View {
             }
         }
         #if os(iOS)
+        .fullScreenCover(isPresented: $expandedInput) {
+            ExpandedInputSheet(
+                text: $text,
+                onSend: {
+                    expandedInput = false
+                    triggerSend()
+                },
+                onDismiss: { expandedInput = false }
+            )
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) { kbUp = true }
         }
