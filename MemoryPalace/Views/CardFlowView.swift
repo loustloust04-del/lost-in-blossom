@@ -740,8 +740,14 @@ struct ChatInputBar: View {
                 try? modelContext.save()
             }
         )
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        // 定位对齐粟粟（她走 UIKit：container 的 leading/trailing 直接贴 chatHC.view，
+        // bottom 钉 keyboardLayoutGuide.topAnchor，全程没有手写间距）。
+        // 我们没有她那套 UIKit 定位层，用 SwiftUI 等价物：
+        //   左右 16 → 8（她是 0 贴边，但我们输入框本体没有她那层 container 内边距，
+        //   完全贴边会让玻璃描边压在屏幕边缘上，取 8 折中）
+        //   底部 8 → 0（她无手写底距，安全区已经给了 home indicator 的位置）
+        .padding(.horizontal, 8)
+        .padding(.bottom, 0)
         .padding(.top, 6)
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
