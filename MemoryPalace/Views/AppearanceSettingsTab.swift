@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 
 struct AppearanceSettingsTab: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
-    @AppStorage("slimInputBar") private var slimInputBar = true
     @AppStorage("selectedFont") private var selectedFont = ""
     @AppStorage("fontScale") private var fontScale = 1.2
     @AppStorage("expandAllMessages") private var expandAllMessages = false
@@ -227,19 +226,6 @@ struct AppearanceSettingsTab: View {
                     .foregroundColor(Theme.textPrimary)
                     .tint(Theme.branchIndicator)
 
-                // 输入框排法：细版单行 / 旧版两层。放在这里而非「气泡外观（高级）」，
-                // 那个区默认折叠，兔兔 2026-08-24 在里面找不到。
-                Toggle(isOn: $slimInputBar) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("细输入框")
-                            .font(.system(size: Theme.SettingsFont.label))
-                            .foregroundColor(Theme.textPrimary)
-                        Text("单行排法，模型与风格移到框外下方；关掉是改版前的两层排法")
-                            .font(.system(size: Theme.SettingsFont.caption))
-                            .foregroundColor(Theme.textMuted)
-                    }
-                }
-                .tint(Theme.branchIndicator)
             }
         }
         .onAppear {
@@ -311,6 +297,7 @@ struct AppearanceSettingsTab: View {
 
 struct IOSAppearancePage: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @AppStorage("slimInputBar") private var slimInputBar = true
     @AppStorage("selectedFont") private var selectedFont = ""
     @AppStorage("fontScale") private var fontScale = 1.2
     @AppStorage("expandAllMessages") private var expandAllMessages = false
@@ -467,6 +454,15 @@ struct IOSAppearancePage: View {
             .listRowSeparator(.hidden)
 
             Section("消息显示") {
+                Toggle(isOn: $slimInputBar) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("细输入框")
+                            .font(.system(size: Theme.F.body))
+                        Text("单行排法，模型与风格移到框外下方；关掉是改版前的两层排法")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
                 Toggle(isOn: $expandAllMessages) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("全部展开全文")
