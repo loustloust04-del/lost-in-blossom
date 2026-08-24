@@ -1062,6 +1062,12 @@ private struct InputFieldContainer: View {
                     }
                     #endif
             }
+            // 兔兔 2026-08-24 报的空白 bug：上面那把测量用的隐藏 Text 是 .hidden()，
+            // SwiftUI 里 .hidden() 只是不绘制、仍参与布局——长文本时它真长到几百 pt，
+            // 把 ZStack 撑开，TextEditor 却钳在 120，多出来的全是点不着的死空白。
+            // 这里把容器高度钳死到 inputTextHeight 并裁剪，尺子照量，但不再撑父级。
+            .frame(height: inputTextHeight, alignment: .topLeading)
+            .clipped()
             .animation(.easeInOut(duration: 0.1), value: inputTextHeight)
             .padding(.horizontal, 10)
             .padding(.top, 4)
@@ -1170,8 +1176,11 @@ private struct InputFieldContainer: View {
         }
         // 圆角矩形卡片，跟聊天背景同色 + 细边框
         .background(
+            // 玻璃感：原为 Theme.mainBg 纯色不透明；换系统材质后能透出底下的聊天内容。
+            // 加一层极淡的同色底，避免深色壁纸下材质发灰。
             RoundedRectangle(cornerRadius: 22)
-                .fill(Theme.mainBg)
+                .fill(Theme.mainBg.opacity(0.35))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
                 .overlay(
                     RoundedRectangle(cornerRadius: 22)
                         .strokeBorder(Theme.textMuted.opacity(0.14), lineWidth: 1)
