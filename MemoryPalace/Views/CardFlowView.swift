@@ -1042,47 +1042,28 @@ private struct InputFieldContainer: View {
                     .focused($isFocused)
                     .padding(.vertical, 6)
 
-                // 语音占位（空文本）/ 发送 / 停止 按钮
-                ZStack {
-                    if hasText || isStreaming {
-                        // 有文本 或 正在流式：显示发送 / 停止圆形按钮
-                        Button(action: triggerSend) {
-                            Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
-                                .contentTransition(.symbolEffect(.replace))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(canSend ? .white : Theme.textMuted)
-                                .frame(width: 30, height: 30)
-                                .background(
-                                    Circle()
-                                        .fill(
-                                            // 兔兔：纯黑是全屏唯一的纯黑，一片奶白里最抢眼。
-                                            // 换主题 accent（粟粟那颗也是淡色，不抢）。
-                                            isStreaming ? Theme.danger :
-                                            canSend     ? Theme.accent :
-                                                          Theme.textMuted.opacity(0.15)
-                                        )
-                                        .animation(.easeInOut(duration: 0.15), value: isStreaming)
-                                        .animation(.easeInOut(duration: 0.15), value: canSend)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!canSend)
-                        .transition(.scale.combined(with: .opacity))
-                    } else {
-                        // 空文本：显示语音占位按钮（暂无功能）
-                        Button(action: {}) {
-                            // 空态不该有实心黑圆——粟粟那儿只是个淡灰波形，没有底
-                            Image(systemName: "waveform")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(Theme.textMuted.opacity(0.55))
-                                .frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.plain)
-                        .transition(.scale.combined(with: .opacity))
-                    }
+                // 发送 / 停止 / 语音占位 —— 同一个按钮换图标，不做 if/else 两个按钮
+                // 2026-08-24 兔兔第三轮：上一刀把黑换成 Theme.accent，太淡、糊进背景。
+                // 粟粟用的是 Theme.branchIndicator（她注释叫「薄荷发送」），饱和度够。
+                // 她也不拆两个按钮：canSend ? arrow.up : waveform，底色 canSend 才填，
+                // 否则 Color.clear——这样空↔有字切换不会闪。
+                Button(action: triggerSend) {
+                    Image(systemName: isStreaming ? "stop.fill" : (canSend ? "arrow.up" : "waveform"))
+                        .contentTransition(.symbolEffect(.replace))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(canSend || isStreaming ? .white : Theme.textMuted.opacity(0.55))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(
+                                isStreaming ? Theme.danger
+                                            : canSend ? Theme.branchIndicator : Color.clear
+                            )
+                            .animation(.easeInOut(duration: 0.15), value: isStreaming)
+                            .animation(.easeInOut(duration: 0.15), value: canSend)
+                        )
                 }
-                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: hasText || isStreaming)
-                .padding(.trailing, 4)
+                .buttonStyle(.plain)
+                .disabled(!canSend && !isStreaming)
             }
             .frame(height: 44)
             .padding(.horizontal, 6)
