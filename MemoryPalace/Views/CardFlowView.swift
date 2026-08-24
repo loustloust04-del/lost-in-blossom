@@ -1175,7 +1175,10 @@ private struct InputFieldContainer: View {
         // 它就永远跟着输入框走，键盘顶不掉。粟粟那边也不是物理顶掉的——
         // 她显式写 `if !kbUp { bottomControlRow.transition(.opacity) }`。
         // 过渡只用淡入淡出不带位移：滑动成分会被看成「灰块被推下去」（她的原话）。
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // spacing 6 常驻——兔兔观察到粟粟键盘升起时输入框与键盘之间有条小缝。
+        // 那正是她外层 VStack(spacing: 6) 留下的：kbUp 收的是 bottomControlRow 的
+        // 内容，间距本身还在。我们原先整个 inset 一起消失，输入框就贴死键盘了。
+        .safeAreaInset(edge: .bottom, spacing: 6) {
             if slimInputBar && !kbUp {
             HStack(spacing: 6) {
                 Spacer()
@@ -1184,7 +1187,9 @@ private struct InputFieldContainer: View {
                 Button(action: onModelTap) {
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(Theme.accent.opacity(0.6))
+                            // 她 CardFlowView:1420 用的是 branchIndicator（薄荷），
+                            // 我原先用 accent——那个太淡，兔兔说信号灯发暗。
+                            .fill(Theme.branchIndicator.opacity(0.6))
                             .frame(width: 5, height: 5)
                         Text(modelName)
                             .font(.system(size: 10))
@@ -1198,6 +1203,10 @@ private struct InputFieldContainer: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.ultraThinMaterial, in: Capsule())
+                    // 她的实调：padding(6) 撑开触摸区 → contentShape → padding(-6) 收回视觉位置
+                    .padding(6)
+                    .contentShape(Rectangle())
+                    .padding(-6)
                 }
                 .buttonStyle(.plain)
             }
