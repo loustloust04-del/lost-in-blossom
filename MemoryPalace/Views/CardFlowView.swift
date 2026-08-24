@@ -1081,7 +1081,7 @@ private struct InputFieldContainer: View {
             // + 与发送键仍独占下面一行，所以还是两层、没瘦下来。
             // 粟粟那个是真单层——三者同处一个 HStack，文本多行时两侧按钮垂直居中。
             // 这里按她的排法并成一行；alignment 显式 .center，否则多行时按钮会被顶到顶部。
-            HStack(alignment: .center, spacing: 4) {
+            HStack(alignment: .center, spacing: 0) {
                 // + 号按钮
                 if let onStickerTap {
                     Button(action: onStickerTap) {
@@ -1159,19 +1159,12 @@ private struct InputFieldContainer: View {
             // 不设任何行高——粟粟那边整行也没有 frame(height:)，
             // 高度全靠 TextField 自己的 .padding(.vertical, 10) 撑出来。
             // 之前写死 44 正是「不随文字长高」第三次复发的根因。
-            .padding(.horizontal, 6)
+            // 也不加 horizontal padding：她的左右内距全在 + / 发送键各自的 leading/trailing 上。
         }
         // 玻璃卡片只包「输入框本体」——模型/风格已挪到框外下方那条
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Theme.mainBg.opacity(0.35))
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(Theme.textMuted.opacity(0.14), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
-        )
+        // 她 CardFlowView:2047 就一行纯材质，没有描边也没有投影。
+        // 我原先加的 mainBg 打底 + strokeBorder + shadow 正是框看着比她「重」的原因。
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         .contentShape(RoundedRectangle(cornerRadius: 20))
         .onTapGesture { isFocused = true }
         )
