@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct AppearanceSettingsTab: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @AppStorage("slimInputBar") private var slimInputBar = true
     @AppStorage("selectedFont") private var selectedFont = ""
     @AppStorage("fontScale") private var fontScale = 1.2
     @AppStorage("expandAllMessages") private var expandAllMessages = false
@@ -130,6 +131,17 @@ struct AppearanceSettingsTab: View {
                     bubbleSliderRow("气泡间距", value: $bubbleSpacing, range: 8...40, step: 1) { "\(Int($0))pt" }
                     bubbleSliderRow("行间距", value: $lineSpacingScale, range: 0.5...2.0, step: 0.05) { "\(Int($0 * 100))%" }
                     bubbleSliderRow("段落间距", value: $paragraphSpacingScale, range: 0.5...2.0, step: 0.05) { "\(Int($0 * 100))%" }
+
+                    Divider().opacity(0.1)
+
+                    Toggle(isOn: $slimInputBar) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("细输入框")
+                            Text("单行排法，模型与风格移到框外下方；关闭则用两层旧排法")
+                                .font(.caption)
+                                .foregroundColor(Theme.textMuted)
+                        }
+                    }
 
                     Divider().opacity(0.1)
 

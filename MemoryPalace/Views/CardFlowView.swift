@@ -877,6 +877,10 @@ extension ChatInputBar: Equatable {
 /// Claude App 风格两层输入框：
 /// 上层 TextField(axis:.vertical，自适应高度) + 下层工具栏（+ 号 | Spacer | 语音/发送）
 private struct InputFieldContainer: View {
+    /// 输入框排法：true = 细版单行（模型/✨ 在框外），false = 旧版两层（模型/✨ 在框内）。
+    /// 只切「排法」，不切修复——TextField 自适应高度、发送键 branchIndicator 配色、
+    /// 单按钮换图标、玻璃背景，两种排法共享同一份代码。
+    @AppStorage("slimInputBar") private var slimInputBar = true
     /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
     /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
     /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
@@ -933,6 +937,39 @@ private struct InputFieldContainer: View {
     }
     private var hasText: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
+    }
+
+
+    /// 风格快捷切换 ✨——两种排法共用（细版在框外那条，旧版在框内控件行）
+    @ViewBuilder
+    private var styleMenu: some View {
+                Menu {
+                    Button("无风格") {
+                        onStyleChange?("")
+                    }
+                    ForEach(StyleManager.shared.styles) { style in
+                        Button(style.name) {
+                            onStyleChange?(style.id)
+                        }
+                    }
+                } label: {
+                    let hasStyle = !(currentStyleId?.isEmpty ?? true)
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10))
+                        if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
+                            Text(name)
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    // 与旁边模型胶囊同款：同样 ultraThinMaterial 玻璃 + 同内距，
+                    // 两个并排才像一组。原来 5% 不透明度的底看着像个幽灵圆。
+                    .foregroundColor(hasStyle ? Theme.branchIndicator : Theme.textMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
     }
 
     var body: some View {
@@ -1026,7 +1063,19 @@ private struct InputFieldContainer: View {
                 .padding(.bottom, 2)
                 Divider().padding(.horizontal, 12).padding(.top, 6)
             }
-            // ── 单行：+ | 文本 | 发送 ─────────────────────────────────
+            // 旧版排法：文本独占上层（细版下文本在控件行里）
+            if !slimInputBar {
+                TextField("", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15))
+                    .lineLimit(1...5)
+                    .focused($isFocused)
+                    .padding(.horizontal, 15)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+            }
+
+            // ── 控件行：细版 = + | 文本 | 发送；旧版 = + | 模型 | ✨ | Spacer | 发送 ──
             // 2026-08-24 兔兔第二轮真机验收：上一刀只把模型/✨ 挪到框外，
             // + 与发送键仍独占下面一行，所以还是两层、没瘦下来。
             // 粟粟那个是真单层——三者同处一个 HStack，文本多行时两侧按钮垂直居中。
@@ -1045,7 +1094,30 @@ private struct InputFieldContainer: View {
                     .padding(.leading, 6)
                 }
 
-                // 文本输入（TextField(axis:.vertical) 自适应高度，5 行封顶后内部滚）
+                // 旧版排法：模型/✨ 回到框内（细版下它们在框外那条）
+                if !slimInputBar {
+                    Button(action: onModelTap) {
+                        HStack(spacing: 4) {
+                            Text(modelName)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Theme.textSecondary)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 8))
+                                .foregroundColor(Theme.textMuted.opacity(0.7))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Theme.textMuted.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                    styleMenu
+                    Spacer()
+                }
+
+                // 文本输入（TextField(axis:.vertical) 自适应高度，封顶后内部滚）
+                // 细版：与 + / 发送同处一行。旧版：这一行只放控件，文本在上层。
+                if slimInputBar {
                 TextField("", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
@@ -1053,6 +1125,7 @@ private struct InputFieldContainer: View {
                     .focused($isFocused)
                     .padding(.leading, 6)
                     .padding(.vertical, 10)
+                }
 
                 // 发送 / 停止 / 语音占位 —— 同一个按钮换图标，不做 if/else 两个按钮
                 // 2026-08-24 兔兔第三轮：上一刀把黑换成 Theme.accent，太淡、糊进背景。
@@ -1109,37 +1182,10 @@ private struct InputFieldContainer: View {
         // 她显式写 `if !kbUp { bottomControlRow.transition(.opacity) }`。
         // 过渡只用淡入淡出不带位移：滑动成分会被看成「灰块被推下去」（她的原话）。
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !kbUp {
+            if slimInputBar && !kbUp {
             HStack(spacing: 6) {
                 Spacer()
-            // 风格快捷切换
-            Menu {
-                Button("无风格") {
-                    onStyleChange?("")
-                }
-                ForEach(StyleManager.shared.styles) { style in
-                    Button(style.name) {
-                        onStyleChange?(style.id)
-                    }
-                }
-            } label: {
-                let hasStyle = !(currentStyleId?.isEmpty ?? true)
-                HStack(spacing: 3) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 10))
-                    if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
-                        Text(name)
-                            .font(.system(size: 10))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-                // 与旁边模型胶囊同款：同样 ultraThinMaterial 玻璃 + 同内距，
-                // 两个并排才像一组。原来 5% 不透明度的底看着像个幽灵圆。
-                .foregroundColor(hasStyle ? Theme.branchIndicator : Theme.textMuted)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.ultraThinMaterial, in: Capsule())
+            styleMenu
             }
                 // 模型胶囊（吸粟粟实调：10pt 字 + 5×5 状态点 + 中间截断，超长名不撑爆）
                 Button(action: onModelTap) {
