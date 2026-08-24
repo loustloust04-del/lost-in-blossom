@@ -1016,24 +1016,12 @@ private struct InputFieldContainer: View {
                 .padding(.bottom, 2)
                 Divider().padding(.horizontal, 12).padding(.top, 6)
             }
-            // ── 上层：多行文本输入 ──────────────────────────────────────
-            // 2026-08-24 兔兔真机验收后返工。原本用一个 .hidden() 的 Text 当尺子量高度，
-            // 再把值套给固定高的 TextEditor——.hidden() 仍参与布局，长文本时尺子长到几百 pt
-            // 撑出死空白。上一刀把容器钳死虽然消了空白，却连「随文字长高」也一起没了。
-            // 改走粟粟那条路：TextField(axis:.vertical) 让系统按内容自适应，
-            // lineLimit(1...5) 封顶后内部自己滚动。不再需要测量，尺子和 inputTextHeight 一并退役。
-            // placeholder 也按兔兔要求彻底去掉（细输入框上留占位符会更奇怪）。
-            TextField("", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15))
-                .lineLimit(1...5)
-                .focused($isFocused)
-                .padding(.horizontal, 5)
-            .padding(.horizontal, 10)
-            .padding(.top, 4)
-
-            // ── 下层：工具栏 ────────────────────────────────────────────
-            HStack(spacing: 4) {
+            // ── 单行：+ | 文本 | 发送 ─────────────────────────────────
+            // 2026-08-24 兔兔第二轮真机验收：上一刀只把模型/✨ 挪到框外，
+            // + 与发送键仍独占下面一行，所以还是两层、没瘦下来。
+            // 粟粟那个是真单层——三者同处一个 HStack，文本多行时两侧按钮垂直居中。
+            // 这里按她的排法并成一行；alignment 显式 .center，否则多行时按钮会被顶到顶部。
+            HStack(alignment: .center, spacing: 4) {
                 // + 号按钮
                 if let onStickerTap {
                     Button(action: onStickerTap) {
@@ -1046,7 +1034,13 @@ private struct InputFieldContainer: View {
                     .buttonStyle(.plain)
                 }
 
-                Spacer()
+                // 文本输入（TextField(axis:.vertical) 自适应高度，5 行封顶后内部滚）
+                TextField("", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15))
+                    .lineLimit(1...5)
+                    .focused($isFocused)
+                    .padding(.vertical, 6)
 
                 // 语音占位（空文本）/ 发送 / 停止 按钮
                 ZStack {
@@ -1061,8 +1055,10 @@ private struct InputFieldContainer: View {
                                 .background(
                                     Circle()
                                         .fill(
+                                            // 兔兔：纯黑是全屏唯一的纯黑，一片奶白里最抢眼。
+                                            // 换主题 accent（粟粟那颗也是淡色，不抢）。
                                             isStreaming ? Theme.danger :
-                                            canSend     ? Color.black  :
+                                            canSend     ? Theme.accent :
                                                           Theme.textMuted.opacity(0.15)
                                         )
                                         .animation(.easeInOut(duration: 0.15), value: isStreaming)
@@ -1075,9 +1071,10 @@ private struct InputFieldContainer: View {
                     } else {
                         // 空文本：显示语音占位按钮（暂无功能）
                         Button(action: {}) {
-                            Image(systemName: "waveform.circle.fill")
-                                .font(.system(size: 30))
-                                .foregroundColor(.black)
+                            // 空态不该有实心黑圆——粟粟那儿只是个淡灰波形，没有底
+                            Image(systemName: "waveform")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(Theme.textMuted.opacity(0.55))
                                 .frame(width: 30, height: 30)
                         }
                         .buttonStyle(.plain)
