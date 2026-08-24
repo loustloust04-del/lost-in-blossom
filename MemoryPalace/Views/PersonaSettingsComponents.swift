@@ -172,56 +172,6 @@ struct SlotEditPage: View {
     }
 }
 
-// MARK: - Auto-Growing Text Editor
-
-struct AutoGrowingTextEditor: View {
-    @Binding var text: String
-    let placeholder: String
-    var minHeight: CGFloat = 50
-    var maxHeight: CGFloat = 250
-
-    @State private var measuredHeight: CGFloat = 50
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Hidden Text to measure content height
-            Text(text.isEmpty ? " " : text)
-                .font(.system(size: Theme.F.body))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(GeometryReader { geo in
-                    Color.clear.preference(key: AutoGrowHeightKey.self, value: geo.size.height)
-                })
-                .hidden()
-
-            TextEditor(text: $text)
-                .font(.system(size: Theme.F.body))
-                .scrollContentBackground(.hidden)
-                .frame(height: min(max(measuredHeight, minHeight), maxHeight))
-
-            if text.isEmpty {
-                Text(placeholder)
-                    .font(.system(size: Theme.F.body))
-                    .foregroundColor(Theme.textMuted.opacity(0.4))
-                    .padding(.leading, 5)
-                    .padding(.top, 8)
-                    .allowsHitTesting(false)
-            }
-        }
-        .onPreferenceChange(AutoGrowHeightKey.self) { h in
-            measuredHeight = h
-        }
-    }
-}
-
-private struct AutoGrowHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
 // MARK: - Slot Navigation Modifier（push vs sheet 切换）
 
 /// 右栏用 sheet 弹出插槽编辑，设置页用 navigationDestination push

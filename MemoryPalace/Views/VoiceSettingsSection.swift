@@ -3,37 +3,6 @@ import AVFoundation
 
 // MARK: - 语音条设置（设置-朗读 内）
 
-/// macOS 朗读区里的「语音条」节
-struct VoiceMessageSettingsSection: View {
-    @AppStorage("assistantName") private var assistantName = "助手"
-    @AppStorage(VoiceTuning.proactiveKey) private var proactiveEnabled = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("语音条")
-                .font(.system(size: Theme.SettingsFont.sectionHeader, weight: .semibold))
-                .foregroundColor(Theme.textPrimary)
-
-            VoiceKeyField()
-
-            Toggle("AI 主动发语音", isOn: $proactiveEnabled)
-                .toggleStyle(.switch)
-                .tint(Theme.branchIndicator)
-
-            Text("开启后 \(assistantName) 会在想让你听见语气的时刻发语音条。需要填好 key 并在「通用」里给楼层选声音。")
-                .font(.system(size: Theme.SettingsFont.caption))
-                .foregroundColor(Theme.textMuted.opacity(0.7))
-
-            DisclosureGroup("声音效果") {
-                VoiceEffectControls()
-                    .padding(.top, 8)
-            }
-            .font(.system(size: Theme.SettingsFont.label))
-            .tint(Theme.textMuted)
-        }
-    }
-}
-
 /// iOS 朗读页里的「语音条」两个 Section
 struct VoiceMessageSettingsIOSSections: View {
     @AppStorage("assistantName") private var assistantName = "助手"

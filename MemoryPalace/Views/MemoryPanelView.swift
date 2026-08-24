@@ -77,17 +77,6 @@ struct RightPanelView: View {
     }
 }
 
-struct RightPanelTopBar: View {
-    @Binding var selectedToolId: String
-    var onImport: () -> Void
-    var onSettings: () -> Void
-
-    var body: some View {
-        ToolBarView(selectedToolId: $selectedToolId)
-            .background(Theme.sidebarBg)
-    }
-}
-
 // MARK: - Memory Panel
 
 struct MemoryPanelView: View {

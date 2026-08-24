@@ -145,34 +145,3 @@ struct DeletedBubbleRow: View {
         .padding(.horizontal, 8)
     }
 }
-
-
-// MARK: - Filter Chip
-
-struct FilterChip: View {
-    let title: String
-    var icon: String? = nil
-    let isActive: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                if let icon = icon {
-                    Image(systemName: icon)
-                        .font(.caption2)
-                }
-                Text(title)
-                    .font(.caption)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(isActive ? Theme.accent : Theme.mainBg)
-            )
-            .foregroundColor(isActive ? Theme.textPrimary : Theme.textMuted)
-        }
-        .buttonStyle(.plain)
-    }
-}
