@@ -1070,6 +1070,11 @@ private struct InputFieldContainer: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend && !isStreaming)
+                // 44×44 是 iOS 标准最小点击区，也是整行高度的下限——
+                // 兔兔报「输入框太细」的根因：我上一刀只搬了粟粟里层那个 32 的圆，
+                // 没搬她外面这层 44（CardFlowView:2035），行高就少了 8pt。
+                .frame(width: 44, height: 44)
+                .padding(.trailing, 4)
             }
             // 不设任何行高——粟粟那边整行也没有 frame(height:)，
             // 高度全靠 TextField 自己的 .padding(.vertical, 10) 撑出来。
