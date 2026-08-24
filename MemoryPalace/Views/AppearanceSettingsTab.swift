@@ -134,17 +134,6 @@ struct AppearanceSettingsTab: View {
 
                     Divider().opacity(0.1)
 
-                    Toggle(isOn: $slimInputBar) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("细输入框")
-                            Text("单行排法，模型与风格移到框外下方；关闭则用两层旧排法")
-                                .font(.caption)
-                                .foregroundColor(Theme.textMuted)
-                        }
-                    }
-
-                    Divider().opacity(0.1)
-
                     Toggle("隐藏时间戳", isOn: $hideTimestamp)
                     Toggle("隐藏用户/助手名", isOn: $hideRoleName)
                     Toggle("隐藏消息下方按钮行", isOn: $hideActionBar)
@@ -237,6 +226,20 @@ struct AppearanceSettingsTab: View {
                     .font(.system(size: Theme.SettingsFont.label))
                     .foregroundColor(Theme.textPrimary)
                     .tint(Theme.branchIndicator)
+
+                // 输入框排法：细版单行 / 旧版两层。放在这里而非「气泡外观（高级）」，
+                // 那个区默认折叠，兔兔 2026-08-24 在里面找不到。
+                Toggle(isOn: $slimInputBar) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("细输入框")
+                            .font(.system(size: Theme.SettingsFont.label))
+                            .foregroundColor(Theme.textPrimary)
+                        Text("单行排法，模型与风格移到框外下方；关掉是改版前的两层排法")
+                            .font(.system(size: Theme.SettingsFont.caption))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+                .tint(Theme.branchIndicator)
             }
         }
         .onAppear {
