@@ -1027,20 +1027,22 @@ private struct InputFieldContainer: View {
                     Button(action: onStickerTap) {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(Theme.textMuted)
-                            .frame(width: 36, height: 36)
+                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                            .frame(width: 32, height: 32)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.leading, 6)
                 }
 
                 // 文本输入（TextField(axis:.vertical) 自适应高度，5 行封顶后内部滚）
                 TextField("", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15))
-                    .lineLimit(1...5)
+                    .font(.system(size: 13))
+                    .lineLimit(1...6)
                     .focused($isFocused)
-                    .padding(.vertical, 6)
+                    .padding(.leading, 6)
+                    .padding(.vertical, 10)
 
                 // 发送 / 停止 / 语音占位 —— 同一个按钮换图标，不做 if/else 两个按钮
                 // 2026-08-24 兔兔第三轮：上一刀把黑换成 Theme.accent，太淡、糊进背景。
@@ -1065,21 +1067,23 @@ private struct InputFieldContainer: View {
                 .buttonStyle(.plain)
                 .disabled(!canSend && !isStreaming)
             }
-            .frame(height: 44)
+            // 不设任何行高——粟粟那边整行也没有 frame(height:)，
+            // 高度全靠 TextField 自己的 .padding(.vertical, 10) 撑出来。
+            // 之前写死 44 正是「不随文字长高」第三次复发的根因。
             .padding(.horizontal, 6)
         }
         // 玻璃卡片只包「输入框本体」——模型/风格已挪到框外下方那条
         .background(
-            RoundedRectangle(cornerRadius: 22)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(Theme.mainBg.opacity(0.35))
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22)
+                    RoundedRectangle(cornerRadius: 20)
                         .strokeBorder(Theme.textMuted.opacity(0.14), lineWidth: 1)
                 )
                 .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .contentShape(RoundedRectangle(cornerRadius: 20))
         .onTapGesture { isFocused = true }
         // ── 框外下方：模型 + 风格 ────────────────────────────────────
         // 兔兔 2026-08-24 定的方案（照粟粟思路）：这俩都是「这次对话用什么」的设置，
