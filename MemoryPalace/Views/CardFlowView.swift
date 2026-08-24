@@ -679,10 +679,6 @@ struct ChatInputBar: View {
     @AppStorage("blurRadius") private var blurRadius = 1.3
     @AppStorage("selectedChatModel") private var selectedModelId = ""
     @State private var showModelPicker = false
-    /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
-    /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
-    /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
-    @State private var kbUp = false
     @State private var showCCDisconnectedAlert = false
     @FocusState private var isFocused: Bool
 
@@ -875,6 +871,10 @@ extension ChatInputBar: Equatable {
 /// Claude App 风格两层输入框：
 /// 上层 TextField(axis:.vertical，自适应高度) + 下层工具栏（+ 号 | Spacer | 语音/发送）
 private struct InputFieldContainer: View {
+    /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
+    /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
+    /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
+    @State private var kbUp = false
     @State private var text: String = ""
     @FocusState.Binding var isFocused: Bool
     let isStreaming: Bool
@@ -939,7 +939,7 @@ private struct InputFieldContainer: View {
                          text.count))
         }()
         #endif
-        return VStack(spacing: 0) {
+        return AnyView(VStack(spacing: 0) {
             // ── 图片预览行（pendingImageData 非 nil 时显示）──────────────
             if let imgData = pendingImageData, let uiImg = UIImage(data: imgData) {
                 HStack(spacing: 8) {
@@ -1089,10 +1089,10 @@ private struct InputFieldContainer: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 20))
         .onTapGesture { isFocused = true }
+        )
         // ── 框外下方：模型 + 风格 ────────────────────────────────────
         // 兔兔 2026-08-24 定的方案（照粟粟思路）：这俩都是「这次对话用什么」的设置，
         // 不是「发这条消息」的动作，摘出框外输入框就回归单层 = 细。
-        // 键盘升起时整栈上推，这条自然被挤出屏幕——不需要任何隐藏逻辑，粟粟那边也是这样。
         // 键盘升起时收起这条：兔兔发现原来 safeAreaInset 挂在输入框上，
         // 它就永远跟着输入框走，键盘顶不掉。粟粟那边也不是物理顶掉的——
         // 她显式写 `if !kbUp { bottomControlRow.transition(.opacity) }`。
