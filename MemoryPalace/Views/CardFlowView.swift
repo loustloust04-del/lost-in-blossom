@@ -1086,50 +1086,6 @@ private struct InputFieldContainer: View {
                     .buttonStyle(.plain)
                 }
 
-                // 模型选择标签
-                Button(action: onModelTap) {
-                    HStack(spacing: 4) {
-                        Text(modelName)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Theme.textSecondary)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 8))
-                            .foregroundColor(Theme.textMuted.opacity(0.7))
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(Theme.textMuted.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
-
-                // 风格快捷切换
-                Menu {
-                    Button("无风格") {
-                        onStyleChange?("")
-                    }
-                    ForEach(StyleManager.shared.styles) { style in
-                        Button(style.name) {
-                            onStyleChange?(style.id)
-                        }
-                    }
-                } label: {
-                    let hasStyle = !(currentStyleId?.isEmpty ?? true)
-                    HStack(spacing: 3) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10))
-                        if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
-                            Text(name)
-                                .font(.system(size: 11, weight: .medium))
-                                .lineLimit(1)
-                        }
-                    }
-                    .foregroundColor(hasStyle ? Theme.accent : Theme.textMuted.opacity(0.5))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(hasStyle ? Theme.accent.opacity(0.1) : Theme.textMuted.opacity(0.05)))
-                }
-
                 Spacer()
 
                 // 语音占位（空文本）/ 发送 / 停止 按钮
@@ -1174,10 +1130,8 @@ private struct InputFieldContainer: View {
             .frame(height: 44)
             .padding(.horizontal, 6)
         }
-        // 圆角矩形卡片，跟聊天背景同色 + 细边框
+        // 玻璃卡片只包「输入框本体」——模型/风格已挪到框外下方那条
         .background(
-            // 玻璃感：原为 Theme.mainBg 纯色不透明；换系统材质后能透出底下的聊天内容。
-            // 加一层极淡的同色底，避免深色壁纸下材质发灰。
             RoundedRectangle(cornerRadius: 22)
                 .fill(Theme.mainBg.opacity(0.35))
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
@@ -1189,6 +1143,63 @@ private struct InputFieldContainer: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 22))
         .onTapGesture { isFocused = true }
+        // ── 框外下方：模型 + 风格 ────────────────────────────────────
+        // 兔兔 2026-08-24 定的方案（照粟粟思路）：这俩都是「这次对话用什么」的设置，
+        // 不是「发这条消息」的动作，摘出框外输入框就回归单层 = 细。
+        // 键盘升起时整栈上推，这条自然被挤出屏幕——不需要任何隐藏逻辑，粟粟那边也是这样。
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 6) {
+                Spacer()
+            // 风格快捷切换
+            Menu {
+                Button("无风格") {
+                    onStyleChange?("")
+                }
+                ForEach(StyleManager.shared.styles) { style in
+                    Button(style.name) {
+                        onStyleChange?(style.id)
+                    }
+                }
+            } label: {
+                let hasStyle = !(currentStyleId?.isEmpty ?? true)
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10))
+                    if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
+                        Text(name)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                    }
+                }
+                .foregroundColor(hasStyle ? Theme.accent : Theme.textMuted.opacity(0.5))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(hasStyle ? Theme.accent.opacity(0.1) : Theme.textMuted.opacity(0.05)))
+            }
+                // 模型胶囊（吸粟粟实调：10pt 字 + 5×5 状态点 + 中间截断，超长名不撑爆）
+                Button(action: onModelTap) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Theme.accent.opacity(0.6))
+                            .frame(width: 5, height: 5)
+                        Text(modelName)
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 7))
+                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 6)
+            .padding(.trailing, 8)   // 粟粟实调：胶囊左移 8px
+        }
         // B41 草稿：每键上报（外层写 conversation.draftText + 显式 save）
         .onChange(of: text) { _, newText in
             onDraftChange?(newText)
