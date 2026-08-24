@@ -1105,14 +1105,17 @@ private struct InputFieldContainer: View {
                         .font(.system(size: 10))
                     if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
                         Text(name)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10))
                             .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
-                .foregroundColor(hasStyle ? Theme.accent : Theme.textMuted.opacity(0.5))
+                // 与旁边模型胶囊同款：同样 ultraThinMaterial 玻璃 + 同内距，
+                // 两个并排才像一组。原来 5% 不透明度的底看着像个幽灵圆。
+                .foregroundColor(hasStyle ? Theme.branchIndicator : Theme.textMuted)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(hasStyle ? Theme.accent.opacity(0.1) : Theme.textMuted.opacity(0.05)))
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial, in: Capsule())
             }
                 // 模型胶囊（吸粟粟实调：10pt 字 + 5×5 状态点 + 中间截断，超长名不撑爆）
                 Button(action: onModelTap) {
