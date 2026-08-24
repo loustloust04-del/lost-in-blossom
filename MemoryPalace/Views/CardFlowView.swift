@@ -679,6 +679,10 @@ struct ChatInputBar: View {
     @AppStorage("blurRadius") private var blurRadius = 1.3
     @AppStorage("selectedChatModel") private var selectedModelId = ""
     @State private var showModelPicker = false
+    /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
+    /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
+    /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
+    @State private var kbUp = false
     @State private var showCCDisconnectedAlert = false
     @FocusState private var isFocused: Bool
 
@@ -1089,7 +1093,12 @@ private struct InputFieldContainer: View {
         // 兔兔 2026-08-24 定的方案（照粟粟思路）：这俩都是「这次对话用什么」的设置，
         // 不是「发这条消息」的动作，摘出框外输入框就回归单层 = 细。
         // 键盘升起时整栈上推，这条自然被挤出屏幕——不需要任何隐藏逻辑，粟粟那边也是这样。
+        // 键盘升起时收起这条：兔兔发现原来 safeAreaInset 挂在输入框上，
+        // 它就永远跟着输入框走，键盘顶不掉。粟粟那边也不是物理顶掉的——
+        // 她显式写 `if !kbUp { bottomControlRow.transition(.opacity) }`。
+        // 过渡只用淡入淡出不带位移：滑动成分会被看成「灰块被推下去」（她的原话）。
         .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !kbUp {
             HStack(spacing: 6) {
                 Spacer()
             // 风格快捷切换
@@ -1144,7 +1153,17 @@ private struct InputFieldContainer: View {
             }
             .padding(.top, 6)
             .padding(.trailing, 8)   // 粟粟实调：胶囊左移 8px
+            .transition(.opacity)
+            }
         }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) { kbUp = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) { kbUp = false }
+        }
+        #endif
         // B41 草稿：每键上报（外层写 conversation.draftText + 显式 save）
         .onChange(of: text) { _, newText in
             onDraftChange?(newText)
