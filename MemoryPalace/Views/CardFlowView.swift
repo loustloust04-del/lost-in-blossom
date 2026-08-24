@@ -666,7 +666,6 @@ struct InConversationSearchBar: View {
 // MARK: - Chat Input Bar
 
 struct ChatInputBar: View {
-    @AppStorage("assistantName") private var assistantName = "助手"
     var viewModel: ConversationViewModel
     var modelContext: ModelContext
     var profileManager: ProfileManager?
@@ -697,9 +696,6 @@ struct ChatInputBar: View {
         return prompt.isEmpty ? nil : prompt
     }
 
-    private var inputPlaceholder: String {
-        viewModel.selectedConversation?.kind == "group" ? "在群里说点什么…" : "跟 \(assistantName) 说点什么…"
-    }
 
     var body: some View {
         #if DEBUG
@@ -719,7 +715,6 @@ struct ChatInputBar: View {
             // 堵住本对话在空窗期插队发送（user+user 连排）。别的对话照常显示 send → 排队。
             // 群聊例外：插话直接入树被轮次吸收（sendMessage 群分支），按钮保持发送态。
             isStreaming: viewModel.selectedConversation?.kind == "group" ? false : viewModel.isCurrentConvResponding,
-            placeholder: inputPlaceholder,
             modelName: currentModel.name,
             pendingImageData: pendingImageData,
             pendingFileData: pendingFileData,
@@ -874,13 +869,11 @@ extension ChatInputBar: Equatable {
 // sheet / alert）不受影响。粟粟 2026-04-19 log 实测 150-170ms/字 → 预期 ≤80ms/字。
 
 /// Claude App 风格两层输入框：
-/// 上层 TextEditor（多行，placeholder）+ 下层工具栏（+ 号 | 模型 ▾ | Spacer | 语音/发送）
+/// 上层 TextField(axis:.vertical，自适应高度) + 下层工具栏（+ 号 | Spacer | 语音/发送）
 private struct InputFieldContainer: View {
     @State private var text: String = ""
-    @State private var inputTextHeight: CGFloat = 36  // starts single-line, grows to ≤120
     @FocusState.Binding var isFocused: Bool
     let isStreaming: Bool
-    let placeholder: String
     let modelName: String
     @Binding var pendingImageData: Data?
     @Binding var pendingFileData: Data?
@@ -1024,51 +1017,18 @@ private struct InputFieldContainer: View {
                 Divider().padding(.horizontal, 12).padding(.top, 6)
             }
             // ── 上层：多行文本输入 ──────────────────────────────────────
-            ZStack(alignment: .topLeading) {
-                // 隐藏的 Text 尺寸镜像 — 计算 TextEditor 应有的高度
-                // Text 和 TextEditor 同字号，高度近似一致，用 GeometryReader 实测
-                Text(text.isEmpty ? " " : text)
-                    .font(.system(size: 15))
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 9)
-                    .padding(.leading, 5)
-                    .hidden()
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.onChange(of: geo.size.height, initial: true) { _, h in
-                                let clamped = max(36, min(120, h + 4))
-                                if abs(clamped - inputTextHeight) > 1 { inputTextHeight = clamped }
-                            }
-                        }
-                    )
-                // placeholder（TextEditor 没有原生 placeholder）
-                if text.isEmpty {
-                    Text(placeholder)
-                        .font(.system(size: 15))
-                        .foregroundColor(Theme.textMuted.opacity(0.45))
-                        .padding(.top, 9)
-                        .padding(.leading, 5)
-                        .allowsHitTesting(false)
-                }
-                TextEditor(text: $text)
-                    .font(.system(size: 15))
-                    .scrollContentBackground(.hidden)
-                    .frame(height: inputTextHeight)
-                    .focused($isFocused)
-                    #if DEBUG
-                    .onChange(of: text) { _, newVal in
-                        print(String(format: "[PERF] TextEditor onChange len=%d t=%.3f", newVal.count, CFAbsoluteTimeGetCurrent()))
-                    }
-                    #endif
-            }
-            // 兔兔 2026-08-24 报的空白 bug：上面那把测量用的隐藏 Text 是 .hidden()，
-            // SwiftUI 里 .hidden() 只是不绘制、仍参与布局——长文本时它真长到几百 pt，
-            // 把 ZStack 撑开，TextEditor 却钳在 120，多出来的全是点不着的死空白。
-            // 这里把容器高度钳死到 inputTextHeight 并裁剪，尺子照量，但不再撑父级。
-            .frame(height: inputTextHeight, alignment: .topLeading)
-            .clipped()
-            .animation(.easeInOut(duration: 0.1), value: inputTextHeight)
+            // 2026-08-24 兔兔真机验收后返工。原本用一个 .hidden() 的 Text 当尺子量高度，
+            // 再把值套给固定高的 TextEditor——.hidden() 仍参与布局，长文本时尺子长到几百 pt
+            // 撑出死空白。上一刀把容器钳死虽然消了空白，却连「随文字长高」也一起没了。
+            // 改走粟粟那条路：TextField(axis:.vertical) 让系统按内容自适应，
+            // lineLimit(1...5) 封顶后内部自己滚动。不再需要测量，尺子和 inputTextHeight 一并退役。
+            // placeholder 也按兔兔要求彻底去掉（细输入框上留占位符会更奇怪）。
+            TextField("", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .lineLimit(1...5)
+                .focused($isFocused)
+                .padding(.horizontal, 5)
             .padding(.horizontal, 10)
             .padding(.top, 4)
 
@@ -1084,50 +1044,6 @@ private struct InputFieldContainer: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                }
-
-                // 模型选择标签
-                Button(action: onModelTap) {
-                    HStack(spacing: 4) {
-                        Text(modelName)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Theme.textSecondary)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 8))
-                            .foregroundColor(Theme.textMuted.opacity(0.7))
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(Theme.textMuted.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
-
-                // 风格快捷切换
-                Menu {
-                    Button("无风格") {
-                        onStyleChange?("")
-                    }
-                    ForEach(StyleManager.shared.styles) { style in
-                        Button(style.name) {
-                            onStyleChange?(style.id)
-                        }
-                    }
-                } label: {
-                    let hasStyle = !(currentStyleId?.isEmpty ?? true)
-                    HStack(spacing: 3) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10))
-                        if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
-                            Text(name)
-                                .font(.system(size: 11, weight: .medium))
-                                .lineLimit(1)
-                        }
-                    }
-                    .foregroundColor(hasStyle ? Theme.accent : Theme.textMuted.opacity(0.5))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(hasStyle ? Theme.accent.opacity(0.1) : Theme.textMuted.opacity(0.05)))
                 }
 
                 Spacer()
@@ -1174,10 +1090,8 @@ private struct InputFieldContainer: View {
             .frame(height: 44)
             .padding(.horizontal, 6)
         }
-        // 圆角矩形卡片，跟聊天背景同色 + 细边框
+        // 玻璃卡片只包「输入框本体」——模型/风格已挪到框外下方那条
         .background(
-            // 玻璃感：原为 Theme.mainBg 纯色不透明；换系统材质后能透出底下的聊天内容。
-            // 加一层极淡的同色底，避免深色壁纸下材质发灰。
             RoundedRectangle(cornerRadius: 22)
                 .fill(Theme.mainBg.opacity(0.35))
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
@@ -1189,6 +1103,63 @@ private struct InputFieldContainer: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 22))
         .onTapGesture { isFocused = true }
+        // ── 框外下方：模型 + 风格 ────────────────────────────────────
+        // 兔兔 2026-08-24 定的方案（照粟粟思路）：这俩都是「这次对话用什么」的设置，
+        // 不是「发这条消息」的动作，摘出框外输入框就回归单层 = 细。
+        // 键盘升起时整栈上推，这条自然被挤出屏幕——不需要任何隐藏逻辑，粟粟那边也是这样。
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 6) {
+                Spacer()
+            // 风格快捷切换
+            Menu {
+                Button("无风格") {
+                    onStyleChange?("")
+                }
+                ForEach(StyleManager.shared.styles) { style in
+                    Button(style.name) {
+                        onStyleChange?(style.id)
+                    }
+                }
+            } label: {
+                let hasStyle = !(currentStyleId?.isEmpty ?? true)
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10))
+                    if hasStyle, let name = StyleManager.shared.find(currentStyleId ?? "")?.name {
+                        Text(name)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                    }
+                }
+                .foregroundColor(hasStyle ? Theme.accent : Theme.textMuted.opacity(0.5))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(hasStyle ? Theme.accent.opacity(0.1) : Theme.textMuted.opacity(0.05)))
+            }
+                // 模型胶囊（吸粟粟实调：10pt 字 + 5×5 状态点 + 中间截断，超长名不撑爆）
+                Button(action: onModelTap) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Theme.accent.opacity(0.6))
+                            .frame(width: 5, height: 5)
+                        Text(modelName)
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 7))
+                            .foregroundColor(Theme.textMuted.opacity(0.5))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 6)
+            .padding(.trailing, 8)   // 粟粟实调：胶囊左移 8px
+        }
         // B41 草稿：每键上报（外层写 conversation.draftText + 显式 save）
         .onChange(of: text) { _, newText in
             onDraftChange?(newText)
