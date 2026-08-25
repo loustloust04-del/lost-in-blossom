@@ -80,6 +80,13 @@ final class CCBridgeWebSocketClient: NSObject {
     @ObservationIgnored private var reconnectDelay: TimeInterval = 1
     @ObservationIgnored private var reconnectTimer: Timer?
     @ObservationIgnored private var pingTimer: Timer?
+    /// 连接阶段看门狗。timeoutIntervalForRequest 是给已连上的 idle 保活用的，
+    /// 但它同时管 handshake——连黑洞 IP（换 WiFi 后的旧 LAN 地址，无 RST）要挂满
+    /// 整个超时才失败，多 URL 主备轮换形同虚设。didOpen 前单独限 10s，
+    /// 超时掐掉这次尝试，走正常 reconnect 轮换下一个候选。
+    /// （粟粟 2026-08-21 45abf0a0 实测：她换 WiFi 后主 URL 挂满 10 分钟，Tailscale 备用轮不到。）
+    @ObservationIgnored private var connectWatchdog: Timer?
+    private static let connectTimeout: TimeInterval = 10
     @ObservationIgnored private var manualClose = false
     @ObservationIgnored private var replyHandlers: [String: (String) -> Void] = [:]
     /// L2: spawn 结果回调，key = 请求时的 session_name
@@ -250,6 +257,8 @@ final class CCBridgeWebSocketClient: NSObject {
         manualClose = true
         reconnectTimer?.invalidate()
         reconnectTimer = nil
+        connectWatchdog?.invalidate()
+        connectWatchdog = nil
         pingTimer?.invalidate()
         pingTimer = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -495,6 +504,7 @@ final class CCBridgeWebSocketClient: NSObject {
         task.maximumMessageSize = 64 * 1024 * 1024
         self.task = task
         task.resume()
+        startConnectWatchdog(for: task)
         receiveLoop()
     }
 
@@ -755,9 +765,30 @@ final class CCBridgeWebSocketClient: NSObject {
         }
     }
 
+    /// 握手阶段限时：10s 内没 didOpen 就掐掉，交给正常重连轮换下一个候选。
+    private func startConnectWatchdog(for armedTask: URLSessionWebSocketTask) {
+        connectWatchdog?.invalidate()
+        // 学 pingTimer 用 .common mode：SwiftUI 滚动时 RunLoop 进 .tracking，
+        // default mode 的 Timer 会跳票。
+        let timer = Timer(timeInterval: Self.connectTimeout, repeats: false) { [weak self] _ in
+            guard let self, self.task === armedTask, !self.isConnected else { return }
+            armedTask.cancel(with: .goingAway, reason: nil)
+            self.handleDisconnect(error: "connect timeout")
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        connectWatchdog = timer
+    }
+
     private func handleDisconnect(error: String?) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // 幂等守卫：同一次断连，receive failure 与 didClose 都会走到这里
+            // → scheduleReconnect 被调两次 → 候选轮换转两格，两个候选正好转回原地，
+            // 备用 URL 永远轮不到。清掉 task 引用，让晚到的重复回调被各自的 === guard 挡掉。
+            guard self.task != nil else { return }
+            self.task = nil
+            self.connectWatchdog?.invalidate()
+            self.connectWatchdog = nil
             self.isConnected = false
             self.lastError = error
             if !self.manualClose {
@@ -810,6 +841,8 @@ extension CCBridgeWebSocketClient: URLSessionWebSocketDelegate {
             // 老 session 在 invalidateAndCancel 后回调可能跟新 task didOpen race，
             // 只认当前 self.task 的回调，避免被替换掉的老 task 污染状态
             guard webSocketTask === self.task else { return }
+            self.connectWatchdog?.invalidate()
+            self.connectWatchdog = nil
             self.isConnected = true
             self.resendPushTokenIfNeeded()
             self.reattachTerminals()
