@@ -15,6 +15,9 @@ struct TransientNotice: Equatable {
 
 @Observable
 final class ConversationViewModel {
+    /// CC 桥选择卡挂起中（非 nil = sheet 呈现）。详见 ConversationViewModel+AskUser.swift
+    var pendingCCQuestion: PendingCCQuestion? = nil
+
     var selectedConversation: Conversation?
     /// CC→记忆 反向提取用：installCCFollowUpHandler 从 loadConversation 注册时拿不到
     /// providerManager（那条路径没有）。存一份最近一次可用的，让 CC proactive 回复也能提取。

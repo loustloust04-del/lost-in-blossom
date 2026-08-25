@@ -298,6 +298,15 @@ final class CCBridgeWebSocketClient: NSObject {
     }
 
     /// JSON 序列化后以文本帧发出。
+    /// 选择卡答案回 hub，驱动 tmux TUI 键序。
+    /// answers 每项二选一：["indices": [Int]]（按位置选）或 ["text": String]（自由输入）。
+    /// skip=true 时 answers 传 nil——hub 发 Esc 整卡撤销（TUI 语义只支持整卡，不能逐题跳）。
+    func sendAskUserAnswer(toolUseId: String, answers: [[String: Any]]?, skip: Bool = false) {
+        var frame: [String: Any] = ["type": "ask_user_answer", "tool_use_id": toolUseId]
+        if skip { frame["skip"] = true } else if let answers { frame["answers"] = answers }
+        send(frame) { _ in }
+    }
+
     func send(_ payload: [String: Any], completion: @escaping (Error?) -> Void) {
         guard let task else {
             completion(NSError(domain: "CCBridge", code: -10,
