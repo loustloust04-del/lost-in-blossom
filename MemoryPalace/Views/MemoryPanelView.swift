@@ -9,33 +9,24 @@ struct RightPanelView: View {
     var stickerVM: StickerViewModel
 
     @Environment(ProfileManager.self) private var profileManager: ProfileManager?
-    @State private var bounceTrigger: Int = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            ToolBarView(selectedToolId: $selectedToolId)
-                .background(Theme.sidebarBg)
-                .zIndex(selectedToolId == "calendar" ? 0 : 1)
-
-            panelContent
-                .phaseAnimator(
-                    [false, true],
-                    trigger: bounceTrigger
-                ) { content, phase in
-                    content
-                        .scaleEffect(phase ? 0.995 : 1.0, anchor: .top)
-                        .offset(y: phase ? 2 : 0)
-                } animation: { phase in
-                    phase
-                        ? .spring(duration: 0.35, bounce: 0.2)   // 弹回：柔和微弹
-                        : .easeOut(duration: 0.08)               // 下压：快速平滑
-                }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.sidebarBg)
-        .onChange(of: selectedToolId) { _, _ in
-            bounceTrigger += 1
-        }
+        // 2026-08-24 兔兔定：工具 bar 从顶部移到底部当 dock（照粟粟 06-06 那刀）。
+        // 拇指够得着，且顶部让给内容。
+        // 用 safeAreaInset(.bottom) 而非把 ToolBarView 放进 VStack 末尾——
+        // inset 会把安全区让给面板内容，内容滚到底时不会被 dock 盖住。
+        //
+        // 同时去掉切工具时的 phaseAnimator 回弹（连同 bounceTrigger）：
+        // 那个 scaleEffect 0.995 会在缩放瞬间露出背景、且切换手感发卡，
+        // 粟粟同刀也删了它，原话「缩放露背景+卡」。
+        panelContent
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ToolBarView(selectedToolId: $selectedToolId)
+                    .background(Theme.sidebarBg)
+                    .zIndex(selectedToolId == "calendar" ? 0 : 1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Theme.sidebarBg)
     }
 
     @ViewBuilder
