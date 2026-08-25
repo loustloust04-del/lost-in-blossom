@@ -47,7 +47,11 @@ struct ContentView: View {
     @GestureState private var sidebarLiveDrag: CGFloat = 0
     @State private var edgePanDrag: CGFloat = 0
     @State private var isRightPanelVisible = false
-    @State private var selectedToolId: String = "memory"
+    /// 右滑页默认停在桌面（Console），而不是直接落进某个工具。
+    /// 2026-08-24 兔兔定，对齐粟粟的 page2 逻辑：dock 最右 🏠 回桌面、平常停桌面。
+    /// 「home」case 与 dock 键 07-09 afbec0f4 就做好了，只有这个默认值一直没改，
+    /// 所以桌面态从来没被看见过。
+    @State private var selectedToolId: String = "home"
     @State private var stickerVM = StickerViewModel()
     @State private var isFullscreen = false
     @State private var isFullscreenTransitioning = false
