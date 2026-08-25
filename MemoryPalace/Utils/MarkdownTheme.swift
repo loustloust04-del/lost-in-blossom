@@ -81,6 +81,13 @@ extension MarkdownUI.Theme {
                     .markdownMargin(top: 0, bottom: 12 * paragraphSpacingScale)
             }
             .codeBlock { configuration in
+                // html 代码块 → 收成 80×80 可点开的网页卡片（2026-08-24 自粟粟搬入）。
+                // 她那边靠 fork 的 htmlBlockRenderer EnvironmentKey 注入；我们用上游
+                // MarkdownUI，直接用它官方的 codeBlock 钩子分流——一处覆盖全部渲染路径，
+                // 比逐个调用点注入 environment 干净。
+                if let lang = configuration.language?.lowercased(), lang == "html" {
+                    HTMLArtifactCardView(content: configuration.content)
+                } else {
                 ZStack(alignment: .topTrailing) {
                     ScrollView(.horizontal, showsIndicators: true) {
                         configuration.label
@@ -105,6 +112,7 @@ extension MarkdownUI.Theme {
                     }
                 }
                 .markdownMargin(top: 8, bottom: 8)
+                }
             }
             .blockquote { configuration in
                 configuration.label
