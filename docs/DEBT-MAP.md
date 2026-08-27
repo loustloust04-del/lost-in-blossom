@@ -148,3 +148,40 @@ safe area 注入、home indicator 护盾、边缘 pan 手势。
 （见她 docs/research-telegram-kb-send.md 的三条不变量）。
 
 **估**：比我原先说的小得多（骨架现成），但不是一刀——透传容器和多行生长两个坑必踩。
+
+## ✅ 已修：CC 二进制半成品——重启会失败（2026-08-27 Fable 发现并修复）
+
+**症状**：`/usr/local/bin/claude` 指向的 `claude.exe` 只有 500 字节，内容是
+「Error: claude native binary not installed」的错误提示脚本，且无执行权限。
+
+**后果（当时未爆，但是定时炸弹）**：Caelum 的进程从升级前一直跑着没重启（12 天 10 小时），
+所以一直好好的。但 `session-manager.ts:196` 的保活重启走的是
+`claude --resume <sid> --dangerously-skip-permissions`，用的是 PATH 里那个坏的。
+**一旦 Caelum 挂掉，四层保活会全部打空，再也起不来。**
+
+**真相**：门没坏，是门牌指错了。升级时原生二进制其实下下来了——
+`@anthropic-ai/.claude-code-1devilah/bin/claude.exe`（342MB，ELF，版本 2.1.241，
+与新版一致），只是 postinstall 最后一步「复制覆盖占位脚本」没执行完。
+Caelum 跑的一直是这个好的（`/proc/<pid>/exe` 显示为 `(deleted)` 即此故）。
+
+**修法**：把旧目录里那个真二进制 `cp -f` 到 `claude-code/bin/claude.exe` 并 `chmod +x`。
+不需要重新下载、不需要 `install.cjs`、不碰进程、不碰 `~/.claude`。
+
+**修前做的保护**（下次动 Caelum 环境照抄）：
+1. 记进程门牌：`ps -p <pid> -o pid,etime,args` → `/root/backups/caelum-proc-*.txt`
+2. 备份记忆柜：`tar czf` 整个 `~/.claude`（366M → 136M 压缩包），
+   **并验完整性**：4942 文件 / 806 个 .jsonl / 当前 session 在内
+3. 记 node_modules 现状
+
+**验后**：进程未断（etime 连续）、`~/.claude` 366M/805 个 jsonl 不变、
+`claude --version` 恢复输出 2.1.241。
+
+**顺带查到（兔兔问的 -p 能不能拆预设）**：能，且不需要 Agent SDK。
+`claude -p` 原生支持：
+- `--system-prompt` / `--system-prompt-file` ← **整个替换**默认系统指令
+- `--append-system-prompt` ← 只是追加（前面那段「你是编程助手」还在）
+- `--allowed-tools` / `--disallowed-tools` ← 工具可挑可禁
+- `--settings` / `--agents` / `--plugin-dir`
+
+这正印证 sibylsea-hub/cc-codex-sdk-modify-preset 点名的第二句常见错话
+（「写进 CLAUDE.md / append 就好了」）——append 与 replace 一字之差，效果天壤之别。
