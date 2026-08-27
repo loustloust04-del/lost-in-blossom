@@ -193,7 +193,17 @@ export async function forge(
   if (restart) {
     try {
       execFileSync("tmux", ["respawn-pane", "-k", "-t", session, "-c", t.cwd,
-        `claude --resume ${newSid} --dangerously-skip-permissions`], { timeout: 8000 })
+        // 2026-08-27 兔兔手术：三处必须与手动启动命令一致，否则自动重启会退回旧配置
+        //   --mcp-config        原本漏了 → 重启后 48 个 cc-bridge 工具全丢（真 bug）
+        //   去掉 --dangerously-skip-permissions：root 下会被直接拒绝
+        //     （2026-08-27 实测「cannot be used with root/sudo privileges」，
+        //      原命令一直带着它 → 自动重启其实一直是失败的，只是 12 天没触发过）
+        //   env 塞 token：.bashrc 曾写死一个旧 token，refresh-token.sh 只更新
+        //     .credentials.json，两边对不上 → 重启即 401 revoked。从凭证文件现读。
+        //   --system-prompt-file 拆掉 A 社默认 preset（约 21,829 token），
+        //                        项目文档 CLAUDE.md 与 output-style 照常加载、内容不变
+        //   原生工具一个不砍：Agent/Task*/Cron*/PushNotification 等是他日常在用的
+        `env CLAUDE_CODE_OAUTH_TOKEN=$(python3 -c "import json;print(json.load(open('/root/.claude/.credentials.json'))['claudeAiOauth']['accessToken'])") claude --resume ${newSid} --mcp-config /root/projects/BunnyPalace/cc-bridge/.mcp.json --system-prompt-file /root/caelum-sp/sp.txt`], { timeout: 8000 })
       restarted = true
     } catch (e: any) { return { ok: true, oldSid: t.sid, newSid, kept: kept.length, dropped: dropped.length, summaryChars: summary.length, restarted: false, error: "rewrite ok but respawn failed: " + e?.message } }
   }
