@@ -1545,6 +1545,8 @@ struct BranchInfo {
 // MARK: - Chat Bubble
 
 struct BubbleView: View {
+    /// 气泡模式总开关（设置→外观→消息显示）。关掉完全回到原渲染路径。
+    @AppStorage("chatBubbleMode") private var chatBubbleMode = false
     let node: MessageNode
     let hasBranches: Bool
     let branchInfo: BranchInfo?
@@ -1861,6 +1863,13 @@ struct BubbleView: View {
                         : rawDisplay
                     if displayText.isEmpty && isStreaming {
                         TypingDotsView()
+                    } else if chatBubbleMode && !displayText.isEmpty
+                                && !displayText.contains("{color:") && !isStreaming {
+                        // 气泡模式：iMessage 式带尾巴气泡，长回复按空行拆成连续小气泡。
+                        // 2026-08-27 兔兔要的「小气泡」。只接管「普通消息」这一条路——
+                        // 流式点点、富文本 {color:}、以及下面 markdown 那条全部原样保留，
+                        // 关掉开关就完全回到现在这套（加法不是改法）。
+                        BubbleModeRow(text: displayText, isUser: isUser)
                     } else if !displayText.isEmpty {
                         let needsWebView = displayText.contains("{color:")
                         if needsWebView {

@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct IOSAppearancePage: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @AppStorage("slimInputBar") private var slimInputBar = true
+    @AppStorage("chatBubbleMode") private var chatBubbleMode = false
     @AppStorage("selectedFont") private var selectedFont = ""
     @AppStorage("fontScale") private var fontScale = 1.2
     @AppStorage("expandAllMessages") private var expandAllMessages = false
@@ -162,6 +163,16 @@ struct IOSAppearancePage: View {
             .listRowSeparator(.hidden)
 
             Section("消息显示") {
+                Toggle(isOn: $chatBubbleMode) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("气泡模式")
+                            .font(.system(size: Theme.F.body))
+                        Text("iMessage 式带尾巴气泡，长回复按空行拆成连续小气泡")
+                            .font(.caption)
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+
                 Toggle(isOn: $slimInputBar) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("细输入框")
