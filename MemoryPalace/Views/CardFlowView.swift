@@ -1783,12 +1783,24 @@ struct BubbleView: View {
                         ? RegexEngine.apply(scripts: regexScripts, text: cleaned,
                                             messagePlacement: 2, isMarkdown: true)
                         : cleaned
+                    // 第三刀：思考链灰气泡。来源两条——[thinking] 嵌入（extractThinking）
+                    // 或 segments 里的 .thinking 段（API 流式）。这条分支绕开了下方原路径，
+                    // 所以要自己把思考链带上；「不拆块」和「不显示思考链」拆开处理。
+                    let segThinking: String? = node.segments?.compactMap { seg -> String? in
+                        if case .thinking(text: let t, signature: _) = seg { return t } else { return nil }
+                    }.joined(separator: "\n\n")
+                    let bubbleThinking: String? = {
+                        if let t = thinkingResult?.thinking, !t.isEmpty { return t }
+                        if let t = segThinking, !t.isEmpty { return t }
+                        return nil
+                    }()
                     BubbleModeRow(
                         text: bubbleText,
                         isUser: isUser,
                         // 带可渲染段（工具/附件）的消息不拆块，整条一个泡——
-                        // 但思考链照常由下方原路径显示，不学粟粟那句 isComplex ? (nil, [])
-                        allowSplit: !(node.segments?.hasRenderableSegments ?? false)
+                        // 思考链另走上方灰泡，不学粟粟那句 isComplex ? (nil, [])
+                        allowSplit: !(node.segments?.hasRenderableSegments ?? false),
+                        thinking: isUser ? nil : bubbleThinking
                     )
                 } else if isUser {
                     if isEditing {

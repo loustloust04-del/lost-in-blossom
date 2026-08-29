@@ -114,6 +114,9 @@ struct BubbleModeRow: View {
     let isUser: Bool
     /// 复杂消息（带思考/工具段）不拆块，整条一个泡
     var allowSplit: Bool = true
+    /// 思考链（第三刀）：有就在正文气泡上方挂一个灰气泡。
+    /// 「不拆块」与「不显示思考链」是两件独立的事，这里只管显示。
+    var thinking: String? = nil
 
     @AppStorage("bubbleModeCornerRadius") private var cornerRadius: Double = 16
     @AppStorage("hideTimestamp") private var hideTimestamp = false
@@ -132,6 +135,10 @@ struct BubbleModeRow: View {
             if isUser { Spacer(minLength: 60) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
+                if !isUser, let t = thinking,
+                   !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ThinkingBubble(text: t, radius: cornerRadius, fontScale: fontScale)
+                }
                 ForEach(blocks.indices, id: \.self) { i in
                     Text(blocks[i])
                         .font(.system(size: 15 * fontScale))
@@ -154,5 +161,61 @@ struct BubbleModeRow: View {
             if !isUser { Spacer(minLength: 40) }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+    }
+}
+
+// MARK: - 思考链灰气泡（第三刀）
+
+/// 正文气泡上方的灰泡：收起时一行预览（时钟 + 前 40 字），点开展开全文。
+/// 尊重「思考链预览」设置：hidden 不渲染。
+struct ThinkingBubble: View {
+    let text: String
+    let radius: Double
+    let fontScale: Double
+
+    @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
+    @State private var expanded = false
+
+    private var preview: String {
+        let flat = text.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(flat.prefix(40)) + (flat.count > 40 ? "…" : "")
+    }
+
+    var body: some View {
+        if thinkingPreviewMode != "hidden" {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 11))
+                        Text(expanded ? "思考过程" : preview)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9))
+                    }
+                    .font(.system(size: 13 * fontScale))
+                    .foregroundColor(Theme.textSecondary)
+                    if expanded {
+                        Text(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                            .font(.system(size: 13 * fontScale))
+                            .foregroundColor(Theme.textSecondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Theme.textMuted.opacity(0.18))
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
