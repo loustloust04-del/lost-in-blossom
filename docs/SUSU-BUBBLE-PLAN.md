@@ -65,3 +65,28 @@ else 分支就是原来那套。**我们照做，现有渲染路径一行不动�
 
 **不搬**：头像（兔兔明确不要）、usage footer（我们有自己的）、
 她的 RecallCardView（绑她的记忆系统）
+
+## 七、第三刀（思考链气泡）：不要照抄她的写法
+
+2026-08-28 兔兔实机发现：**她的气泡模式下思考链不见了**。查明不是 bug，是半成品。
+
+`ChatBubbleStyle.swift:314`：
+```swift
+let parsed: (thinking: String?, blocks: [String]) = isComplex ? (nil, []) : parsedContent
+```
+只要 `isComplex`（消息含 thinking / tool / attachment 段），**thinking 被强制 nil**，
+后面 `if let thinking { ThinkingBubble(...) }` 永远拿不到东西。
+
+她自己的注释承认了：「有 thinking/tool/attachment 段 = 复杂，整块不拆。**（思考链气泡是第 3 步）**」
+——即她把「不拆块」和「不显示思考链」图省事塞进同一个三元表达式，第 3 步没做完。
+
+**后果对兔兔尤其明显**：她主要用 CC，CC 回话几乎每条都带工具段 → 每条都 isComplex
+→ 思考链全程不出现。
+
+**我们做第三刀时的正确做法**：
+「复杂消息不拆块」与「不显示思考链」**是两件独立的事**，拆开：
+```swift
+let blocks = isComplex ? [text] : splitBlocks(text)   // 不拆块 ✓
+let thinking = parsedThinking                          // 但思考链照常给 ✓
+```
+我们自己的 `[thinking]` 嵌入通路是好的（08-24 修完 latestThinking 串台），数据源没问题。
