@@ -20,6 +20,8 @@ struct CardFlowView: View {
     @Environment(PresetManager.self) private var presetManager: PresetManager?
     @Environment(\.scenePhase) private var scenePhase
     // globalWBManager 通过 ContentView 同步到 viewModel.globalWorldBookEntries
+    /// 气泡模式：在此读、传给 BubbleView 并参与其 ==，否则 Equatable 会挡住重绘
+    @AppStorage("chatBubbleMode") private var chatBubbleMode = false
     @AppStorage("blurRadius") private var blurRadius = 1.3
     @AppStorage("bubbleSpacing") private var bubbleSpacing: Double = 31
     @State private var showInConvSearch = false
@@ -58,6 +60,7 @@ struct CardFlowView: View {
         let streamingThinkingForNode = isNodeAPIStreaming ? viewModel.streamingThinkingText : ""
         let thinkingSummaryForNode = isNodeAPIStreaming ? viewModel.thinkingSummary : ""
         BubbleView(
+            chatBubbleMode: chatBubbleMode,
             node: node,
             hasBranches: info != nil,
             branchInfo: info,
@@ -1546,7 +1549,14 @@ struct BranchInfo {
 
 struct BubbleView: View {
     /// 气泡模式总开关（设置→外观→消息显示）。关掉完全回到原渲染路径。
-    @AppStorage("chatBubbleMode") private var chatBubbleMode = false
+    ///
+    /// 2026-08-28：这里原本是 @AppStorage，导致开关拨了却毫无变化——
+    /// BubbleView 是 Equatable，SwiftUI 只在 == 返回 false 时才重建视图，
+    /// 而 == 里比的十四项全是数据（node.id / content / isStreaming...），
+    /// 没有任何外观项。@AppStorage 是内部状态、不参与 ==，
+    /// 于是开关变了但每个气泡都判定「没变化」，拒绝重绘。
+    /// 改为由父视图传入并加进 ==，值一变整列气泡才会跟着重画。
+    let chatBubbleMode: Bool
     let node: MessageNode
     let hasBranches: Bool
     let branchInfo: BranchInfo?
@@ -2177,6 +2187,7 @@ extension BubbleView: Equatable {
             && lhs.isLastAssistant == rhs.isLastAssistant
             && lhs.regexScripts.count == rhs.regexScripts.count
             && lhs.groupMembers.count == rhs.groupMembers.count
+            && lhs.chatBubbleMode == rhs.chatBubbleMode
     }
 }
 
