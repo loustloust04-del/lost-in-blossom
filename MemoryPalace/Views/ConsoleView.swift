@@ -14,8 +14,22 @@ struct ConsoleView: View {
     @Query(sort: \DailyContext.date, order: .reverse) private var allContexts: [DailyContext]
     // 统一数据源：健康数据全部读本地 SwiftData（跟健康面板同一份）
     @Query private var localMeds: [Medication]
-    @Query private var localMedLogs: [MedicationLog]
+
+    // 2026-08-28 兔兔报「切右滑页卡顿」：Console 是桌面默认页，每次切进来都重建。
+    // 原本这两个 @Query 无过滤全表拉取，再在内存里 filter 出今天——
+    //   localMedLogs：每次吃药写一条，用久了成百上千条，只为显示今天那几条
+    //   localCycleDays：只取今天一条，却全表读
+    // 改为在谓词里就框定范围，把过滤下推给数据库。
+    // MedicationLog 只要今天：用 takenAt >= 今天零点。
+    // 谓词里不能调 Calendar（不可翻译成 SQL），故用 init 里算好的静态起点。
+    @Query(filter: #Predicate<MedicationLog> { $0.takenAt >= Self.todayStart })
+    private var localMedLogs: [MedicationLog]
+    // CycleDay 保留全量——HealthCycleStore.periods 需要历史算周期，不能截断。
     @Query(sort: \CycleDay.date, order: .reverse) private var localCycleDays: [CycleDay]
+
+    /// 今天零点。@Query 的谓词在类型初始化时求值，不能放 Calendar 调用，
+    /// 故提成静态常量。跨天后需重进页面刷新——Console 每次切页都重建，影响可忽略。
+    private static let todayStart = Calendar.current.startOfDay(for: Date())
 
     @State private var healthKit = HealthKitService()
     @State private var vitalsData: VitalsResponse? = nil
@@ -621,7 +635,8 @@ struct ConsoleView: View {
     /// 本地药物今日进度：(已服, 总计)
     private var localMedProgress: (Int, Int) {
         let now = Date()
-        let todayLogs = localMedLogs.filter { Calendar.current.isDateInToday($0.takenAt) }
+        // @Query 谓词已框定今天，这里不再二次 filter
+        let todayLogs = localMedLogs
         var total = 0, taken = 0
         for med in localMeds where !med.isArchived {
             for slot in med.timesOfDay {
