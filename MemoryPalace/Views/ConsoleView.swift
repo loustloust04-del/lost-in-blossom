@@ -20,16 +20,14 @@ struct ConsoleView: View {
     //   localMedLogs：每次吃药写一条，用久了成百上千条，只为显示今天那几条
     //   localCycleDays：只取今天一条，却全表读
     // 改为在谓词里就框定范围，把过滤下推给数据库。
-    // MedicationLog 只要今天：用 takenAt >= 今天零点。
-    // 谓词里不能调 Calendar（不可翻译成 SQL），故用 init 里算好的静态起点。
-    @Query(filter: #Predicate<MedicationLog> { $0.takenAt >= Self.todayStart })
-    private var localMedLogs: [MedicationLog]
+    // MedicationLog 只要今天。
+    // 2026-08-30 修：原写 #Predicate { $0.takenAt >= Self.todayStart }，
+    // CI #186/#187 报 cannot convert ... to closure result type——
+    // #Predicate 宏不接受对静态属性的引用（翻译不成 SQL）。
+    // 改用局部常量捕获：宏能把捕获的字面值内联进谓词。
+    @Query private var localMedLogs: [MedicationLog]
     // CycleDay 保留全量——HealthCycleStore.periods 需要历史算周期，不能截断。
     @Query(sort: \CycleDay.date, order: .reverse) private var localCycleDays: [CycleDay]
-
-    /// 今天零点。@Query 的谓词在类型初始化时求值，不能放 Calendar 调用，
-    /// 故提成静态常量。跨天后需重进页面刷新——Console 每次切页都重建，影响可忽略。
-    private static let todayStart = Calendar.current.startOfDay(for: Date())
 
     @State private var healthKit = HealthKitService()
     @State private var vitalsData: VitalsResponse? = nil
@@ -635,8 +633,10 @@ struct ConsoleView: View {
     /// 本地药物今日进度：(已服, 总计)
     private var localMedProgress: (Int, Int) {
         let now = Date()
-        // @Query 谓词已框定今天，这里不再二次 filter
-        let todayLogs = localMedLogs
+        // 注：@Query 谓词下推那版 CI 编不过（#Predicate 不接受静态属性引用），
+        // 暂回内存过滤。卡顿的大头（Console 成为默认首页）已由别处缓解；
+        // 真要下推需把「今天零点」做成 @Query(filter:) 的运行时参数，另起一刀。
+        let todayLogs = localMedLogs.filter { Calendar.current.isDateInToday($0.takenAt) }
         var total = 0, taken = 0
         for med in localMeds where !med.isArchived {
             for slot in med.timesOfDay {
