@@ -17,7 +17,14 @@ struct ToolBarView: View {
     /// 切页动画：原 0.45s 弹簧，点一下要等近半秒才见反应（兔兔实测「反应不过来」）。
     /// 拖拽重排仍用弹簧手感，纯切页用短促的 easeOut。
     private let springAnim: Animation = .spring(response: 0.32, dampingFraction: 0.82)
-    private let switchAnim: Animation = .easeOut(duration: 0.2)
+    /// dock 选中胶囊的展开动画。
+    /// 08-12 那刀为治「点了要等半秒才见反应」，把它从弹簧改成了 easeOut——
+    /// 治好了迟滞，但也把胶囊撑开时那口弹性一起去掉了（兔兔 08-28 说粟粟那边「有个动画」，
+    /// 指的就是这点弹）。
+    /// 现在两全：selectedToolId 仍是无动画直接赋值（页面立刻切，保住 08-12 的修复），
+    /// 只有这条样式动画换回弹簧。她那边是 0.45/0.75，但她整体切页也走这条、必须留余量；
+    /// 我们只驱动一个胶囊的宽度与底色，取更快的 0.30/0.78——弹一下就停，不拖尾。
+    private let switchAnim: Animation = .spring(response: 0.30, dampingFraction: 0.78)
 
     var body: some View {
         HStack(spacing: 0) {
