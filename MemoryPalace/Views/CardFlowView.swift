@@ -1760,7 +1760,27 @@ struct BubbleView: View {
                 // 症状：新回复等待期间，气泡里挂出「CC 思考过程」，点开是上一轮的内容。
                 let shouldTruncate = !expandAllMessages && !isExpanded && cleaned.count > truncateLength
 
-                if isUser {
+                // ── 气泡模式分流 ───────────────────────────────────────────
+                // 2026-08-28 兔兔实机：开关打开但一个气泡都没出现。
+                // 根因是我上一刀把分流埋在了 else-if 链最深处（只覆盖「纯文本 assistant」），
+                // 而 user 消息走 if isUser、CC 带工具段的回复走 hasRenderableSegments，
+                // 两条都绕开了它——她用 CC，回话几乎每条都带工具段，所以一个都看不到。
+                // 提到最外层：气泡模式下 user 与 assistant 都走这条。
+                // 流式中仍回落原路径（要显示打字点点与实时文本）。
+                if chatBubbleMode && !isStreaming && !cleaned.isEmpty
+                    && !cleaned.contains("{color:") {
+                    let bubbleText = node.role == "assistant" && !regexScripts.isEmpty
+                        ? RegexEngine.apply(scripts: regexScripts, text: cleaned,
+                                            messagePlacement: 2, isMarkdown: true)
+                        : cleaned
+                    BubbleModeRow(
+                        text: bubbleText,
+                        isUser: isUser,
+                        // 带可渲染段（工具/附件）的消息不拆块，整条一个泡——
+                        // 但思考链照常由下方原路径显示，不学粟粟那句 isComplex ? (nil, [])
+                        allowSplit: !(node.segments?.hasRenderableSegments ?? false)
+                    )
+                } else if isUser {
                     if isEditing {
                         VStack(alignment: .trailing, spacing: 6) {
                             TextField("编辑消息...", text: $editText, axis: .vertical)
@@ -1863,13 +1883,6 @@ struct BubbleView: View {
                         : rawDisplay
                     if displayText.isEmpty && isStreaming {
                         TypingDotsView()
-                    } else if chatBubbleMode && !displayText.isEmpty
-                                && !displayText.contains("{color:") && !isStreaming {
-                        // 气泡模式：iMessage 式带尾巴气泡，长回复按空行拆成连续小气泡。
-                        // 2026-08-27 兔兔要的「小气泡」。只接管「普通消息」这一条路——
-                        // 流式点点、富文本 {color:}、以及下面 markdown 那条全部原样保留，
-                        // 关掉开关就完全回到现在这套（加法不是改法）。
-                        BubbleModeRow(text: displayText, isUser: isUser)
                     } else if !displayText.isEmpty {
                         let needsWebView = displayText.contains("{color:")
                         if needsWebView {
