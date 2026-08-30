@@ -1777,7 +1777,11 @@ struct BubbleView: View {
                 // 两条都绕开了它——她用 CC，回话几乎每条都带工具段，所以一个都看不到。
                 // 提到最外层：气泡模式下 user 与 assistant 都走这条。
                 // 流式中仍回落原路径（要显示打字点点与实时文本）。
-                if chatBubbleMode && !isStreaming && !cleaned.isEmpty
+                // D1（2026-08-30，照粟粟 575e14cf/35322cfb）：流式不再回落文章模式逐字吐，
+                // 改「段落完成即弹泡」：assistant 流式也走这条，只渲染已完成段落 + dots 尾泡。
+                // {color:} 富文本仍回落原路径。
+                let bubbleLive = isStreaming && !isUser
+                if chatBubbleMode && (bubbleLive || !cleaned.isEmpty)
                     && !cleaned.contains("{color:") {
                     let bubbleText = node.role == "assistant" && !regexScripts.isEmpty
                         ? RegexEngine.apply(scripts: regexScripts, text: cleaned,
@@ -1790,6 +1794,7 @@ struct BubbleView: View {
                         if case .thinking(text: let t, signature: _) = seg { return t } else { return nil }
                     }.joined(separator: "\n\n")
                     let bubbleThinking: String? = {
+                        if bubbleLive && !streamingThinkingText.isEmpty { return streamingThinkingText }
                         if let t = thinkingResult?.thinking, !t.isEmpty { return t }
                         if let t = segThinking, !t.isEmpty { return t }
                         return nil
@@ -1800,7 +1805,8 @@ struct BubbleView: View {
                         // 带可渲染段（工具/附件）的消息不拆块，整条一个泡——
                         // 思考链另走上方灰泡，不学粟粟那句 isComplex ? (nil, [])
                         allowSplit: !(node.segments?.hasRenderableSegments ?? false),
-                        thinking: isUser ? nil : bubbleThinking
+                        thinking: isUser ? nil : bubbleThinking,
+                        isLiveStreaming: bubbleLive
                     )
                 } else if isUser {
                     if isEditing {

@@ -104,7 +104,14 @@ enum BubbleBlockSplitter {
         }
         flush()
         return blocks.isEmpty ? [text] : blocks
-    }}
+    }
+
+    /// 流式弹泡（粟粟 B6 A2'）：只出**已完成**段落——尾段还在生长不渲染，
+    /// 等下一个空行出现它才成块弹出。思考标签未闭合时整段留在尾块 → 思考阶段自然只显示 dots。
+    static func streamingBlocks(_ text: String) -> [String] {
+        Array(splitBlocks(text).dropLast())
+    }
+}
 
 // MARK: - 气泡模式单条渲染
 
@@ -118,6 +125,9 @@ struct BubbleModeRow: View {
     /// 思考链（第三刀）：有就在正文气泡上方挂一个灰气泡。
     /// 「不拆块」与「不显示思考链」是两件独立的事，这里只管显示。
     var thinking: String? = nil
+    /// 流式弹泡（D1，粟粟 575e14cf/35322cfb）：气泡模式不逐字吐，
+    /// 一段写完弹一泡（spring），尾部挂独立 dots 泡；定格后尾巴回到末块。
+    var isLiveStreaming: Bool = false
 
     @AppStorage("bubbleModeCornerRadius") private var cornerRadius: Double = 16
     @AppStorage("hideTimestamp") private var hideTimestamp = false
@@ -131,6 +141,10 @@ struct BubbleModeRow: View {
     private let padV: CGFloat = 9
 
     private var blocks: [String] {
+        if isLiveStreaming {
+            return BubbleBlockSplitter.streamingBlocks(text)
+                .filter { !BubbleMarkdownSimplifier.isRenderEmpty($0) }
+        }
         let raw = allowSplit ? BubbleBlockSplitter.splitBlocks(text) : [text]
         // 抹平文档感会把纯分隔线块（---）删空——拆块时就过滤掉，避免渲染出空气泡（粟粟 7a6d2423）
         let filtered = isUser ? raw : raw.filter { !BubbleMarkdownSimplifier.isRenderEmpty($0) }
@@ -159,8 +173,21 @@ struct BubbleModeRow: View {
         }
     }
 
+    /// 弹入动画。anchor 取水平侧沿（垂直居中）——反转列表 flip 只翻纵轴，
+    /// 侧沿 anchor 与翻转方向无关，不踩 flip 雷（粟粟 35322cfb）
+    private var popTransition: AnyTransition {
+        .scale(scale: 0.85, anchor: isUser ? .trailing : .leading).combined(with: .opacity)
+    }
+
+    private func bubbleBackground(hasTail: Bool) -> some View {
+        BubbleTailShape(isUser: isUser, radius: cornerRadius, hasTail: hasTail)
+            .fill(isUser ? Theme.userBubble : Theme.assistantBubble)
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
+        // blocks 数提到闭包外给 .animation(value:) 用，避免二次拆块
+        let shown = blocks
+        return HStack(spacing: 0) {
             if isUser { Spacer(minLength: 60) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
@@ -168,25 +195,32 @@ struct BubbleModeRow: View {
                    !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ThinkingBubble(text: t, radius: cornerRadius, fontScale: fontScale)
                 }
-                ForEach(blocks.indices, id: \.self) { i in
-                    blockText(blocks[i])
+                ForEach(shown.indices, id: \.self) { i in
+                    blockText(shown[i])
                         .padding(.horizontal, padH)
                         .padding(.vertical, padV)
-                        .background(
-                            BubbleTailShape(
-                                isUser: isUser,
-                                radius: cornerRadius,
-                                // 只有最后一块带尾巴，中间块纯圆角
-                                hasTail: i == blocks.count - 1
-                            )
-                            .fill(isUser ? Theme.userBubble : Theme.assistantBubble)
-                        )
+                        // 只有最后一块带尾巴，中间块纯圆角；流式中尾巴归 dots 泡
+                        .background(bubbleBackground(
+                            hasTail: i == shown.count - 1 && !isLiveStreaming))
+                        // 块级弹入只在流式弹泡态挂——静态渲染一律 .identity 直出，防群弹
+                        .transition(isLiveStreaming ? popTransition : .identity)
+                }
+                // 流式尾部 typing dots 独立泡（固定 identity，不混进块 ForEach——
+                // 否则「dots 变正文」被 transition 当内容替换而不是新泡弹入）
+                if isLiveStreaming {
+                    TypingDotsView()
+                        .padding(.horizontal, padH)
+                        .padding(.vertical, padV + 2)
+                        .background(bubbleBackground(hasTail: true))
+                        .transition(popTransition)
                 }
             }
 
             if !isUser { Spacer(minLength: 40) }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+        .animation(.spring(duration: 0.35), value: shown.count)
+        .animation(.spring(duration: 0.35), value: isLiveStreaming)
     }
 }
 
