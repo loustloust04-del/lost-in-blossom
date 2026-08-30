@@ -169,3 +169,57 @@ FailoverError: --dangerously-skip-permissions cannot be used with root/sudo priv
 4. `plugins.allow` 显式信任 `openclaw-weixin`（现在每次都刷警告）
 
 **在第 1、3 步做完之前，兔兔在微信里说话，回她的是 GPT-5.5 不是主人。**
+
+## 【2026-08-30 接通】claude-cli backend 打通全过程
+
+四道坎，逐个记（下次配别的机器照抄）：
+
+**坎 1｜npm 装到旧版**
+`npm i -g openclaw` 得到 `2026.5.7`，而微信插件要 `>=2026.5.12`。
+本机 nvm 下早有 `2026.7.1-2`（`/root/.nvm/versions/node/v22.23.2`），用那个。
+我另装的 `/opt/node22` 是多余的。
+
+**坎 2｜`--dangerously-skip-permissions` 在 root 下被拒**
+（与 08-27 保活脚本同一颗雷。）
+根因在 `dist/cli-shared-*.js`：
+```js
+function isOpenClawRequestedYolo(context) {
+  const security = exec?.security ?? "full";
+  const ask = exec?.ask ?? "off";
+  return security === "full" && ask === "off";   // 默认即 true
+}
+```
+yolo=true 就强行追加那个 legacy 参数，自己在 `args` 里写什么都没用。
+**解法**：`tools.exec = {"security":"full","ask":"on-miss"}`
+——ask 不再是 "off"，yolo 判定不成立，参数消失。security 保持 full，工具能力不减。
+（`security` 只接受 deny/allowlist/full；`ask` 只接受 off/on-miss/always。）
+
+**坎 3｜`--output-format=stream-json requires --verbose`**
+OpenClaw 用 stream-json 读输出，claude 要求配 `--verbose`。加进 args。
+
+**坎 4｜`command` 是必填**
+`cliBackends.claude-cli` 少了 `command` 会验证失败。填 `/usr/local/bin/claude`。
+
+### 最终配置（`~/.openclaw/openclaw.json`）
+```json
+"tools": { "exec": { "security": "full", "ask": "on-miss" } },
+"agents": { "defaults": {
+  "model": "claude-cli/claude-opus-4-8",
+  "cliBackends": { "claude-cli": {
+    "command": "/usr/local/bin/claude",
+    "args": ["--permission-mode","acceptEdits","--verbose",
+             "--mcp-config","/root/projects/BunnyPalace/cc-bridge/.mcp.json",
+             "--system-prompt-file","/root/caelum-sp/sp.txt"],
+    "resumeArgs": ["--permission-mode","acceptEdits","--verbose",
+                   "--resume","252c3c5a-3bd9-482d-beb6-3ff6fad05c8b",
+                   "--mcp-config","...","--system-prompt-file","..."],
+    "env": { "CLAUDE_CODE_OAUTH_TOKEN": "<从 .credentials.json 现读>" },
+    "serialize": true
+  } } } }
+```
+
+**验证通过**：`openclaw agent --local --agent main -m "回一个字：好"` → 返回「好」，
+`turn: durationMs=7677`（非 turn failed）。
+
+**待验**：微信端实际发消息、以及 `resumeArgs` 是否真的接上了 252c3c5a
+（日志显示 `useResume=false`，说明这次走的是 args 不是 resumeArgs）。
