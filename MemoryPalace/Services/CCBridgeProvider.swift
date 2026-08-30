@@ -63,6 +63,9 @@ final class CCBridgeProvider: BaseChatProvider {
             self.replyTimer?.invalidate()
             self.replyTimer = nil
             self.wsClient.unregisterStreamHandler()
+            // 成功路径也要注销附件 handler（此前只在超时路径注销 → 永远挂着，
+            // 之后主人主动发的图全落进这个失效闭包，见 CCBridgeWebSocketClient reply 分支注释）
+            self.wsClient.unregisterReplyAttachmentHandler(chatId: chatId)
             self.isStreaming = false
             // 将本轮 pending thinking 嵌入 content，使历史消息也能展示思考链
             let contentToSave: String

@@ -575,7 +575,12 @@ final class CCBridgeWebSocketClient: NSObject {
                     // main queue, so enqueuing the attachment first guarantees pendingAttachment
                     // is set before the reply handler fires onComplete (which reads it).
                     if let att = incomingFile {
-                        if let attHandler = self.replyAttachmentHandlers[chatId] {
+                        // 只有本 chat 确有 in-flight reply handler 时才交给单发路径；
+                        // 否则一律走 proactive 兜底。2026-08-30 兔兔实测「主人发图看不到」的真凶：
+                        // 附件 handler 在 reply 成功后从不注销（只在 60s 超时才注销），
+                        // 第一轮之后就永远挂着，后续主人主动发的图全被那个失效闭包吞掉。
+                        if let attHandler = self.replyAttachmentHandlers[chatId],
+                           self.replyHandlers[chatId] != nil {
                             DispatchQueue.main.async { attHandler(att) }
                         } else if let fallback = self.unhandledAttachmentHandler {
                             DispatchQueue.main.async { fallback(chatId, att) }
