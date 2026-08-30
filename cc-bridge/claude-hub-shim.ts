@@ -33,26 +33,22 @@ const HUB = process.env.HUB_URL ?? `ws://127.0.0.1:7890/ws?token=${encodeURIComp
 const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-main"
 const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 180_000)
 
-/** 取 prompt：优先命令行最后一个非选项参数（OpenClaw input=argv），退回 stdin。
+/** 按 claude 的 stream-json 方言输出一行 */
+function emit(obj: unknown) { process.stdout.write(JSON.stringify(obj) + "\n") }
+
+/** 取 prompt。OpenClaw（input=arg）把它放在 argv 最后一个，形如：
+ *    -p --output-format stream-json --verbose ... --append-system-prompt-file <路径> "[时间戳] 正文"
+ *  所以直接取最后一个参数即可；退回 stdin 兼容手工调用。
  *  不用 stdin 模式的原因：OpenClaw 的 liveSession 会保持进程不关 stdin，
- *  而读到 EOF 才动的 shim 会永远卡住（2026-08-30 实测）。 */
+ *  读到 EOF 才动的 shim 会永远卡住（2026-08-30 实测）。 */
 async function readPrompt(): Promise<string> {
   const argv = process.argv.slice(2)
-  for (let i = argv.length - 1; i >= 0; i--) {
-    const a = argv[i]
-    if (a && !a.startsWith("-") && (i === 0 || !argv[i - 1].startsWith("--output") )) {
-      // 跳过已知选项的值
-      if (["stream-json", "text", "json"].includes(a)) continue
-      return a.trim()
-    }
-  }
+  const last = argv[argv.length - 1]
+  if (last && !last.startsWith("-")) return last.trim()
   const chunks: Uint8Array[] = []
   for await (const c of Bun.stdin.stream()) chunks.push(c)
   return Buffer.concat(chunks).toString("utf-8").trim()
 }
-
-/** 按 claude 的 stream-json 方言输出一行 */
-function emit(obj: unknown) { process.stdout.write(JSON.stringify(obj) + "\n") }
 
 const prompt = await readPrompt()
 if (!prompt) { emit({ type: "result", subtype: "error", is_error: true, result: "empty prompt" }); process.exit(1) }
