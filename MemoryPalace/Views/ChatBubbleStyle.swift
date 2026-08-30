@@ -128,6 +128,10 @@ struct BubbleModeRow: View {
     /// 流式弹泡（D1，粟粟 575e14cf/35322cfb）：气泡模式不逐字吐，
     /// 一段写完弹一泡（spring），尾部挂独立 dots 泡；定格后尾巴回到末块。
     var isLiveStreaming: Bool = false
+    /// 语音气泡（D4，粟粟 bb8fd45b）：audioRef 在正文泡上方一条一泡；正文空时尾巴归最后一条语音
+    var voices: [(path: String, duration: Double?)] = []
+    var nodeId: String = ""
+    var profileId: String = ""
 
     @AppStorage("bubbleModeCornerRadius") private var cornerRadius: Double = 16
     @AppStorage("hideTimestamp") private var hideTimestamp = false
@@ -194,6 +198,15 @@ struct BubbleModeRow: View {
                 if !isUser, let t = thinking,
                    !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ThinkingBubble(text: t, radius: cornerRadius, fontScale: fontScale)
+                }
+                let voiceTail = shown.isEmpty && !isLiveStreaming
+                ForEach(voices.indices, id: \.self) { i in
+                    VoiceCapsuleView(path: voices[i].path, duration: voices[i].duration,
+                                     nodeId: nodeId, profileId: profileId,
+                                     isUser: isUser, embedded: true)
+                        .padding(.horizontal, padH)
+                        .padding(.vertical, padV)
+                        .background(bubbleBackground(hasTail: voiceTail && i == voices.count - 1))
                 }
                 ForEach(shown.indices, id: \.self) { i in
                     blockText(shown[i])

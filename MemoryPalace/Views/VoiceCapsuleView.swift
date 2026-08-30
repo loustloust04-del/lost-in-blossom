@@ -8,6 +8,8 @@ struct VoiceCapsuleView: View {
     let nodeId: String
     let profileId: String
     let isUser: Bool
+    /// 气泡模式内嵌：外层已是气泡壳（BubbleTailShape），去掉自带胶囊底/描边/定高
+    var embedded: Bool = false
 
     @Environment(\.modelContext) private var modelContext
 
@@ -37,10 +39,10 @@ struct VoiceCapsuleView: View {
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundColor(Theme.textMuted)
         }
-        .padding(.horizontal, 12)
-        .frame(height: 34)
-        .background(Capsule().fill(Theme.accent.opacity(0.55)))
-        .overlay(Capsule().stroke(Theme.textMuted.opacity(0.12), lineWidth: 0.5))
+        .padding(.horizontal, embedded ? 0 : 12)
+        .frame(height: embedded ? nil : 34)
+        .background(Capsule().fill(embedded ? Color.clear : Theme.accent.opacity(0.55)))
+        .overlay(Capsule().stroke(embedded ? Color.clear : Theme.textMuted.opacity(0.12), lineWidth: 0.5))
         .contentShape(Capsule())
         .onTapGesture {
             guard let url else { return }

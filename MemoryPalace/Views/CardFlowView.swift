@@ -1781,7 +1781,11 @@ struct BubbleView: View {
                 // 改「段落完成即弹泡」：assistant 流式也走这条，只渲染已完成段落 + dots 尾泡。
                 // {color:} 富文本仍回落原路径。
                 let bubbleLive = isStreaming && !isUser
-                if chatBubbleMode && (bubbleLive || !cleaned.isEmpty)
+                let bubbleVoices: [(path: String, duration: Double?)] = (node.segments ?? []).compactMap { seg in
+                    if case .audioRef(_, _, let p, let d, _) = seg { return (p, d) }
+                    return nil
+                }
+                if chatBubbleMode && (bubbleLive || !cleaned.isEmpty || !bubbleVoices.isEmpty)
                     && !cleaned.contains("{color:") {
                     let bubbleText = node.role == "assistant" && !regexScripts.isEmpty
                         ? RegexEngine.apply(scripts: regexScripts, text: cleaned,
@@ -1806,7 +1810,10 @@ struct BubbleView: View {
                         // 思考链另走上方灰泡，不学粟粟那句 isComplex ? (nil, [])
                         allowSplit: !(node.segments?.hasRenderableSegments ?? false),
                         thinking: isUser ? nil : bubbleThinking,
-                        isLiveStreaming: bubbleLive
+                        isLiveStreaming: bubbleLive,
+                        voices: bubbleVoices,
+                        nodeId: node.id,
+                        profileId: node.profileId
                     )
                 } else if isUser {
                     if isEditing {
@@ -1948,7 +1955,8 @@ struct BubbleView: View {
 
                 // Artifact canvas card (assistant only, not during streaming)
                 // 语音条胶囊（audioRef 不进 segments 渲染，这里单独画）
-                if let segs = node.segments {
+                // D4：气泡模式下语音已在 BubbleModeRow 里一条一泡，外侧胶囊不再画
+                if !chatBubbleMode, let segs = node.segments {
                     let voiceSegs: [(path: String, duration: Double?)] = segs.compactMap { seg in
                         if case .audioRef(_, _, let p, let d, _) = seg { return (p, d) }
                         return nil
