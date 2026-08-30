@@ -149,6 +149,7 @@ interface BufferedReply {
   content: string
   reply_id: string
   ts: number
+  file_path?: string
 }
 const REPLY_BUFFER_TTL_MS = 60_000
 const recentReplies: BufferedReply[] = []
@@ -224,6 +225,8 @@ interface OfflineMessage {
   message_id?: string
   reply_id: string
   timestamp: string
+  /// CC 发的文件在 outbound/ 的暂存路径（只存路径不存 b64，防 offline 文件膨胀；replay 时重读）
+  file_path?: string
 }
 
 const OFFLINE_DIR = join(BRIDGE_DIR, "offline")
@@ -413,6 +416,22 @@ interface StagedFile {
   mime: string
   data_base64: string
   isImage: boolean
+  /// outbound/ 里的暂存副本路径，供 replay 重读
+  stagedPath: string
+}
+
+/// replay 用：从 outbound 暂存路径重建 reply 帧的 file 字段（文件没了就只发文字）
+function fileFieldFromStaged(stagedPath: string | undefined): Record<string, unknown> | undefined {
+  if (!stagedPath) return undefined
+  try {
+    if (!existsSync(stagedPath)) return undefined
+    const buf = readFileSync(stagedPath)
+    if (buf.length === 0 || buf.length > MAX_FILE_BYTES) return undefined
+    const mime = extToMime(extname(stagedPath))
+    // 暂存名是 `${ts}_${原名}`，去掉时间戳前缀还原
+    const name = basename(stagedPath).replace(/^\d+_/, "")
+    return { name, mime, data: buf.toString("base64"), is_image: isImageMime(mime) }
+  } catch { return undefined }
 }
 
 function stageOutboundFile(chatId: string, srcPath: string): StagedFile | null {
@@ -438,6 +457,7 @@ function stageOutboundFile(chatId: string, srcPath: string): StagedFile | null {
       mime,
       data_base64: readFileSync(dest).toString("base64"),
       isImage: isImageMime(mime),
+      stagedPath: dest,
     }
   } catch (e: any) {
     console.warn(`[hub] stageOutboundFile fail: ${e.message}`)
@@ -713,13 +733,16 @@ export function startHub(): WebSocketServer {
       const replayedIds = new Set<string>()
       for (const r of recentReplies) {
         try {
-          ws.send(JSON.stringify({
+          const replayObj: Record<string, unknown> = {
             type: "reply",
             chat_id: r.chat_id,
             message_id: r.message_id,
             content: r.content,
             reply_id: r.reply_id,
-          }))
+          }
+          const f = fileFieldFromStaged(r.file_path)
+          if (f) replayObj.file = f
+          ws.send(JSON.stringify(replayObj))
           replayedIds.add(r.reply_id)
         } catch { /* dead socket, will get cleaned up on close */ }
       }
@@ -736,13 +759,16 @@ export function startHub(): WebSocketServer {
             for (const m of messages) {
               if (replayedIds.has(m.reply_id)) continue
               try {
-                ws.send(JSON.stringify({
+                const replayObj: Record<string, unknown> = {
                   type: "reply",
                   chat_id: chatId,
                   message_id: m.message_id,
                   content: m.content,
                   reply_id: m.reply_id,
-                }))
+                }
+                const f = fileFieldFromStaged(m.file_path)
+                if (f) replayObj.file = f
+                ws.send(JSON.stringify(replayObj))
                 delivered++
               } catch { break }
             }
@@ -1076,6 +1102,7 @@ export function startHub(): WebSocketServer {
             content: msg.content,
             reply_id,
             ts: Date.now(),
+            file_path: fileField?.stagedPath,
           })
           // Focus check (computed early so offline-queue can use it)
           const isFocused = [...focusByClient.values()].some(id => id === msg.chat_id)
@@ -1100,6 +1127,7 @@ export function startHub(): WebSocketServer {
             message_id: msg.message_id,
             reply_id,
             timestamp: new Date().toISOString(),
+            file_path: fileField?.stagedPath,
           })
           console.log(`[hub] reply ← mcp → broadcast to ${count}/${appClients.size} App clients chat_id=${String(msg.chat_id).slice(0, 8)} focused=${isFocused}`)
           // Push to all known devices. Tokens outlive the WebSocket (iOS kills the
