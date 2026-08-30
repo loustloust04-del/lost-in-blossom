@@ -794,7 +794,7 @@ private struct FlagCardView: View {
 
 // MARK: - Attachment Card
 
-private struct AttachmentCardView: View {
+struct AttachmentCardView: View {
     let name: String
     let type: String?
     let extractedContent: String?

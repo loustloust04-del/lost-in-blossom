@@ -1785,12 +1785,31 @@ struct BubbleView: View {
                     if case .audioRef(_, _, let p, let d, _) = seg { return (p, d) }
                     return nil
                 }
+                // D6 附件解包：multimodal_text 的图/文档从 content JSON 拆出；.attachment 段拆出文件卡，
+                // 正文只取 .text 段（content 里的附件全文是发给模型的，不进气泡）
+                let bubbleMM: MultimodalContent? = node.contentType == "multimodal_text"
+                    ? MultimodalContent.parse(node.content) : nil
+                let bubbleAttachments: [(name: String, type: String?, content: String?)] =
+                    (node.segments ?? []).compactMap { seg in
+                        if case .attachment(let n, let t, let c) = seg { return (n, t, c) }
+                        return nil
+                    }
+                let bubbleHasAttachments = bubbleMM != nil || !bubbleAttachments.isEmpty
                 if chatBubbleMode && (bubbleLive || !cleaned.isEmpty || !bubbleVoices.isEmpty)
                     && !cleaned.contains("{color:") {
+                    let bubbleSource: String = {
+                        if let mm = bubbleMM { return mm.text }
+                        if !bubbleAttachments.isEmpty {
+                            return (node.segments ?? []).compactMap { seg -> String? in
+                                if case .text(let t) = seg { return t } else { return nil }
+                            }.joined(separator: "\n\n")
+                        }
+                        return cleaned
+                    }()
                     let bubbleText = node.role == "assistant" && !regexScripts.isEmpty
-                        ? RegexEngine.apply(scripts: regexScripts, text: cleaned,
+                        ? RegexEngine.apply(scripts: regexScripts, text: bubbleSource,
                                             messagePlacement: 2, isMarkdown: true)
-                        : cleaned
+                        : bubbleSource
                     // 第三刀：思考链灰气泡。来源两条——[thinking] 嵌入（extractThinking）
                     // 或 segments 里的 .thinking 段（API 流式）。这条分支绕开了下方原路径，
                     // 所以要自己把思考链带上；「不拆块」和「不显示思考链」拆开处理。
@@ -1808,12 +1827,16 @@ struct BubbleView: View {
                         isUser: isUser,
                         // 带可渲染段（工具/附件）的消息不拆块，整条一个泡——
                         // 思考链另走上方灰泡，不学粟粟那句 isComplex ? (nil, [])
-                        allowSplit: !(node.segments?.hasRenderableSegments ?? false),
+                        // 附件已自己拆出去，剩下的纯文字可以正常拆块
+                        allowSplit: bubbleHasAttachments || !(node.segments?.hasRenderableSegments ?? false),
                         thinking: isUser ? nil : bubbleThinking,
                         isLiveStreaming: bubbleLive,
                         voices: bubbleVoices,
                         nodeId: node.id,
-                        profileId: node.profileId
+                        profileId: node.profileId,
+                        images: bubbleMM?.images ?? [],
+                        documentTitles: bubbleMM?.documentTitles ?? [],
+                        attachments: bubbleAttachments
                     )
                 } else if isUser {
                     if isEditing {

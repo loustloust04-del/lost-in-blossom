@@ -132,6 +132,10 @@ struct BubbleModeRow: View {
     var voices: [(path: String, duration: Double?)] = []
     var nodeId: String = ""
     var profileId: String = ""
+    /// 附件条（D6）：图片/文档/文件卡放气泡外上方，正文泡只留文字
+    var images: [Data] = []
+    var documentTitles: [String] = []
+    var attachments: [(name: String, type: String?, content: String?)] = []
 
     @AppStorage("bubbleModeCornerRadius") private var cornerRadius: Double = 16
     @AppStorage("hideTimestamp") private var hideTimestamp = false
@@ -195,6 +199,11 @@ struct BubbleModeRow: View {
             if isUser { Spacer(minLength: 60) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
+                if !images.isEmpty || !documentTitles.isEmpty || !attachments.isEmpty {
+                    BubbleAttachmentStrip(images: images, documentTitles: documentTitles,
+                                          attachments: attachments, isUser: isUser)
+                        .padding(.bottom, 3)
+                }
                 if !isUser, let t = thinking,
                    !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ThinkingBubble(text: t, radius: cornerRadius, fontScale: fontScale)
