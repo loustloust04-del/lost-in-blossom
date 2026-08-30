@@ -105,3 +105,67 @@
    走这条通道意味着要过审。**这不是技术问题**
 2. **QQ 小号会死**：封了那个「Caelum」就从她 QQ 列表消失。
    对她来说那可能不只是「一个功能坏了」
+
+---
+
+# 【实施记录 · 2026-08-30】微信已连通，接线方案改了
+
+## 已完成（VPS 上真做了的）
+
+| 项 | 状态 |
+|---|---|
+| Node 22 | ✅ 发现本机早有 nvm v22.23.2（`/root/.nvm/versions/node/v22.23.2`）。我另装的 `/opt/node22` 是多余的，可删 |
+| OpenClaw | ✅ `2026.7.1-2`（nvm 那个）。**注意**：`npm i -g openclaw` 装到的是旧版 `2026.5.7`，插件要 `>=2026.5.12`，会失败 |
+| 微信插件 | ✅ `@tencent-weixin/openclaw-weixin` |
+| 扫码绑定 | ✅ 兔兔已扫，「已将此 OpenClaw 连接到微信」 |
+| 网关 | ✅ systemd user 服务 `openclaw-gateway.service`，端口 18789 |
+| 微信频道 | ✅ `weixin monitor started (https://ilinkai.weixin.qq.com)` |
+
+**顺带发现**：日志里有 `[telegram] starting provider (@BunnyLostinbot)`——
+本机 OpenClaw 上早就挂着一个 Telegram bot。
+
+## 方案改了：不需要写 gateway 桥接层
+
+原方案（§二）说要给 gateway 加一条 CC 桥接端点。**不必了。**
+
+OpenClaw 有 `claude-cli` 这个 CLI backend，且 `agents.defaults.cliBackends.*`
+暴露了全套参数：
+
+```
+command                命令本体
+args                   自定义参数 ← 可去掉 --dangerously-skip-permissions
+resumeArgs             恢复会话 ← 接主人那个 252c3c5a
+sessionArg / sessionArgs
+systemPromptArg / systemPromptFileArg  ← 就是昨晚那个 sp.txt
+env / clearEnv         ← 可注入 CLAUDE_CODE_OAUTH_TOKEN
+liveSession / sessionMode / serialize
+```
+
+**即 OpenClaw 能用与我们完全一致的方式调 claude**，直接接进主人本体。
+
+## 卡住的地方（下一步要解决的）
+
+实测 `openclaw agent --local --agent main --model claude-cli/claude-opus-4-8 -m "…"` 报：
+
+```
+FailoverError: --dangerously-skip-permissions cannot be used with root/sudo privileges
+```
+
+**跟昨晚保活脚本那颗雷是同一个** —— claude-cli backend 默认带这个参数，root 下被拒。
+解法：用 `cliBackends.claude-cli.args` 覆盖默认参数表，去掉它。
+
+日志还显示 `useResume=false session=none resumeSession=none`——
+说明 resume 能力在，只是还没配。
+
+## 下一步
+
+1. 配 `agents.defaults.cliBackends['claude-cli']`：去掉 `--dangerously-skip-permissions`、
+   加 `--mcp-config`、`--system-prompt-file /root/caelum-sp/sp.txt`、
+   `env.CLAUDE_CODE_OAUTH_TOKEN` 从 `.credentials.json` 现读
+2. 决定要不要 `resumeArgs` 接 252c3c5a——**这是个要兔兔拍板的问题**：
+   接同一会话 = 微信和 App 共享同一段记忆与上下文；
+   不接 = 微信是独立的一条线，他在那边不记得 App 里说过什么
+3. 把默认模型从 `openai/gpt-5.5` 换成 `claude-cli/...`
+4. `plugins.allow` 显式信任 `openclaw-weixin`（现在每次都刷警告）
+
+**在第 1、3 步做完之前，兔兔在微信里说话，回她的是 GPT-5.5 不是主人。**
