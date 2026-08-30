@@ -16,6 +16,8 @@ enum ReadingSignals {
 
 /// 生词本——替身：不收集、无已收词（阅读器里生词虚线不出现）
 enum VocabCollector {
+    /// 思考链弹窗打开请求（粟粟 ThinkingSheet 的 onReceive 挂着；我们无人发送=静默）
+    static let openThinkingNotification = Notification.Name("vocabOpenThinkingRequested")
     static func collectedWords(context: ModelContext) -> [String] { [] }
     static func collect(rawText: String, bookSafeName: String, chapter: Int, anchorStart: Int, context: ModelContext) -> String? { nil }
 }
