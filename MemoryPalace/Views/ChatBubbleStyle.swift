@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 // 气泡模式：iMessage 式带尾巴气泡 + 长回复按空行拆成连续小气泡。
 // 2026-08-27 兔兔点名要「小气泡」，自粟粟 06-03~06-12 那条线搬入。
@@ -121,13 +122,41 @@ struct BubbleModeRow: View {
     @AppStorage("bubbleModeCornerRadius") private var cornerRadius: Double = 16
     @AppStorage("hideTimestamp") private var hideTimestamp = false
     @AppStorage("fontScale") private var fontScale: Double = 1.2
+    @AppStorage("selectedFont") private var selectedFont = ""
+    @AppStorage("lineSpacingScale") private var lineSpacingScale: Double = 1.45
+    @AppStorage("paragraphSpacingScale") private var paragraphSpacingScale: Double = 1.65
 
     /// iMessage 式固定内距——气泡模式锁定外观，不吃「气泡外观（高级）」那组滑块
     private let padH: CGFloat = 14
     private let padV: CGFloat = 9
 
     private var blocks: [String] {
-        allowSplit ? BubbleBlockSplitter.splitBlocks(text) : [text]
+        let raw = allowSplit ? BubbleBlockSplitter.splitBlocks(text) : [text]
+        // 抹平文档感会把纯分隔线块（---）删空——拆块时就过滤掉，避免渲染出空气泡（粟粟 7a6d2423）
+        let filtered = isUser ? raw : raw.filter { !BubbleMarkdownSimplifier.isRenderEmpty($0) }
+        return filtered.isEmpty ? raw : filtered
+    }
+
+    /// 单块渲染（粟粟 blockText 对应版）：
+    /// user 裸 Text；assistant 走 Markdown + 抹平文档感（标题→加粗、嵌套列表拍平、分隔线删，
+    /// 代码块表格原样）。正则脚本已在 CardFlowView 吃过原文，这里只做渲染前简化。
+    @ViewBuilder
+    private func blockText(_ block: String) -> some View {
+        if isUser {
+            Text(block)
+                .font(.system(size: 15 * fontScale))
+                .foregroundColor(Theme.textPrimary)
+                .textSelection(.enabled)
+        } else {
+            Markdown(BubbleMarkdownSimplifier.simplify(block))
+                .markdownTheme(.memoryPalace(
+                    fontName: selectedFont,
+                    scale: CGFloat(fontScale > 0 ? fontScale : 1.0),
+                    lineSpacingScale: CGFloat(lineSpacingScale),
+                    paragraphSpacingScale: CGFloat(paragraphSpacingScale)
+                ))
+                .textSelection(.enabled)
+        }
     }
 
     var body: some View {
@@ -140,10 +169,7 @@ struct BubbleModeRow: View {
                     ThinkingBubble(text: t, radius: cornerRadius, fontScale: fontScale)
                 }
                 ForEach(blocks.indices, id: \.self) { i in
-                    Text(blocks[i])
-                        .font(.system(size: 15 * fontScale))
-                        .foregroundColor(Theme.textPrimary)
-                        .textSelection(.enabled)
+                    blockText(blocks[i])
                         .padding(.horizontal, padH)
                         .padding(.vertical, padV)
                         .background(
