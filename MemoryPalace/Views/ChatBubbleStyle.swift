@@ -144,9 +144,9 @@ struct BubbleModeRow: View {
     @AppStorage("lineSpacingScale") private var lineSpacingScale: Double = 1.45
     @AppStorage("paragraphSpacingScale") private var paragraphSpacingScale: Double = 1.65
 
-    /// iMessage 式固定内距——气泡模式锁定外观，不吃「气泡外观（高级）」那组滑块
-    private let padH: CGFloat = 14
-    private let padV: CGFloat = 9
+    /// iMessage 式固定内距——气泡模式锁定外观，不吃「气泡外观（高级）」那组滑块（数值对齐粟粟 fixedPaddingH/V）
+    private let padH: CGFloat = 18
+    private let padV: CGFloat = 15
 
     private var blocks: [String] {
         if isLiveStreaming {
@@ -198,7 +198,7 @@ struct BubbleModeRow: View {
         return HStack(spacing: 0) {
             if isUser { Spacer(minLength: 60) }
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 if !images.isEmpty || !documentTitles.isEmpty || !attachments.isEmpty {
                     BubbleAttachmentStrip(images: images, documentTitles: documentTitles,
                                           attachments: attachments, isUser: isUser)

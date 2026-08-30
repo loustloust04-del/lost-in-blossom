@@ -2030,11 +2030,17 @@ struct BubbleView: View {
 
 // PR(usage): 气泡底部 token 数字已移除（统计走 Token 统计页）
             }
-            .padding(.horizontal, bubblePaddingH)
-            .padding(.vertical, bubblePaddingV)
+            // 2026-08-30 兔兔实机：气泡模式「根本没做成功」的真凶——BubbleModeRow 被套在这层
+            // 文章模式的大卡片里面，小泡和大卡同色（userBubble/assistantBubble）→ 小泡完全隐形，
+            // 看起来就是原来的文章卡。粟粟那边 innerBody 是顶层 if 分流，气泡模式根本不进大卡。
+            // 这里做法：气泡模式下这层卡片去内距、去底色（contextMenu / overlay / 分支指示器 /
+            // sheet 全部保留在原位，不用整段搬）。
+            .padding(.horizontal, chatBubbleMode ? 0 : bubblePaddingH)
+            .padding(.vertical, chatBubbleMode ? 0 : bubblePaddingV)
             .background(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                    .fill(isUser ? Theme.userBubble : (hideAssistantBubble ? Color.clear : Theme.assistantBubble))
+                    .fill(chatBubbleMode ? Color.clear
+                          : (isUser ? Theme.userBubble : (hideAssistantBubble ? Color.clear : Theme.assistantBubble)))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
@@ -2153,7 +2159,8 @@ struct BubbleView: View {
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
 
             // iOS action bar: copy / TTS / regenerate (controlled by hideActionBar setting)
-            if !hideActionBar {
+            // 气泡模式不挂（粟粟同款：操作走长按菜单，泡下面不放小按钮）
+            if !hideActionBar && !chatBubbleMode {
                 HStack(spacing: 16) {
                     // Copy
                     Button {

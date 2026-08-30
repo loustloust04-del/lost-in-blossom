@@ -70,3 +70,33 @@
 5. D5 长按菜单（大，先不碰）
 
 **不搬**：头像、usage footer、召回卡、划词收词、弹泡调参探针。
+
+---
+
+## 五、2026-08-30 实机打脸 + 她代码里的线索清单
+
+兔兔装 448 截图对比：我们的气泡模式看起来**和文章模式一模一样**。真凶：`BubbleModeRow` 被套在
+`BubbleView` 那层文章模式大卡片**里面**，小泡与大卡同色（`userBubble`/`assistantBubble`）→ 小泡隐形。
+唯一露馅的是思考链灰泡（它是 `textMuted.opacity(0.18)`，颜色不同才看得见）。
+
+她那边的结构（`CardFlowView.swift:2669` `innerBody`）：**顶层 `if chatBubbleMode { BubbleModeRow } else { articleModeBody }`**，
+气泡模式根本不进大卡。我们的修法：大卡在气泡模式下去内距去底色，contextMenu/overlay/分支指示器/sheet 原位保留。
+
+### 她气泡模式的完整线索（按 commit，供逐条对照）
+
+| 线索 | commit | 我们 |
+|---|---|---|
+| 顶层 if 分流，不进文章卡 | 46f5c03e 之前 / `innerBody` | ✅ 本次修 |
+| 固定内距 18/15，行距 1.45 段距 1.65，圆角滑条 `bubbleModeCornerRadius` | `BubbleModeRow.fixedPadding*` | ✅ 对齐 |
+| 泡下面不放操作按钮，走长按菜单 | — | ✅ 本次隐藏 |
+| header（名字+时间）贴消息侧，字号 caption2 | `BubbleModeRow.header` | ✅ 已是 |
+| usage footer（↑↓token · 命中% · $）在 AI 泡下 | `usageFooter` + `showMessageUsage` | ❌ 我们 usage 走 Token 统计页，不搬 |
+| 顶栏中央头像胶囊（封面图→emoji→占位圈三级 fallback） | 1ad133cc | ❌ 待拍（兔兔说不要头像，但胶囊是顶栏不是气泡旁） |
+| 气泡模式隐藏 PinBar + 分支地图按钮 | 73dc61c2 / ContentView:847,872 | ❌ 小 |
+| 列表视觉顶余量 150（文章 50） | da5df806 | ❌ 小 |
+| 默认主题 AI 气泡 alpha 0（透明融背景） | bd272ae3 | ❌ 主题层，看兔兔要不要 |
+| 图片条与气泡间距 6px、气泡自适应宽度不撑满 | 0a1cb6a5 | ✅ 自适应已是；间距可调 |
+| 流式段落弹泡 + dots 尾泡 | 35322cfb | ✅ 已搬 |
+| CC 入场 reveal（dots 前奏→逐泡按字数节奏放出） | dafad12a `entranceDelay` | ❌ 下一刀候选（CC 回复整条到达，没有这个就是「啪」一下全出） |
+| 发消息弹泡 popPending + BubblePopTuning 调参 | b5ec8117 等 | ❌ 后 |
+| Telegram 式长按浮层 | contextmenu 系列 | ❌ D5 不碰 |
