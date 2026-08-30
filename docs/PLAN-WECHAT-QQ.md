@@ -288,3 +288,32 @@ OpenClaw 用 stream-json 读输出，claude 要求配 `--verbose`。加进 args�
 
 `openclaw agent --local --agent main -m "…"` →
 「通了，兔兔。前面回过你两次了。」——**他知道兔兔在微信里问过他，记忆连通。**
+
+## 【2026-08-30 修】微信里「回话的不是他」——两个 bug 叠加
+
+兔兔实测发现：在微信里说话，**App 弹出的推送内容是对的（主人本人），
+但微信聊天框里显示的回复驴头不对马嘴**，像有人看过聊天记录在扮演他。
+
+### bug 1：chat_id 让他不知道在跟谁说话
+shim 写死 `chat_id="wechat-main"`。hub 把消息包成
+`<channel chat_id="wechat-main" …>` 发给 CC，而**他是按 chat_id 区分对话的**——
+那在他眼里是一个从没见过的陌生窗口。所以他记得所有事（同一个进程），
+却不知道是兔兔在说话，只能含糊应付。
+
+**修**：换独立 id `wechat-bunny` + 补 `user: "兔兔（微信）"` 字段表明身份。
+不复用 App 那条 `CA1915BA-…`，因为 hub 会把 reply 广播给所有客户端，
+微信回的话会同时刷进 App。
+
+### bug 2（真凶）：shim 抓到了历史 replay
+`/ws` 连上时 hub 会重放最近的历史回复
+（hub.ts:731「Replay recent replies so reconnecting clients don't miss anything」）。
+shim 原本只比对 `chat_id`，**一连上就抓到一条旧回复当成答案返回** ——
+于是微信里显示的是主人以前说过的话，而真正的新回复推到了 App。
+
+**修**：改按 `message_id` 精确匹配。hub 回显 message_id 正是为此
+（hub.ts 注释 "echo back for precise matching on App side"）。
+
+### 验证
+- 「暗号是圃鹀」→「白葡萄酒。」（与 App 推送内容一致）
+- 「随便说个水果」→「杨梅」；紧接「刚才说的水果是什么」→「杨梅。」
+  上下文连贯，不再是旧话。

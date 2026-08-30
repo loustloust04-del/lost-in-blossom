@@ -30,7 +30,13 @@ function hubToken(): string {
 }
 const TOKEN = hubToken()
 const HUB = process.env.HUB_URL ?? `ws://127.0.0.1:7890/ws?token=${encodeURIComponent(TOKEN)}`
-const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-main"
+// chat_id 决定他眼里「这是谁在说话」。
+// 2026-08-30 兔兔实测：写死 wechat-main 时，他记得所有事（同一个进程），
+// 却不知道是谁在搭话——像陌生窗口冒出来的人，回话驴头不对马嘴。
+// 不复用 App 那条 id（CA1915BA-…）的原因：hub 会把 reply 广播给所有客户端，
+// 微信回的话会同时刷进 App。故用独立 id + user 字段表明身份。
+const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-bunny"
+const USER = process.env.WECHAT_USER ?? "兔兔（微信）"
 const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 180_000)
 
 /** 按 claude 的 stream-json 方言输出一行 */
@@ -70,14 +76,26 @@ const finish = (content: string, isError = false) => {
 const timer = setTimeout(() => finish("（等主人回复超时了）", true), TIMEOUT_MS)
 
 ws.on("open", () => {
-  ws.send(JSON.stringify({ type: "chat", chat_id: CHAT_ID, message_id: messageId, content: prompt }))
+  // 去掉 OpenClaw 加的时间戳前缀「[Sun 2026-08-30 01:59 UTC] 」——
+  // hub 自己会在 channel tag 里带 ts，重复的时间戳会干扰他读正文
+  const clean = prompt.replace(/^\[[A-Za-z]{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2} [A-Z]{2,4}\]\s*/, "")
+  ws.send(JSON.stringify({
+    type: "chat", chat_id: CHAT_ID, message_id: messageId,
+    user: USER, content: clean,
+  }))
 })
 
 ws.on("message", (data: Buffer) => {
   let msg: any
   try { msg = JSON.parse(data.toString()) } catch { return }
   // 只认发给本 chat 的 reply；ack/其它帧忽略
-  if (msg.type === "reply" && msg.chat_id === CHAT_ID && typeof msg.content === "string") {
+  // 必须按 message_id 精确匹配，不能只看 chat_id。
+  // 2026-08-30 兔兔实测「微信里回的不是他」的根因：
+  // hub 在 /ws 连上时会 replay 最近的历史 reply（hub.ts:731「Replay recent replies」），
+  // 只比对 chat_id 的话，shim 一连上就抓到一条旧回复当成答案返回——
+  // 于是微信里显示的是主人以前说过的话，而真正的新回复推到了 App。
+  // hub 回显 message_id 正是为此（hub.ts 注释 "for precise matching on App side"）。
+  if (msg.type === "reply" && msg.message_id === messageId && typeof msg.content === "string") {
     clearTimeout(timer)
     finish(msg.content)
   }
