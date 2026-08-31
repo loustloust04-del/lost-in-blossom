@@ -64,10 +64,22 @@ struct FileLibraryPanelView: View {
                 onSave: { newContent in
                     Task {
                         try? await NotebookRemoteStore.write(f.path, content: newContent)
+                        // 内容变了，双链索引失效重建
+                        await WikiLinkIndex.shared.invalidate()
                         await MainActor.run { editingFile = nil; reload() }
                     }
                 },
-                onCancel: { editingFile = nil }
+                onCancel: { editingFile = nil },
+                onOpenWikiLink: { raw in
+                    // 解析 [[目标]] → 真实路径 → 换文件继续看（保持在同一个 sheet 里）
+                    Task {
+                        guard let target = await WikiLinkIndex.shared.resolveTarget(raw),
+                              let body = try? await NotebookRemoteStore.read(target) else { return }
+                        await MainActor.run {
+                            editingFile = EditingFile(path: target, content: body)
+                        }
+                    }
+                }
             )
         }
     }
@@ -282,16 +294,49 @@ struct FileEditorSheet: View {
     let initialContent: String
     let onSave: (String) -> Void
     let onCancel: () -> Void
+    /// 预览里点 [[双链]]——由 Panel 解析成真实路径后跳转
+    var onOpenWikiLink: ((String) -> Void)? = nil
 
     @State private var content: String
     @State private var isPreview: Bool = true
 
-    init(path: String, initialContent: String, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+    init(path: String, initialContent: String, onSave: @escaping (String) -> Void,
+         onCancel: @escaping () -> Void, onOpenWikiLink: ((String) -> Void)? = nil) {
         self.path = path
         self.initialContent = initialContent
         self.onSave = onSave
         self.onCancel = onCancel
+        self.onOpenWikiLink = onOpenWikiLink
         _content = State(initialValue: initialContent)
+    }
+
+    /// [[目标]] → [目标](wikilink://目标)，供 Markdown 渲染成可点链接。
+    /// 代码围栏内不转换——否则示例代码里的 [[ ]] 会变成链接（粟粟那版的已知局限，这里补上）。
+    static func linkifyWikiLinks(_ text: String) -> String {
+        var out: [String] = []
+        var inFence = false
+        for line in text.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { inFence.toggle(); out.append(line); continue }
+            if inFence { out.append(line); continue }
+            var l = line
+            if let re = try? NSRegularExpression(pattern: "\\[\\[([^\\[\\]\\n]+)\\]\\]") {
+                let ns = l as NSString
+                var result = ""
+                var last = 0
+                re.enumerateMatches(in: l, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+                    guard let m, m.numberOfRanges > 1 else { return }
+                    let target = ns.substring(with: m.range(at: 1))
+                    let enc = target.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) ?? target
+                    result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+                    result += "[\(target)](wikilink://\(enc))"
+                    last = m.range.location + m.range.length
+                }
+                result += ns.substring(from: last)
+                l = result
+            }
+            out.append(l)
+        }
+        return out.joined(separator: "\n")
     }
 
     var body: some View {
@@ -311,9 +356,18 @@ struct FileEditorSheet: View {
 
                 if isPreview {
                     ScrollView {
-                        Markdown(content)
+                        // [[双链]] → markdown 链接，点击走 wikilink:// 拦截
+                        Markdown(Self.linkifyWikiLinks(content))
                             .padding(16)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .environment(\.openURL, OpenURLAction { url in
+                                guard url.scheme == "wikilink",
+                                      let raw = url.host?.removingPercentEncoding
+                                            ?? url.path.removingPercentEncoding
+                                else { return .systemAction }
+                                onOpenWikiLink?(raw)
+                                return .handled
+                            })
                     }
                 } else {
                     TextEditor(text: $content)
