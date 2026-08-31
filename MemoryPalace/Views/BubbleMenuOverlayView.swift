@@ -307,7 +307,7 @@ private struct BubbleMenuOverlayContent: View {
         .frame(width: 235)
         // Liquid Glass 加在卡容器上——glassEffect 直接套 Button 会吞 hit test
         // （feedback_ios26_glass_button），行按钮用自定义 style 坐玻璃卡上
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .glassEffectCompat(tint: .clear, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: .black.opacity(0.12), radius: 28, y: 10)
     }
 

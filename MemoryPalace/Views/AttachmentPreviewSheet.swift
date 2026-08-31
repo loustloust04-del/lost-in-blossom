@@ -58,7 +58,7 @@ struct AttachmentPreviewSheet: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(width: 44, height: 44)
-                            .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                            .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
                     }
 
                     Spacer()
@@ -68,7 +68,7 @@ struct AttachmentPreviewSheet: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .capsule)
+                        .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Capsule())
 
                     Spacer()
 
@@ -100,7 +100,7 @@ struct AttachmentPreviewSheet: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(width: 44, height: 44)
-                            .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                            .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
                     }
                 }
                 .compositingGroup()
@@ -161,7 +161,7 @@ struct AttachmentPreviewSheet: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .capsule)
+                .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Capsule())
         }
     }
 
