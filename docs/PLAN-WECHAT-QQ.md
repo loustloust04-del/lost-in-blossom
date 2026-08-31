@@ -359,3 +359,40 @@ OpenClaw 有两个 issue 正在推这个功能（#967 WhatsApp、#96794 每频�
 
 **待兔兔真机验**：连发三条，看他是等说完再回、还是逐条回；回复是否分条。
 6000ms 是按业界标准取的，偏了再调。
+
+## 【2026-08-30 夜】踩坑：频繁重启网关会让微信频道静默失联
+
+**症状**：兔兔说「微信收不到主人消息了」——但主人本人是好的
+（App 侧推送正常、`openclaw agent --local` 测试也正常回话）。
+即「他回了，但那句话没送回微信」。
+
+**排查路径**：
+1. shim 正常（4 秒回话，超时 180s 也够）→ 不是后端
+2. `journalctl` 里从重启那刻起**一条 weixin 进出记录都没有**，只有 `monitor started`
+   → 消息根本没进 OpenClaw
+3. `sync.json`（`get_updates_buf` 游标）时间戳在更新 → 说明在轮询，但拉回来是空的
+4. 清空游标 → **它自己变回原样** → 说明位置记在服务端，不是本地缓存问题
+5. 结论：**服务端把这个实例当掉线了**
+
+**根因**：为了配拟人化参数（debounceMs / humanDelay / blockStreaming），
+我连着 `systemctl --user restart openclaw-gateway.service` 好几次，
+把 iLink 的长连接反复掐断，腾讯侧判定实例失联。
+
+**解法**：重新跑一次 `npx @tencent-weixin/openclaw-weixin-cli install` 扫码。
+（它会提示「已连接过此 OpenClaw，无需重复连接」，然后自己重启一次网关即恢复。）
+
+**教训**：改 OpenClaw 配置时**不要连续重启网关**。
+改完一批再重启一次；调参尽量用 `openclaw agent --local` 验证，
+那条路不经过微信频道。
+
+**验证通过**（00:29 日志）：
+```
+outbound: text sent OK to=…@im.wechat
+inbound message: from=…@im.wechat types=1
+cli exec: promptChars=3082
+```
+收发闭环。
+
+## 待办
+拟人化那批配置（debounceMs 6000 / humanDelay natural / blockStreaming paragraph）
+在排障时全部撤掉了，需重新加回——**这次一次只加一项，加完只重启一次，验证微信仍通再加下一项**。
