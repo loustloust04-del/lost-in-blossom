@@ -501,6 +501,22 @@ struct CardFlowView: View {
                     pendingFileName = name
                 }
             }
+            // CC 选择卡：pendingCCQuestion 非 nil 时弹出。
+            // 答完或关掉都会经 ConversationViewModel+AskUser 回帧，驱动 tmux 里的 TUI 键序。
+            // 挂在 CardFlowView 而非 InputFieldContainer——后者没有 viewModel（08-31 编译错的原因）。
+            .sheet(isPresented: Binding(
+            get: { viewModel.pendingCCQuestion != nil },
+            set: { if !$0 { viewModel.dismissActiveAskCard() } }
+            )) {
+            AskUserQuestionSheet(viewModel: viewModel)
+            }
+            .onAppear {
+            CCBridgeWebSocketClient.shared.onAskUserQuestion = { chatId, toolUseId, questions in
+                viewModel.pendingCCQuestion = PendingCCQuestion(
+                    chatId: chatId, toolUseId: toolUseId, questions: questions
+                )
+            }
+            }
             .sheet(isPresented: $showAddToChat) {
                 AddToChatSheet(
                     onOpenSticker: {
@@ -1253,20 +1269,6 @@ private struct InputFieldContainer: View {
             }
         }
         #if os(iOS)
-        // CC 选择卡：pendingCCQuestion 非 nil 时弹出，答完/关掉都会回帧驱动 tmux 键序
-        .sheet(isPresented: Binding(
-            get: { viewModel.pendingCCQuestion != nil },
-            set: { if !$0 { viewModel.dismissActiveAskCard() } }
-        )) {
-            AskUserQuestionSheet(viewModel: viewModel)
-        }
-        .onAppear {
-            CCBridgeWebSocketClient.shared.onAskUserQuestion = { chatId, toolUseId, questions in
-                viewModel.pendingCCQuestion = PendingCCQuestion(
-                    chatId: chatId, toolUseId: toolUseId, questions: questions
-                )
-            }
-        }
         .fullScreenCover(isPresented: $expandedInput) {
             ExpandedInputSheet(
                 text: $text,
