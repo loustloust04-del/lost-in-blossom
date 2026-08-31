@@ -114,6 +114,12 @@ struct BubbleAttachmentStrip: View {
 }
 
 #if os(iOS)
+/// 附件条左右淡出遮罩的边状态（onScrollGeometryChange 用，需 Equatable）。粟粟原文同段搬入。
+private struct ScrollFadeEdges: Equatable {
+    let leading: Bool
+    let trailing: Bool
+}
+
 /// 横向滚动条左右 alpha 淡出：内容溢出且该侧有隐藏内容才淡（滚到头/不溢出不淡）。
 /// 预发送附件条 + 已发送附件条共用。.mask 让边缘 alpha 渐隐（露背景），不是盖白色。
 private struct HorizontalScrollEdgeFade: ViewModifier {
