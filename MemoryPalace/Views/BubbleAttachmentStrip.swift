@@ -1,106 +1,179 @@
 import SwiftUI
+#if os(iOS)
 import UIKit
+#endif
 
-// D6（2026-08-30，气泡模式独立化）：附件挪到气泡外上方。
-// 微信/iMessage 里图片是一条独立消息，不塞在文字泡里；气泡里只留文字。
-//
-// 与粟粟 BubbleAttachmentStrip 思路一致，但数据源接我们自己的：
-//   · 图片存在 multimodal_text 的 content JSON 里（不是 segments .image 段）
-//   · 文件附件是 segments 的 .attachment 段（content 里另有全文发给模型）
-// 之前气泡分支没解包 multimodal_text，开气泡模式发图会直接露 JSON——本刀顺手修。
+// 粟粟原文搬运（2026-08-30 气泡整套搬运）：附件条 + 依赖零件。
+// IdentifiableInt / HorizontalScrollEdgeFade / attachmentFileIcon / attachmentFileBlockStyle
+// 原散在她 CardFlowView.swift 内，一并收进此文件；除 private 放开外一字未改。
 
-/// multimodal_text 内容解包（原 MultimodalUserBubble 私有逻辑抽出共用）
-struct MultimodalContent {
-    var images: [Data] = []
-    var documentTitles: [String] = []
-    var text: String = ""
-
-    static func parse(_ content: String) -> MultimodalContent {
-        var out = MultimodalContent()
-        guard let data = content.data(using: .utf8),
-              let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
-            out.text = content
-            return out
-        }
-        for item in arr {
-            let type = item["type"] as? String ?? ""
-            if type == "image", let source = item["source"] as? [String: Any],
-               let b64 = source["data"] as? String,
-               let imgData = Data(base64Encoded: b64) {
-                out.images.append(imgData)
-            } else if type == "document" {
-                out.documentTitles.append(item["title"] as? String ?? "document.pdf")
-            } else if type == "text" {
-                out.text = item["text"] as? String ?? ""
-            }
-        }
-        return out
-    }
+struct IdentifiableInt: Identifiable {
+    let id = UUID()
+    let value: Int
 }
 
-/// 气泡模式附件条：图片（点开全屏）+ 文件卡，靠消息侧对齐，放在正文泡上方
-struct BubbleAttachmentStrip: View {
-    let images: [Data]
-    let documentTitles: [String]
-    let attachments: [(name: String, type: String?, content: String?)]
-    let isUser: Bool
+enum BubbleAttachmentItem {
+    case image(name: String, data: Data)
+    case file(name: String, type: String?, content: String?)
+    case fileData(name: String, mime: String, data: Data)   // C2：带原始字节的真文件（可 QuickLook/存 Files）
+}
 
-    @State private var fullImageIndex: Int? = nil
+struct BubbleAttachmentStrip: View {
+    let items: [BubbleAttachmentItem]
+    let isUser: Bool
+    private let thumbSize: CGFloat = 80
+    private let gap: CGFloat = 4
+    private let scrollThreshold = 3
+    @State private var previewIndex: IdentifiableInt?
 
     var body: some View {
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-            ForEach(images.indices, id: \.self) { i in
-                if let ui = UIImage(data: images[i]) {
-                    Image(uiImage: ui)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .onTapGesture { fullImageIndex = i }
+        Group {
+            if items.count > scrollThreshold {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    stripContent
                 }
+                #if os(iOS)
+                .horizontalScrollEdgeFade()
+                #endif
+            } else {
+                stripContent
             }
-            ForEach(documentTitles.indices, id: \.self) { i in
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.red.opacity(0.8))
-                    Text(documentTitles[i])
-                        .font(FontManager.font(size: 13))
-                        .foregroundColor(Theme.textMuted)
-                        .lineLimit(1)
+        }
+        #if os(iOS)
+        .sheet(item: $previewIndex) { wrapper in
+            AttachmentPreviewSheet(items: items, initialIndex: wrapper.value)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.black)
+                .presentationCornerRadius(20)
+        }
+        #endif
+    }
+
+    private var stripContent: some View {
+        HStack(spacing: gap) {
+            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                Button { previewIndex = IdentifiableInt(value: idx) } label: {
+                    switch item {
+                    case .image(_, let data):
+                        imageBlock(data: data)
+                    case .file(let name, let type, _):
+                        fileBlock(name: name, type: type)
+                    case .fileData(let name, let mime, _):
+                        fileBlock(name: name, type: mime)
+                    }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Theme.textMuted.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            ForEach(attachments.indices, id: \.self) { i in
-                AttachmentCardView(name: attachments[i].name, type: attachments[i].type,
-                                   extractedContent: attachments[i].content)
-                    .frame(maxWidth: 260, alignment: .leading)
+                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .fullScreenCover(isPresented: Binding(
-            get: { fullImageIndex != nil },
-            set: { if !$0 { fullImageIndex = nil } }
-        )) {
-            if let i = fullImageIndex, i < images.count, let ui = UIImage(data: images[i]) {
-                ZStack(alignment: .topTrailing) {
-                    Color.black.ignoresSafeArea()
-                    Image(uiImage: ui)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Button { fullImageIndex = nil } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(.white)
-                            .padding(16)
-                    }
-                    .buttonStyle(.plain)
-                }
+    }
+
+    private func imageBlock(data: Data) -> some View {
+        Group {
+            #if os(iOS)
+            if let uiImg = UIImage(data: data) {
+                Image(uiImage: uiImg)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: thumbSize, height: thumbSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            #else
+            if let nsImg = NSImage(data: data) {
+                Image(nsImage: nsImg)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: thumbSize, height: thumbSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            #endif
+        }
+    }
+
+    private func fileBlock(name: String, type: String?) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: attachmentFileIcon(for: name))
+                .font(.system(size: 20))
+                .foregroundColor(Theme.textMuted.opacity(0.6))
+            Text(name)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(Theme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            if let type, !type.isEmpty {
+                Text(type)
+                    .font(.system(size: 8))
+                    .foregroundColor(Theme.textMuted.opacity(0.5))
+                    .lineLimit(1)
             }
         }
+        .frame(width: thumbSize, height: thumbSize)
+        .attachmentFileBlockStyle(cornerRadius: 8)
+    }
+}
+
+#if os(iOS)
+/// 横向滚动条左右 alpha 淡出：内容溢出且该侧有隐藏内容才淡（滚到头/不溢出不淡）。
+/// 预发送附件条 + 已发送附件条共用。.mask 让边缘 alpha 渐隐（露背景），不是盖白色。
+private struct HorizontalScrollEdgeFade: ViewModifier {
+    @State private var fadeLeading = false
+    @State private var fadeTrailing = false
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: ScrollFadeEdges.self) { geo in
+                ScrollFadeEdges(
+                    leading: geo.contentOffset.x > 1,
+                    trailing: geo.contentOffset.x < geo.contentSize.width - geo.containerSize.width - 1
+                )
+            } action: { _, edges in
+                fadeLeading = edges.leading
+                fadeTrailing = edges.trailing
+            }
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: fadeLeading ? 0.05 : 0),
+                        .init(color: .black, location: fadeTrailing ? 0.95 : 1),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            }
+    }
+}
+
+extension View {
+    func horizontalScrollEdgeFade() -> some View { modifier(HorizontalScrollEdgeFade()) }
+}
+#endif
+
+/// 附件文件图标（按扩展名）。预发送方块 + 已发送 fileBlock 共用。
+func attachmentFileIcon(for name: String) -> String {
+    let ext = (name as NSString).pathExtension.lowercased()
+    switch ext {
+    case "pdf": return "doc.richtext"
+    case "txt", "md", "markdown": return "doc.text"
+    case "json", "csv", "xml", "yaml", "yml": return "doc.badge.gearshape"
+    case "swift", "py", "js", "ts", "html", "css": return "chevron.left.forwardslash.chevron.right"
+    default: return "doc"
+    }
+}
+
+extension View {
+    /// 文件附件方块底：奶油白填充 + 淡薄荷描边（学 page2 日历卡片样式）。
+    /// 预发送 + 已发送共用，保持一致。
+    func attachmentFileBlockStyle(cornerRadius: CGFloat) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Theme.mainBg.opacity(0.96))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Theme.accent.opacity(0.72), lineWidth: 1)
+            )
     }
 }

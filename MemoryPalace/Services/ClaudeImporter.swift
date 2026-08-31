@@ -743,6 +743,10 @@ final class ClaudeImporter {
                 parts.append("🖼 \(name)")
             case .audioRef(let name, _, _, _, let script):
                 parts.append("🎤 \(name)\(script.map { "\n\($0)" } ?? "")")
+            case .image(let name, _, _):
+                parts.append("🖼 \(name)")
+            case .fileData(let name, _, _):
+                parts.append("📎 \(name)")
             }
         }
         return parts.joined(separator: "\n\n")

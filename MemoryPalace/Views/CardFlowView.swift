@@ -1706,6 +1706,7 @@ struct BubbleView: View {
     @AppStorage("hideActionBar") private var hideActionBar: Bool = true
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
+    @AppStorage("bubbleModeCornerRadius") private var bubbleModeCornerRadius: Double = 23
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
@@ -1733,6 +1734,34 @@ struct BubbleView: View {
     }
 
     var body: some View {
+        // 粟粟气泡模式整套搬运（2026-08-30）：顶层分流，气泡模式根本不进文章卡
+        //（她的 CardFlowView innerBody 同款结构）。header 由 BubbleModeRow 自带。
+        if chatBubbleMode {
+            BubbleModeRow(
+                node: node, isUser: isUser, isStreaming: isStreaming,
+                // B6 A2'：弹泡数据源，只有流式中的 assistant 行才读
+                streamingText: (!isUser && isStreaming) ? streamingContentText : nil,
+                selectedFont: selectedFont, fontScale: fontScale,
+                // 外观锁定 iMessage 固定值（她的注释：滑块只准普通模式调，字号仍可调）
+                lineSpacingScale: BubbleModeRow.fixedLineSpacing,
+                paragraphSpacingScale: BubbleModeRow.fixedParagraphSpacing,
+                regexScripts: regexScripts,
+                bubbleCornerRadius: bubbleModeCornerRadius,
+                bubblePaddingH: BubbleModeRow.fixedPaddingH,
+                bubblePaddingV: BubbleModeRow.fixedPaddingV,
+                userName: userName,
+                assistantName: node.senderName ?? assistantName,
+                hideTimestamp: hideTimestamp, hideRoleName: hideRoleName,
+                // 头像/入场弹泡/长按浮层：下一刀接线（entrancePending/popPending/blockMenuSpecs）
+                showAvatar: false,
+                avatars: .none
+            )
+        } else {
+            articleBody
+        }
+    }
+
+    private var articleBody: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
             // Role label + time（两个都隐藏时整行不 render，避免空 HStack 占位）
             if !hideRoleName || !hideTimestamp {
@@ -1770,75 +1799,7 @@ struct BubbleView: View {
                 // 症状：新回复等待期间，气泡里挂出「CC 思考过程」，点开是上一轮的内容。
                 let shouldTruncate = !expandAllMessages && !isExpanded && cleaned.count > truncateLength
 
-                // ── 气泡模式分流 ───────────────────────────────────────────
-                // 2026-08-28 兔兔实机：开关打开但一个气泡都没出现。
-                // 根因是我上一刀把分流埋在了 else-if 链最深处（只覆盖「纯文本 assistant」），
-                // 而 user 消息走 if isUser、CC 带工具段的回复走 hasRenderableSegments，
-                // 两条都绕开了它——她用 CC，回话几乎每条都带工具段，所以一个都看不到。
-                // 提到最外层：气泡模式下 user 与 assistant 都走这条。
-                // 流式中仍回落原路径（要显示打字点点与实时文本）。
-                // D1（2026-08-30，照粟粟 575e14cf/35322cfb）：流式不再回落文章模式逐字吐，
-                // 改「段落完成即弹泡」：assistant 流式也走这条，只渲染已完成段落 + dots 尾泡。
-                // {color:} 富文本仍回落原路径。
-                let bubbleLive = isStreaming && !isUser
-                let bubbleVoices: [(path: String, duration: Double?)] = (node.segments ?? []).compactMap { seg in
-                    if case .audioRef(_, _, let p, let d, _) = seg { return (p, d) }
-                    return nil
-                }
-                // D6 附件解包：multimodal_text 的图/文档从 content JSON 拆出；.attachment 段拆出文件卡，
-                // 正文只取 .text 段（content 里的附件全文是发给模型的，不进气泡）
-                let bubbleMM: MultimodalContent? = node.contentType == "multimodal_text"
-                    ? MultimodalContent.parse(node.content) : nil
-                let bubbleAttachments: [(name: String, type: String?, content: String?)] =
-                    (node.segments ?? []).compactMap { seg in
-                        if case .attachment(let n, let t, let c) = seg { return (n, t, c) }
-                        return nil
-                    }
-                let bubbleHasAttachments = bubbleMM != nil || !bubbleAttachments.isEmpty
-                if chatBubbleMode && (bubbleLive || !cleaned.isEmpty || !bubbleVoices.isEmpty)
-                    && !cleaned.contains("{color:") {
-                    let bubbleSource: String = {
-                        if let mm = bubbleMM { return mm.text }
-                        if !bubbleAttachments.isEmpty {
-                            return (node.segments ?? []).compactMap { seg -> String? in
-                                if case .text(let t) = seg { return t } else { return nil }
-                            }.joined(separator: "\n\n")
-                        }
-                        return cleaned
-                    }()
-                    let bubbleText = node.role == "assistant" && !regexScripts.isEmpty
-                        ? RegexEngine.apply(scripts: regexScripts, text: bubbleSource,
-                                            messagePlacement: 2, isMarkdown: true)
-                        : bubbleSource
-                    // 第三刀：思考链灰气泡。来源两条——[thinking] 嵌入（extractThinking）
-                    // 或 segments 里的 .thinking 段（API 流式）。这条分支绕开了下方原路径，
-                    // 所以要自己把思考链带上；「不拆块」和「不显示思考链」拆开处理。
-                    let segThinking: String? = node.segments?.compactMap { seg -> String? in
-                        if case .thinking(text: let t, signature: _) = seg { return t } else { return nil }
-                    }.joined(separator: "\n\n")
-                    let bubbleThinking: String? = {
-                        if bubbleLive && !streamingThinkingText.isEmpty { return streamingThinkingText }
-                        if let t = thinkingResult?.thinking, !t.isEmpty { return t }
-                        if let t = segThinking, !t.isEmpty { return t }
-                        return nil
-                    }()
-                    BubbleModeRow(
-                        text: bubbleText,
-                        isUser: isUser,
-                        // 带可渲染段（工具/附件）的消息不拆块，整条一个泡——
-                        // 思考链另走上方灰泡，不学粟粟那句 isComplex ? (nil, [])
-                        // 附件已自己拆出去，剩下的纯文字可以正常拆块
-                        allowSplit: bubbleHasAttachments || !(node.segments?.hasRenderableSegments ?? false),
-                        thinking: isUser ? nil : bubbleThinking,
-                        isLiveStreaming: bubbleLive,
-                        voices: bubbleVoices,
-                        nodeId: node.id,
-                        profileId: node.profileId,
-                        images: bubbleMM?.images ?? [],
-                        documentTitles: bubbleMM?.documentTitles ?? [],
-                        attachments: bubbleAttachments
-                    )
-                } else if isUser {
+                if isUser {
                     if isEditing {
                         VStack(alignment: .trailing, spacing: 6) {
                             TextField("编辑消息...", text: $editText, axis: .vertical)
@@ -2030,17 +1991,11 @@ struct BubbleView: View {
 
 // PR(usage): 气泡底部 token 数字已移除（统计走 Token 统计页）
             }
-            // 2026-08-30 兔兔实机：气泡模式「根本没做成功」的真凶——BubbleModeRow 被套在这层
-            // 文章模式的大卡片里面，小泡和大卡同色（userBubble/assistantBubble）→ 小泡完全隐形，
-            // 看起来就是原来的文章卡。粟粟那边 innerBody 是顶层 if 分流，气泡模式根本不进大卡。
-            // 这里做法：气泡模式下这层卡片去内距、去底色（contextMenu / overlay / 分支指示器 /
-            // sheet 全部保留在原位，不用整段搬）。
-            .padding(.horizontal, chatBubbleMode ? 0 : bubblePaddingH)
-            .padding(.vertical, chatBubbleMode ? 0 : bubblePaddingV)
+            .padding(.horizontal, bubblePaddingH)
+            .padding(.vertical, bubblePaddingV)
             .background(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
-                    .fill(chatBubbleMode ? Color.clear
-                          : (isUser ? Theme.userBubble : (hideAssistantBubble ? Color.clear : Theme.assistantBubble)))
+                    .fill(isUser ? Theme.userBubble : (hideAssistantBubble ? Color.clear : Theme.assistantBubble))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: bubbleCornerRadius)
@@ -2159,8 +2114,7 @@ struct BubbleView: View {
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
 
             // iOS action bar: copy / TTS / regenerate (controlled by hideActionBar setting)
-            // 气泡模式不挂（粟粟同款：操作走长按菜单，泡下面不放小按钮）
-            if !hideActionBar && !chatBubbleMode {
+            if !hideActionBar {
                 HStack(spacing: 16) {
                     // Copy
                     Button {

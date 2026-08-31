@@ -66,3 +66,17 @@ struct HTMLArtifactCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
+
+/// 粟粟召回卡（RecallCardView 绑她的记忆召回系统）——垫片：我们暂无对应功能，空渲染。
+/// 她的 BubbleModeRow 在 assistant 列里无条件挂它，签名保持一致让原文编译。
+struct RecallCardView: View {
+    let node: MessageNode
+    var body: some View { EmptyView() }
+}
+
+// 平台图片别名（粟粟 MessageSegmentsView 同款；她的 AvatarImageCache 用）
+#if os(macOS)
+typealias PlatformImage = NSImage
+#else
+typealias PlatformImage = UIImage
+#endif

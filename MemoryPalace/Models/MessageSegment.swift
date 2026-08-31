@@ -32,6 +32,11 @@ enum MessageSegment: Codable, Hashable {
         extractedContent: String?
     )
     case file(name: String, uuid: String)
+    /// 图片段（2026-08-30 气泡整套搬运补缺，对齐粟粟 MessageSegment.image）：
+    /// 字节内联。我们此前图片塞 multimodal_text JSON，她的气泡/附件条全靠这个 case。
+    case image(name: String, type: String?, data: Data)
+    /// 原始字节内联的任意文件（CC↔app 互发；区别于 .file 的 uuid 引用、.attachment 的纯文本）
+    case fileData(name: String, mime: String, data: Data)
 
     // MARK: - Codable
 
@@ -59,6 +64,8 @@ enum MessageSegment: Codable, Hashable {
         case path
         case duration
         case script
+        case data
+        case mime
     }
 
     private enum Kind: String, Codable {
@@ -70,6 +77,8 @@ enum MessageSegment: Codable, Hashable {
         case attachment
         case file
         case audioRef
+        case image
+        case fileData
     }
 
     func encode(to encoder: Encoder) throws {
@@ -110,6 +119,16 @@ enum MessageSegment: Codable, Hashable {
             try c.encode(Kind.file, forKey: .kind)
             try c.encode(name, forKey: .name)
             try c.encode(uuid, forKey: .uuid)
+        case .image(let name, let type, let data):
+            try c.encode(Kind.image, forKey: .kind)
+            try c.encode(name, forKey: .name)
+            try c.encodeIfPresent(type, forKey: .type)
+            try c.encode(data, forKey: .data)
+        case .fileData(let name, let mime, let data):
+            try c.encode(Kind.fileData, forKey: .kind)
+            try c.encode(name, forKey: .name)
+            try c.encode(mime, forKey: .mime)
+            try c.encode(data, forKey: .data)
         case .audioRef(let name, let mime, let path, let duration, let script):
             try c.encode(Kind.audioRef, forKey: .kind)
             try c.encode(name, forKey: .name)
@@ -164,6 +183,18 @@ enum MessageSegment: Codable, Hashable {
                 name: try c.decode(String.self, forKey: .name),
                 uuid: try c.decode(String.self, forKey: .uuid)
             )
+        case .image:
+            self = .image(
+                name: try c.decode(String.self, forKey: .name),
+                type: try c.decodeIfPresent(String.self, forKey: .type),
+                data: try c.decode(Data.self, forKey: .data)
+            )
+        case .fileData:
+            self = .fileData(
+                name: try c.decode(String.self, forKey: .name),
+                mime: try c.decode(String.self, forKey: .mime),
+                data: try c.decode(Data.self, forKey: .data)
+            )
         case .audioRef:
             self = .audioRef(
                 name: try c.decode(String.self, forKey: .name),
@@ -185,4 +216,8 @@ extension Array where Element == MessageSegment {
             return true
         }
     }
+
+    /// 粟粟接口对齐（搬运垫片）：她那边 imageRef/fileDataRef 存文件库引用，显示前要「注水」
+    /// 成内联字节；我们暂无引用型段，原样返回。签名保持一致让她的调用点原文编译。
+    func hydratedForDisplay(profileId: String) -> [MessageSegment] { self }
 }

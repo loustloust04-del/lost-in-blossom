@@ -122,6 +122,12 @@ struct MessageSegmentsView: View {
     let regexScripts: [RegexScript]
     /// user 气泡字体 / 对齐跟 assistant 不一样；text 段按此切换渲染。
     var isUser: Bool = false
+    /// 粟粟接口对齐（气泡整套搬运）：气泡模式传入，用她的调用点签名。
+    /// simplifyMarkdown=true 时 text 段渲染前过 BubbleMarkdownSimplifier（抹平文档感）。
+    var profileId: String = ""
+    var simplifyMarkdown: Bool = false
+    var nodeId: String? = nil
+    var onQuoteText: ((String) -> Void)? = nil
 
     /// 外观 - 消息显示 - 「显示安全提示卡」开关。粟粟觉得 flag 卡丑可关掉。
     @AppStorage("showFlagBlocks") private var showFlagBlocks: Bool = true
@@ -193,6 +199,9 @@ struct MessageSegmentsView: View {
                 i += 1
             case .file(let name, _):
                 result.append(.file(name: name))
+                i += 1
+            case .image, .fileData:
+                // 图片/文件字节段：气泡模式在 BubbleAttachmentStrip 渲染，文章模式段内跳过
                 i += 1
             case .audioRef:
                 // 语音条不进 segments 渲染——VoiceCapsuleView 在气泡层单独画胶囊

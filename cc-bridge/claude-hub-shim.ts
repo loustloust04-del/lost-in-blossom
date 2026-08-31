@@ -63,6 +63,25 @@ const messageId = crypto.randomUUID()
 const ws = new WebSocket(HUB)
 let done = false
 
+/** 把他的回复拆成几条，像人在微信里连发。
+ *  业界通行做法是按双换行（\n\n）拆——多个微信机器人方案的「消息分割」都是这个分隔符。
+ *  与 App 那边的气泡拆块同源（都是按空行分段）。
+ *  代码围栏 ``` 内不拆，否则代码会被劈碎。
+ *  OpenClaw 侧配了 humanDelay=natural，条与条之间它自己会加自然间隔。 */
+function splitForChat(text: string): string[] {
+  const lines = text.split("\n")
+  const out: string[] = []
+  let buf: string[] = [], inFence = false
+  const flush = () => { const t = buf.join("\n").trim(); if (t) out.push(t); buf = [] }
+  for (const ln of lines) {
+    if (ln.trimStart().startsWith("```")) inFence = !inFence
+    if (!inFence && ln.trim() === "") { flush(); continue }
+    buf.push(ln)
+  }
+  flush()
+  return out.length ? out : [text.trim()]
+}
+
 const finish = (content: string, isError = false) => {
   if (done) return
   done = true
