@@ -121,11 +121,6 @@ final class MessageNode {
     var replyToId: String? = nil
     var ccEdited: Bool = false
     var ccThinking: String? = nil
-    /// 每轮 usage（2026-08-30 气泡整套搬运补缺，对齐粟粟 D2 usage footer；可选字段轻量迁移）
-    var usagePromptTokens: Int? = nil
-    var usageCompletionTokens: Int? = nil
-    var usageCacheReadTokens: Int? = nil   // >0 即「命中」
-    var usageCostUSD: Double? = nil        // 显示用费用
     @Attribute(.externalStorage) var imageDescsData: Data? = nil
 
     /// PR(usage): 每条 AI 回复的 token 用量快照（气泡 footer 显示）。
@@ -195,4 +190,14 @@ final class UserCard {
         self.attachedToNodeId = attachedToNodeId
         self.profileId = profileId
     }
+}
+
+
+// 粟粟接口对齐（2026-08-30 气泡整套搬运）：她的 usage footer 用 prompt/completion/cost 命名，
+// 我们既有 PR(usage) 是 input/cacheRead/cacheCreation/output 四字段。计算属性桥接，不入库。
+extension MessageNode {
+    var usagePromptTokens: Int? { usageInputTokens }
+    var usageCompletionTokens: Int? { usageOutputTokens }
+    /// 我们暂不记每轮费用；她的 footer 对 nil/0 自动不显示费用段
+    var usageCostUSD: Double? { nil }
 }

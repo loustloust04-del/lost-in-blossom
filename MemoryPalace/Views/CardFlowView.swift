@@ -2523,10 +2523,4 @@ private struct TransientNoticeCapsule: View {
     }
 }
 
-// MARK: - BubbleAttachmentItem
-
-enum BubbleAttachmentItem {
-    case image(name: String, data: Data)
-    case file(name: String, type: String?, content: String?)
-    case fileData(name: String, mime: String, data: Data)
-}
+// BubbleAttachmentItem 已随粟粟原文搬运挪到 Views/BubbleAttachmentStrip.swift（2026-08-30）
