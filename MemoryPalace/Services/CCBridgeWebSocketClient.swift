@@ -40,6 +40,9 @@ final class CCBridgeWebSocketClient: NSObject {
     /// 改为字典后，每条会话各自保留自己的思考链，不会被后到的新 thinking 覆盖。
     private(set) var thinkingBlocks: [String: CCThinkingBlock] = [:]
 
+    /// CC 选择卡题面到达。由 ContentView 注册，落进 viewModel.pendingCCQuestion。
+    @ObservationIgnored var onAskUserQuestion: ((String, String, [AskUserTool.ParsedQuestion]) -> Void)?
+
     /// ⚠️ 已废弃（2026-08-24），UI 不得再用。
     /// 这是 pendingThinking 之前的旧实现残骸。它取全局时间戳最大者、不区分对话，
     /// 且背后的 thinkingBlocks 只写不清 → 会把上一轮/别的窗口的思考链串给当前气泡。
@@ -545,6 +548,17 @@ final class CCBridgeWebSocketClient: NSObject {
               let type = obj["type"] as? String else { return }
 
         switch type {
+        case "ask_user_question":
+            // CC 侧弹了选择卡（AskUserQuestion）——hub 把题面推过来，App 呈现 sheet，
+            // 用户点完由 ConversationViewModel+AskUser 把下标发回去驱动 tmux 键序。
+            guard let toolUseId = obj["tool_use_id"] as? String,
+                  let rawQs = obj["questions"] as? [[String: Any]] else { return }
+            let chatId = (obj["chat_id"] as? String) ?? ""
+            guard let parsed = AskUserTool.parseCCQuestions(rawQs), !parsed.isEmpty else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.onAskUserQuestion?(chatId, toolUseId, parsed)
+            }
+
         case "reply":
             if let chatId = obj["chat_id"] as? String,
                let content = obj["content"] as? String {

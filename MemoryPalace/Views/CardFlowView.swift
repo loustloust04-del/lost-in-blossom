@@ -887,7 +887,14 @@ private struct InputFieldContainer: View {
     /// 输入框全屏展开（参照 ChatGPT App）——细输入框最多 6 行，长消息看不全前文
     @State private var expandedInput = false
     /// 输入框是否已经换行/长到多行——决定右上角展开按钮出不出现
-    private var isMultilineInput: Bool { text.contains("\n") || text.count > 18 }
+    /// TextField 实测高度（onGeometryChange 量的真值，不是估的）
+    @State private var fieldHeight: CGFloat = 0
+    /// 输入框是否已经长到头（撑满 lineLimit 上限、再打字也不长了）——此刻才给展开入口。
+    /// 兔兔 2026-08-29 定的判定：不是「字够多」，是「框到顶了」，
+    /// 因为正是那一刻才真的看不全前文。
+    /// 13pt 字行高约 16pt + vertical padding 20，6 行封顶约 116pt，取 110 留余量。
+    /// （933bd5a7 做过一次，后来被覆盖成字数阈值，08-31 修回。）
+    private var inputAtMaxHeight: Bool { fieldHeight >= 110 }
     /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
     /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
     /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
@@ -1133,8 +1140,11 @@ private struct InputFieldContainer: View {
                     .focused($isFocused)
                     .padding(.leading, 6)
                     .padding(.vertical, 10)
-                    // 多行时右上角浮着展开按钮，给首行末尾让出位置，否则压字
-                    .padding(.trailing, isMultilineInput ? 26 : 0)
+                    // 到顶时右上角浮着展开按钮，给首行末尾让出位置，否则压字
+                    .padding(.trailing, inputAtMaxHeight ? 26 : 0)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { h in
+                        fieldHeight = h
+                    }
                 }
 
                 // 发送 / 停止 / 语音占位 —— 同一个按钮换图标，不做 if/else 两个按钮
@@ -1175,11 +1185,10 @@ private struct InputFieldContainer: View {
         // 我原先加的 mainBg 打底 + strokeBorder + shadow 正是框看着比她「重」的原因。
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         // 展开成全屏编辑：挂框内右上角（ChatGPT 那样）。
-        // 只在已经换行/写长时出现——单行时框才 44pt 高，「右上角」就是右边，会撞发送键；
-        // 而且单行本来也不需要展开。阈值 18 是按 13pt 字、可用宽度约 288pt 估的，
-        // 中文一行约 22 字，留了余量。
+        // 只在输入框已长到头时出现：单行时框才 44pt 高，「右上角」就是右边、会撞发送键；
+        // 而且没长满之前本来也看得全，不需要展开。
         .overlay(alignment: .topTrailing) {
-            if isMultilineInput {
+            if inputAtMaxHeight {
                 Button { expandedInput = true } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 12, weight: .medium))
@@ -1244,6 +1253,20 @@ private struct InputFieldContainer: View {
             }
         }
         #if os(iOS)
+        // CC 选择卡：pendingCCQuestion 非 nil 时弹出，答完/关掉都会回帧驱动 tmux 键序
+        .sheet(isPresented: Binding(
+            get: { viewModel.pendingCCQuestion != nil },
+            set: { if !$0 { viewModel.dismissActiveAskCard() } }
+        )) {
+            AskUserQuestionSheet(viewModel: viewModel)
+        }
+        .onAppear {
+            CCBridgeWebSocketClient.shared.onAskUserQuestion = { chatId, toolUseId, questions in
+                viewModel.pendingCCQuestion = PendingCCQuestion(
+                    chatId: chatId, toolUseId: toolUseId, questions: questions
+                )
+            }
+        }
         .fullScreenCover(isPresented: $expandedInput) {
             ExpandedInputSheet(
                 text: $text,
