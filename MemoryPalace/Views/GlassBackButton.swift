@@ -15,7 +15,9 @@ struct GlassBackButton: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(Theme.textSecondary)
                 .frame(width: 44, height: 44)
-                .glassEffect(.regular.tint(Color.white.opacity(0.15)).interactive(), in: .circle)
+                // 搬运适配：她的 CI 是 Xcode 18（iOS 26 SDK 有 .glassEffect），我们 CI Xcode 16.4
+                // 连 @available 包装都编译不过——走既有 GlassEffectCompat（.ultraThinMaterial fallback）
+                .glassEffectCompat(tint: Color.white.opacity(0.15), interactive: true, in: Circle())
         }
         .buttonStyle(.plain)
     }
