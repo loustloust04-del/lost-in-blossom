@@ -466,6 +466,73 @@ struct FileEditorSheet: View {
         _content = State(initialValue: initialContent)
     }
 
+    /// markdown 格式栏。原生实现——粟粟那版走 WebView（MarkdownWebEditorCommand），
+    /// 我们用原生 TextEditor，直接拼字符串更轻。
+    /// 没有选区 API 的限制：一律追加到末尾/整行处理，不做「包裹选中文字」。
+    private var markdownToolbar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                mdButton("H1", tip: "一级标题") { prependLine("# ") }
+                mdButton("H2", tip: "二级标题") { prependLine("## ") }
+                mdButton("H3", tip: "三级标题") { prependLine("### ") }
+                Divider().frame(height: 16)
+                mdIcon("bold", tip: "加粗") { wrapAtEnd("**", "**") }
+                mdIcon("italic", tip: "斜体") { wrapAtEnd("*", "*") }
+                mdIcon("chevron.left.forwardslash.chevron.right", tip: "行内代码") { wrapAtEnd("`", "`") }
+                Divider().frame(height: 16)
+                mdIcon("list.bullet", tip: "列表") { prependLine("- ") }
+                mdIcon("text.quote", tip: "引用") { prependLine("> ") }
+                mdIcon("link", tip: "双链") { wrapAtEnd("[[", "]]") }
+                mdIcon("minus", tip: "分隔线") { appendBlock("\n---\n") }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .background(Theme.sidebarBg.opacity(0.5))
+    }
+
+    private func mdButton(_ label: String, tip: String, _ act: @escaping () -> Void) -> some View {
+        Button(action: act) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Theme.textSecondary)
+                .frame(minWidth: 26, minHeight: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func mdIcon(_ systemName: String, tip: String, _ act: @escaping () -> Void) -> some View {
+        Button(action: act) {
+            Image(systemName: systemName)
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textSecondary)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 在最后一行行首加前缀（标题/列表/引用用）。已有同类前缀则替换。
+    private func prependLine(_ prefix: String) {
+        var lines = content.components(separatedBy: "\n")
+        guard var last = lines.popLast() else { content = prefix; return }
+        for p in ["# ", "## ", "### ", "- ", "> "] where last.hasPrefix(p) {
+            last = String(last.dropFirst(p.count)); break
+        }
+        lines.append(prefix + last)
+        content = lines.joined(separator: "\n")
+    }
+
+    /// 在末尾插入一对标记，光标位置留给用户手填（加粗/斜体/双链用）
+    private func wrapAtEnd(_ open: String, _ close: String) {
+        content += open + close
+    }
+
+    private func appendBlock(_ block: String) {
+        content += block
+    }
+
     /// [[目标]] → [目标](wikilink://目标)，供 Markdown 渲染成可点链接。
     /// 代码围栏内不转换——否则示例代码里的 [[ ]] 会变成链接（粟粟那版的已知局限，这里补上）。
     static func linkifyWikiLinks(_ text: String) -> String {
@@ -526,10 +593,14 @@ struct FileEditorSheet: View {
                             })
                     }
                 } else {
-                    TextEditor(text: $content)
-                        .font(.system(size: Theme.F.body))
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
+                    VStack(spacing: 0) {
+                        markdownToolbar
+                        Divider().opacity(0.4)
+                        TextEditor(text: $content)
+                            .font(.system(size: Theme.F.body))
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                    }
                 }
             }
             .background(Theme.mainBg)
