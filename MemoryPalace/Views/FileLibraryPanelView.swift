@@ -25,6 +25,10 @@ struct FileLibraryPanelView: View {
 
     struct EditingFile: Identifiable { let id = UUID(); let path: String; let content: String }
 
+    /// 视图模式：卡片网格（带预览，默认）/ 树形（按目录层级，长文档分章时更清楚）
+    @AppStorage("fileLibTreeMode") private var treeMode = false
+    @State private var expandedFolders: Set<String> = []
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -92,6 +96,18 @@ struct FileLibraryPanelView: View {
                 .font(.system(size: Theme.F.secondary))
                 .foregroundColor(Theme.textMuted)
             Spacer()
+            // 网格 / 树 切换。长文档分章（如 Y_N 中文翻译/ 下的各章）时树形更清楚。
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) { treeMode.toggle() }
+            } label: {
+                Image(systemName: treeMode ? "list.bullet.indent" : "square.grid.2x2")
+                    .font(.system(size: 13))
+                    .foregroundColor(Theme.textMuted)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
             Button { newFileName = ""; showNewFileAlert = true } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus.circle.fill")
@@ -111,17 +127,157 @@ struct FileLibraryPanelView: View {
 
     private var fileList: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(remoteFiles) { meta in
-                    fileCard(CardMeta(path: meta.path, subtitle: byteText(meta.bytes)))
+            if treeMode {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(buildFileTree(from: remoteFiles)) { node in
+                        treeRows(node, depth: 0)
+                    }
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            } else {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(remoteFiles) { meta in
+                        fileCard(CardMeta(path: meta.path, subtitle: byteText(meta.bytes)))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
         }
     }
 
+    /// 递归渲染一个节点及其（展开的）子节点
+    @ViewBuilder
+    private func treeRows(_ node: FileTreeNode, depth: Int) -> some View {
+        treeRow(node, depth: depth)
+        if node.kind == .folder, expandedFolders.contains(node.path) {
+            ForEach(node.children) { child in
+                treeRows(child, depth: depth + 1)
+            }
+        }
+    }
+
+    private func treeRow(_ node: FileTreeNode, depth: Int) -> some View {
+        let isFolder = node.kind == .folder
+        let expanded = expandedFolders.contains(node.path)
+        return Button {
+            if isFolder {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    if expanded { expandedFolders.remove(node.path) }
+                    else { expandedFolders.insert(node.path) }
+                }
+            } else {
+                openFile(node.path)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isFolder ? (expanded ? "chevron.down" : "chevron.right") : "doc.text")
+                    .font(.system(size: isFolder ? 10 : 12))
+                    .foregroundColor(Theme.textMuted)
+                    .frame(width: 14)
+                Text(node.name)
+                    .font(.system(size: Theme.F.body))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let m = node.meta {
+                    Text(byteText(m.bytes))
+                        .font(.system(size: Theme.F.caption))
+                        .foregroundColor(Theme.textMuted.opacity(0.7))
+                }
+            }
+            .padding(.leading, CGFloat(depth) * 16)
+            .padding(.vertical, 7)
+            .padding(.trailing, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private struct CardMeta { let path: String; let subtitle: String }
+
+    // MARK: - 树形
+
+    /// 目录树节点。2026-08-31 自粟粟 FileLibraryPanelView:601 搬入，
+    /// 数据源换成我们的 NotebookRemoteStore.FileMeta。
+    struct FileTreeNode: Identifiable {
+        enum Kind { case folder, file }
+        let id = UUID()
+        let name: String
+        let path: String
+        let kind: Kind
+        let meta: NotebookRemoteStore.FileMeta?
+        var children: [FileTreeNode]
+    }
+
+    /// 把「第十三章」里的中文数字换成阿拉伯数字，供排序用（不改显示名）。
+    /// 支持到「九十九」，够章节用。
+    static func chapterSortKey(_ name: String) -> String {
+        let digits: [Character: Int] = ["零":0,"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9]
+        guard let re = try? NSRegularExpression(pattern: "[零一二三四五六七八九十]+") else { return name }
+        let ns = name as NSString
+        var out = "", last = 0
+        re.enumerateMatches(in: name, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m else { return }
+            let cn = ns.substring(with: m.range)
+            var v = 0, section = 0, hasTen = false
+            for ch in cn {
+                if ch == "十" {
+                    hasTen = true
+                    section = section == 0 ? 10 : section * 10
+                } else if let d = digits[ch] {
+                    section = hasTen ? section + d : d
+                }
+            }
+            v = section
+            out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            out += String(format: "%03d", v)
+            last = m.range.location + m.range.length
+        }
+        out += ns.substring(from: last)
+        return out
+    }
+
+    /// 按 "/" 拆路径建树。排序规则同她：文件夹在前，同类按自然序（第2章排在第10章前）。
+    private func buildFileTree(from files: [NotebookRemoteStore.FileMeta]) -> [FileTreeNode] {
+        final class Builder {
+            let name: String, path: String
+            var meta: NotebookRemoteStore.FileMeta?
+            var children: [String: Builder] = [:]
+            init(name: String, path: String, meta: NotebookRemoteStore.FileMeta? = nil) {
+                self.name = name; self.path = path; self.meta = meta
+            }
+        }
+        let root = Builder(name: "", path: "")
+        for meta in files {
+            let parts = meta.path.split(separator: "/").map(String.init)
+            guard !parts.isEmpty else { continue }
+            var cur = root, curPath = ""
+            for (i, part) in parts.enumerated() {
+                curPath = curPath.isEmpty ? part : curPath + "/" + part
+                if i == parts.count - 1 {
+                    cur.children[part] = Builder(name: part, path: curPath, meta: meta)
+                } else {
+                    if cur.children[part] == nil { cur.children[part] = Builder(name: part, path: curPath) }
+                    cur = cur.children[part]!
+                }
+            }
+        }
+        func sortNodes(_ a: FileTreeNode, _ b: FileTreeNode) -> Bool {
+            if a.kind != b.kind { return a.kind == .folder }
+            // 中文数字归一化后再比：否则「第一章/第三章/第二章」会按字面排错
+            // （粟粟那版直接 localizedStandardCompare，兔兔的 Y_N 翻译正好踩到）
+            return Self.chapterSortKey(a.name)
+                .localizedStandardCompare(Self.chapterSortKey(b.name)) == .orderedAscending
+        }
+        func convert(_ b: Builder) -> FileTreeNode {
+            FileTreeNode(name: b.name, path: b.path,
+                         kind: b.meta == nil ? .folder : .file, meta: b.meta,
+                         children: b.children.values.map(convert).sorted(by: sortNodes))
+        }
+        return root.children.values.map(convert).sorted(by: sortNodes)
+    }
 
     private func fileCard(_ meta: CardMeta) -> some View {
         VStack(alignment: .leading, spacing: 6) {
