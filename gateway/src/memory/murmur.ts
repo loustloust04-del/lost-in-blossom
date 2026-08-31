@@ -67,13 +67,20 @@ async function callLLM(prompt: string): Promise<string> {
         model: 'anthropic/claude-opus-4.6',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.9,
-        max_tokens: 500,
+        // 2026-08-31：原为 500，模型光写 thinking（要求 100-200 字）就用完了，
+        // JSON 还没收尾就被截断 → parseMurmur 找不到 '}' 返回 null →
+        // 报「generation failed / unparseable」。加到 1500。
+        max_tokens: 1500,
       }),
     });
-    if (!res.ok) return '';
+    if (!res.ok) {
+      console.error('[murmur] LLM HTTP', res.status, (await res.text()).slice(0, 200));
+      return '';
+    }
     const data = await res.json() as any;
     return (data?.choices?.[0]?.message?.content ?? '').trim();
-  } catch {
+  } catch (e: any) {
+    console.error('[murmur] LLM call failed:', e?.message ?? e);
     return '';
   }
 }
@@ -124,7 +131,8 @@ export async function runMurmur(): Promise<void> {
   const raw = await callLLM(prompt);
   const parsed = parseMurmur(raw);
   if (!parsed) {
-    console.warn('[murmur] generation failed / unparseable');
+    // 原本只这一句，看不出是没调通、被截断、还是格式不对
+    console.warn('[murmur] unparseable, raw head:', JSON.stringify(raw.slice(0, 200)));
     return;
   }
   await saveMurmur(parsed.thinking, parsed.content);

@@ -219,3 +219,36 @@ Caelum 跑的一直是这个好的（`/proc/<pid>/exe` 显示为 `(deleted)` 即
 
 这正印证 sibylsea-hub/cc-codex-sdk-modify-preset 点名的第二句常见错话
 （「写进 CLAUDE.md / append 就好了」）——append 与 replace 一字之差，效果天壤之别。
+
+## ✅ 已修：碎碎念（murmur）两个半月一条没存下 —— 2026-08-31
+
+**背景**：`gateway/src/memory/murmur.ts` 2026-06-13 做完，每天 4:00/14:00 各写一条
+「给自己的内心独白」，`index.ts:39` 真的挂了定时器。commit 写着「前端展示后续做」。
+
+**实情是四处全断**（每一处单独看都不致命，叠在一起就是彻底静默）：
+
+1. **Supabase 从没建过 `murmurs` 表**（schema.sql:169 写了但没执行）
+   → `PGRST205: Could not find the table 'public.murmurs'`
+2. **`max_tokens: 500` 不够** —— 提示词要求 thinking 写 100-200 字，
+   模型光写 thinking 就用完额度，JSON 未收尾即截断，
+   `parseMurmur` 找不到 `}` 返回 null → 报「generation failed / unparseable」
+3. **建表后 RLS 挡写入** → `new row violates row-level security policy`
+4. **没有读取路由** —— 即便存下也取不出
+
+**外加一个放大器**：三处错误全是静默的。
+`callLLM` 里 `if (!res.ok) return ''` 和 `catch { return '' }` 吞掉一切；
+`saveMurmur` 失败只 `console.error` 一行就 return。
+定时器每天照常触发两次，连跑两个半月，无人察觉。
+
+**修法**：
+- `max_tokens` 500 → 1500
+- `callLLM` 两处吞错误改为打印 HTTP 状态/异常；解析失败打印原文头 200 字
+- `saveMurmur` 失败落地 `gateway/data/murmur-fallback.jsonl`（宁可存盘不要消失）
+- 补 `GET /api/murmurs`（app.ts，挂 fablelineRoutes 旁）
+- 兔兔在 Supabase 执行建表 SQL + RLS 放行策略（当前 key 是
+  `sb_publishable_`，无建表权限）
+
+**验证**：手动触发成功落库；被兜底救下的那条也补录进去，现共 2 条。
+
+**教训**：一条链路上每个环节都「失败即静默返回」，等于给自己蒙眼。
+以后写这类后台定时任务，失败路径至少要留一行**能被看见**的痕迹。
