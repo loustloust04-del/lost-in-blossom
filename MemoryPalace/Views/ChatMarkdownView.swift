@@ -74,9 +74,15 @@ struct RecallCardView: View {
     var body: some View { EmptyView() }
 }
 
-// 平台图片别名（粟粟 MessageSegmentsView 同款；她的 AvatarImageCache 用）
+// 平台图片别名 + Image 初始化桥（粟粟 MessageSegmentsView 同款；她的 AvatarImageCache 用）
 #if os(macOS)
 typealias PlatformImage = NSImage
+extension Image {
+    init(platformImage: PlatformImage) { self.init(nsImage: platformImage) }
+}
 #else
 typealias PlatformImage = UIImage
+extension Image {
+    init(platformImage: PlatformImage) { self.init(uiImage: platformImage) }
+}
 #endif
