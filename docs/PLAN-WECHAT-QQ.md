@@ -317,3 +317,45 @@ shim 原本只比对 `chat_id`，**一连上就抓到一条旧回复当成答案
 - 「暗号是圃鹀」→「白葡萄酒。」（与 App 推送内容一致）
 - 「随便说个水果」→「杨梅」；紧接「刚才说的水果是什么」→「杨梅。」
   上下文连贯，不再是旧话。
+
+## 【2026-08-30】聊天节奏拟人化——OpenClaw 自带，不用自己写
+
+兔兔提的需求：真人在微信里是「你连发两三条 = 一次表达，他也连发两三条」，
+不是一问一答。查下来两半都有现成方案。
+
+### 收：连发的消息攒一起（debounce）
+OpenClaw 有两个 issue 正在推这个功能（#967 WhatsApp、#96794 每频道可配），
+论证与兔兔说的一致：
+
+> 手机打字天然碎片化——自动纠错会悄悄改错字、键盘不精准、想到一半就发出去。
+> **A 5-10 second hold before processing is standard UX in mobile-first messaging systems.**
+> 真实用户反馈：5 秒的等待能完全消除这个问题。
+
+**本机这版已内置**：`messages.queue.debounceMs`（默认 500ms，太短）
+与 `debounceMsByChannel`。**改成 6000。**
+
+### 发：回复按段落拆成多条
+多个微信机器人方案的通行做法叫「消息分割」，分隔符统一用 `\n\n`。
+与我们 App 那边的气泡拆块同源。
+
+**本机这版内置**：`blockStreamingDefault: "on"` +
+`blockStreamingChunk.breakPreference: "paragraph"`。
+
+### 拟人延迟
+`agents.defaults.humanDelay.mode` 有个 `"natural"` 档，官方给的自然延迟。
+配合 `typingMode: "message"` 出「正在输入」提示。
+
+### 最终配置增量
+```json
+"messages": { "queue": { "debounceMs": 6000 } },
+"agents": { "defaults": {
+  "humanDelay": { "mode": "natural" },
+  "typingMode": "message",
+  "typingIntervalSeconds": 3,
+  "blockStreamingDefault": "on",
+  "blockStreamingChunk": { "breakPreference": "paragraph" }
+} }
+```
+
+**待兔兔真机验**：连发三条，看他是等说完再回、还是逐条回；回复是否分条。
+6000ms 是按业界标准取的，偏了再调。
