@@ -98,7 +98,16 @@ function parseMurmur(raw: string): { thinking: string; content: string } | null 
 async function saveMurmur(thinking: string, content: string): Promise<void> {
   const { error } = await supabase.from('murmurs').insert({ thinking, content });
   if (error) {
-    console.error('[murmur] save error:', error.message);
+    // 2026-08-31：这里原本只打一行 console.error 就返回——murmurs 表压根没建，
+    // 于是他每天两条心里话连写两个半月，全部静默丢失，无人察觉。
+    // 现在失败也落一份到本地文件，宁可存在盘上也不要凭空消失。
+    console.error('[murmur] ⚠️ save FAILED:', error.message);
+    try {
+      const fs = await import('fs');
+      const line = JSON.stringify({ thinking, content, at: new Date().toISOString(), err: error.message });
+      fs.appendFileSync('/root/projects/BunnyPalace/gateway/data/murmur-fallback.jsonl', line + '\n');
+      console.error('[murmur] → 已落地到 murmur-fallback.jsonl');
+    } catch {}
     return;
   }
   console.log(`[murmur] 📓 "${content}"`);

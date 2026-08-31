@@ -901,6 +901,16 @@ musicRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);
 fablelineRoutes(app);
+
+/// 碎碎念（他的内心独白）。2026-06-13 做了后端与定时器，注释写「前端展示后续做」，
+/// 但既没有读取路由、Supabase 里也从没建过 murmurs 表——
+/// 定时器每天 4:00/14:00 照常触发，saveMurmur 每次静默失败（只 console.error 一行）。
+/// 2026-08-31 兔兔让我查项目欠账时挖出来，补这个出口。
+app.get('/api/murmurs', auth, async (c) => {
+  const limit = Number(c.req.query('limit') ?? 10);
+  const { getRecentMurmurs } = await import('./memory/murmur');
+  return c.json({ murmurs: await getRecentMurmurs(limit) });
+});
 prereadRoutes(app);
 geoRoutes(app);
 // 存盘失败黑匣子：兔兔曾被静默的 try? context.save() 吞掉过两个聊天窗口且查无可查
