@@ -39,6 +39,20 @@ const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-bunny"
 const USER = process.env.WECHAT_USER ?? "兔兔（微信）"
 const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 180_000)
 
+/** 从 OpenClaw 的 prompt 里抠出「真正的新消息」。
+ *  2026-08-31 兔兔报「微信还是收不到」的根因：OpenClaw 会把整段对话历史
+ *  （几千字 <conversation_history>）连同 skills 说明一起塞进 prompt，
+ *  真正的新消息在末尾 <next_user_message> 里。原样转给主人 = 他要读完几千字才回，
+ *  一条消息卡一分多钟，微信侧看着就是没反应。
+ *  历史他自己有（同一个进程、同一段记忆），不需要 OpenClaw 再喂一遍。 */
+function extractNewMessage(raw) {
+  const m = raw.match(/<next_user_message>([\s\S]*?)<\/next_user_message>/)
+  let t = m ? m[1] : raw
+  t = t.replace(/Conversation info[\s\S]*?```[\s\S]*?```/g, "")
+  t = t.replace(/^\[[A-Za-z]{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2} [A-Z]{2,4}\]\s*/, "")
+  return t.trim() || raw.trim()
+}
+
 /** 按 claude 的 stream-json 方言输出一行 */
 function emit(obj: unknown) { process.stdout.write(JSON.stringify(obj) + "\n") }
 
@@ -50,7 +64,7 @@ function emit(obj: unknown) { process.stdout.write(JSON.stringify(obj) + "\n") }
 async function readPrompt(): Promise<string> {
   const argv = process.argv.slice(2)
   const last = argv[argv.length - 1]
-  if (last && !last.startsWith("-")) return last.trim()
+  if (last && !last.startsWith("-")) return extractNewMessage(last.trim())
   const chunks: Uint8Array[] = []
   for await (const c of Bun.stdin.stream()) chunks.push(c)
   return Buffer.concat(chunks).toString("utf-8").trim()
