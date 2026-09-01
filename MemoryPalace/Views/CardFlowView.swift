@@ -338,10 +338,31 @@ struct CardFlowView: View {
                             }
                         }
                     }
-                    .onChange(of: viewModel.currentPath.count) { _, n in
+                    .onChange(of: viewModel.currentPath.count) { old, n in
                         // B20 修复：path 变（新消息进来等）→ 同步给 stickerVM，让 clampStickerY
                         // 在 drag end 时拿到最新 path 长度
                         stickerVM.currentPathCount = n
+                        // [white-screen-fix] 发送：进页面/回前台/键盘起落四个时机都有「等布局落定再
+                        // 强制回底」的兜底，唯独发送没有——一次塞两条（她的话 + 空占位泡）还带 0.2s
+                        // 入场动画，只靠 defaultScrollAnchor 钉底会飞，露出没画的区域（兔兔 09-02：
+                        // 「发完整页空白，往下划一下才回来」，两条车道都会）。刚发的（尾部两条里有
+                        // user）无条件回底；别人的消息进来（CC 主动说话）只在她本来就在底时回底。
+                        guard n > old else { return }
+                        let justSent = viewModel.currentPath.suffix(n - old).contains { $0.role == "user" }
+                        guard justSent || isAtBottom else { return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            scrollToLastMessage(proxy: proxy, force: true)
+                        }
+                    }
+                    .onChange(of: viewModel.ccTurnNodeId) { old, new in
+                        // [white-screen-fix] CC 车道不流式：他的回复一次性落进空占位泡，高度从 0
+                        // 跳到整条——API 车道有 streamingText 收尾回底，CC 这边没有对应出口。
+                        // turn 结束（ccTurnNodeId → nil）且她在底 → 同款兜底。
+                        if old != nil, new == nil, isAtBottom {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                scrollToLastMessage(proxy: proxy, force: true)
+                            }
+                        }
                     }
                     .onChange(of: viewModel.scrollToNodeId) { _, nodeId in
                         if let nodeId {

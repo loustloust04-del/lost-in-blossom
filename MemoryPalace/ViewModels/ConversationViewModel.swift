@@ -34,24 +34,30 @@ final class ConversationViewModel {
     /// 此前 ForEach 直接吃整条 currentPath——聊到上千条时每条都要参与布局与几何测量，
     /// 于是白屏、左右滑卡死、连打字都卡（兔兔实测）。LazyVStack 只省绘制不省布局。
     static let renderWindowStep = 60
-    var renderWindow: Int = renderWindowStep
+    /// 窗口**起点**（currentPath 下标），不是窗口长度。
+    /// 之前记的是长度 `suffix(60)`：每发一条（尾部 +2）顶上就被挤掉 2 条——正在被布局的
+    /// 列表同帧一头长一头缩，钉底锚点跟不上，屏幕露出没画的区域＝兔兔说的「发完消息整页
+    /// 空白，往下划一下才回来」，长对话（>60 条）才有这一挤所以更明显。改记起点后追加
+    /// 消息只让窗口自然变长，顶上不动；起点只在切对话（reset）和上滑扩窗（expand）时变。
+    var renderStart: Int = 0
 
     /// 实际交给 ForEach 的那一段
     var visiblePath: [MessageNode] {
-        guard currentPath.count > renderWindow else { return currentPath }
-        return Array(currentPath.suffix(renderWindow))
+        // 起点越界（路径被重建得比起点还短）时整条给出去，宁可多画也不能画空
+        guard renderStart > 0, renderStart < currentPath.count else { return currentPath }
+        return Array(currentPath[renderStart...])
     }
 
-    var hasMoreAbove: Bool { currentPath.count > renderWindow }
+    var hasMoreAbove: Bool { renderStart > 0 && renderStart < currentPath.count }
 
     /// 往上滑到顶时扩窗
     func expandRenderWindow() {
         guard hasMoreAbove else { return }
-        renderWindow = min(renderWindow + Self.renderWindowStep, currentPath.count)
+        renderStart = max(0, renderStart - Self.renderWindowStep)
     }
 
-    /// 切对话 / 重建路径时收回窗口
-    func resetRenderWindow() { renderWindow = Self.renderWindowStep }
+    /// 切对话 / 重建路径时收回窗口（按当时的 currentPath 算，须在 currentPath 赋值之后调）
+    func resetRenderWindow() { renderStart = max(0, currentPath.count - Self.renderWindowStep) }
     var branchChoices: [String: Int] = [:] // nodeId -> chosen child index
     var isLoading: Bool = false
 

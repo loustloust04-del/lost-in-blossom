@@ -450,8 +450,9 @@ extension ConversationViewModel {
         bubbledBranches = data.bubbledBranches
         let prevCount = currentPath.count
         currentPath = data.pathNodeIds.compactMap { nodeMap[$0] }
-        // 换了一条对话（长度骤变）就收回渲染窗口；同一对话追加消息时保持窗口，免得视野跳
-        if abs(currentPath.count - prevCount) > 5 { resetRenderWindow() }
+        // 换了一条对话（长度骤变）就收回渲染窗口；同一对话追加消息时保持窗口，免得视野跳。
+        // 起点越界（新路径比旧起点还短）也收，否则 visiblePath 退化成整条全画
+        if abs(currentPath.count - prevCount) > 5 || renderStart >= currentPath.count { resetRenderWindow() }
 
         // Build branchInfoMap (needs actual MessageNode objects)
         branchInfoMap.removeAll()
