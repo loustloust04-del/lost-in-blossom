@@ -1730,6 +1730,8 @@ struct BubbleView: View {
     @AppStorage("hideAssistantBubble") private var hideAssistantBubble: Bool = false
     @AppStorage("thinkingPreviewMode") private var thinkingPreviewMode: String = "summary"
     @AppStorage("bubbleModeCornerRadius") private var bubbleModeCornerRadius: Double = 23
+    @State private var showBubbleThinking = false
+    @State private var bubbleThinkingText = ""
     @State private var isExpanded = false
     @State private var showBranchPicker = false
     @State private var showFolderPicker = false
@@ -1764,6 +1766,17 @@ struct BubbleView: View {
         // 「特别长的白条 + 滑不到底」。老图片消息先回落文章路径（有 MultimodalUserBubble
         // 解包），新消息改写 .image 段是单独一刀（DEBT-MAP 已记）。
         if chatBubbleMode && node.contentType != "multimodal_text" {
+            bubbleModeRowWired
+        } else {
+            articleBody
+        }
+    }
+
+    /// 气泡模式接线（长按菜单 + 思考链入口）。
+    /// 兔兔 2026-08-31 拍板：聊天软件里对面发来的是说出口的话，思考链不进对话流——
+    /// 长按「他当时在想…」才看（灰泡由 bubbleInlineThinking 关掉，主人不白想，收进长按里）。
+    private var bubbleModeRowWired: some View {
+        Group {
             BubbleModeRow(
                 node: node, isUser: isUser, isStreaming: isStreaming,
                 // B6 A2'：弹泡数据源，只有流式中的 assistant 行才读
@@ -1781,11 +1794,58 @@ struct BubbleView: View {
                 hideTimestamp: hideTimestamp, hideRoleName: hideRoleName,
                 // 头像/入场弹泡/长按浮层：下一刀接线（entrancePending/popPending/blockMenuSpecs）
                 showAvatar: false,
-                avatars: .none
+                avatars: .none,
+                blockMenuSpecs: { block in bubbleMenuSpecs(quoteText: block) }
             )
-        } else {
-            articleBody
         }
+        .sheet(isPresented: $showBubbleThinking) {
+            ThinkingSheet(text: bubbleThinkingText, nodeId: node.id, profileId: node.profileId)
+        }
+    }
+
+    /// 气泡模式每个泡的长按菜单（结构照粟粟 bubbleMenuSpecs，动作接我们自己的）
+    private func bubbleMenuSpecs(quoteText: String) -> [MenuActionSpec] {
+        var specs: [MenuActionSpec] = []
+        // 思考链入口放最上面：他当时在想…（兔兔的 A 方案）
+        if !isUser {
+            let segThinking = (node.segments ?? []).compactMap { seg -> String? in
+                if case .thinking(text: let t, signature: _) = seg { return t } else { return nil }
+            }.joined(separator: "\n\n")
+            let thinking = ContentCleaner.extractThinking(from: node.content).thinking
+                ?? node.ccThinking
+                ?? (segThinking.isEmpty ? nil : segThinking)
+            if let thinking, !thinking.isEmpty {
+                specs.append(MenuActionSpec(title: "他当时在想…", systemImage: "cloud", dividerAfter: true) {
+                    bubbleThinkingText = thinking
+                    showBubbleThinking = true
+                })
+            }
+        }
+        if !isUser, let onRegenerate, !isStreaming {
+            specs.append(MenuActionSpec(title: "重新生成", systemImage: "arrow.counterclockwise", dividerAfter: true, handler: onRegenerate))
+        }
+        specs.append(MenuActionSpec(title: node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star") {
+            let willFav = !node.isFavorite
+            onToggleFavorite()
+            onNotice?(willFav ? "已收藏" : "已取消收藏")
+        })
+        specs.append(MenuActionSpec(title: "收藏到文件夹...", systemImage: "folder.badge.plus", dividerAfter: true) {
+            showFolderPicker = true
+        })
+        specs.append(MenuActionSpec(title: "复制本段", systemImage: "doc.on.doc") {
+            UIPasteboard.general.string = quoteText
+            onNotice?("已复制")
+        })
+        if !isUser {
+            specs.append(MenuActionSpec(title: "朗读", systemImage: "speaker.wave.2") {
+                SpeechService.shared.speak(nodeId: node.id, text: SpeechService.speakableText(from: node))
+            })
+            specs.append(MenuActionSpec(title: "停止朗读", systemImage: "speaker.slash", dividerAfter: true) {
+                SpeechService.shared.stop()
+            })
+        }
+        specs.append(MenuActionSpec(title: "删除", systemImage: "trash", isDestructive: true, handler: onSoftDelete))
+        return specs
     }
 
     private var articleBody: some View {

@@ -355,7 +355,11 @@ struct BubbleModeRow: View {
                         : .identity)
                 }
             } else {
-                if let thinking = parsed.thinking ?? (showCCThinking ? node.ccThinking : nil), !thinking.isEmpty {
+                // 搬运偏离（兔兔 2026-08-31 拍板）：聊天软件里看不到对面的腹稿——
+                // 思考链默认不进对话流，收进长按菜单「他当时在想…」（CardFlowView bubbleMenuSpecs）。
+                // 留 bubbleInlineThinking 逃生开关（默认关）想要粟粟原版随时打开。
+                if UserDefaults.standard.bool(forKey: "bubbleInlineThinking"),
+                   let thinking = parsed.thinking ?? (showCCThinking ? node.ccThinking : nil), !thinking.isEmpty {
                     ThinkingBubble(text: thinking, nodeId: node.id, profileId: node.profileId)
                 }
                 ForEach(shownBlocks.indices, id: \.self) { i in
