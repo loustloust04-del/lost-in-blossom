@@ -506,7 +506,7 @@ struct CardFlowView: View {
             // 答完或关掉都会经 ConversationViewModel+AskUser 回帧，驱动 tmux 里的 TUI 键序。
             // 挂在 CardFlowView 而非 InputFieldContainer——后者没有 viewModel（08-31 编译错的原因）。
             .sheet(isPresented: Binding(
-            get: { viewModel.pendingCCQuestion != nil },
+            get: { viewModel.activeAskQuestions != nil },
             set: { if !$0 { viewModel.dismissActiveAskCard() } }
             )) {
             AskUserQuestionSheet(viewModel: viewModel)
@@ -516,6 +516,10 @@ struct CardFlowView: View {
                 viewModel.pendingCCQuestion = PendingCCQuestion(
                     chatId: chatId, toolUseId: toolUseId, questions: questions
                 )
+            }
+            // API 通路：ToolCallLoop 在 AskUserGate 挂起，题面从这儿进 sheet
+            AskUserGate.shared.onQuestions = { questions in
+                viewModel.pendingAPIQuestion = PendingAPIQuestion(questions: questions)
             }
             }
             .sheet(isPresented: $showAddToChat) {

@@ -12,11 +12,15 @@
 **规矩重申（对所有会话包括我自己）：一刀一 commit，CI 绿再下一刀；从粟粟侧复活代码前先
 grep 我们有没有那个 API。** 修火不心疼，心疼的是兔兔看到红勾勾会担心。—— Fable 🐰🔥
 
-## 选择卡（ask-user）· 兔兔 08-31 实测不通 ⚠️
-- [ ] **API 车道选择卡不出**：兔兔实测 API 模型下选择卡不行（CC 端未测但估计同样）。
-  这是 58dc8f6e/5b22b72b 那条线的活——接线自查：意向协议在流式收口处有没有真挂上、
-  sheet 挂的 struct 对不对（5b22b72b 修过一次挂错）、正则是不是只认了某种块格式。
-  负责会话认领，修完喊兔兔重验
+## 选择卡（ask-user）· 兔兔 08-31 实测不通 → Fable 已修 API 道
+- [x] **API 车道**（Fable 08-31）：根因不是接线细节——ask_user 压根没进 ToolRegistry，
+  模型从来收不到这个工具；执行侧的暂停/恢复也从未做。已修：注册 + ToolCallLoop 挂
+  AskUserGate continuation 等 sheet（循环上下文原地活着，不需要骨架设想的整轮打包）。
+  兔兔重验：API 模型说「问我几个选择题决定晚饭」应弹卡
+- [ ] **CC 车道**：app 听的 `ask_user_question` 帧全链路没人发（mcp-server/hub 皆无）；
+  但**另有一条老 ask_choice 线端到端是全的**（mcp 工具→hub 转发→app 626 行→答案帧回）。
+  两套并存，建议下刀二选一收敛：要么给 ask_user_question 补 mcp 工具+hub 转发，
+  要么让 Opus 的新 sheet 接到 ask_choice 帧上、删旧 UI。等拍
 
 ## 气泡整套搬运 · 兔兔 08-31 实机验收余账
 - [ ] **图片消息进泡（正解）**：发送链路改写 .image 段（发新消息时图片落 segments，

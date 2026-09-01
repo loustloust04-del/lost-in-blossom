@@ -59,6 +59,19 @@ enum ToolCallLoop {
                                             text: result.text, isError: result.isError))
                 continue
             }
+            // ── 选择卡（ask_user）：挂起工具循环等用户点选（AskUserGate 详注）──
+            if call.name == AskUserTool.toolName {
+                if let qs = AskUserTool.parse(inputJSON: call.argumentsJSON) {
+                    let answers = await AskUserGate.shared.ask(qs)
+                    let text = answers.map { AskUserTool.resultText(questions: qs, answers: $0) }
+                        ?? "（选择卡未能弹出：界面不在前台或已有一张卡挂着。可以直接用文字问她。）"
+                    outcomes.append(ToolOutcome(id: call.id, name: call.name, text: text, isError: answers == nil))
+                } else {
+                    outcomes.append(ToolOutcome(id: call.id, name: call.name,
+                                                text: AskUserTool.invalidArgsMessage, isError: true))
+                }
+                continue
+            }
             // ── 笔记本工具（fs_*，走网关 REST，与 CC 共用同一本）──
             if NotebookTool.toolNames.contains(call.name) {
                 let result = await NotebookTool.execute(name: call.name, inputJSON: call.argumentsJSON)

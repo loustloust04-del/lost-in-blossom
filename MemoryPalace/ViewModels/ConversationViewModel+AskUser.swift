@@ -16,6 +16,18 @@ import SwiftUI
 // 但两条共用这一层，先立起来 API 侧才有地基接 CC。
 // MARK: - 挂起态
 
+/// API 选择卡：模型调 ask_user 工具，ToolCallLoop 挂起在 AskUserGate 等答案。
+/// 无恢复参数——循环上下文在挂起的 continuation 里原地活着（AskUserGate 详注）。
+struct PendingAPIQuestion {
+    let questions: [AskUserTool.ParsedQuestion]
+    var collectedAnswers: [AskUserTool.AnswerValue?]
+
+    init(questions: [AskUserTool.ParsedQuestion]) {
+        self.questions = questions
+        self.collectedAnswers = Array(repeating: nil, count: questions.count)
+    }
+}
+
 /// CC 桥选择卡：hub 推来的 AskUserQuestion 题面。
 /// 无恢复参数——CC 那头自己在 tmux 里等按键，我们只负责把选中的下标送回去。
 struct PendingCCQuestion {
@@ -37,13 +49,17 @@ extension ConversationViewModel {
 
     /// sheet 的统一题面源。API 优先——两边同时挂起时 API 卡先出，CC 卡排队等它收。
     var activeAskQuestions: [AskUserTool.ParsedQuestion]? {
-        // API 通路接进来后，这里改成 pendingUserQuestion 优先、CC 排队等它收
-        pendingCCQuestion?.questions
+        pendingAPIQuestion?.questions ?? pendingCCQuestion?.questions
     }
 
     /// sheet 记录单题答案。index 跨题面平铺按序对齐。
     @MainActor
     func recordUserAnswer(_ answer: AskUserTool.AnswerValue?, at index: Int) {
+        if pendingAPIQuestion != nil {
+            guard pendingAPIQuestion?.collectedAnswers.indices.contains(index) == true else { return }
+            pendingAPIQuestion?.collectedAnswers[index] = answer
+            return
+        }
         guard pendingCCQuestion?.collectedAnswers.indices.contains(index) == true else { return }
         pendingCCQuestion?.collectedAnswers[index] = answer
     }
@@ -51,6 +67,14 @@ extension ConversationViewModel {
     /// 全部答完的出口：答案帧回 hub → 驱动 tmux TUI 键序。
     @MainActor
     func completeActiveAskCard() {
+        if let api = pendingAPIQuestion {
+            pendingAPIQuestion = nil
+            let answers = zip(api.questions, api.collectedAnswers).map { q, v in
+                v?.displayString(options: q.options)
+            }
+            AskUserGate.shared.resolve(answers)
+            return
+        }
         guard let cc = pendingCCQuestion else { return }
         pendingCCQuestion = nil
         // 用下标而非文本——CC 那头是方向键+回车选的，要的是位置不是内容。
@@ -69,13 +93,24 @@ extension ConversationViewModel {
     /// 必须回这一帧，否则 tmux 那头会一直等按键。
     @MainActor
     func dismissActiveAskCard() {
+        if let api = pendingAPIQuestion {
+            // API 侧语义（方案 a）：已答的保留、没答的按跳过回灌
+            pendingAPIQuestion = nil
+            let answers = zip(api.questions, api.collectedAnswers).map { q, v in
+                v?.displayString(options: q.options)
+            }
+            AskUserGate.shared.resolve(answers)
+            return
+        }
         guard let cc = pendingCCQuestion else { return }
         pendingCCQuestion = nil
         CCBridgeWebSocketClient.shared.sendAskUserAnswer(toolUseId: cc.toolUseId, answers: nil, skip: true)
     }
 }
 
-// TODO(ask-user API 侧)：API 通路的暂停/恢复。
+// （2026-08-31 API 通路已接：ToolCallLoop 认出 ask_user → AskUserGate 挂起 continuation
+// 等 sheet 答案——循环上下文原地活着，不需要下面设想的整轮恢复参数打包。TODO 留档：）
+// 原 TODO(ask-user API 侧)：API 通路的暂停/恢复。
 // 需要在 provider 的工具循环里认出 ask_user 调用后中断本轮，
 // 把整轮恢复参数打包进 PendingUserQuestion（messages/systemPrompt/sampling/
 // assistantNode/preset/toolTurns/round/calls/otherResults...），

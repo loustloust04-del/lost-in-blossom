@@ -31,6 +31,8 @@ enum ToolRegistry {
             Entry(definition: BrowseURLTool.definition, enabledIf: { ctx in
                 ctx.family == .openAI && WebSearchSettings.isSearchEnabledFlag
             }),
+            // 选择卡：两家模型都给（执行在 ToolCallLoop 挂起等用户点选）
+            Entry(definition: AskUserTool.definition, enabledIf: { _ in true }),
         ] + NotebookTool.definitions.map { def in
             // 笔记本 fs_* 工具：两家模型都给，网关 token 配好就开
             Entry(definition: def, enabledIf: { _ in NotebookTool.isConfigured })
