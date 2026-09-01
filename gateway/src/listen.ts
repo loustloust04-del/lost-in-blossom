@@ -64,6 +64,12 @@ export function listenRoutes(app: Hono) {
     if (c.req.query('key') !== KEY) return c.json({ error: 'unauthorized' }, 401);
     const s = load();
     if (s) { s.active = false; save(s); }
+    // 散场收尾（播放器优化②的另一半）：邀请有开场白，结束不该是静默——给他一个说收尾话的机会
+    if (s?.active !== undefined && s?.startedAt) {
+      const mins = Math.max(1, Math.round((Date.now() - new Date(s.startedAt).getTime()) / 60000));
+      const { pushLiveline } = await import('./liveline');
+      pushLiveline('listen_end', `这场共听结束了，一共陪她听了约 ${mins} 分钟。她摘下了耳机。`);
+    }
     console.log('[listen] 共听结束');
     return c.json({ ok: true });
   });

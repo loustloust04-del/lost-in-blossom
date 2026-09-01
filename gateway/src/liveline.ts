@@ -15,6 +15,8 @@ const THROTTLE: Record<string, number> = {
   // 一起听邀请：显式动作，被节流吞掉=她按了没人来（09-02 实测：Fable 的测试邀请
   // 把 5min 默认窗占了，兔兔紧接着的真邀请被静默吞）。30s 只防连点。
   listen_invite: 30_000,
+  listen_end: 30_000,     // 散场收尾：同 30s 防连点
+  music_loop: 30 * 60_000, // 单曲循环心情信号：一首歌一场只该来一次，app 侧已控，这里兜底
   meds: 0,          // 吃药：每次都值得知道
   water: 10 * 60_000,
   food: 0,

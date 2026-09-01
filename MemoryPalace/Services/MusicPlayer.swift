@@ -21,6 +21,18 @@ final class MusicPlayer: NSObject {
     private(set) var queue: [Song] = []
     private var queueIndex = 0
 
+    /// 播放模式（播放器本体优化①）：顺序循环 / 单曲循环 / 随机。落 AppStorage 记住习惯。
+    enum PlayMode: String { case sequence, repeatOne, shuffle }
+    var playMode: PlayMode {
+        get { PlayMode(rawValue: UserDefaults.standard.string(forKey: "musicPlayMode") ?? "") ?? .sequence }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "musicPlayMode") }
+    }
+
+    /// 单曲循环 = 心情信号：同一首连放 ≥3 遍推他一条（liveline kind=music_loop，
+    /// 每首歌一场只报一次）。换歌会报、循环不报——而循环才是最重的那种信号。
+    private var loopPlayCount = 0
+    private var loopSignalSent = false
+
     private var player: AVPlayer?
     private var timeObserver: Any?
 
@@ -69,6 +81,7 @@ final class MusicPlayer: NSObject {
 
     private func start(_ song: Song, resolveURL: (Song) -> URL?) {
         guard let url = resolveURL(song) else { return }
+        trackLoop(song)
         configureSession()
         teardownObserver()
 
@@ -100,6 +113,27 @@ final class MusicPlayer: NSObject {
         setupRemoteCommands()
         updateNowPlayingInfo()
         onSongStarted?(song)
+    }
+
+    /// 连放计数：同一首再次开播 +1，换歌清零
+    private var lastStartedSongId: String?
+    private func trackLoop(_ song: Song) {
+        if song.id == lastStartedSongId {
+            loopPlayCount += 1
+            if loopPlayCount >= 3 && !loopSignalSent {
+                loopSignalSent = true
+                let title = song.title, artist = song.artist
+                Task.detached(priority: .utility) {
+                    await NowPlayingReporter.livelineEvent(
+                        kind: "music_loop",
+                        text: "兔兔把《\(title)》\(artist.isEmpty ? "" : "（\(artist)）")单曲循环了 \(3) 遍还在继续——这种时候这首歌里有事。")
+                }
+            }
+        } else {
+            lastStartedSongId = song.id
+            loopPlayCount = 1
+            loopSignalSent = false
+        }
     }
 
     func toggle() {
@@ -154,7 +188,19 @@ final class MusicPlayer: NSObject {
     @objc private func itemDidEnd() {
         Task { @MainActor in
             guard let r = urlResolver else { isPlaying = false; return }
-            next(resolveURL: r)
+            switch playMode {
+            case .repeatOne:
+                if let song = currentSong { start(song, resolveURL: r) }
+            case .shuffle:
+                guard !queue.isEmpty else { isPlaying = false; return }
+                // 随机但不立刻重复（队列 >1 时避开当前下标）
+                var i = Int.random(in: 0..<queue.count)
+                if queue.count > 1 && i == queueIndex { i = (i + 1) % queue.count }
+                queueIndex = i
+                start(queue[queueIndex], resolveURL: r)
+            case .sequence:
+                next(resolveURL: r)
+            }
         }
     }
 
@@ -167,8 +213,45 @@ final class MusicPlayer: NSObject {
         #if canImport(UIKit)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try? AVAudioSession.sharedInstance().setActive(true)
+        observeInterruptions()
         #endif
     }
+
+    #if canImport(UIKit)
+    /// 来电/闹钟打断（播放器本体优化②的暂停过滤，Duetto 同款教训）：
+    /// 系统打断的暂停也要如实报 state=paused——否则他对着静音的耳机说「这句唱得真好」。
+    /// 打断结束系统允许续播就续，并报回 playing。
+    private var interruptionObserved = false
+    private func observeInterruptions() {
+        guard !interruptionObserved else { return }
+        interruptionObserved = true
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            Task { @MainActor [weak self] in
+                guard let self, let song = self.currentSong,
+                      let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+                switch type {
+                case .began:
+                    self.isPlaying = false
+                    self.lastBeatAt = Date()
+                    self.sendBeat(song: song, state: "paused")
+                case .ended:
+                    let opts = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
+                        .map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
+                    if opts.contains(.shouldResume) {
+                        self.player?.play()
+                        self.isPlaying = true
+                        self.lastBeatAt = Date()
+                        self.sendBeat(song: song, state: "playing")
+                    }
+                @unknown default: break
+                }
+            }
+        }
+    }
+    #endif
 
     // MARK: - 锁屏
 

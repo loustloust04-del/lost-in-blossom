@@ -147,6 +147,18 @@ struct MusicPanelView: View {
                     player.next { MusicPanelView.resolve($0, profileId: pid) }
                 } label: { Image(systemName: "forward.fill") }
                 Button { showLyrics = true } label: { Image(systemName: "text.quote") }
+                // 播放模式：顺序循环 → 单曲循环 → 随机（点按轮换；单曲循环连放≥3遍会推心情信号）
+                Button {
+                    switch player.playMode {
+                    case .sequence:  player.playMode = .repeatOne
+                    case .repeatOne: player.playMode = .shuffle
+                    case .shuffle:   player.playMode = .sequence
+                    }
+                } label: {
+                    Image(systemName: player.playMode == .repeatOne ? "repeat.1"
+                          : player.playMode == .shuffle ? "shuffle" : "repeat")
+                        .foregroundColor(player.playMode == .sequence ? ConsoleView.greenDeep : ConsoleView.green)
+                }
                 // T2 叫他一起听：邀请这个动作本身有仪式感（plan-listen-together-v2 D2）。
                 // 亮 = 共听中（心跳替你续命，切歌不断场；停播 5min 网关侧自动过期）
                 Button {
@@ -292,6 +304,23 @@ struct LyricsSheet: View {
         let mainChat = UserDefaults.standard.string(forKey: "lastCCChatId")
         CCBridgeWebSocketClient.shared.sendChat(
             chatId: mainChat ?? "music-\(s.id)", messageId: UUID().uuidString, content: payload) { _ in }
+    }
+}
+
+extension NowPlayingReporter {
+    /// liveline 事件直投（单曲循环等心情信号用；节流在网关侧按 kind 管）
+    static func livelineEvent(kind: String, text: String) async {
+        let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
+        guard let url = URL(string: "\(base)/api/liveline") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let tk = UserDefaults.standard.string(forKey: "gatewayAuthToken"), !tk.isEmpty {
+            req.setValue("Bearer \(tk)", forHTTPHeaderField: "Authorization")
+        }
+        req.timeoutInterval = 6
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["kind": kind, "text": text])
+        _ = try? await URLSession.shared.data(for: req)
     }
 }
 
