@@ -42,6 +42,8 @@ final class CCBridgeProvider: BaseChatProvider {
         //    UUID fallback 不会丢消息：我们把同一 id 写进 payload 发给 hub，CC 回复时
         //    带回这个 id，handler 仍能命中。只是这条对话跟 MP 的 MessageNode 失联。
         let chatId    = extraHeaders["X-MP-ChatId"]    ?? UUID().uuidString
+        // T3（一起听）：记住主对话的 chat_id，歌词「指着这句跟他说」直达主对话
+        UserDefaults.standard.set(chatId, forKey: "lastCCChatId")
         let messageId = extraHeaders["X-MP-MessageId"] ?? UUID().uuidString
         let user      = extraHeaders["X-MP-User"]      ?? "bunny"
         // L2：可选 tmux session（nil = hub 端 fallback 默认 mp-cc）
