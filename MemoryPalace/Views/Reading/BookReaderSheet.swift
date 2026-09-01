@@ -1170,7 +1170,7 @@ struct BookReaderSheet: View {
     /// 把选段当作 quote 注入楼层主对话；小克回复时 vm 的 sendMessage 路径自然走流式。
     /// 用户消息的 MessageNode 上盖 bookRef，主对话里能看到 "📖 书名·第N章" tag。
     /// 同时 notes.json 写一条 kind=aiBubble 占位锚点（content 暂为空，等 vm 写回填）。
-    问 AI：真身依赖 startDraftConversation/resolveModel/BookChatDrawer，
+    // 问 AI：真身依赖 startDraftConversation/resolveModel/BookChatDrawer，
     // 均属共读系统。入口（toolbar 按钮 + edit menu 条目）已注释，本函数为编译占位。
     private func askXiaoke(_ range: SelectedRange) {
         selectedRange = nil
