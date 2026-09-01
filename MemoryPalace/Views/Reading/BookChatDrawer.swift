@@ -144,14 +144,14 @@ struct BookChatDrawer: View {
               let pm = providerManager,
               let psm = presetManager else { return }
 
-        if viewModel.selectedConversation == nil {
-            viewModel.startDraftConversation(profileId: prof.id)
-        }
+        // 适配我们的 API（b8e531bd 从粟粟侧复活的这段用的是她的
+        // startDraftConversation/resolveModel，我们没有）：抽屉发言落当前选中的主对话；
+        // 没有选中对话就先不发（主 app 实际使用中恒有选中会话）。
+        guard let conversation = viewModel.selectedConversation else { return }
 
-        let model = pm.resolveModel(
-            conversationModelId: viewModel.selectedConversation?.selectedModelId,
-            globalFallbackId: nil
-        )
+        let model = pm.model(byId: conversation.selectedModelId)
+            ?? pm.availableModels.first
+            ?? ProviderModel(providerId: "openrouter", modelId: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4")
         let preset = psm.preset(byId: prof.presetId) ?? .balanced
         let bookRef = "\(bookSafeName)#chapter\(currentChapter)"
 
