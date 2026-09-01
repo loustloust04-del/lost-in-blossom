@@ -475,7 +475,7 @@ extension ConversationViewModel {
             let queued = pendingCCMessages
             pendingCCMessages.removeAll()
             for item in queued where item.chatId == conversation.id {
-                appendCCMessage(chatId: item.chatId, content: item.content, context: context)
+                appendCCMessage(chatId: item.chatId, content: item.content, contentType: item.contentType, context: context)
             }
         }
         refreshBranchOffMainCount()

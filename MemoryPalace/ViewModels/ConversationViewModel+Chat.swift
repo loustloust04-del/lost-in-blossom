@@ -895,7 +895,11 @@ extension ConversationViewModel {
                 ]
                 if let json = try? JSONSerialization.data(withJSONObject: blocks),
                    let jsonStr = String(data: json, encoding: .utf8) {
-                    self.appendCCMessage(chatId: chatId, content: jsonStr, context: context)
+                    // 兔兔 08-31 实测「他发的图显示成一大串字母」的真凶：这里插的是
+                    // multimodal JSON，contentType 却写死 "text" → 渲染层不解包，
+                    // 整段 base64 当正文糊脸。标成 multimodal_text 走 MultimodalUserBubble。
+                    self.appendCCMessage(chatId: chatId, content: jsonStr,
+                                         contentType: "multimodal_text", context: context)
                 }
             } else {
                 // 非图片文件：标注文件名
@@ -934,7 +938,7 @@ extension ConversationViewModel {
     /// 把一条 CC 消息作为独立 assistant 节点插入对应对话。
     /// 当前打开的对话 → 同步更新 currentPath/nodeMap，UI 直接长出新气泡；
     /// 其他对话 → 直接持久化，下次打开可见。
-    func appendCCMessage(chatId: String, content: String, context: ModelContext) {
+    func appendCCMessage(chatId: String, content: String, contentType: String = "text", context: ModelContext) {
         if let conversation = selectedConversation, conversation.id == chatId {
             // ⚠️ 兔兔实测「聊天记录被整个吞掉」的真凶：
             // App 从后台回来时 currentPath 可能还没重建完（空的），这时他的消息一到，
@@ -951,7 +955,7 @@ extension ConversationViewModel {
             // 有历史（存过 currentNodeId）却仍拿不到 parent → 状态没准备好，排队等路径重建，
             // 绝不在空路径上造新根（那会让整条历史被绕过）
             if parentId == nil, !savedNodeId.isEmpty {
-                pendingCCMessages.append((chatId: chatId, content: content))
+                pendingCCMessages.append((chatId: chatId, content: content, contentType: contentType))
                 return
             }
             let nodeId = UUID().uuidString
@@ -959,7 +963,7 @@ extension ConversationViewModel {
                 id: nodeId,
                 role: "assistant",
                 content: content,
-                contentType: "text",
+                contentType: contentType,
                 createTime: Date(),
                 parentId: parentId,
                 childrenIds: [],

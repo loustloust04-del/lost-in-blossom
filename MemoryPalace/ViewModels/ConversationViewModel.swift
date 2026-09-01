@@ -27,7 +27,7 @@ final class ConversationViewModel {
     /// CC 消息来得比路径重建快时的待插队列。
     /// 不排队直接插的话，parentId=nil 会让这条消息成为新根，整条历史被绕过
     /// ——兔兔实测「聊天记录被整个吞掉」就是这么来的。loadConversation 完成后消费。
-    var pendingCCMessages: [(chatId: String, content: String)] = []
+    var pendingCCMessages: [(chatId: String, content: String, contentType: String)] = []
 
     /// 渲染窗口：只画尾部这么多条，往上滑再扩。
     /// 此前 ForEach 直接吃整条 currentPath——聊到上千条时每条都要参与布局与几何测量，
