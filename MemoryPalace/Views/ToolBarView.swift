@@ -9,6 +9,12 @@ struct ToolBarView: View {
 
     @State private var showDrawer = false
     @State private var draggingToolId: String? = nil
+    /// 胶囊视觉位（selectedToolId 的镜像）。
+    /// 08-29 ddaeecf9 把弹簧挂回 .animation(value:) 后兔兔实机仍看不到过渡——
+    /// 右滑页每次切工具 panelContent 整棵换枝，隐式动画在这种结构变动下被吞。
+    /// 改法：真选中即时赋值（面板立刻切，保住 08-12 的修复），胶囊视觉走本地镜像态，
+    /// onChange 里用显式 withAnimation 驱动——显式事务不怕父级换枝。
+    @State private var capsuleId: String = ""
 
     private var pinnedTools: [RightPanelTool] {
         toolManager?.pinnedTools ?? []
@@ -31,7 +37,7 @@ struct ToolBarView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
             ForEach(pinnedTools) { tool in
-                let isSelected = tool.id == selectedToolId
+                let isSelected = tool.id == (capsuleId.isEmpty ? selectedToolId : capsuleId)
                 Button {
                     // 先无动画置位（内容立刻切过去），样式变化交给短动画——
                     // 否则要等整条弹簧跑完才看到新页面
@@ -57,7 +63,6 @@ struct ToolBarView: View {
                             .fill(Theme.branchIndicator.opacity(isSelected ? 0.14 : 0))
                     )
                     .opacity(draggingToolId == tool.id ? 0.3 : 1)
-                    .animation(switchAnim, value: isSelected)
                 }
                 .buttonStyle(.plain)
                 .onDrag {
@@ -101,11 +106,9 @@ struct ToolBarView: View {
             .buttonStyle(.plain)
 
             // 🏠 桌面键：HStack 内、ScrollView 外最右，固定不可拖不可删（对齐粟粟布局）
-            let isHomeSelected = (selectedToolId == "home")
+            let isHomeSelected = ((capsuleId.isEmpty ? selectedToolId : capsuleId) == "home")
             Button {
-                withAnimation(springAnim) {
-                    selectedToolId = "home"
-                }
+                selectedToolId = "home"
             } label: {
                 Image(systemName: "house")
                     .font(.system(size: 14, weight: .medium))
@@ -120,7 +123,10 @@ struct ToolBarView: View {
             .buttonStyle(.plain)
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
-        .animation(springAnim, value: selectedToolId)
+        .onAppear { capsuleId = selectedToolId }
+        .onChange(of: selectedToolId) { _, new in
+            withAnimation(switchAnim) { capsuleId = new }
+        }
         .padding(4)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
         .padding(.horizontal, 12)
