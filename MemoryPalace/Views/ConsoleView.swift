@@ -34,6 +34,8 @@ struct ConsoleView: View {
     @State private var showMemoBoard: Bool = false
     @State private var anniversaries: [AnniversaryClient.Item] = []
     @State private var showAnniversaries: Bool = false
+    @State private var murmurs: [MurmurClient.Item] = []
+    @State private var showMurmurs: Bool = false
     @State private var latestTweets: [TweetsClient.Tweet] = []
     @State private var showTweets: Bool = false
     @State private var showAddTodo: Bool = false
@@ -76,6 +78,7 @@ struct ConsoleView: View {
             }
             loadVitals()
             anniversaries = await AnniversaryClient.fetch()
+            murmurs = await MurmurClient.fetch()
             latestTweets = await TweetsClient.fetch(limit: 40)
             latestBoardPost = await BoardClient.fetch().last
             medsData = await MedsClient.fetch()
@@ -120,6 +123,7 @@ struct ConsoleView: View {
             Task { anniversaries = await AnniversaryClient.fetch() }
         }) { AnniversaryManageSheet() }
         .sheet(isPresented: $showTweets) { TweetsFeedSheet() }
+        .sheet(isPresented: $showMurmurs) { MurmurFeedSheet(items: murmurs) }
         .sheet(isPresented: $showPeriod, onDismiss: {
             Task { if let snap = await PeriodClient.fetch() { periodPred = snap.prediction } }
         }) { PeriodSheet() }
@@ -179,6 +183,7 @@ struct ConsoleView: View {
             todoWidget
             screenWide
             sectionLabel("WITH YOU")
+            murmurWidget
             anniversaryWidget
             worldWidget
             caelumWidget
@@ -477,6 +482,29 @@ struct ConsoleView: View {
         }
     }
 
+    // MARK: - 他的心里话（murmur）wide
+
+    private var murmurWidget: some View {
+        wideWidget {
+            HStack(spacing: 13) {
+                Image(systemName: "moon.stars").font(.system(size: 20, weight: .regular)).foregroundColor(Self.green)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("MURMUR").font(.system(size: 11.5, weight: .medium)).tracking(1).foregroundColor(Self.textSub)
+                    if let m = murmurs.first {
+                        Text(m.content).font(.system(size: 14)).foregroundColor(Self.textPrimary).lineLimit(2)
+                    } else {
+                        Text("他每天清晨和午后各写一条心里话，还没到点")
+                            .font(.system(size: 12.5)).foregroundColor(Self.textFaint)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Self.textFaint)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { showMurmurs = true }
+    }
+
     // MARK: - 给世界的（Twitter MCP）wide
 
     private var worldWidget: some View {
@@ -726,5 +754,67 @@ private extension Font {
             ]]
         ])
         return Font(UIFont(descriptor: desc, size: size))
+    }
+}
+
+// MARK: - 他的心里话列表
+
+/// murmur 时间线：正文为主，长按一条看他写正文前的思考（同「他当时在想…」的口径——
+/// 心里话本身已经是私密的了，思考再收一层）。
+struct MurmurFeedSheet: View {
+    let items: [MurmurClient.Item]
+    @Environment(\.dismiss) private var dismiss
+    @State private var thinkingText: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if items.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "moon.zzz").font(.system(size: 28)).foregroundColor(ConsoleView.textFaint)
+                        Text("还没有心里话——他每天 4:00 和 14:00 各写一条")
+                            .font(.system(size: 13)).foregroundColor(ConsoleView.textFaint)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ForEach(items) { m in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    if let d = m.createdDate {
+                                        Text(d.formatted(.dateTime.month().day().hour().minute()))
+                                            .font(.system(size: 11)).foregroundColor(ConsoleView.textFaint)
+                                    }
+                                    Text(m.content)
+                                        .font(.system(size: 15))
+                                        .foregroundColor(ConsoleView.textPrimary)
+                                        .textSelection(.enabled)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(ConsoleView.card))
+                                .contextMenu {
+                                    if let t = m.thinking, !t.isEmpty {
+                                        Button { thinkingText = t } label: {
+                                            Label("他写这句之前在想…", systemImage: "cloud")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(16)
+                    }
+                }
+            }
+            .background(ConsoleView.pageBg.ignoresSafeArea())
+            .navigationTitle("他的心里话")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            .sheet(isPresented: Binding(get: { thinkingText != nil }, set: { if !$0 { thinkingText = nil } })) {
+                if let t = thinkingText {
+                    ThinkingSheet(text: t)
+                }
+            }
+        }
     }
 }
