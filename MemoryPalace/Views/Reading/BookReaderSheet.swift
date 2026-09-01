@@ -292,17 +292,23 @@ struct BookReaderSheet: View {
             highlightedNoteId = nil
             directHighlightMessageId = nil
         }) {
-            BookChatDrawer(
-                bookSafeName: bookSafeName,
-                bookDisplayName: index?.name ?? bookSafeName,
-                currentChapter: currentChapter,
-                viewModel: viewModel,
-                highlightMessageId: directHighlightMessageId ?? messageIdForHighlightedNote()
-            )
-            #if os(iOS)
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            #endif
+            // 真凶（连环 ambiguous 的源头）：本视图的 viewModel 是 Optional
+            // （@Environment(ConversationViewModel.self) var viewModel: ConversationViewModel?），
+            // BookChatDrawer 的 @Bindable 要非可选。类型错发生在这个 sheet builder 里，
+            // Swift 却把诊断劣化成 toolbar 那句 ambiguous——红鲱鱼追了三刀。
+            if let vm = viewModel {
+                BookChatDrawer(
+                    bookSafeName: bookSafeName,
+                    bookDisplayName: index?.name ?? bookSafeName,
+                    currentChapter: currentChapter,
+                    viewModel: vm,
+                    highlightMessageId: directHighlightMessageId ?? messageIdForHighlightedNote()
+                )
+                #if os(iOS)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                #endif
+            }
         }
     }
 
