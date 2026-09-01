@@ -35,3 +35,4 @@ chatroom/*.db
 cc-bridge/cc-bridge/offline/
 cc-bridge/inbound/
 cc-bridge/proactive-state.json
+cc-bridge/offline/
