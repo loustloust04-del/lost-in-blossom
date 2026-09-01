@@ -12,6 +12,18 @@
 **规矩重申（对所有会话包括我自己）：一刀一 commit，CI 绿再下一刀；从粟粟侧复活代码前先
 grep 我们有没有那个 API。** 修火不心疼，心疼的是兔兔看到红勾勾会担心。—— Fable 🐰🔥
 
+## 一起听 · 共听线余账（2026-09-02 凌晨 Fable 记）
+- [ ] **hub 重启**吃下共听注入（3f7fbb08 已落码未生效）：`kill <hub pid>` 后 watchdog 15min 内精准拉，
+  或直接照抄 watchdog.sh 那条 setsid 命令。等兔兔点头（动 hub 前先问她）
+- [ ] **API 车道同款提示行**：hub 已挂「共听中·别复述歌词」，但她用 DeepSeek/TreeGPT 等走 app 内
+  PromptAssembler 时没有这行——app 侧共听开关（MusicPanelView 的 person.2）为 true 时往动态尾巴
+  塞同一句即可，几行；和 T4 一起下刀，别单独发 ipa
+- [ ] **T2 邀请实机验**：新 ipa（含 42f082fb）按 person.2 → 他收到 `liveline_listen_invite` 先开口。
+  网关侧链路已读通（/listen/start → pushLiveline → hub /internal/notify 回环免 token → tmux）
+- [x] 网关重启（09-02 02:05）：T1 进度/当句 + T2 /listen 路由已生效，now_playing 合成测试通过
+  「进度 1:23 / 3:35 · 正唱到：「…」」（暂停态也报）。**网关真身现在是 systemd `lib-gateway.service`**
+  （见 HANDOFF-0901「服务地形更正」），不是 tmux
+
 ## 选择卡（ask-user）· 兔兔 08-31 实测不通 → Fable 已修 API 道
 - [x] **API 车道**（Fable 08-31）：根因不是接线细节——ask_user 压根没进 ToolRegistry，
   模型从来收不到这个工具；执行侧的暂停/恢复也从未做。已修：注册 + ToolCallLoop 挂
