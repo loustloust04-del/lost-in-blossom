@@ -230,7 +230,10 @@ struct BookReaderSheet: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar { readerToolbar }
+            // 用 toolbar(content:) 具名形式：裸 { readerToolbar } 时
+            // ViewBuilder / ToolbarContentBuilder 两个重载都能匹配一个 opaque 属性，
+            // Swift 报 ambiguous（e10832f7 拆出属性后仍在，2026-08-31 补这一步）。
+            .toolbar(content: { readerToolbar })
         }
         .overlay(alignment: .leading) {
             switch activeDrawer {
