@@ -118,6 +118,15 @@ export const NOWPLAYING_TOOLS = [
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
+    name: 'music_play',
+    description: '放一首歌给她听（T6 DJ）：按「歌名 歌手」搜索并直接在她手机的播放器里播放。她让你放歌、或你想用一首歌接住此刻的气氛时用。App 在线才放得出去；结果会如实告诉你有没有送达。放之前或之后用 reply 跟她说一句为什么是这首——别静默换歌。',
+    input_schema: {
+      type: 'object' as const,
+      properties: { query: { type: 'string' as const, description: '歌名 + 歌手，例：束花线 洛天依' } },
+      required: ['query'],
+    },
+  },
+  {
     name: 'song_lyrics',
     description: '看她正在听的这首歌的完整歌词（含翻译，如有）。now_playing 只给「正唱到的那句」；想通读整首、接住上下文时用这个。共听时她聊到歌词、或你想懂这首歌在唱什么，就调它。',
     input_schema: { type: 'object' as const, properties: {} },
@@ -147,10 +156,35 @@ ${lrc}`;
   }
 }
 
-export async function callNowPlayingTool(name: string): Promise<string | null> {
+export async function callNowPlayingTool(name: string, input?: any): Promise<string | null> {
   if (name === 'now_playing') return describeNowPlaying();
   if (name === 'song_lyrics') return describeFullLyrics();
+  if (name === 'music_play') return playForHer(String(input?.query || ''));
   return null;
+}
+
+/// T6 DJ：搜到第一条命中 → 经 hub 推送到 App 播放（eryu Remote Play 形状，实现自写）
+async function playForHer(query: string): Promise<string> {
+  if (!query.trim()) return '要放什么？给我「歌名 歌手」。';
+  try {
+    const { searchFirstSong } = await import('./music');
+    const hit = await searchFirstSong(query.trim());
+    if (!hit) return `没搜到「${query}」——换个写法试试（歌名 + 歌手最稳）。`;
+    const notifyUrl = process.env.MP_CC_HUB_NOTIFY_URL || 'http://127.0.0.1:7890/internal/notify';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const tk = process.env.MP_CC_HUB_TOKEN || '';
+    if (tk) headers['Authorization'] = 'Bearer ' + tk;
+    const r = await fetch(notifyUrl, {
+      method: 'POST', headers,
+      body: JSON.stringify({ type: 'music_command', action: 'play', songId: String(hit.id), title: hit.title, artist: hit.artist }),
+      signal: AbortSignal.timeout(3000),
+    });
+    const j: any = await r.json().catch(() => ({}));
+    if (j?.delivered > 0) return `放出去了：《${hit.title}》- ${hit.artist}，她手机上已经开始播了。`;
+    return `搜到了《${hit.title}》- ${hit.artist}，但她的 App 这会儿不在线，没送出去。`;
+  } catch (e: any) {
+    return `放歌链路出错（${e?.message || 'unknown'}）。`;
+  }
 }
 
 /// T4 聊天挂账：共听期间她说的话挂到「正在放的这首」的滚动记忆（不动播放计数）。

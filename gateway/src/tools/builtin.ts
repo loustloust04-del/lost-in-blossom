@@ -185,7 +185,7 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (vitalsResult !== null) return vitalsResult;
   const phoneResult = await callPhoneStatusTool(name, input);
   if (phoneResult !== null) return phoneResult;
-  const musicResult = await callNowPlayingTool(name);
+  const musicResult = await callNowPlayingTool(name, input);
   if (musicResult !== null) return musicResult;
   const intimacyResult = await callIntimacyTool(name, input);
   if (intimacyResult !== null) return intimacyResult;

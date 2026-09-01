@@ -613,6 +613,24 @@ function requestChapter(m: any): number {
   return n
 }
 
+/// T6 DJ：他放歌 → 广播给 App 播放（字段重建，不透传外来 JSON）
+function broadcastMusicCommand(m: any): number {
+  const payload = JSON.stringify({
+    type: "music_command",
+    action: String(m.action ?? "play").slice(0, 16),
+    songId: String(m.songId ?? "").slice(0, 32),
+    title: String(m.title ?? "").slice(0, 200),
+    artist: String(m.artist ?? "").slice(0, 200),
+  })
+  let count = 0
+  for (const app of appClients) {
+    if (app.readyState === WebSocket.OPEN) {
+      try { app.send(payload); count++ } catch { /* dead */ }
+    }
+  }
+  return count
+}
+
 /// Caelum 递来的书页批注 → 广播给 App（阅读器里展示）
 function broadcastBookNote(m: any): number {
   const payload = JSON.stringify({
@@ -671,6 +689,9 @@ export function startHub(): WebSocketServer {
           if (m?.type === "notebook_changed") {
             n = broadcastNotebookChanged(String(m.path ?? "").slice(0, 512), String(m.op ?? "write").slice(0, 32))
             console.log(`[hub] notebook_changed ${m.op} ${String(m.path ?? "").slice(0, 60)} → ${n}/${appClients.size} App`)
+          } else if (m?.type === "music_command") {
+            n = broadcastMusicCommand(m)
+            console.log(`[hub] music_command ${m.action ?? "play"} 《${String(m.title ?? "").slice(0, 40)}》 → ${n}/${appClients.size} App`)
           } else if (m?.type === "phone_event") {
             // 手机事件（充电开始等）→ 注入 CC 一条 phone 频道消息；CC 自行决定要不要用 reply 跟用户说
             const text = String(m.text ?? "").slice(0, 300)

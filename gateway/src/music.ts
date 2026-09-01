@@ -20,6 +20,18 @@ async function ncm(path: string, params: Record<string, string | number> = {}): 
   return r.json();
 }
 
+/// music_play 工具用：搜网易云取第一条命中（id/歌名/歌手）
+export async function searchFirstSong(query: string): Promise<{ id: number; title: string; artist: string } | null> {
+  const d = await ncm('/search', { keywords: query, limit: 1 });
+  const hit = d?.result?.songs?.[0];
+  if (!hit?.id) return null;
+  return {
+    id: hit.id,
+    title: String(hit.name || ''),
+    artist: (hit.artists || hit.ar || []).map((a: any) => a.name).filter(Boolean).join(' / '),
+  };
+}
+
 /// song_lyrics 工具用：按「歌名 歌手」搜网易云取第一条命中的 LRC（去时间戳留纯词，保留翻译）
 export async function fetchLyricsBySearch(title: string, artist?: string): Promise<string | null> {
   const q = artist ? `${title} ${artist.split('/')[0].trim()}` : title;
