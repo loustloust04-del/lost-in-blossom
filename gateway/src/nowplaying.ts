@@ -153,6 +153,28 @@ export async function callNowPlayingTool(name: string): Promise<string | null> {
   return null;
 }
 
+/// T4 聊天挂账：共听期间她说的话挂到「正在放的这首」的滚动记忆（不动播放计数）。
+/// 90s 节流防刷屏；notes 滚动上限沿用 6 条。
+let lastNoteAt = 0;
+export function appendListeningNote(text: string): boolean {
+  const now = load<NowPlaying | null>(NOW_PATH, null);
+  if (!now?.title) return false;
+  if (Date.now() - lastNoteAt < 90_000) return false;
+  const t = text.trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (t.length < 4) return false;
+  lastNoteAt = Date.now();
+  const key = now.artist ? `${now.title} - ${now.artist}` : now.title;
+  const hist = load<Record<string, SongMemory>>(HIST_PATH, {});
+  const mem = hist[key];
+  if (!mem) return false;
+  mem.notes.push(`${new Date().toISOString().slice(0, 10)} 共听时她说：${t}`);
+  if (mem.notes.length > 6) mem.notes = mem.notes.slice(-6);
+  hist[key] = mem;
+  save(HIST_PATH, hist);
+  console.log(`[music] 📝 挂账 → ${key}: ${t.slice(0, 30)}`);
+  return true;
+}
+
 export function nowPlayingRoutes(app: Hono) {
   // 快捷指令上报：POST /now-playing?key=...  { title, artist?, album?, note? }
   app.post('/now-playing', async (c) => {

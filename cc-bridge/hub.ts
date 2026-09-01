@@ -58,7 +58,19 @@ export function buildChannelTag(msg: ChatMessage, ts: string, attachments: strin
   }
   // 共听段放最前：每轮措辞相同，稳定前缀在前
   const listen = listenContextLine()
-  if (listen) safe = `〔${listen}〕 ${safe}`
+  if (listen) {
+    safe = `〔${listen}〕 ${safe}`
+    // T4 聊天挂账：共听时她的话顺手记到「正在放的这首」的滚动记忆（fire-and-forget，
+    // 节流/长度过滤在 gateway 侧；失败无声，不影响正常聊天链路）
+    try {
+      fetch("http://127.0.0.1:4567/listen/note?key=" + (process.env.PHONE_DATA_KEY || "bunny-lib-2026"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: msg.content.slice(0, 200) }),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {})
+    } catch {}
+  }
   if (attachments.length > 0) {
     safe += ` [附件 ${attachments.length} 个，已存到本机，用 Read 工具查看/处理：${attachments.join(" ; ")}]`
   }

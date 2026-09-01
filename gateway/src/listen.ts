@@ -69,4 +69,15 @@ export function listenRoutes(app: Hono) {
   });
 
   app.get('/api/listen', async (c) => c.json({ active: isListeningTogether() }));
+
+  /// T4：hub 在共听期间把她的聊天转一份过来挂到当前歌（节流/长度过滤在 appendListeningNote）
+  app.post('/listen/note', async (c) => {
+    if (c.req.query('key') !== KEY) return c.json({ error: 'unauthorized' }, 401);
+    if (!isListeningTogether()) return c.json({ ok: false, skipped: 'not-listening' });
+    let body: any = {};
+    try { body = await c.req.json(); } catch {}
+    if (!body?.text) return c.json({ ok: false, skipped: 'empty' });
+    const { appendListeningNote } = await import('./nowplaying');
+    return c.json({ ok: appendListeningNote(String(body.text)) });
+  });
 }
