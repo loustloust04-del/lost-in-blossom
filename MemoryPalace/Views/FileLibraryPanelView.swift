@@ -129,8 +129,10 @@ struct FileLibraryPanelView: View {
         ScrollView {
             if treeMode {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(buildFileTree(from: remoteFiles)) { node in
-                        treeRows(node, depth: 0)
+                    // 递归 @ViewBuilder 会撞 opaque type 自指（CI 4c19275c 报错），
+                    // 改为先把「展开可见」的节点拍平成 (node, depth) 数组再平铺渲染
+                    ForEach(flattenVisibleTree(buildFileTree(from: remoteFiles)), id: \.node.id) { pair in
+                        treeRow(pair.node, depth: pair.depth)
                     }
                 }
                 .padding(.horizontal, 8)
@@ -147,15 +149,16 @@ struct FileLibraryPanelView: View {
         }
     }
 
-    /// 递归渲染一个节点及其（展开的）子节点
-    @ViewBuilder
-    private func treeRows(_ node: FileTreeNode, depth: Int) -> some View {
-        treeRow(node, depth: depth)
-        if node.kind == .folder, expandedFolders.contains(node.path) {
-            ForEach(node.children) { child in
-                treeRows(child, depth: depth + 1)
+    /// 把树按当前展开状态拍平成可见行（递归留在纯数据层，视图层零递归）
+    private func flattenVisibleTree(_ nodes: [FileTreeNode], depth: Int = 0) -> [(node: FileTreeNode, depth: Int)] {
+        var out: [(node: FileTreeNode, depth: Int)] = []
+        for node in nodes {
+            out.append((node, depth))
+            if node.kind == .folder, expandedFolders.contains(node.path) {
+                out.append(contentsOf: flattenVisibleTree(node.children, depth: depth + 1))
             }
         }
+        return out
     }
 
     private func treeRow(_ node: FileTreeNode, depth: Int) -> some View {
