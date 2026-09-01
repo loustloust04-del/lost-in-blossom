@@ -230,62 +230,7 @@ struct BookReaderSheet: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .foregroundColor(Theme.textSecondary)
-                }
-                ToolbarItem(placement: .principal) {
-                    if let ch = index?.chapters.first(where: { $0.no == currentChapter }) {
-                        Text("第 \(currentChapter)/\(index?.totalChapters ?? 0) 章 · \(ch.title)")
-                            .font(.system(size: Theme.F.secondary))
-                            .foregroundColor(Theme.textMuted)
-                            .lineLimit(1)
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    HStack(spacing: 12) {
-                        Button {
-                            toggleBookmarkHere()
-                        } label: {
-                            Image(systemName: hasBookmarkHere ? "bookmark.fill" : "bookmark")
-                        }
-                        .foregroundColor(hasBookmarkHere ? Theme.branchIndicator : Theme.textSecondary)
-
-                        // 陪读开关：开着他会在你读到的段落旁掉弹幕；关着安静读书
-                        Button {
-                            LiveReadingService.isEnabled.toggle()
-                            liveOn = LiveReadingService.isEnabled
-                            if !liveOn { LiveReadingService.shared.stop(); liveComment = nil }
-                        } label: {
-                            Image(systemName: liveOn ? "bubble.left.fill" : "bubble.left")
-                        }
-                        .foregroundColor(liveOn ? ConsoleView.greenDeep : Theme.textSecondary)
-                        .simultaneousGesture(LongPressGesture().onEnded { _ in showCompanionSheet = true })
-
-                        Button {
-                            if activeDrawer != .annotations { detectBrokenAnchors() }
-                            withAnimation(.spring(response: 0.3)) {
-                                activeDrawer = (activeDrawer == .annotations) ? nil : .annotations
-                            }
-                        } label: {
-                            Image(systemName: "pencil.tip.crop.circle")
-                        }
-                        .foregroundColor(Theme.textSecondary)
-
-                        Button {
-                            withAnimation(.spring(response: 0.3)) {
-                                activeDrawer = (activeDrawer == .catalog) ? nil : .catalog
-                            }
-                        } label: {
-                            Image(systemName: "list.bullet")
-                        }
-                        .foregroundColor(Theme.textSecondary)
-                    }
-                }
-            }
+            .toolbar { readerToolbar }
         }
         .overlay(alignment: .leading) {
             switch activeDrawer {
@@ -1174,6 +1119,67 @@ struct BookReaderSheet: View {
     // 均属共读系统。入口（toolbar 按钮 + edit menu 条目）已注释，本函数为编译占位。
     private func askXiaoke(_ range: SelectedRange) {
         selectedRange = nil
+    }
+
+
+    // 拆出 ToolbarContentBuilder：三个异构 ToolbarItem 内联时 Swift 在 View/ToolbarContent
+    // 两个 toolbar(content:) 重载间推断失败（defc8121 起报 ambiguous）。显式类型即解。
+    @ToolbarContentBuilder
+    private var readerToolbar: some ToolbarContent {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .foregroundColor(Theme.textSecondary)
+                    }
+                    ToolbarItem(placement: .principal) {
+                        if let ch = index?.chapters.first(where: { $0.no == currentChapter }) {
+                            Text("第 \(currentChapter)/\(index?.totalChapters ?? 0) 章 · \(ch.title)")
+                                .font(.system(size: Theme.F.secondary))
+                                .foregroundColor(Theme.textMuted)
+                                .lineLimit(1)
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        HStack(spacing: 12) {
+                            Button {
+                                toggleBookmarkHere()
+                            } label: {
+                                Image(systemName: hasBookmarkHere ? "bookmark.fill" : "bookmark")
+                            }
+                            .foregroundColor(hasBookmarkHere ? Theme.branchIndicator : Theme.textSecondary)
+
+                            // 陪读开关：开着他会在你读到的段落旁掉弹幕；关着安静读书
+                            Button {
+                                LiveReadingService.isEnabled.toggle()
+                                liveOn = LiveReadingService.isEnabled
+                                if !liveOn { LiveReadingService.shared.stop(); liveComment = nil }
+                            } label: {
+                                Image(systemName: liveOn ? "bubble.left.fill" : "bubble.left")
+                            }
+                            .foregroundColor(liveOn ? ConsoleView.greenDeep : Theme.textSecondary)
+                            .simultaneousGesture(LongPressGesture().onEnded { _ in showCompanionSheet = true })
+
+                            Button {
+                                if activeDrawer != .annotations { detectBrokenAnchors() }
+                                withAnimation(.spring(response: 0.3)) {
+                                    activeDrawer = (activeDrawer == .annotations) ? nil : .annotations
+                                }
+                            } label: {
+                                Image(systemName: "pencil.tip.crop.circle")
+                            }
+                            .foregroundColor(Theme.textSecondary)
+
+                            Button {
+                                withAnimation(.spring(response: 0.3)) {
+                                    activeDrawer = (activeDrawer == .catalog) ? nil : .catalog
+                                }
+                            } label: {
+                                Image(systemName: "list.bullet")
+                            }
+                            .foregroundColor(Theme.textSecondary)
+                        }
+                    }
     }
 
     private func annotationFromNote(_ n: BookStore.Note) -> ChapterHTMLRenderer.Annotation? {
