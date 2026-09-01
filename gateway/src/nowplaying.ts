@@ -17,6 +17,11 @@ interface NowPlaying {
   note?: string;        // 她随手说的一句
   startedAt: string;
   updatedAt: string;
+  // T1 共听 v2（2026-08-31）：同一时刻感——进度与「正唱到哪句」
+  position?: number;    // 秒
+  duration?: number;    // 秒
+  line?: string;        // 当前 LRC 行
+  state?: 'playing' | 'paused' | 'stopped';
 }
 
 interface SongMemory {
@@ -37,17 +42,24 @@ function save(p: string, data: unknown): void {
   writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-export function recordNowPlaying(input: { title: string; artist?: string; album?: string; note?: string }): SongMemory {
+export function recordNowPlaying(input: { title: string; artist?: string; album?: string; note?: string; position?: number; duration?: number; line?: string; state?: string }): SongMemory {
   const title = String(input.title || '').slice(0, 200).trim();
   const artist = input.artist ? String(input.artist).slice(0, 120).trim() : undefined;
   const now = new Date().toISOString();
 
   const prev = load<NowPlaying | null>(NOW_PATH, null);
   const isSameSong = prev?.title === title && prev?.artist === artist;
+  const st = input.state === 'paused' || input.state === 'stopped' ? input.state : 'playing';
   save(NOW_PATH, {
-    title, artist, album: input.album, note: input.note,
+    title, artist, album: input.album,
+    // 心跳不带 note；同一首歌保留她之前随手说的那句
+    note: input.note ?? (isSameSong ? prev!.note : undefined),
     startedAt: isSameSong ? prev!.startedAt : now,
     updatedAt: now,
+    position: typeof input.position === 'number' ? Math.max(0, input.position) : undefined,
+    duration: typeof input.duration === 'number' ? Math.max(0, input.duration) : undefined,
+    line: input.line ? String(input.line).slice(0, 200) : undefined,
+    state: st,
   } satisfies NowPlaying);
 
   // 歌曲记忆
@@ -71,16 +83,24 @@ export function describeNowPlaying(): string {
   if (!now) return '不知道她在听什么（她还没报过，或者没在听）。';
 
   const ageMin = (Date.now() - new Date(now.updatedAt).getTime()) / 60000;
-  const stale = ageMin > 60;
+  // T1：有心跳后 3 分钟没动静就算旧（原 60min 是「开播报一次」时代的阈值）
+  const stale = ageMin > 3;
   const key = now.artist ? `${now.title} - ${now.artist}` : now.title;
   const hist = load<Record<string, SongMemory>>(HIST_PATH, {});
   const mem = hist[key];
 
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const lines = [
     stale
-      ? `${Math.round(ageMin / 60)} 小时前她在听：${key}（现在未必还在听）`
-      : `她在听：${key}`,
+      ? `${ageMin > 90 ? Math.round(ageMin / 60) + ' 小时' : Math.round(ageMin) + ' 分钟'}前她在听：${key}（现在未必还在听）`
+      : now.state === 'paused' ? `她在听：${key}（暂停着）` : `她在听：${key}`,
   ];
+  if (!stale && typeof now.position === 'number' && typeof now.duration === 'number' && now.duration > 0) {
+    lines.push(`进度 ${fmt(now.position)} / ${fmt(now.duration)}`);
+  }
+  if (!stale && now.line && now.state !== 'stopped') {
+    lines.push(`正唱到：「${now.line}」`);
+  }
   if (now.album) lines.push(`专辑：${now.album}`);
   if (now.note) lines.push(`她说：${now.note}`);
   if (mem) {
@@ -94,7 +114,7 @@ export function describeNowPlaying(): string {
 export const NOWPLAYING_TOOLS = [
   {
     name: 'now_playing',
-    description: '看兔兔在听什么歌：歌名、歌手、她说的话，以及这首歌你们之间的记录（她听过几次、第一次是什么时候、以前听这首时说过什么）。她提到音乐、或者你想知道她此刻的背景音时调用。',
+    description: '看兔兔在听什么歌：歌名、歌手、播放进度、正唱到哪句歌词、她说的话，以及这首歌你们之间的记录（她听过几次、第一次是什么时候、以前听这首时说过什么）。她提到音乐、或者你想知道她此刻的背景音时调用。她在 App 里听歌时进度是实时的，能接住「正唱到的这句」说话。',
     input_schema: { type: 'object' as const, properties: {} },
   },
 ];

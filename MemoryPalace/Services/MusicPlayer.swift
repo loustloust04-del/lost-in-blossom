@@ -33,6 +33,32 @@ final class MusicPlayer: NSObject {
     /// 每首歌开播时回调（挂账在场记录用）
     var onSongStarted: ((Song) -> Void)?
 
+    // MARK: - T1 共听心跳（plan-listen-together-v2）
+    // 「他说得出唱到哪句」：LRC 行变化才报（≥5s 节流，信息量最高最省电），
+    // 无歌词/歌词间隙 30s 保底；暂停/停止各补一发 state。失败静默不打断播放。
+    private var lastBeatAt: Date = .distantPast
+    private var lastBeatLine: String?
+
+    private func heartbeatTick() {
+        guard let song = currentSong else { return }
+        let line = currentLyricText
+        let elapsed = Date().timeIntervalSince(lastBeatAt)
+        let lineChanged = line != nil && line != lastBeatLine && elapsed >= 5
+        guard lineChanged || elapsed >= 30 else { return }
+        lastBeatAt = Date(); lastBeatLine = line
+        sendBeat(song: song, state: isPlaying ? "playing" : "paused")
+    }
+
+    private func sendBeat(song: Song, state: String) {
+        let pos = currentTime, dur = duration, line = currentLyricText
+        Task.detached(priority: .utility) {
+            await NowPlayingReporter.beat(
+                title: song.title, artist: song.artist, album: song.album,
+                position: pos, duration: dur,
+                line: state == "stopped" ? nil : line, state: state)
+        }
+    }
+
     // MARK: - 播放
 
     func play(song: Song, in list: [Song] = [], resolveURL: (Song) -> URL?) {
@@ -62,6 +88,7 @@ final class MusicPlayer: NSObject {
                     self.duration = d
                 }
                 self.updateNowPlayingInfo()
+                self.heartbeatTick()
             }
         }
         NotificationCenter.default.addObserver(
@@ -80,6 +107,11 @@ final class MusicPlayer: NSObject {
         if isPlaying { p.pause() } else { p.play() }
         isPlaying.toggle()
         updateNowPlayingInfo()
+        // 暂停/续播即时报一发（他那头「暂停着」与否是在场感的一部分）
+        if let song = currentSong {
+            lastBeatAt = Date()
+            sendBeat(song: song, state: isPlaying ? "playing" : "paused")
+        }
     }
 
     func seek(to seconds: Double) {
@@ -103,6 +135,7 @@ final class MusicPlayer: NSObject {
     }
 
     func stop() {
+        if let song = currentSong { sendBeat(song: song, state: "stopped") }
         teardownObserver()
         player?.pause()
         player = nil

@@ -278,18 +278,29 @@ struct LyricsSheet: View {
     }
 }
 
-/// 开播时把「她在听什么」报给网关（Caelum 的 now_playing 工具读的就是它）
+/// 开播/心跳把「她在听什么·听到哪儿」报给网关（Caelum 的 now_playing 工具读的就是它）
 enum NowPlayingReporter {
     static func report(song: Song) async {
+        await beat(title: song.title, artist: song.artist, album: song.album,
+                   position: 0, duration: song.durationSec, line: nil, state: "playing")
+    }
+
+    /// T1 共听心跳：进度 + 当前 LRC 行 + 播放状态（plan-listen-together-v2）
+    static func beat(title: String, artist: String?, album: String?,
+                     position: Double, duration: Double, line: String?, state: String) async {
         let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
         guard let url = URL(string: "\(base)/now-playing?key=bunny-lib-2026") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 6
-        req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "title": song.title, "artist": song.artist, "album": song.album,
-        ])
+        var body: [String: Any] = [
+            "title": title, "position": position, "duration": duration, "state": state,
+        ]
+        if let artist { body["artist"] = artist }
+        if let album { body["album"] = album }
+        if let line { body["line"] = line }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await URLSession.shared.data(for: req)
     }
 }
