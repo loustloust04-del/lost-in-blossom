@@ -149,12 +149,24 @@ struct FileLibraryPanelView: View {
                 },
                 onCancel: { editingFile = nil },
                 onOpenWikiLink: { raw in
-                    // 解析 [[目标]] → 真实路径 → 换文件继续看（保持在同一个 sheet 里）
+                    // 解析 [[目标]] → 真实路径 → 换文件继续看（保持在同一个 sheet 里）。
+                    // Obsidian 工作流补全（学粟粟 846039a6）：点了不存在的 [[链接]] 不再装死——
+                    // 直接建这个文件并打开，先链接后落笔本来就是双链笔记的正统写法。
                     Task {
-                        guard let target = await WikiLinkIndex.shared.resolveTarget(raw),
-                              let body = try? await NotebookRemoteStore.read(target) else { return }
+                        if let target = await WikiLinkIndex.shared.resolveTarget(raw),
+                           let body = try? await NotebookRemoteStore.read(target) {
+                            await MainActor.run { editingFile = EditingFile(path: target, content: body) }
+                            return
+                        }
+                        var newPath = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !newPath.isEmpty else { return }
+                        if URL(fileURLWithPath: newPath).pathExtension.isEmpty { newPath += ".md" }
+                        let seed = "# " + URL(fileURLWithPath: newPath).deletingPathExtension().lastPathComponent + "\n\n"
+                        try? await NotebookRemoteStore.write(newPath, content: seed)
+                        await WikiLinkIndex.shared.invalidate()
                         await MainActor.run {
-                            editingFile = EditingFile(path: target, content: body)
+                            editingFile = EditingFile(path: newPath, content: seed)
+                            reload()
                         }
                     }
                 }
