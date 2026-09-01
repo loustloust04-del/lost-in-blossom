@@ -265,15 +265,15 @@ struct BookReaderSheet: View {
                         .foregroundColor(liveOn ? ConsoleView.greenDeep : Theme.textSecondary)
                         .simultaneousGesture(LongPressGesture().onEnded { _ in showCompanionSheet = true })
 
-// [共读暂缓]                         Button {
-// [共读暂缓]                             if activeDrawer != .annotations { detectBrokenAnchors() }
-// [共读暂缓]                             withAnimation(.spring(response: 0.3)) {
-// [共读暂缓]                                 activeDrawer = (activeDrawer == .annotations) ? nil : .annotations
-// [共读暂缓]                             }
-// [共读暂缓]                         } label: {
-// [共读暂缓]                             Image(systemName: "pencil.tip.crop.circle")
-// [共读暂缓]                         }
-// [共读暂缓]                         .foregroundColor(Theme.textSecondary)
+                        Button {
+                            if activeDrawer != .annotations { detectBrokenAnchors() }
+                            withAnimation(.spring(response: 0.3)) {
+                                activeDrawer = (activeDrawer == .annotations) ? nil : .annotations
+                            }
+                        } label: {
+                            Image(systemName: "pencil.tip.crop.circle")
+                        }
+                        .foregroundColor(Theme.textSecondary)
 
                         Button {
                             withAnimation(.spring(response: 0.3)) {
@@ -292,7 +292,7 @@ struct BookReaderSheet: View {
             case .catalog:
                 catalogDrawer.transition(.move(edge: .leading))
             case .annotations:
-                EmptyView() // [共读暂缓] annotationsDrawer（批注抽屉入口已注释，此 case 不可达）
+                annotationsDrawer.transition(.move(edge: .leading))
             case .none:
                 EmptyView()
             }
@@ -339,23 +339,23 @@ struct BookReaderSheet: View {
         .sheet(isPresented: $showNoteEditor) {
             noteEditorSheet
         }
-// [共读暂缓]         // M3-B-2 底部抽屉 mini 对话（学 page1 ModelPickerPopover 的 .sheet + detents 模式）
-// [共读暂缓]         .sheet(isPresented: $showChatDrawer, onDismiss: {
-// [共读暂缓]             highlightedNoteId = nil
-// [共读暂缓]             directHighlightMessageId = nil
-// [共读暂缓]         }) {
-// [共读暂缓]             BookChatDrawer(
-// [共读暂缓]                 bookSafeName: bookSafeName,
-// [共读暂缓]                 bookDisplayName: index?.name ?? bookSafeName,
-// [共读暂缓]                 currentChapter: currentChapter,
-// [共读暂缓]                 viewModel: viewModel,
-// [共读暂缓]                 highlightMessageId: directHighlightMessageId ?? messageIdForHighlightedNote()
-// [共读暂缓]             )
-// [共读暂缓]             #if os(iOS)
-// [共读暂缓]             .presentationDetents([.medium, .large])
-// [共读暂缓]             .presentationDragIndicator(.visible)
-// [共读暂缓]             #endif
-// [共读暂缓]         }
+        // M3-B-2 底部抽屉 mini 对话（学 page1 ModelPickerPopover 的 .sheet + detents 模式）
+        .sheet(isPresented: $showChatDrawer, onDismiss: {
+            highlightedNoteId = nil
+            directHighlightMessageId = nil
+        }) {
+            BookChatDrawer(
+                bookSafeName: bookSafeName,
+                bookDisplayName: index?.name ?? bookSafeName,
+                currentChapter: currentChapter,
+                viewModel: viewModel,
+                highlightMessageId: directHighlightMessageId ?? messageIdForHighlightedNote()
+            )
+            #if os(iOS)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            #endif
+        }
     }
 
     // MARK: - 笔记输入 sheet
@@ -429,25 +429,25 @@ struct BookReaderSheet: View {
                     .foregroundColor(Theme.textMuted)
             }
 
-// [共读暂缓]             // M3-B-2：抽屉入口按钮（带消息数 badge）
-// [共读暂缓]             Button { showChatDrawer = true } label: {
-// [共读暂缓]                 ZStack(alignment: .topTrailing) {
-// [共读暂缓]                     Image(systemName: "bubble.left.and.bubble.right")
-// [共读暂缓]                         .font(.system(size: 14))
-// [共读暂缓]                     if bookMessageCount > 0 {
-// [共读暂缓]                         Text("\(bookMessageCount)")
-// [共读暂缓]                             .font(.system(size: 9, weight: .bold))
-// [共读暂缓]                             .foregroundColor(.white)
-// [共读暂缓]                             .padding(.horizontal, 4)
-// [共读暂缓]                             .padding(.vertical, 1)
-// [共读暂缓]                             .background(Theme.branchIndicator)
-// [共读暂缓]                             .clipShape(Capsule())
-// [共读暂缓]                             .offset(x: 8, y: -6)
-// [共读暂缓]                     }
-// [共读暂缓]                 }
-// [共读暂缓]             }
-// [共读暂缓]             .buttonStyle(.plain)
-// [共读暂缓]             .foregroundColor(Theme.textSecondary)
+            // M3-B-2：抽屉入口按钮（带消息数 badge）
+            Button { showChatDrawer = true } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 14))
+                    if bookMessageCount > 0 {
+                        Text("\(bookMessageCount)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Theme.branchIndicator)
+                            .clipShape(Capsule())
+                            .offset(x: 8, y: -6)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(Theme.textSecondary)
 
             Spacer()
 
@@ -736,54 +736,54 @@ struct BookReaderSheet: View {
         }
     }
 
-// [共读暂缓]     // MARK: - 批注抽屉
+    // MARK: - 批注抽屉
 
-// [共读暂缓]     private var annotationsDrawer: some View {
-// [共读暂缓]         BookAnnotationDrawer(
-// [共读暂缓]             allNotes: allNotes,
-// [共读暂缓]             chapters: index?.chapters ?? [],
-// [共读暂缓]             assistantName: assistantName,
-// [共读暂缓]             currentChapter: currentChapter,
-// [共读暂缓]             brokenNoteIds: brokenNoteIds,
-// [共读暂缓]             isPresented: Binding(
-// [共读暂缓]                 get: { activeDrawer == .annotations },
-// [共读暂缓]                 set: { if !$0 { activeDrawer = nil } }
-// [共读暂缓]             ),
-// [共读暂缓]             onTapNote: { note in
-// [共读暂缓]                 handleTapNote(note)
-// [共读暂缓]             },
-// [共读暂缓]             onJumpToChapter: { chapter in
-// [共读暂缓]                 withAnimation(.spring(response: 0.3)) { activeDrawer = nil }
-// [共读暂缓]                 if chapter != currentChapter { currentChapter = chapter }
-// [共读暂缓]             },
-// [共读暂缓]             onShowChat: { messageId in
-// [共读暂缓]                 withAnimation(.spring(response: 0.3)) { activeDrawer = nil }
-// [共读暂缓]                 directHighlightMessageId = messageId
-// [共读暂缓]                 highlightedNoteId = nil
-// [共读暂缓]                 showChatDrawer = true
-// [共读暂缓]             },
-// [共读暂缓]             onDelete: { note in
-// [共读暂缓]                 deleteNote(note)
-// [共读暂缓]             },
-// [共读暂缓]             onReply: { parent, content in
-// [共读暂缓]                 let reply = BookStore.Note(
-// [共读暂缓]                     id: UUID().uuidString,
-// [共读暂缓]                     chapter: parent.chapter,
-// [共读暂缓]                     anchorText: parent.anchorText,
-// [共读暂缓]                     anchorStart: parent.anchorStart,
-// [共读暂缓]                     anchorEnd: parent.anchorEnd,
-// [共读暂缓]                     kind: "note",
-// [共读暂缓]                     content: content,
-// [共读暂缓]                     role: "user",
-// [共读暂缓]                     messageId: nil,
-// [共读暂缓]                     createdAt: Date(),
-// [共读暂缓]                     replyTo: parent.id
-// [共读暂缓]                 )
-// [共读暂缓]                 appendNote(reply)
-// [共读暂缓]                 ReadingSignals.logEvent(type: "reply", book: bookSafeName, chapter: parent.chapter, profileId: profileId)
-// [共读暂缓]             }
-// [共读暂缓]         )
-// [共读暂缓]     }
+    private var annotationsDrawer: some View {
+        BookAnnotationDrawer(
+            allNotes: allNotes,
+            chapters: index?.chapters ?? [],
+            assistantName: assistantName,
+            currentChapter: currentChapter,
+            brokenNoteIds: brokenNoteIds,
+            isPresented: Binding(
+                get: { activeDrawer == .annotations },
+                set: { if !$0 { activeDrawer = nil } }
+            ),
+            onTapNote: { note in
+                handleTapNote(note)
+            },
+            onJumpToChapter: { chapter in
+                withAnimation(.spring(response: 0.3)) { activeDrawer = nil }
+                if chapter != currentChapter { currentChapter = chapter }
+            },
+            onShowChat: { messageId in
+                withAnimation(.spring(response: 0.3)) { activeDrawer = nil }
+                directHighlightMessageId = messageId
+                highlightedNoteId = nil
+                showChatDrawer = true
+            },
+            onDelete: { note in
+                deleteNote(note)
+            },
+            onReply: { parent, content in
+                let reply = BookStore.Note(
+                    id: UUID().uuidString,
+                    chapter: parent.chapter,
+                    anchorText: parent.anchorText,
+                    anchorStart: parent.anchorStart,
+                    anchorEnd: parent.anchorEnd,
+                    kind: "note",
+                    content: content,
+                    role: "user",
+                    messageId: nil,
+                    createdAt: Date(),
+                    replyTo: parent.id
+                )
+                appendNote(reply)
+                ReadingSignals.logEvent(type: "reply", book: bookSafeName, chapter: parent.chapter, profileId: profileId)
+            }
+        )
+    }
 
     /// 卡片点击派发：
     /// - note      → 编辑（弹 noteEditor 预填）
@@ -1170,7 +1170,7 @@ struct BookReaderSheet: View {
     /// 把选段当作 quote 注入楼层主对话；小克回复时 vm 的 sendMessage 路径自然走流式。
     /// 用户消息的 MessageNode 上盖 bookRef，主对话里能看到 "📖 书名·第N章" tag。
     /// 同时 notes.json 写一条 kind=aiBubble 占位锚点（content 暂为空，等 vm 写回填）。
-    // [共读暂缓] 问 AI：真身依赖 startDraftConversation/resolveModel/BookChatDrawer，
+    问 AI：真身依赖 startDraftConversation/resolveModel/BookChatDrawer，
     // 均属共读系统。入口（toolbar 按钮 + edit menu 条目）已注释，本函数为编译占位。
     private func askXiaoke(_ range: SelectedRange) {
         selectedRange = nil
