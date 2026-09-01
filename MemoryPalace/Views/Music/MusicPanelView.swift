@@ -104,6 +104,12 @@ struct MusicPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Theme.mainBg)
+                .contextMenu {
+                    Button {
+                        player.playNext(s)
+                        HapticService.shared.longPress()
+                    } label: { Label("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") }
+                }
             }
             .onDelete { idx in
                 for i in idx { context.delete(songs[i]) }

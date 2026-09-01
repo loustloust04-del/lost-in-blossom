@@ -132,6 +132,11 @@ struct CloudMusicView: View {
                     }
                     .buttonStyle(.plain)
                     .listRowBackground(Theme.mainBg)
+                    .contextMenu {
+                        Button {
+                            queueNext(r: s)
+                        } label: { Label("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") }
+                    }
                 }
             } header: { if let t = title { Text(t) } }
         }
@@ -161,6 +166,23 @@ struct CloudMusicView: View {
     }
 
     /// 云端歌曲：现取直链和歌词 → 落成本地 Song（带 isRemote）→ 交给播放器
+    /// 云端歌「下一首播放」：解析直链→建 Song（边听边存照旧）→插队；没在放歌就直接开播
+    private func queueNext(r: MusicLibraryClient.RemoteSong) {
+        Task {
+            guard let d = await MusicLibraryClient.detail(songId: r.id), let url = d.url else { return }
+            let song = Song(profileId: profileId, title: r.title, artist: r.artist, album: r.album,
+                            source: url, isRemote: true, durationSec: Double(r.duration), lyrics: d.lyric)
+            song.remoteId = r.id
+            context.insert(song)
+            try? context.save()
+            if let remote = URL(string: url) { MusicCache.store(songId: r.id, from: remote) }
+            await MainActor.run {
+                player.playNext(song)
+                HapticService.shared.longPress()
+            }
+        }
+    }
+
     private func playRemote(_ r: MusicLibraryClient.RemoteSong, in list: [MusicLibraryClient.RemoteSong]) {
         loadingSongId = r.id
         Task {

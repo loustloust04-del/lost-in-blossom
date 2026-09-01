@@ -73,6 +73,28 @@ final class MusicPlayer: NSObject {
 
     // MARK: - 播放
 
+    /// 添加到下一首（兔兔 09-02 点名）：插到当前播放位之后。
+    /// 已在队列里的挪位不复制；没在放歌时直接开播。连点多首按点选顺序排在后面。
+    private var playNextInsertions = 0
+    func playNext(_ song: Song) {
+        guard currentSong != nil, !queue.isEmpty else {
+            if let r = urlResolver { play(song: song, in: [song], resolveURL: r) }
+            return
+        }
+        if song.id == currentSong?.id { return }
+        if let existing = queue.firstIndex(where: { $0.id == song.id }) {
+            let moved = queue.remove(at: existing)
+            if existing < queueIndex { queueIndex -= 1 }
+            if existing == queueIndex { queueIndex = max(0, queueIndex) }
+            queue.insert(moved, at: min(queueIndex + 1, queue.count))
+        } else {
+            // 连点三首 A/B/C → 顺序 A、B、C（各自排在上一次插入之后）
+            let at = min(queueIndex + 1 + playNextInsertions, queue.count)
+            queue.insert(song, at: at)
+            playNextInsertions += 1
+        }
+    }
+
     func play(song: Song, in list: [Song] = [], resolveURL: (Song) -> URL?) {
         queue = list.isEmpty ? [song] : list
         queueIndex = queue.firstIndex(where: { $0.id == song.id }) ?? 0
@@ -110,6 +132,7 @@ final class MusicPlayer: NSObject {
 
         player?.play()
         isPlaying = true
+        playNextInsertions = 0
         setupRemoteCommands()
         updateNowPlayingInfo()
         onSongStarted?(song)
