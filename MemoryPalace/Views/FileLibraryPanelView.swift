@@ -16,6 +16,11 @@ struct FileLibraryPanelView: View {
     @State private var newFileName = ""
     @State private var deletingPath: String? = nil
     @State private var editingFile: EditingFile? = nil
+    /// 外部改动冲突（学粟粟 FileEditorSheet 的 external-change 守护，做在 Panel 层）：
+    /// 这本笔记本是三方共写的（她在 app 编辑、API Caelum fs_*、CC Caelum fs_*）。
+    /// 原保存是盲写 last-write-wins——她编辑期间他 append 的日记会被无声抹掉。
+    /// 保存前重读远端指纹比对，撞了弹三选。
+    @State private var saveConflict: SaveConflict? = nil
     @State private var previews: [String: String] = [:]
 
     private var profileId: String { profileManager?.currentProfile.id ?? "" }
@@ -24,6 +29,12 @@ struct FileLibraryPanelView: View {
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     struct EditingFile: Identifiable { let id = UUID(); let path: String; let content: String }
+    struct SaveConflict: Identifiable {
+        let id = UUID()
+        let path: String
+        let mine: String      // 她编辑后的版本
+        let theirs: String    // 保存瞬间的远端版本（他改过的）
+    }
 
     /// 视图模式：卡片网格（带预览，默认）/ 树形（按目录层级，长文档分章时更清楚）
     @AppStorage("fileLibTreeMode") private var treeMode = false
@@ -63,10 +74,53 @@ struct FileLibraryPanelView: View {
         } message: {
             Text(deletingPath.map { "确定删除「\($0)」吗？不可恢复。" } ?? "")
         }
+        .alert("他也改过这个文件", isPresented: Binding(
+            get: { saveConflict != nil },
+            set: { if !$0 { saveConflict = nil } }
+        )) {
+            Button("我的接在他的后面（都保住）") {
+                guard let c = saveConflict else { return }
+                let merged = c.theirs + "
+
+---
+
+" + c.mine
+                Task {
+                    try? await NotebookRemoteStore.write(c.path, content: merged)
+                    await WikiLinkIndex.shared.invalidate()
+                    await MainActor.run { saveConflict = nil; editingFile = nil; reload() }
+                }
+            }
+            Button("用我的覆盖他的", role: .destructive) {
+                guard let c = saveConflict else { return }
+                Task {
+                    try? await NotebookRemoteStore.write(c.path, content: c.mine)
+                    await WikiLinkIndex.shared.invalidate()
+                    await MainActor.run { saveConflict = nil; editingFile = nil; reload() }
+                }
+            }
+            Button("先看他的版本", role: .cancel) {
+                guard let c = saveConflict else { return }
+                // 换成远端最新版重新打开；她的版本进剪贴板兜底，一个字不丢
+                UIPasteboard.general.string = c.mine
+                saveConflict = nil
+                editingFile = EditingFile(path: c.path, content: c.theirs)
+            }
+        } message: {
+            Text("你编辑期间 Caelum 也写了这个文件。直接保存会抹掉他写的。你的版本已备好，选一个处理方式（选「先看」时你的版本会复制到剪贴板）。")
+        }
         .sheet(item: $editingFile) { f in
             FileEditorSheet(path: f.path, initialContent: f.content,
                 onSave: { newContent in
                     Task {
+                        // 冲突守护：保存前重读远端。和「打开时的版本」不一样 = 他也改过
+                        let remote = (try? await NotebookRemoteStore.read(f.path)) ?? f.content
+                        if remote != f.content && remote != newContent {
+                            await MainActor.run {
+                                saveConflict = SaveConflict(path: f.path, mine: newContent, theirs: remote)
+                            }
+                            return
+                        }
                         try? await NotebookRemoteStore.write(f.path, content: newContent)
                         // 内容变了，双链索引失效重建
                         await WikiLinkIndex.shared.invalidate()
