@@ -72,6 +72,7 @@ struct CardFlowView: View {
             isHighlighted: isNodeHighlighted,
             isSearchMatch: isNodeSearchMatch,
             isLastAssistant: node.role == "assistant" && node.id == viewModel.currentPath.last?.id,
+            onNotice: { viewModel.transientNotice = TransientNotice($0) },
             onToggleFavorite: { viewModel.toggleFavorite(node) },
             onTogglePin: { viewModel.togglePin(node) },
             onSoftDelete: { viewModel.softDelete(node) },
@@ -1703,6 +1704,11 @@ struct BubbleView: View {
                     }
     }
 
+    /// 轻提示（复制/收藏/钉住后的 toast）。BubbleView 拿不到 viewModel，
+    /// 与 onToggleFavorite 等一样由父视图注入。
+    var onNotice: ((String) -> Void)? = nil
+    /// 删除二次确认（防误触——菜单里手滑一下消息就没了）
+    @State private var showDeleteConfirm = false
     let onToggleFavorite: () -> Void
     let onTogglePin: () -> Void
     let onSoftDelete: () -> Void
@@ -2112,18 +2118,32 @@ struct BubbleView: View {
                     }
                     Divider()
                 }
-                Button(action: onToggleFavorite) {
+                Button(action: {
+                    let willFav = !node.isFavorite
+                    onToggleFavorite()
+                    HapticService.shared.longPress()
+                    onNotice?(willFav ? "已收藏" : "已取消收藏")
+                }) {
                     Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
                 }
                 Button(action: { showFolderPicker = true }) {
                     Label("收藏到文件夹...", systemImage: "folder.badge.plus")
                 }
-                Button(action: onTogglePin) {
+                Button(action: {
+                    let willPin = !node.isPinned
+                    onTogglePin()
+                    HapticService.shared.longPress()
+                    onNotice?(willPin ? "已钉住" : "已取消钉住")
+                }) {
                     Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
                 }
                 Divider()
                 Button(action: {
                     UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+                    // 2026-08-31：项目里早有 HapticService（含 copyText/deleteAction），
+                    // 但气泡按钮一个都没接过——现成的轮子没用上。（自粟粟 07-11「气泡小按钮三连打磨」）
+                    HapticService.shared.copyText()
+                    onNotice?("已复制")
                 }) {
                     Label("复制文本", systemImage: "doc.on.doc")
                 }
@@ -2131,9 +2151,18 @@ struct BubbleView: View {
                     Label("选取文本", systemImage: "text.cursor")
                 }
                 Divider()
-                Button(role: .destructive, action: onSoftDelete) {
+                Button(role: .destructive, action: { showDeleteConfirm = true }) {
                     Label("删除", systemImage: "trash")
                 }
+            }
+            .confirmationDialog("删除这条消息？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("删除", role: .destructive) {
+                    HapticService.shared.deleteAction()
+                    onSoftDelete()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("会移到回收站，可以恢复。")
             }
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
@@ -2144,6 +2173,8 @@ struct BubbleView: View {
                     // Copy
                     Button {
                         UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+                        HapticService.shared.copyText()
+                        onNotice?("已复制")
                     } label: {
                         Image(systemName: "doc.on.doc")
                             .font(.system(size: 13))
