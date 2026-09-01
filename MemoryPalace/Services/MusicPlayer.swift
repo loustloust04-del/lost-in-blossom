@@ -45,6 +45,38 @@ final class MusicPlayer: NSObject {
     /// 每首歌开播时回调（挂账在场记录用）
     var onSongStarted: ((Song) -> Void)?
 
+    // MARK: - 预取（播放器本体优化②）
+    // 切歌卡顿的根：下一首要现场换直链+起下载。放到 15s（或 30% 时长）就把
+    // 「计划中的下一首」交给 prefetcher（面板侧负责换新直链→MusicCache 落盘），
+    // 到点切歌直接命中本地文件。随机模式提前抽签并锁定，保证预取的就是要放的。
+    var prefetcher: ((Song) -> Void)?
+    private var prefetchedForSongId: String?
+    private var plannedShuffleIndex: Int?
+
+    private func prefetchTick() {
+        guard let cur = currentSong, prefetchedForSongId != cur.id,
+              duration > 0, currentTime > Swift.min(15, duration * 0.3) else { return }
+        prefetchedForSongId = cur.id
+        guard let nxt = plannedNextSong() else { return }
+        prefetcher?(nxt)
+    }
+
+    private func plannedNextSong() -> Song? {
+        guard !queue.isEmpty else { return nil }
+        switch playMode {
+        case .repeatOne:
+            return nil   // 就是这首，已经在放
+        case .sequence:
+            let n = queue[(queueIndex + 1) % queue.count]
+            return n.id == currentSong?.id ? nil : n
+        case .shuffle:
+            var i = Int.random(in: 0..<queue.count)
+            if queue.count > 1 && i == queueIndex { i = (i + 1) % queue.count }
+            plannedShuffleIndex = i
+            return queue[i]
+        }
+    }
+
     // MARK: - T1 共听心跳（plan-listen-together-v2）
     // 「他说得出唱到哪句」：LRC 行变化才报（≥5s 节流，信息量最高最省电），
     // 无歌词/歌词间隙 30s 保底；暂停/停止各补一发 state。失败静默不打断播放。
@@ -124,6 +156,7 @@ final class MusicPlayer: NSObject {
                 }
                 self.updateNowPlayingInfo()
                 self.heartbeatTick()
+                self.prefetchTick()
             }
         }
         NotificationCenter.default.addObserver(
@@ -133,6 +166,8 @@ final class MusicPlayer: NSObject {
         player?.play()
         isPlaying = true
         playNextInsertions = 0
+        prefetchedForSongId = nil
+        plannedShuffleIndex = nil
         setupRemoteCommands()
         updateNowPlayingInfo()
         onSongStarted?(song)
@@ -216,10 +251,14 @@ final class MusicPlayer: NSObject {
                 if let song = currentSong { start(song, resolveURL: r) }
             case .shuffle:
                 guard !queue.isEmpty else { isPlaying = false; return }
-                // 随机但不立刻重复（队列 >1 时避开当前下标）
-                var i = Int.random(in: 0..<queue.count)
-                if queue.count > 1 && i == queueIndex { i = (i + 1) % queue.count }
-                queueIndex = i
+                // 预取阶段抽过签就用那个（保证预取命中）；没抽过再抽，避开立刻重复
+                if let planned = plannedShuffleIndex, queue.indices.contains(planned) {
+                    queueIndex = planned
+                } else {
+                    var i = Int.random(in: 0..<queue.count)
+                    if queue.count > 1 && i == queueIndex { i = (i + 1) % queue.count }
+                    queueIndex = i
+                }
                 start(queue[queueIndex], resolveURL: r)
             case .sequence:
                 next(resolveURL: r)

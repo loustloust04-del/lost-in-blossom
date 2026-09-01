@@ -48,6 +48,17 @@ struct MusicPanelView: View {
         .onAppear {
             let pid = profileId
             player.urlResolver = { s in MusicPanelView.resolve(s, profileId: pid) }
+            // 预取：远端且没缓存的下一首，提前换新直链（直链有时效）并落 MusicCache
+            player.prefetcher = { s in
+                guard s.isRemote, !s.remoteId.isEmpty, !MusicCache.has(songId: s.remoteId) else { return }
+                Task {
+                    if let d = await MusicLibraryClient.detail(songId: s.remoteId),
+                       let fresh = d.url, let u = URL(string: fresh) {
+                        await MainActor.run { s.source = fresh }
+                        MusicCache.store(songId: s.remoteId, from: u)
+                    }
+                }
+            }
             player.onSongStarted = { s in
                 s.playCount += 1
                 s.lastPlayedAt = Date()
