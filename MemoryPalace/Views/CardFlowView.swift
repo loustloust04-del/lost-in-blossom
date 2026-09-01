@@ -542,6 +542,27 @@ struct CardFlowView: View {
             AskUserGate.shared.onQuestions = { questions in
                 viewModel.pendingAPIQuestion = PendingAPIQuestion(questions: questions)
             }
+            // T6 DJ：他放歌 → 解析直链→建 Song→开播（CloudMusicView.playRemote 同款，
+            // 边听边存照旧）。装在 CardFlowView：主界面在，DJ 就在，不用先开音乐面板
+            CCBridgeWebSocketClient.shared.onMusicCommand = { songId, title, artist in
+                let pid = profileManager?.currentProfile.id ?? ""
+                let ctx = modelContext
+                Task {
+                    guard let d = await MusicLibraryClient.detail(songId: songId), let url = d.url else { return }
+                    await MainActor.run {
+                        let song = Song(profileId: pid, title: title, artist: artist, album: "",
+                                        source: url, isRemote: true, durationSec: 0, lyrics: d.lyric)
+                        song.remoteId = songId
+                        ctx.insert(song)
+                        try? ctx.save()
+                        if let remote = URL(string: url) { MusicCache.store(songId: songId, from: remote) }
+                        MusicPlayer.shared.play(song: song, in: [song]) { s in
+                            MusicCache.localURL(songId: s.remoteId) ?? URL(string: s.source)
+                        }
+                        HapticService.shared.longPress()
+                    }
+                }
+            }
             }
             .sheet(isPresented: $showAddToChat) {
                 AddToChatSheet(
