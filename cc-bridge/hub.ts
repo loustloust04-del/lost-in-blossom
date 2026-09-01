@@ -29,6 +29,24 @@ export interface ChatMessage {
   context?: string       // API 会话最近的原始对话（缺省 fallback 摘要），注入 channel tag 供 CC 接话
 }
 
+// ── 共听注入（plan-listen-together-v2 T2 后半：「共听中聊别的他也知道背景音在放什么」）──
+// 会话态由 gateway 落盘（/listen/start 写、now-playing 心跳续命），hub 只读同机文件，
+// 不走 HTTP：buildChannelTag 是同步的，读文件不会挂、不会等。5 分钟没心跳 = 她走了，不注。
+// 措辞与 gateway/src/listen.ts listenContextLine 一致：只当背景，别复述歌词（Duetto/粟粟共同教训）。
+const LISTEN_STATE_PATH = process.env.MP_LISTEN_STATE_PATH
+  ?? "/root/projects/BunnyPalace/gateway/data/listen-session.json"
+const LISTEN_CONTEXT_LINE = "共听中·她邀请你一起听歌。当下在放的内容用 now_playing 看。这是背景，不要复述歌词，除非她先聊到。"
+
+export function listenContextLine(now = Date.now()): string | null {
+  try {
+    const s = JSON.parse(readFileSync(process.env.MP_LISTEN_STATE_PATH ?? LISTEN_STATE_PATH, "utf-8"))
+    if (!s?.active) return null
+    const seen = new Date(String(s.lastSeenAt ?? "")).getTime()
+    if (!Number.isFinite(seen) || now - seen >= 5 * 60_000) return null
+    return LISTEN_CONTEXT_LINE
+  } catch { return null }   // 文件不存在/坏 JSON = 没在共听
+}
+
 export function buildChannelTag(msg: ChatMessage, ts: string, attachments: string[] = []): string {
   let safe = msg.content.replace(/\n/g, " ")
   // CC↔API 上下文共享（可通过环境变量 CC_INJECT_SUMMARY=0 关闭）
@@ -38,6 +56,9 @@ export function buildChannelTag(msg: ChatMessage, ts: string, attachments: strin
     if (ctx.length > 4000) ctx = ctx.slice(0, 4000) + " …[截断]"
     safe = `〔最近对话〕${ctx}〔/最近对话〕 ${safe}`
   }
+  // 共听段放最前：每轮措辞相同，稳定前缀在前
+  const listen = listenContextLine()
+  if (listen) safe = `〔${listen}〕 ${safe}`
   if (attachments.length > 0) {
     safe += ` [附件 ${attachments.length} 个，已存到本机，用 Read 工具查看/处理：${attachments.join(" ; ")}]`
   }
