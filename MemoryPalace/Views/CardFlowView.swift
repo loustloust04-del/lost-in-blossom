@@ -1477,7 +1477,7 @@ private struct MultimodalUserBubble: View {
     let fontScale: Double
     let lineSpacingScale: Double
 
-    @State private var showFullImage = false
+    @State private var previewItems: [BubbleAttachmentItem]? = nil
 
     private struct ContentBlock {
         var imageData: Data?
@@ -1516,23 +1516,15 @@ private struct MultimodalUserBubble: View {
                     .scaledToFit()
                     .frame(maxWidth: 200)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .onTapGesture { showFullImage = true }
-                    .fullScreenCover(isPresented: $showFullImage) {
-                        ZStack(alignment: .topTrailing) {
-                            Color.black.ignoresSafeArea()
-                            Image(uiImage: uiImg)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            Button {
-                                showFullImage = false
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(.white)
-                                    .padding(16)
-                            }
-                            .buttonStyle(.plain)
+                    // 点开走她的 AttachmentPreviewSheet：全屏 + 保存到相册 + QuickLook
+                    //（原来的裸 fullScreenCover 只有一张图和关闭键，兔兔 08-31：存不了相册）
+                    .onTapGesture { previewItems = [.image(name: "photo.jpg", data: imgData)] }
+                    .fullScreenCover(isPresented: Binding(
+                        get: { previewItems != nil },
+                        set: { if !$0 { previewItems = nil } }
+                    )) {
+                        if let items = previewItems {
+                            AttachmentPreviewSheet(items: items, initialIndex: 0)
                         }
                     }
             }
@@ -1767,7 +1759,11 @@ struct BubbleView: View {
     var body: some View {
         // 粟粟气泡模式整套搬运（2026-08-30）：顶层分流，气泡模式根本不进文章卡
         //（她的 CardFlowView innerBody 同款结构）。header 由 BubbleModeRow 自带。
-        if chatBubbleMode {
+        // multimodal_text 的图存在 content JSON 里（不是她那边的 .image 段），
+        // 直接进她的 BubbleModeRow 会把整段 base64 当正文渲染——就是兔兔 08-31 实测的
+        // 「特别长的白条 + 滑不到底」。老图片消息先回落文章路径（有 MultimodalUserBubble
+        // 解包），新消息改写 .image 段是单独一刀（DEBT-MAP 已记）。
+        if chatBubbleMode && node.contentType != "multimodal_text" {
             BubbleModeRow(
                 node: node, isUser: isUser, isStreaming: isStreaming,
                 // B6 A2'：弹泡数据源，只有流式中的 assistant 行才读
