@@ -176,6 +176,19 @@ struct MusicPanelView: View {
                           : player.playMode == .shuffle ? "shuffle" : "repeat")
                         .foregroundColor(player.playMode == .sequence ? ConsoleView.greenDeep : ConsoleView.green)
                 }
+                // 睡眠定时器：月亮菜单（15/30/60 分钟 / 听完这首停 / 取消）
+                Menu {
+                    Button("15 分钟后停") { player.setSleepTimer(minutes: 15) }
+                    Button("30 分钟后停") { player.setSleepTimer(minutes: 30) }
+                    Button("60 分钟后停") { player.setSleepTimer(minutes: 60) }
+                    Button(player.stopAfterCurrent ? "✓ 听完这首停" : "听完这首停") { player.toggleStopAfterCurrent() }
+                    if player.sleepTimerEndsAt != nil || player.stopAfterCurrent {
+                        Button("取消定时", role: .destructive) { player.setSleepTimer(minutes: nil) }
+                    }
+                } label: {
+                    Image(systemName: (player.sleepTimerEndsAt != nil || player.stopAfterCurrent) ? "moon.zzz.fill" : "moon.zzz")
+                        .foregroundColor((player.sleepTimerEndsAt != nil || player.stopAfterCurrent) ? ConsoleView.green : ConsoleView.greenDeep)
+                }
                 // T2 叫他一起听：邀请这个动作本身有仪式感（plan-listen-together-v2 D2）。
                 // 亮 = 共听中（心跳替你续命，切歌不断场；停播 5min 网关侧自动过期）
                 Button {

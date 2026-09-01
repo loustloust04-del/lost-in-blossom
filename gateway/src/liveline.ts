@@ -17,6 +17,7 @@ const THROTTLE: Record<string, number> = {
   listen_invite: 30_000,
   listen_end: 30_000,     // 散场收尾：同 30s 防连点
   music_loop: 30 * 60_000, // 单曲循环心情信号：一首歌一场只该来一次，app 侧已控，这里兜底
+  music_sleep: 0,          // 睡眠定时器到点：一晚就一次，每次都值得他知道
   meds: 0,          // 吃药：每次都值得知道
   water: 10 * 60_000,
   food: 0,

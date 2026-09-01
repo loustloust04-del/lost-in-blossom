@@ -45,6 +45,51 @@ final class MusicPlayer: NSObject {
     /// 每首歌开播时回调（挂账在场记录用）
     var onSongStarted: ((Song) -> Void)?
 
+    // MARK: - 睡眠定时器（播放器本体优化③——她是听着歌睡觉的人）
+    private(set) var sleepTimerEndsAt: Date?
+    private(set) var stopAfterCurrent = false
+    private var sleepTask: Task<Void, Never>?
+
+    /// minutes=nil 取消。到点：4 秒淡出→暂停→报 paused→liveline「她大概听着歌睡着了」
+    func setSleepTimer(minutes: Int?) {
+        sleepTask?.cancel(); sleepTask = nil
+        stopAfterCurrent = false
+        guard let minutes else { sleepTimerEndsAt = nil; return }
+        let ends = Date().addingTimeInterval(Double(minutes) * 60)
+        sleepTimerEndsAt = ends
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Double(minutes) * 60))
+            guard !Task.isCancelled else { return }
+            await self?.sleepTimerFired()
+        }
+    }
+
+    /// 「听完这首停」：不设时钟，本首自然结束时停
+    func toggleStopAfterCurrent() {
+        stopAfterCurrent.toggle()
+        if stopAfterCurrent { sleepTask?.cancel(); sleepTask = nil; sleepTimerEndsAt = nil }
+    }
+
+    private func sleepTimerFired() async {
+        sleepTimerEndsAt = nil
+        guard isPlaying, let song = currentSong, let p = player else { return }
+        // 4 秒淡出，别把睡着的人惊醒
+        for step in stride(from: 1.0, through: 0.0, by: -0.1) {
+            p.volume = Float(step)
+            try? await Task.sleep(for: .milliseconds(400))
+        }
+        p.pause(); isPlaying = false; p.volume = 1.0
+        updateNowPlayingInfo()
+        lastBeatAt = Date()
+        sendBeat(song: song, state: "paused")
+        let title = song.title
+        Task.detached(priority: .utility) {
+            await NowPlayingReporter.livelineEvent(
+                kind: "music_sleep",
+                text: "她的睡眠定时器到点了，《\(title)》淡出停下——她大概听着歌睡着了。这会儿轻一点。")
+        }
+    }
+
     // MARK: - 预取（播放器本体优化②）
     // 切歌卡顿的根：下一首要现场换直链+起下载。放到 15s（或 30% 时长）就把
     // 「计划中的下一首」交给 prefetcher（面板侧负责换新直链→MusicCache 落盘），
@@ -248,8 +293,10 @@ final class MusicPlayer: NSObject {
             guard let r = urlResolver else { isPlaying = false; return }
             switch playMode {
             case .repeatOne:
+                if stopAfterCurrent { stopAfterCurrent = false; await sleepStopAtSongEnd(); return }
                 if let song = currentSong { start(song, resolveURL: r) }
             case .shuffle:
+                if stopAfterCurrent { stopAfterCurrent = false; await sleepStopAtSongEnd(); return }
                 guard !queue.isEmpty else { isPlaying = false; return }
                 // 预取阶段抽过签就用那个（保证预取命中）；没抽过再抽，避开立刻重复
                 if let planned = plannedShuffleIndex, queue.indices.contains(planned) {
@@ -261,8 +308,22 @@ final class MusicPlayer: NSObject {
                 }
                 start(queue[queueIndex], resolveURL: r)
             case .sequence:
+                if stopAfterCurrent { stopAfterCurrent = false; await sleepStopAtSongEnd(); return }
                 next(resolveURL: r)
             }
+        }
+    }
+
+    /// 「听完这首停」到站：歌已自然结束，无需淡出，直接停 + 同款晚安信号
+    private func sleepStopAtSongEnd() async {
+        let title = currentSong?.title ?? ""
+        isPlaying = false
+        updateNowPlayingInfo()
+        if let song = currentSong { lastBeatAt = Date(); sendBeat(song: song, state: "paused") }
+        Task.detached(priority: .utility) {
+            await NowPlayingReporter.livelineEvent(
+                kind: "music_sleep",
+                text: "《\(title)》放完，按她定的「听完这首停」停下了——她大概听着歌睡着了。这会儿轻一点。")
         }
     }
 
