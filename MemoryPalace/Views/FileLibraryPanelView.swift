@@ -21,6 +21,9 @@ struct FileLibraryPanelView: View {
     /// 原保存是盲写 last-write-wins——她编辑期间他 append 的日记会被无声抹掉。
     /// 保存前重读远端指纹比对，撞了弹三选。
     @State private var saveConflict: SaveConflict? = nil
+    /// 重命名（文件库菜单第二件；NotebookRemoteStore.rename 网关早就支持，一直没 UI）
+    @State private var renamingPath: String? = nil
+    @State private var renameText: String = ""
     @State private var previews: [String: String] = [:]
 
     private var profileId: String { profileManager?.currentProfile.id ?? "" }
@@ -104,6 +107,27 @@ struct FileLibraryPanelView: View {
             }
         } message: {
             Text("你编辑期间 Caelum 也写了这个文件。直接保存会抹掉他写的。你的版本已备好，选一个处理方式（选「先看」时你的版本会复制到剪贴板）。")
+        }
+        .alert("重命名 / 移动", isPresented: Binding(
+            get: { renamingPath != nil },
+            set: { if !$0 { renamingPath = nil } }
+        )) {
+            TextField("新路径（含目录，如 diary/2026-09.md）", text: $renameText)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            Button("确定") {
+                guard let old = renamingPath else { return }
+                let new = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !new.isEmpty, new != old else { renamingPath = nil; return }
+                Task {
+                    try? await NotebookRemoteStore.rename(old, to: new)
+                    await WikiLinkIndex.shared.invalidate()
+                    await MainActor.run { renamingPath = nil; reload() }
+                }
+            }
+            Button("取消", role: .cancel) { renamingPath = nil }
+        } message: {
+            Text("改名或换目录都在这里；指向它的 [[双链]] 不会自动跟，改完自己核一眼。")
         }
         .sheet(item: $editingFile) { f in
             FileEditorSheet(path: f.path, initialContent: f.content,
@@ -374,6 +398,10 @@ struct FileLibraryPanelView: View {
         .contentShape(Rectangle())
         .onTapGesture { openFile(meta.path) }
         .contextMenu {
+            Button {
+                renamingPath = meta.path
+                renameText = meta.path
+            } label: { Label("重命名 / 移动", systemImage: "pencil") }
             Button("删除", role: .destructive) { deletingPath = meta.path }
         }
     }
