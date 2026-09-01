@@ -15,6 +15,8 @@ struct ToolBarView: View {
     /// 改法：真选中即时赋值（面板立刻切，保住 08-12 的修复），胶囊视觉走本地镜像态，
     /// onChange 里用显式 withAnimation 驱动——显式事务不怕父级换枝。
     @State private var capsuleId: String = ""
+    /// 胶囊滑移的几何配对命名空间（matchedGeometryEffect）
+    @Namespace private var pillNS
 
     private var pinnedTools: [RightPanelTool] {
         toolManager?.pinnedTools ?? []
@@ -38,33 +40,39 @@ struct ToolBarView: View {
                 HStack(spacing: 0) {
             ForEach(pinnedTools) { tool in
                 let isSelected = tool.id == (capsuleId.isEmpty ? selectedToolId : capsuleId)
-                Button {
-                    // 先无动画置位（内容立刻切过去），样式变化交给短动画——
-                    // 否则要等整条弹簧跑完才看到新页面
-                    selectedToolId = tool.id
-                } label: {
-                    HStack(spacing: isSelected ? 5 : 0) {
-                        Image(systemName: tool.icon)
-                            .font(.system(size: 14, weight: .medium))
+                // Button → onTapGesture（0a3edb2e 之后兔兔仍说「不灵敏不丝滑」：
+                // ScrollView 里的 Button 要先过拖拽判定才收 tap，天生一拍延迟；
+                // 裸 tap gesture 即点即发）。动画改 matchedGeometryEffect：
+                // 底色胶囊是「同一个视图」在工具间飞——不依赖每个 label 的隐式动画，
+                // 前两刀都死在那条路上（value 版被换枝吞、镜像版实机也没跑起来）。
+                HStack(spacing: isSelected ? 5 : 0) {
+                    Image(systemName: tool.icon)
+                        .font(.system(size: 14, weight: .medium))
 
-                        Text(tool.name)
-                            .font(.system(size: Theme.F.secondary, weight: .semibold))
-                            .lineLimit(1)
-                            .fixedSize()
-                            .frame(width: isSelected ? nil : 0, alignment: .leading)
-                            .opacity(isSelected ? 1 : 0)
-                            .clipped()
-                    }
-                    .foregroundColor(isSelected ? Theme.textSecondary : Theme.textMuted)
-                    .padding(.horizontal, isSelected ? 14 : 10)
-                    .frame(height: 36)
-                    .background(
-                        Capsule()
-                            .fill(Theme.branchIndicator.opacity(isSelected ? 0.14 : 0))
-                    )
-                    .opacity(draggingToolId == tool.id ? 0.3 : 1)
+                    Text(tool.name)
+                        .font(.system(size: Theme.F.secondary, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(width: isSelected ? nil : 0, alignment: .leading)
+                        .opacity(isSelected ? 1 : 0)
+                        .clipped()
                 }
-                .buttonStyle(.plain)
+                .foregroundColor(isSelected ? Theme.textSecondary : Theme.textMuted)
+                .padding(.horizontal, isSelected ? 14 : 10)
+                .frame(height: 36)
+                .background {
+                    if isSelected {
+                        Capsule()
+                            .fill(Theme.branchIndicator.opacity(0.14))
+                            .matchedGeometryEffect(id: "dockPill", in: pillNS)
+                    }
+                }
+                .opacity(draggingToolId == tool.id ? 0.3 : 1)
+                .contentShape(Capsule())
+                .onTapGesture {
+                    // 真选中即时赋值（面板零延迟），胶囊飞行走镜像态的动画事务
+                    selectedToolId = tool.id
+                }
                 .onDrag {
                     draggingToolId = tool.id
                     return NSItemProvider(object: tool.id as NSString)
@@ -107,20 +115,20 @@ struct ToolBarView: View {
 
             // 🏠 桌面键：HStack 内、ScrollView 外最右，固定不可拖不可删（对齐粟粟布局）
             let isHomeSelected = ((capsuleId.isEmpty ? selectedToolId : capsuleId) == "home")
-            Button {
-                selectedToolId = "home"
-            } label: {
-                Image(systemName: "house")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(isHomeSelected ? Theme.textSecondary : Theme.textMuted)
-                    .padding(.horizontal, 10)
-                    .frame(height: 36)
-                    .background(
+            Image(systemName: "house")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(isHomeSelected ? Theme.textSecondary : Theme.textMuted)
+                .padding(.horizontal, 10)
+                .frame(height: 36)
+                .background {
+                    if isHomeSelected {
                         Capsule()
-                            .fill(Theme.branchIndicator.opacity(isHomeSelected ? 0.14 : 0))
-                    )
-            }
-            .buttonStyle(.plain)
+                            .fill(Theme.branchIndicator.opacity(0.14))
+                            .matchedGeometryEffect(id: "dockPill", in: pillNS)
+                    }
+                }
+                .contentShape(Capsule())
+                .onTapGesture { selectedToolId = "home" }
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
         .onAppear { capsuleId = selectedToolId }
