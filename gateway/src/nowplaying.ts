@@ -117,10 +117,39 @@ export const NOWPLAYING_TOOLS = [
     description: '看兔兔在听什么歌：歌名、歌手、播放进度、正唱到哪句歌词、她说的话，以及这首歌你们之间的记录（她听过几次、第一次是什么时候、以前听这首时说过什么）。她提到音乐、或者你想知道她此刻的背景音时调用。她在 App 里听歌时进度是实时的，能接住「正唱到的这句」说话。',
     input_schema: { type: 'object' as const, properties: {} },
   },
+  {
+    name: 'song_lyrics',
+    description: '看她正在听的这首歌的完整歌词（含翻译，如有）。now_playing 只给「正唱到的那句」；想通读整首、接住上下文时用这个。共听时她聊到歌词、或你想懂这首歌在唱什么，就调它。',
+    input_schema: { type: 'object' as const, properties: {} },
+  },
 ];
+
+/// 完整歌词：走网易云代理搜当前歌（本地导入的歌搜不到就如实说）。
+/// 一首只取一次，缓存在内存（进程生命周期内够用）。
+const lyricsCache = new Map<string, string>();
+async function describeFullLyrics(): Promise<string> {
+  const now = load<NowPlaying | null>(NOW_PATH, null);
+  if (!now?.title) return '她现在没在听歌。';
+  const key = now.artist ? `${now.title} - ${now.artist}` : now.title;
+  const hit = lyricsCache.get(key);
+  if (hit) return hit;
+  try {
+    const { fetchLyricsBySearch } = await import('./music');
+    const lrc = await fetchLyricsBySearch(now.title, now.artist);
+    if (!lrc) return `《${now.title}》的歌词没搜到（可能是本地导入的歌）。你知道的就凭记忆聊，不确定就问她。`;
+    const out = `《${key}》完整歌词：
+
+${lrc}`;
+    lyricsCache.set(key, out.slice(0, 8000));
+    return out.slice(0, 8000);
+  } catch (e: any) {
+    return `歌词服务这会儿没搜到（${e?.message || 'unknown'}）。`;
+  }
+}
 
 export async function callNowPlayingTool(name: string): Promise<string | null> {
   if (name === 'now_playing') return describeNowPlaying();
+  if (name === 'song_lyrics') return describeFullLyrics();
   return null;
 }
 

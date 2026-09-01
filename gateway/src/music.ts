@@ -20,6 +20,24 @@ async function ncm(path: string, params: Record<string, string | number> = {}): 
   return r.json();
 }
 
+/// song_lyrics 工具用：按「歌名 歌手」搜网易云取第一条命中的 LRC（去时间戳留纯词，保留翻译）
+export async function fetchLyricsBySearch(title: string, artist?: string): Promise<string | null> {
+  const q = artist ? `${title} ${artist.split('/')[0].trim()}` : title;
+  const d = await ncm('/search', { keywords: q, limit: 1 });
+  const id = d?.result?.songs?.[0]?.id;
+  if (!id) return null;
+  const l = await ncm('/lyric', { id });
+  const strip = (raw: string) => raw
+    .split('\n')
+    .map((ln: string) => ln.replace(/\[[0-9:.\]]+\]/g, '').trim())
+    .filter((ln: string) => ln.length > 0)
+    .join('\n');
+  const main = strip(l?.lrc?.lyric || '');
+  if (!main) return null;
+  const trans = strip(l?.tlyric?.lyric || '');
+  return trans ? `${main}\n\n—— 翻译 ——\n${trans}` : main;
+}
+
 export function musicRoutes(app: Hono) {
   /// 搜索：GET /api/music/search?q=五月天
   app.get('/api/music/search', async (c) => {
