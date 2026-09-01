@@ -71,23 +71,36 @@ final class MusicPlayer: NSObject {
     }
 
     private func sleepTimerFired() async {
+        // 兔兔 09-02 拍板：到点不掐歌——一首歌被腰斩着停最难受。改成
+        // 「到点后放完当前这首、自然收尾时停」（stopAfterCurrent 既有通路），
+        // 最后 4 秒轻轻淡出收边。定时器到点时如果本来就暂停着，直接算停。
         sleepTimerEndsAt = nil
-        guard isPlaying, let song = currentSong, let p = player else { return }
-        // 4 秒淡出，别把睡着的人惊醒
-        for step in stride(from: 1.0, through: 0.0, by: -0.1) {
-            p.volume = Float(step)
-            try? await Task.sleep(for: .milliseconds(400))
+        guard let song = currentSong else { return }
+        guard isPlaying else {
+            lastBeatAt = Date()
+            sendBeat(song: song, state: "paused")
+            return
         }
-        p.pause(); isPlaying = false; p.volume = 1.0
-        updateNowPlayingInfo()
-        lastBeatAt = Date()
-        sendBeat(song: song, state: "paused")
-        let title = song.title
-        Task.detached(priority: .utility) {
-            await NowPlayingReporter.livelineEvent(
-                kind: "music_sleep",
-                text: "她的睡眠定时器到点了，《\(title)》淡出停下——她大概听着歌睡着了。这会儿轻一点。")
+        stopAfterCurrent = true
+        // 歌尾淡出：等到 remaining ≤4s 再开始压音量，压到自然结束
+        let p = player
+        Task { [weak self] in
+            while let self = await self.sleepFadeShouldWait() {
+                _ = self
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            guard let self, await self.stopAfterCurrent, let p else { return }
+            for step in stride(from: 1.0, through: 0.2, by: -0.1) {
+                p.volume = Float(step)
+                try? await Task.sleep(for: .milliseconds(450))
+            }
         }
+    }
+
+    /// 歌尾淡出的等待判定：还没到最后 4 秒且仍计划停 → 继续等；否则结束等待
+    private func sleepFadeShouldWait() -> Bool? {
+        guard stopAfterCurrent, isPlaying, duration > 0 else { return nil }
+        return (duration - currentTime) > 4 ? true : nil
     }
 
     // MARK: - 预取（播放器本体优化②）
@@ -314,10 +327,11 @@ final class MusicPlayer: NSObject {
         }
     }
 
-    /// 「听完这首停」到站：歌已自然结束，无需淡出，直接停 + 同款晚安信号
+    /// 「听完这首停」到站：歌自然收尾（尾段已淡出）即停 + 晚安信号
     private func sleepStopAtSongEnd() async {
         let title = currentSong?.title ?? ""
         isPlaying = false
+        player?.volume = 1.0   // 归位，别让明早第一首静音
         updateNowPlayingInfo()
         if let song = currentSong { lastBeatAt = Date(); sendBeat(song: song, state: "paused") }
         Task.detached(priority: .utility) {
