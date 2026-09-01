@@ -40,15 +40,19 @@ extension ConversationViewModel {
     }
 
     func softDelete(_ node: MessageNode) {
-        // 1) Instantly remove from display path (single-item diff, no lag)
+        // 兔兔 09-02 实测「删不掉」：defc8121 加了删除二次确认后，confirmationDialog 收起
+        // 引发的视图更新会触发一次 rebuildPath，正落在「已从 currentPath 移除、isDeleted
+        // 还没置」的窗口里（原来置标记在 async 里做）——节点被原样捞回来，看起来就是删除失效。
+        // 修：标记同步置（一个 Bool 而已，不值得为它留竞态窗），之后任何时机的 rebuild
+        // 都会把它滤掉；重活（nodeCount/侧栏）照旧 async。
         let deletedId = node.id
+        node.isDeleted = true
+        node.deletedAt = Date()
         currentPath.removeAll { $0.id == deletedId }
 
-        // 2) Defer SwiftData mutation so UI updates first, then notify sidebar
+        // 2) Defer sidebar bookkeeping so UI updates first
         let conv = selectedConversation
         DispatchQueue.main.async { [self] in
-            node.isDeleted = true
-            node.deletedAt = Date()
             // 软删除是"内容改动"，同步更新对话的 updateTime + nodeCount + 走 3s
             // debounce 重排（之前漏了，导致 sidebar 行里 nodeCount 不减、位置不变）
             if let conv {
