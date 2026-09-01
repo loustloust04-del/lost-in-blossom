@@ -26,6 +26,7 @@ import { savePeek, pendingPeeks, peekImage, ackPeek } from './peek';
 import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
 import { nowPlayingRoutes } from './nowplaying';
+import { listenRoutes } from './listen';
 import { musicRoutes } from './music';
 import { livelineRoutes } from './liveline';
 import { intimacyRoutes } from './intimacy';
@@ -897,6 +898,7 @@ app.post('/internal/tool-call', async (c) => {
 vitalsRoutes(app);
 phoneStatusRoutes(app);
 nowPlayingRoutes(app);
+listenRoutes(app);
 musicRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);

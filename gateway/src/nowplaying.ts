@@ -138,6 +138,8 @@ export function nowPlayingRoutes(app: Hono) {
     }
     if (!body?.title) return c.json({ error: 'title required' }, 400);
     const mem = recordNowPlaying(body);
+    // T2：共听会话续命（心跳即在场证明）
+    try { const { touchListenSession } = await import('./listen'); touchListenSession(); } catch {}
     console.log(`[music] 🎧 ${mem.key} (第 ${mem.count} 次)`);
     return c.json({ ok: true, count: mem.count });
   });

@@ -10,6 +10,7 @@ struct MusicPanelView: View {
     @Environment(\.modelContext) private var context
     @Query private var allSongs: [Song]
     @State private var player = MusicPlayer.shared
+    @AppStorage("listenTogetherOn") private var listenTogether = false
     @State private var showImporter = false
     @State private var showLyrics = false
     @State private var tab = 0          // 0=云端曲库 1=本地导入
@@ -146,6 +147,18 @@ struct MusicPanelView: View {
                     player.next { MusicPanelView.resolve($0, profileId: pid) }
                 } label: { Image(systemName: "forward.fill") }
                 Button { showLyrics = true } label: { Image(systemName: "text.quote") }
+                // T2 叫他一起听：邀请这个动作本身有仪式感（plan-listen-together-v2 D2）。
+                // 亮 = 共听中（心跳替你续命，切歌不断场；停播 5min 网关侧自动过期）
+                Button {
+                    listenTogether.toggle()
+                    let song = player.currentSong
+                    Task.detached(priority: .utility) {
+                        await ListenTogetherClient.set(on: listenTogether, title: song?.title, artist: song?.artist)
+                    }
+                } label: {
+                    Image(systemName: listenTogether ? "person.2.fill" : "person.2")
+                        .foregroundColor(listenTogether ? ConsoleView.green : ConsoleView.greenDeep)
+                }
             }
             .foregroundColor(ConsoleView.greenDeep)
             ProgressView(value: player.duration > 0 ? min(1, player.currentTime / player.duration) : 0)
@@ -275,6 +288,23 @@ struct LyricsSheet: View {
         """
         CCBridgeWebSocketClient.shared.sendChat(
             chatId: "music-\(s.id)", messageId: UUID().uuidString, content: payload) { _ in }
+    }
+}
+
+/// T2 共听开关（网关 /listen/start|stop；路由随下次网关重启生效，之前静默失败无副作用）
+enum ListenTogetherClient {
+    static func set(on: Bool, title: String?, artist: String?) async {
+        let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
+        guard let url = URL(string: "\(base)/listen/\(on ? "start" : "stop")?key=bunny-lib-2026") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 6
+        var body: [String: Any] = [:]
+        if let title { body["title"] = title }
+        if let artist { body["artist"] = artist }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        _ = try? await URLSession.shared.data(for: req)
     }
 }
 
