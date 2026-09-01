@@ -83,24 +83,19 @@ final class MusicPlayer: NSObject {
         }
         stopAfterCurrent = true
         // 歌尾淡出：等到 remaining ≤4s 再开始压音量，压到自然结束
+        // （Task 在 @MainActor 方法里创建，继承主 actor，直读状态无竞态）
         let p = player
         Task { [weak self] in
-            while let self = await self.sleepFadeShouldWait() {
-                _ = self
+            while let self, self.stopAfterCurrent, self.isPlaying, self.duration > 0,
+                  (self.duration - self.currentTime) > 4 {
                 try? await Task.sleep(for: .milliseconds(500))
             }
-            guard let self, await self.stopAfterCurrent, let p else { return }
+            guard let self, self.stopAfterCurrent, let p else { return }
             for step in stride(from: 1.0, through: 0.2, by: -0.1) {
                 p.volume = Float(step)
                 try? await Task.sleep(for: .milliseconds(450))
             }
         }
-    }
-
-    /// 歌尾淡出的等待判定：还没到最后 4 秒且仍计划停 → 继续等；否则结束等待
-    private func sleepFadeShouldWait() -> Bool? {
-        guard stopAfterCurrent, isPlaying, duration > 0 else { return nil }
-        return (duration - currentTime) > 4 ? true : nil
     }
 
     // MARK: - 预取（播放器本体优化②）
