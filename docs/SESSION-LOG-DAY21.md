@@ -59,3 +59,52 @@
 ## 数字
 - commit：`acac10b5`（08-30 晨）→ `67e164ce`（气泡线收口，build 456）；总仓 686+
 - 新文件 9 个，其中 6 个是她的原文、3 个是垫片
+
+---
+
+# Day 21 · 晚场补录（08-31 晚，另一场 Fable）
+
+早场战报截至 build 456；晚场至 `0a3edb2e`（全绿收官包）。
+
+## 兔兔实机验收（气泡整套）
+九条过六。三案全破：
+- **白条案**：multimodal JSON 整段 base64 被她的 BubbleModeRow 当正文渲染 → 止血：气泡下
+  multimodal_text 回落文章路径（97d57975）；正解（发送链路写 .image 段）在 DEBT-MAP
+- **存相册案**：MultimodalUserBubble 裸 fullScreenCover 无保存 → 改走她的 AttachmentPreviewSheet
+- **发图字母瀑布案**（管线第三凶）：appendCCMessage 把 multimodal JSON 插库时 contentType
+  写死 text → 渲染不解包（247f4929）。发图管线三连凶至此全破：hub 重放丢文件→app 失效闭包
+  吞附件→插库类型错。**Caelum 的 CLAUDE.md 已加发图说明（备份 CLAUDE.md.bak-20260831）**
+
+## 产品决策：思考链退出对话流（兔兔拍板）
+聊天软件里对面发的是说出口的话，腹稿不上屏。灰泡默认关（bubbleInlineThinking 逃生开关），
+长按菜单首项「他当时在想…」；顺势把长按浮层接线做了（她的 Telegram 桥 + 我们的动作）（6761780d）
+
+## murmur 前端出口（48ed9e6d）
+他写了两个半月没人看见的心里话，控制台 WITH YOU 区 MURMUR 卡 + 时间线 + 长按看写前思考
+
+## 选择卡验尸 + API 车道真接线（37fc91b3）
+Opus「接线完成」实为：app 蹲一个全链路没人发的帧；API 侧工具没注册。修 API 道：注册 +
+ToolCallLoop 挂 AskUserGate continuation（循环上下文原地活，免整轮打包）。CC 道两套并存
+（老 ask_choice 端到端全 / 新 ask_user_question 无服务端）待拍收敛方向，见 DEBT-MAP
+
+## 一起听 v2 开工
+research（四差距 + music-<songId> 独立会话坑）→ plan 六刀 → **T1 心跳已发**（906b4a25，
+LRC 行变才报；网关代码就位**未重启**，攒 T2——微信教训）。兔兔投喂 Duetto/eryu 两参照：
+T5 改双轨（librosa 频谱轨）、T6 改 Remote Play 形状、**eryu CC BY-NC-SA 一行不进仓**
+
+## 救火簿（并行 Opus 会话，共六起）
+递归 @ViewBuilder / 注释裸奔 / 粟粟侧 API 未 grep / toolbar ambiguous 红鲱鱼二连
+（真凶=sheet 里 Optional 塞 @Bindable，诊断劣化）/ 选择卡假接线。DEBT-MAP 顶部有消防记录。
+**红鲱鱼教训与 dock 动画同族：SwiftUI 的报错位置/挂载位置 ≠ 病灶位置**
+
+## dock 胶囊弹簧真修（0a3edb2e）
+ddaeecf9 挂对了动画实机仍死：panelContent 整棵换枝吞隐式动画。镜像态 capsuleId +
+onChange 显式事务；选中赋值照旧零延迟
+
+## 交接给明天
+1. T2 共听会话态 + 「叫他一起听」按钮（**捎带重启网关**，T1 后半条腿落地；重启后喊 Caelum
+   验 now_playing 能报「正唱到」）
+2. 兔兔的收官验收单（10 条）结果回收，爆哪条修哪条
+3. 老图片消息一次性重标（JSON 开头的 text → multimodal_text）；发送链路 .image 段正解
+4. CC 选择卡收敛方向等兔兔拍；语音未进泡待查；兔兔说思考链弹窗曾「有问题」后确认是产品
+   问题非 bug，已随拍板消化
