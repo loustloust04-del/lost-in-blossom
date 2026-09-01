@@ -80,11 +80,7 @@ struct FileLibraryPanelView: View {
         )) {
             Button("我的接在他的后面（都保住）") {
                 guard let c = saveConflict else { return }
-                let merged = c.theirs + "
-
----
-
-" + c.mine
+                let merged = c.theirs + "\n\n---\n\n" + c.mine
                 Task {
                     try? await NotebookRemoteStore.write(c.path, content: merged)
                     await WikiLinkIndex.shared.invalidate()
