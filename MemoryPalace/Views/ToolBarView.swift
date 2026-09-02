@@ -9,37 +9,20 @@ struct ToolBarView: View {
 
     @State private var showDrawer = false
     @State private var draggingToolId: String? = nil
-    /// 胶囊视觉位（selectedToolId 的镜像）。八渡定案（09-02，「拆探针楼就歪」破的）：
-    /// 探针期动画活着的真正原因——withAnimation 里除了 capsuleId 还 toggle 了绿豆的
-    /// @State：**@State 变更同步落在事务内**，把整次更新钉在动画里。拆掉绿豆后事务里
-    /// 只剩 @AppStorage——AppStorage 走 UserDefaults 通知链回灌，**出了事务才到视图**，
-    /// 动画白包。四渡换 AppStorage 是为了防身份重建，但六渡（ZStack 底座）已根治重建，
-    /// 这层盔甲不再需要——换回 @State，变更同步在事务内，动画天然生效。
-    /// 侦察史留档：五渡口供 i涨a涨c0t0 定罪重建；「拆脚手架楼歪」定罪 AppStorage 出事务。
-    @State private var capsuleId: String = ""
 
     private var pinnedTools: [RightPanelTool] {
         toolManager?.pinnedTools ?? []
     }
 
-    /// 切页动画：原 0.45s 弹簧，点一下要等近半秒才见反应（兔兔实测「反应不过来」）。
-    /// 拖拽重排仍用弹簧手感，纯切页用短促的 easeOut。
-    private let springAnim: Animation = .spring(response: 0.32, dampingFraction: 0.82)
-    /// dock 选中胶囊的展开动画。
-    /// 08-12 那刀为治「点了要等半秒才见反应」，把它从弹簧改成了 easeOut——
-    /// 治好了迟滞，但也把胶囊撑开时那口弹性一起去掉了（兔兔 08-28 说粟粟那边「有个动画」，
-    /// 指的就是这点弹）。
-    /// 现在两全：selectedToolId 仍是无动画直接赋值（页面立刻切，保住 08-12 的修复），
-    /// 只有这条样式动画换回弹簧。她那边是 0.45/0.75，但她整体切页也走这条、必须留余量；
-    /// 我们只驱动一个胶囊的宽度与底色，取更快的 0.30/0.78——弹一下就停，不拖尾。
-    private let switchAnim: Animation = .spring(response: 0.30, dampingFraction: 0.78)
+    /// 九渡：弹簧收敛到粟粟原档——切页/胶囊/重排同一口弹簧（0.45/0.75），手感统一
+    private let springAnim: Animation = .spring(response: 0.45, dampingFraction: 0.75)
 
     var body: some View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
             ForEach(pinnedTools) { tool in
-                let isSelected = tool.id == (capsuleId.isEmpty ? selectedToolId : capsuleId)
+                let isSelected = tool.id == selectedToolId
                 // Button → onTapGesture（0a3edb2e 之后兔兔仍说「不灵敏不丝滑」：
                 // ScrollView 里的 Button 要先过拖拽判定才收 tap，天生一拍延迟；
                 // 裸 tap gesture 即点即发）。动画改 matchedGeometryEffect：
@@ -70,10 +53,8 @@ struct ToolBarView: View {
                 )
                 .opacity(draggingToolId == tool.id ? 0.3 : 1)
                 .contentShape(Capsule())
-                .onTapGesture {
-                    // 真选中即时赋值（面板零延迟），胶囊撑开走镜像态的动画事务
-                    selectedToolId = tool.id
                 }
+                .buttonStyle(.plain)
                 .onDrag {
                     draggingToolId = tool.id
                     return NSItemProvider(object: tool.id as NSString)
@@ -115,7 +96,10 @@ struct ToolBarView: View {
             .buttonStyle(.plain)
 
             // 🏠 桌面键：HStack 内、ScrollView 外最右，固定不可拖不可删（对齐粟粟布局）
-            let isHomeSelected = ((capsuleId.isEmpty ? selectedToolId : capsuleId) == "home")
+            let isHomeSelected = (selectedToolId == "home")
+            Button {
+                withAnimation(springAnim) { selectedToolId = "home" }
+            } label: {
             Image(systemName: "house")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(isHomeSelected ? Theme.textSecondary : Theme.textMuted)
@@ -125,28 +109,17 @@ struct ToolBarView: View {
                     Capsule()
                         .fill(Theme.branchIndicator.opacity(isHomeSelected ? 0.14 : 0))
                 )
-                .contentShape(Capsule())
-                .onTapGesture { selectedToolId = "home" }
+            }
+            .buttonStyle(.plain)
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
-        .onAppear {
-            if capsuleId.isEmpty {
-                capsuleId = selectedToolId          // 首装：直接落位不演
-            } else if capsuleId != selectedToolId {
-                // 身份被重建后的补飞：首帧按旧位画好，下一拍动画归位
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(40))
-                    withAnimation(switchAnim) { capsuleId = selectedToolId }
-                }
-            }
-        }
-        .onChange(of: selectedToolId) { _, new in
-            withAnimation(switchAnim) { capsuleId = new }
-        }
+        .animation(springAnim, value: selectedToolId)
         .padding(4)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        // 九渡：她的「锁最多屏宽」——toolbar 不再用固有总宽撑宽下面的 panelContent
+        .frame(maxWidth: .infinity)
         .sheet(isPresented: $showDrawer) {
             ToolDrawerView(selectedToolId: $selectedToolId, onDismiss: { showDrawer = false })
                 .presentationDetents([.medium])
