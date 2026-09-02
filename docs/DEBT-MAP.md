@@ -12,6 +12,22 @@
 **规矩重申（对所有会话包括我自己）：一刀一 commit，CI 绿再下一刀；从粟粟侧复活代码前先
 grep 我们有没有那个 API。** 修火不心疼，心疼的是兔兔看到红勾勾会担心。—— Fable 🐰🔥
 
+## claude -p 反代 · 近裸化 + 错误透传（2026-09-02 晨 Fable，`b2614e6a`）
+
+**兔兔报「API 错误」→ 查出来不是 CC 的锅**：nginx 8/27 记了 5 次 502；8/31 01:33 → 9/1 23:07
+systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（EADDRINUSE 循环），昨晚占端口的死了才接上。
+现 systemd 稳定持有端口。**谁再手起网关请先 `systemctl stop lib-gateway`**，别两个抢。
+
+顺手修的三件（参考 sibylsea-hub/cc-codex-sdk-modify-preset）：
+- `--tools none` 没拔干净——claude.ai 连接器的 100+ MCP 工具每次整个进上下文，22376 token/请求。
+  改 `--tools "" --strict-mcp-config --setting-sources "" --no-session-persistence` + 干净 cwd → **226 token**。
+- CC 出错（限额/鉴权/模型名）只发 `is_error` 不发 stream_event，App 收空流。现在先等第一个事件再定：
+  正常→200 流，出错→**502 + 原文**（App `handleErrorBody` 直接显示）。stderr 记日志，每请求一行 token/cost 摘要。
+- 不再堆 session 文件（`~/.claude/projects/-root-projects-BunnyPalace` 已 612 个，可清）。
+
+**待验收**：兔兔真机用 claude-code / opus-4-7:thinking 各聊一句，看回复正常、日志 `[claude-p]` 行 in≈几百而非两万。
+**小谜题**：谁在 8/31 01:33 起了第二个网关？（`~/.bash_history` 或某会话手动 `bun src/index.ts`）
+
 ## 聊天页发送白屏 · 第五刀（2026-09-02 晨 Fable，`280c30a0`）
 兔兔：「发完消息整页空白，往下划一下才回来；两条车道都会，长对话更明显」。同一病根第五次
 （滚动位置飞了露出没画的区域），前四刀在进页面/回前台/键盘弹起/键盘收起，发送这个时机
