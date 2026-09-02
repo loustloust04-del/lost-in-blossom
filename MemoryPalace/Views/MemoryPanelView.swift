@@ -50,13 +50,13 @@ struct RightPanelView: View {
             }
         }
         .onChange(of: selectedToolId) { _, new in
-            // LRU 限养 3 只：当前 + 最近两只，老的放生（下次去重付一次冷启动税）。
-            // 内存与陪跑成本双兜底；浏览器/音乐这种常用的基本一直在窝里。
-            if let i = visitedToolIds.firstIndex(of: new) { visitedToolIds.remove(at: i) }
-            visitedToolIds.append(new)
-            while visitedToolIds.count > 3 {
-                visitedToolIds.removeFirst()
-            }
+            // 兔兔 09-02 三报定案：「单个都不卡，反复切才卡」——LRU 限养 3 是庸医针：
+            // 她实际在 7 个工具间轮切，容量 3 意味着几乎每切必有一只被放生+一只重孵，
+            // 冷启动税从一生一次退化成每切必付，反复拆建还越积越沉；remove+append
+            // 重排也让 ZStack 每切洗一次牌。拔针：只进不出、顺序稳定——打字成本由
+            // 静默门兜住（隐藏面板恒等短路），内存若真爆（app 被系统杀）再做
+            // 「带善后的定向放生」，不做粗暴轮换。
+            if !visitedToolIds.contains(new) { visitedToolIds.append(new) }
         }
         .onAppear {
             if visitedToolIds.isEmpty { visitedToolIds = [selectedToolId] }
