@@ -39,45 +39,14 @@ extension ConversationViewModel {
         currentPath.contains { $0.isPinned && !$0.isTrashed }
     }
 
-    /// 侦察版（临时）：返回诊断串给 toast——分身几只/落盘成败/全对话同文几份
-    @discardableResult
-    func softDelete(_ node: MessageNode) -> String {
-        // 兔兔 09-02 实测「删不掉」：defc8121 加了删除二次确认后，confirmationDialog 收起
-        // 引发的视图更新会触发一次 rebuildPath，正落在「已从 currentPath 移除、isTrashed
-        // 还没置」的窗口里（原来置标记在 async 里做）——节点被原样捞回来，看起来就是删除失效。
-        // 修：标记同步置（一个 Bool 而已，不值得为它留竞态窗），之后任何时机的 rebuild
-        // 都会把它滤掉；重活（nodeCount/侧栏）照旧 async。
+    func softDelete(_ node: MessageNode) {
+        // 删除案终审（09-02，五案连环后结案）：isDeleted 是 SwiftData PersistentModel
+        // 保留属性，自声明同名字段从不入库——已整仓改名 isTrashed（e6fdb81d，粟粟同坑
+        // 同修 8c37870a）。同步置标 + 显式落盘是前两刀留下的真修，保留。
         let deletedId = node.id
         node.isTrashed = true
         node.deletedAt = Date()
-        // 兔兔 09-02 二报「删了重进对话又回来」的真凶：标记只改在主 context 内存里，
-        // 从没显式 save；重进对话的路径重建走 **bgContext 从磁盘读**——读到的还是
-        // isTrashed=false 的旧值，节点原样复活。b7cd8976 修的是同会话内的竞态窗，
-        // 这条是跨会话的持久化洞，两个叠着才显得「怎么都删不掉」。
-        // 09-02 终局真相（兔兔三报「删不掉」）：删除本身两刀修后已是好的——真凶是
-        // 8-31 图片测试期卡死的 hub 离线队列反复重投（日志 1657 次 replay），早期没有
-        // 去重的窗口里同一条消息被当成**同父的兄弟分支**插了 N 份。路径一次只显示一个
-        // 分支：删掉当前这份 → 重建路径挑中下一个分身 → 「一模一样的消息又回来了」。
-        // 修：删除时连坐——同父、同角色、同内容的兄弟分身一起删（精确匹配，误伤面为零）。
-        let twins = (nodeMap.values.filter {
-            $0.id != deletedId && $0.parentId == node.parentId &&
-            $0.role == node.role && $0.content == node.content && !$0.isTrashed
-        })
-        for twin in twins {
-            twin.isTrashed = true
-            twin.deletedAt = Date()
-        }
-        var diag = "同胞\(twins.count)"
-        let sameContentAll = nodeMap.values.filter {
-            $0.id != deletedId && $0.role == node.role && $0.content == node.content && !$0.isTrashed
-        }.count
-        diag += "｜全会话同文\(sameContentAll)"
-        if let ctx = node.modelContext {
-            do { try ctx.save(); diag += "｜落盘✓" }
-            catch { diag += "｜落盘✗\(String(describing: error).prefix(40))" }
-        } else {
-            diag += "｜⚠️无context"
-        }
+        try? node.modelContext?.save()
         currentPath.removeAll { $0.id == deletedId }
 
         // 2) Defer sidebar bookkeeping so UI updates first
@@ -93,7 +62,6 @@ extension ConversationViewModel {
                 markConversationDirty()
             }
         }
-        return diag
     }
 
     func restore(_ node: MessageNode) {
