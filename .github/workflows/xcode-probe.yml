@@ -1,0 +1,27 @@
+name: Xcode Probe
+on:
+  push:
+    branches: [probe/xcode]
+jobs:
+  inventory-macos15:
+    runs-on: macos-15
+    steps:
+      - name: List installed Xcodes
+        run: ls /Applications | grep -i xcode || true
+      - name: Current default
+        run: xcodebuild -version
+  inventory-macos26:
+    runs-on: macos-26
+    continue-on-error: true
+    steps:
+      - name: List installed Xcodes
+        run: ls /Applications | grep -i xcode || true
+      - name: Current default
+        run: xcodebuild -version
+  inventory-latest:
+    runs-on: macos-latest
+    steps:
+      - name: List installed Xcodes
+        run: ls /Applications | grep -i xcode || true
+      - name: Current default
+        run: xcodebuild -version
