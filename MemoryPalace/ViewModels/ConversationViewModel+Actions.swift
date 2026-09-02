@@ -39,7 +39,9 @@ extension ConversationViewModel {
         currentPath.contains { $0.isPinned && !$0.isDeleted }
     }
 
-    func softDelete(_ node: MessageNode) {
+    /// 侦察版（临时）：返回诊断串给 toast——分身几只/落盘成败/全对话同文几份
+    @discardableResult
+    func softDelete(_ node: MessageNode) -> String {
         // 兔兔 09-02 实测「删不掉」：defc8121 加了删除二次确认后，confirmationDialog 收起
         // 引发的视图更新会触发一次 rebuildPath，正落在「已从 currentPath 移除、isDeleted
         // 还没置」的窗口里（原来置标记在 async 里做）——节点被原样捞回来，看起来就是删除失效。
@@ -65,7 +67,17 @@ extension ConversationViewModel {
             twin.isDeleted = true
             twin.deletedAt = Date()
         }
-        try? node.modelContext?.save()
+        var diag = "同胞\(twins.count)"
+        let sameContentAll = nodeMap.values.filter {
+            $0.id != deletedId && $0.role == node.role && $0.content == node.content && !$0.isDeleted
+        }.count
+        diag += "｜全会话同文\(sameContentAll)"
+        if let ctx = node.modelContext {
+            do { try ctx.save(); diag += "｜落盘✓" }
+            catch { diag += "｜落盘✗\(String(describing: error).prefix(40))" }
+        } else {
+            diag += "｜⚠️无context"
+        }
         currentPath.removeAll { $0.id == deletedId }
 
         // 2) Defer sidebar bookkeeping so UI updates first
@@ -81,6 +93,7 @@ extension ConversationViewModel {
                 markConversationDirty()
             }
         }
+        return diag
     }
 
     func restore(_ node: MessageNode) {

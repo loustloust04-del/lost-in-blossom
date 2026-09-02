@@ -75,7 +75,11 @@ struct CardFlowView: View {
             onNotice: { viewModel.transientNotice = TransientNotice($0) },
             onToggleFavorite: { viewModel.toggleFavorite(node) },
             onTogglePin: { viewModel.togglePin(node) },
-            onSoftDelete: { viewModel.softDelete(node) },
+            onSoftDelete: {
+                // 侦察版（临时）：把删除诊断串亮成 toast，查清「怎么删都删不掉」
+                let diag = viewModel.softDelete(node)
+                viewModel.transientNotice = TransientNotice("已删｜" + diag)
+            },
             onSwitchBranch: { nodeId, idx in viewModel.switchBranch(at: nodeId, to: idx) },
             onRegenerate: makeRegenerateAction(for: node),
             onEdit: makeEditAction(for: node),

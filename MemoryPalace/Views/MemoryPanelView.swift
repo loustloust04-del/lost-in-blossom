@@ -19,7 +19,14 @@ struct RightPanelView: View {
         // 同时去掉切工具时的 phaseAnimator 回弹（连同 bounceTrigger）：
         // 那个 scaleEffect 0.995 会在缩放瞬间露出背景、且切换手感发卡，
         // 粟粟同刀也删了它，原话「缩放露背景+卡」。
-        panelContent
+        // ── 六渡（09-02，五渡侦察定罪）────────────────────────────────
+        // 探针铁证：切一次工具 i+1 a+1（整棵重建+重新出现）、c/t 恒 0（onChange 从未跑）、
+        // 绿豆不动（@State 每次归零）。真凶：safeAreaInset 挂在 switch(ConditionalContent)
+        // 上，换枝时连同 inset 内容整体 remount——四种动画机制全靠的「上一帧记忆」每次
+        // 都被清空。唯一会动的「影子」是 onAppear 补飞（40ms 后错位归位），所以怪。
+        // 修：拿 ZStack 当身份稳定的底座包住 switch——换枝发生在 ZStack **里面**，
+        // inset 的 ToolBarView 从此常驻不再重建。粟粟同款结构能动，就是这一层的差别。
+        ZStack { panelContent }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 ToolBarView(selectedToolId: $selectedToolId)
                     .background(Theme.sidebarBg)
