@@ -27,6 +27,8 @@ import { getScreenTime, recordAppOpen } from './screentime';
 import { phoneStatusRoutes } from './phone-status';
 import { nowPlayingRoutes } from './nowplaying';
 import { listenRoutes } from './listen';
+// 09-02 删除案侦察（临时）：app 把诊断串直接投回来，绕开手机上 toast 被 UI 挡的问题
+
 import { musicRoutes } from './music';
 import { livelineRoutes } from './liveline';
 import { intimacyRoutes } from './intimacy';
@@ -899,6 +901,12 @@ vitalsRoutes(app);
 phoneStatusRoutes(app);
 nowPlayingRoutes(app);
 listenRoutes(app);
+app.post('/debug/probe', async (c) => {
+  if (c.req.query('key') !== (process.env.PHONE_DATA_KEY || 'bunny-lib-2026')) return c.json({ error: 'unauthorized' }, 401);
+  let body: any = {}; try { body = await c.req.json(); } catch {}
+  console.log(`[probe] 🔍 ${String(body?.text || '').slice(0, 500)}`);
+  return c.json({ ok: true });
+});
 musicRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);

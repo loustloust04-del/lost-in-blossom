@@ -76,9 +76,20 @@ struct CardFlowView: View {
             onToggleFavorite: { viewModel.toggleFavorite(node) },
             onTogglePin: { viewModel.togglePin(node) },
             onSoftDelete: {
-                // 侦察版（临时）：把删除诊断串亮成 toast，查清「怎么删都删不掉」
-                let diag = viewModel.softDelete(node)
-                viewModel.transientNotice = TransientNotice("已删｜" + diag)
+                // 侦察版 v2（临时）：toast 被顶部 UI 挡（兔兔 09-02）——口供改三路并发：
+                // 短 toast + 全文进剪贴板 + 直投网关 /debug/probe（Fable 直接读服务器日志）
+                let diag = "[del] node=\(node.id.prefix(6)) role=\(node.role) len=\(node.content.count)｜" + viewModel.softDelete(node)
+                viewModel.transientNotice = TransientNotice("已删（诊断已回传）")
+                UIPasteboard.general.string = diag
+                Task.detached(priority: .utility) {
+                    let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
+                    guard let url = URL(string: "\(base)/debug/probe?key=bunny-lib-2026") else { return }
+                    var req = URLRequest(url: url)
+                    req.httpMethod = "POST"
+                    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": diag])
+                    _ = try? await URLSession.shared.data(for: req)
+                }
             },
             onSwitchBranch: { nodeId, idx in viewModel.switchBranch(at: nodeId, to: idx) },
             onRegenerate: makeRegenerateAction(for: node),
