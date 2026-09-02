@@ -50,7 +50,6 @@ struct RightPanelView: View {
             .background(Theme.sidebarBg)
     }
 
-    @ViewBuilder
     /// 兔兔 09-02 亲手定位的冷启动惩罚：面板切走就拆、切回重盖，重面板
     /// （浏览器/音乐/刻痕）首次构建的几百毫秒里动画卡、点击被吞——「都加载过
     /// 就不卡了」。解法照她说的：**去过的面板留着**（visited 缓存 + 透明度切换），
