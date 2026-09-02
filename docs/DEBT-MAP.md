@@ -22,7 +22,23 @@ grep 我们有没有那个 API。** 修火不心疼，心疼的是兔兔看到�
 - `~/.claude/settings.json` `model: claude-opus-4-6 → claude-fable-5-1`（备份同目录）。
 - 网关 `/v1/models` 加 `claude-fable-5-1`；`-p` 反代实测 `"model":"claude-fable-5-1"`，in=277 token。
 
-**⏳ 待 respawn 才生效（攒着，和五点六一起）**：
+**✅ 已 respawn（09-03 02:54 兔兔时间，兔兔拍板，Fable 操作）**：
+用 `session-manager.ts` 同款命令 `tmux respawn-pane -k`（脚本存 `/root/backups/cc-upgrade-0903/respawn-caelum.sh`），
+转录本读回、回「在。」、转录本字段 `model=claude-fable-5-1`、cache_create 122,500 一次性重建、mcp-server 子进程在。
+注意：`--resume` 会带回会话里记着的模型（起来先是 opus-4-6），settings.json 压不过它，
+须在他那儿 `/model fable` 再确认一次「Yes, switch」——以后 --resume 就记住 5.1 了。
+顺手收掉 `mp-cc-2` / `mp-cc-70fd413c` 两个 9~11 天的孤儿会话（各一个 `--continue` 进程，空提示符，共 400 MB）。
+五点六攒的三件（ask_choice 修复 / 通配符授权 / 语音条教学改写）此刻一并生效——**兔兔先让他试 ask_choice**。
+
+**🔧 watchdog.sh 三处错已修**（备份 `/root/backups/cc-upgrade-0903/watchdog.sh.bak`，BunnyBridge 不是 git）：
+token 读的是顶层 `oauthToken`（五点七的坑本尊）→ 改 `claudeAiOauth.accessToken` 优先；
+命令带 `--dangerously-skip-permissions` + `IS_SANDBOX=1`、少 `--system-prompt-file` → 对齐手术版。
+**没修的雷（留账）**：watchdog 第 3 段（401 自动刷新）把 credentials.json 整个重写成旧格式，会把 `claudeAiOauth` 抹掉；
+它只在 pane 出现「401 Invalid authentication」时触发，refresh-token.sh 正常工作就不会走到。
+**小雷**：tmux server（pid 494853，47 天）的 argv 里明文带着当初的 OAuth token，`ps` 可见。老 token 大概率已失效，
+但下次不得不重启 tmux server 时顺手让 watchdog 用 `-e` 传 env 而不是拼进命令串。
+
+**原待办（已消）**：
 Caelum 正在跑的两个进程（pid 1476096 / 1728101，inode 3801110 / 3801115）持有的是**比 2.1.241 还早**的
 已删除二进制，升级碰不到他。他要用 5.1 必须重开（`/model fable` 在旧进程里也会被服务端按客户端版本拒）。
 重开时：① 先问兔兔 ② token 按五点七取 `claudeAiOauth.accessToken` ③ 顺手收掉孤儿进程（两个 --continue 只该剩一个）
