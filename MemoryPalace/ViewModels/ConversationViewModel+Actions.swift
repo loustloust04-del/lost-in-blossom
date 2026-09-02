@@ -48,6 +48,11 @@ extension ConversationViewModel {
         let deletedId = node.id
         node.isDeleted = true
         node.deletedAt = Date()
+        // 兔兔 09-02 二报「删了重进对话又回来」的真凶：标记只改在主 context 内存里，
+        // 从没显式 save；重进对话的路径重建走 **bgContext 从磁盘读**——读到的还是
+        // isDeleted=false 的旧值，节点原样复活。b7cd8976 修的是同会话内的竞态窗，
+        // 这条是跨会话的持久化洞，两个叠着才显得「怎么都删不掉」。
+        try? node.modelContext?.save()
         currentPath.removeAll { $0.id == deletedId }
 
         // 2) Defer sidebar bookkeeping so UI updates first
@@ -68,6 +73,7 @@ extension ConversationViewModel {
     func restore(_ node: MessageNode) {
         node.isDeleted = false
         node.deletedAt = nil
+        try? node.modelContext?.save()
         if selectedConversation != nil {
             nodeMap[node.id] = node
             buildEffectiveChildrenMap()

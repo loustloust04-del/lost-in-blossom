@@ -1746,7 +1746,6 @@ struct BubbleView: View {
     /// 与 onToggleFavorite 等一样由父视图注入。
     var onNotice: ((String) -> Void)? = nil
     /// 删除二次确认（防误触——菜单里手滑一下消息就没了）
-    @State private var showDeleteConfirm = false
     let onToggleFavorite: () -> Void
     let onTogglePin: () -> Void
     let onSoftDelete: () -> Void
@@ -2253,18 +2252,14 @@ struct BubbleView: View {
                     Label("选取文本", systemImage: "text.cursor")
                 }
                 Divider()
-                Button(role: .destructive, action: { showDeleteConfirm = true }) {
-                    Label("删除", systemImage: "trash")
-                }
-            }
-            .confirmationDialog("删除这条消息？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("删除", role: .destructive) {
+                Button(role: .destructive, action: {
+                    // 兔兔 09-02 拍板：撤掉二次确认——app 里根本没有回收站入口，
+                    // 弹窗说「可恢复」是空头支票；长按菜单本身已经是一道确认了。
                     HapticService.shared.deleteAction()
                     onSoftDelete()
+                }) {
+                    Label("删除", systemImage: "trash")
                 }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("会移到回收站，可以恢复。")
             }
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
