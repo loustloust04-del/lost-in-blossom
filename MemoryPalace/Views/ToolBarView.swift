@@ -9,12 +9,15 @@ struct ToolBarView: View {
 
     @State private var showDrawer = false
     @State private var draggingToolId: String? = nil
-    /// 胶囊视觉位（selectedToolId 的镜像）。
-    /// 08-29 ddaeecf9 把弹簧挂回 .animation(value:) 后兔兔实机仍看不到过渡——
-    /// 右滑页每次切工具 panelContent 整棵换枝，隐式动画在这种结构变动下被吞。
-    /// 改法：真选中即时赋值（面板立刻切，保住 08-12 的修复），胶囊视觉走本地镜像态，
-    /// onChange 里用显式 withAnimation 驱动——显式事务不怕父级换枝。
-    @State private var capsuleId: String = ""
+    /// 胶囊视觉位（selectedToolId 的镜像）。四修（09-02，兔兔三报仍瞬移）：
+    /// 隐式 value 版、@State 镜像版、matchedGeometry+@State 版实机全灭——三种机制
+    /// 同死指向同一件事：page2 挂在 UIHostingController.rootView 整体重挂的管线上
+    /// （PagingContainerView.updatePages），切工具那次更新里 ToolBarView 身份大概率
+    /// 被重建，@State 归零、onChange 不触发、matched 没有「上一帧」可飞。
+    /// 对策：镜像态换 **AppStorage 底**（重建也带着旧位置），双保险驱动——
+    /// 身份还在→onChange 显式事务；身份被重建→onAppear 发现错位，下一拍动画归位。
+    /// 两条路殊途同归：胶囊总是「从旧工具飞到新工具」。
+    @AppStorage("dockCapsuleVisualId") private var capsuleId: String = ""
     /// 胶囊滑移的几何配对命名空间（matchedGeometryEffect）
     @Namespace private var pillNS
 
@@ -131,7 +134,17 @@ struct ToolBarView: View {
                 .onTapGesture { selectedToolId = "home" }
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
-        .onAppear { capsuleId = selectedToolId }
+        .onAppear {
+            if capsuleId.isEmpty {
+                capsuleId = selectedToolId          // 首装：直接落位不演
+            } else if capsuleId != selectedToolId {
+                // 身份被重建后的补飞：首帧按旧位画好，下一拍动画归位
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(40))
+                    withAnimation(switchAnim) { capsuleId = selectedToolId }
+                }
+            }
+        }
         .onChange(of: selectedToolId) { _, new in
             withAnimation(switchAnim) { capsuleId = new }
         }
