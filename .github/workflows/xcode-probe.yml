@@ -3,25 +3,33 @@ on:
   push:
     branches: [probe/xcode]
 jobs:
-  inventory-macos15:
-    runs-on: macos-15
-    steps:
-      - name: List installed Xcodes
-        run: ls /Applications | grep -i xcode || true
-      - name: Current default
-        run: xcodebuild -version
-  inventory-macos26:
+  compile-on-26:
     runs-on: macos-26
-    continue-on-error: true
     steps:
-      - name: List installed Xcodes
-        run: ls /Applications | grep -i xcode || true
-      - name: Current default
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.4
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app
+      - name: Xcode version
         run: xcodebuild -version
-  inventory-latest:
-    runs-on: macos-latest
-    steps:
-      - name: List installed Xcodes
-        run: ls /Applications | grep -i xcode || true
-      - name: Current default
-        run: xcodebuild -version
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project MemoryPalace.xcodeproj -scheme MemoryPalaceIOS || true
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build -project MemoryPalace.xcodeproj -scheme MemoryPalaceIOS \
+            -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO 2>&1 | tee build26.log | tail -40
+      - name: Error digest
+        if: always()
+        run: grep "error:" build26.log | sort -u | head -60 > errors26.txt || true; wc -l errors26.txt; cat errors26.txt | head -30
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build26-log
+          path: |
+            build26.log
+            errors26.txt
