@@ -360,13 +360,63 @@ extension ConversationViewModel {
         }
     }
 
+    /// 清洗输入法偷偷插入的零宽字符，但**不拆散 emoji**。
+    ///
+    /// 09-03 兔兔报的 bug：😵‍💫 发出去变成 😵💫。旧版一句正则把
+    /// `[\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00AD}]` 全删了——U+200D（ZWJ）恰恰是
+    /// emoji 组合序列的粘合剂，😵‍💫 就是 😵 + ZWJ + 💫，删掉粘合剂它就散成两个。
+    ///
+    /// 现在分两类处理：
+    /// - ZWSP / BOM / 软连字符：任何位置都是杂散，照删
+    /// - ZWJ / ZWNJ：**左右两侧都是 emoji 相关字符才保留**，否则算杂散删掉
+    ///   （左侧要跳过变体选择符 U+FE0F 和肤色修饰符——❤️‍🔥 里 ZWJ 的前一个 scalar
+    ///   是 FE0F 不是 emoji 本体，不跳就会误删）
+    static func stripStrayInvisibles(_ s: String) -> String {
+        /// emoji 序列里的合法邻居：emoji 本体、变体选择符、肤色修饰符、区域指示符
+        func emojiish(_ u: Unicode.Scalar) -> Bool {
+            if u.properties.isEmoji { return true }
+            let v = u.value
+            return v == 0xFE0F || v == 0xFE0E
+                || (0x1F3FB...0x1F3FF).contains(v)
+                || (0x1F1E6...0x1F1FF).contains(v)
+        }
+
+        let scalars = Array(s.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        out.reserveCapacity(scalars.count)
+
+        for (i, u) in scalars.enumerated() {
+            switch u.value {
+            case 0x200B, 0xFEFF, 0x00AD:
+                continue
+            case 0x200C, 0x200D:
+                // 左邻：跳过变体选择符 / 肤色修饰符，找到真正的前一个字符
+                var j = i - 1
+                while j >= 0 {
+                    let v = scalars[j].value
+                    if v == 0xFE0F || v == 0xFE0E || (0x1F3FB...0x1F3FF).contains(v) { j -= 1; continue }
+                    break
+                }
+                let prev: Unicode.Scalar? = j >= 0 ? scalars[j] : nil
+                let next: Unicode.Scalar? = i + 1 < scalars.count ? scalars[i + 1] : nil
+                guard let p = prev, let n = next, emojiish(p), emojiish(n) else { continue }
+            default:
+                break
+            }
+            out.append(u)
+        }
+        return String(out)
+    }
+
     /// Send a user message and get a streaming response.
     /// 返回 true = 已受理（发出或排队）；false = 被 guard 拦下（无对话 / 预算闸 / 空群）。
     /// drainPendingSends 用返回值决定是否把 pending 塞回队列，不静默丢消息。
     @discardableResult
     func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) -> Bool {
         // 清洗零宽字符（iOS输入法切换时偷偷插入）
-        let text = text.replacingOccurrences(of: "[\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00AD}]", with: "", options: .regularExpression)
+        // 09-03 兔兔报：😵‍💫 发出去变成 😵💫——旧版把 U+200D 一起删了，
+        // 而 ZWJ 正是 emoji 组合序列的粘合剂。改成只删「孤立的」连接符，见 stripStrayInvisibles。
+        let text = Self.stripStrayInvisibles(text)
         guard let conversation = selectedConversation else { return false }
 
         // 群聊 V3：串行门控编排（API 车道），不走单聊逻辑
