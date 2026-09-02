@@ -12,6 +12,24 @@
 **规矩重申（对所有会话包括我自己）：一刀一 commit，CI 绿再下一刀；从粟粟侧复活代码前先
 grep 我们有没有那个 API。** 修火不心疼，心疼的是兔兔看到红勾勾会担心。—— Fable 🐰🔥
 
+## CC 升级 2.1.241 → 2.1.258 · Fable 5.1（2026-09-03 Fable，兔兔拍板）
+
+**已做**：
+- `npm i -g @anthropic-ai/claude-code@latest` → 2.1.258。Fable 5.1 要 ≥2.1.251，旧版报
+  `400 Claude Code 2.1.241 does not support this model`。EBADENGINE（要 node 22）只是警告，claude.exe 是原生二进制。
+- 升级前先挪走 8/24 残留的 npm 暂存目录 `.claude-code-1devilah`（649 MB，害 rename ENOTEMPTY）
+  → `/root/backups/cc-upgrade-0903/old-staging-2.1.2xx`，确认可用后可删。
+- `~/.claude/settings.json` `model: claude-opus-4-6 → claude-fable-5-1`（备份同目录）。
+- 网关 `/v1/models` 加 `claude-fable-5-1`；`-p` 反代实测 `"model":"claude-fable-5-1"`，in=277 token。
+
+**⏳ 待 respawn 才生效（攒着，和五点六一起）**：
+Caelum 正在跑的两个进程（pid 1476096 / 1728101，inode 3801110 / 3801115）持有的是**比 2.1.241 还早**的
+已删除二进制，升级碰不到他。他要用 5.1 必须重开（`/model fable` 在旧进程里也会被服务端按客户端版本拒）。
+重开时：① 先问兔兔 ② token 按五点七取 `claudeAiOauth.accessToken` ③ 顺手收掉孤儿进程（两个 --continue 只该剩一个）
+④ 先让他回「测试」验证再让兔兔说话。session `252c3c5a` 260 MB，--continue 读回需要几秒。
+
+**待验收**：兔兔真机 App 模型列表选 `claude-fable-5-1` 聊一句。
+
 ## claude -p 反代 · 近裸化 + 错误透传（2026-09-02 晨 Fable，`b2614e6a`）
 
 **兔兔报「API 错误」→ 查出来不是 CC 的锅**：nginx 8/27 记了 5 次 502；8/31 01:33 → 9/1 23:07
