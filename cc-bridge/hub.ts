@@ -832,7 +832,15 @@ export function startHub(): WebSocketServer {
               clearOffline(chatId)
               if (delivered > 0) console.log(`[hub] offline replay: ${delivered} messages for chat_id=${chatId.slice(0, 8)}`)
             } else {
-              console.warn(`[hub] offline replay partial (${delivered}/${messages.length}) for chat_id=${chatId.slice(0, 8)} — keeping file for retry`)
+              // 09-02：重试要有寿命——8-31 一份卡死的文件重投了 1657 次，造出消息分身军团。
+              // 48h 后还投不完就放弃：留 .dead 尸检件 + 日志，不再无限重投。
+              const ageMs = Date.now() - (statSync(join(OFFLINE_DIR, file)).mtimeMs || Date.now())
+              if (ageMs > 48 * 3600_000) {
+                try { renameSync(join(OFFLINE_DIR, file), join(OFFLINE_DIR, file + ".dead")) } catch {}
+                console.warn(`[hub] offline replay 超龄放弃（${Math.round(ageMs / 3600_000)}h）→ ${file}.dead`)
+              } else {
+                console.warn(`[hub] offline replay partial (${delivered}/${messages.length}) for chat_id=${chatId.slice(0, 8)} — keeping file for retry`)
+              }
             }
           }
         }

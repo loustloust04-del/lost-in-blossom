@@ -52,6 +52,19 @@ extension ConversationViewModel {
         // 从没显式 save；重进对话的路径重建走 **bgContext 从磁盘读**——读到的还是
         // isDeleted=false 的旧值，节点原样复活。b7cd8976 修的是同会话内的竞态窗，
         // 这条是跨会话的持久化洞，两个叠着才显得「怎么都删不掉」。
+        // 09-02 终局真相（兔兔三报「删不掉」）：删除本身两刀修后已是好的——真凶是
+        // 8-31 图片测试期卡死的 hub 离线队列反复重投（日志 1657 次 replay），早期没有
+        // 去重的窗口里同一条消息被当成**同父的兄弟分支**插了 N 份。路径一次只显示一个
+        // 分支：删掉当前这份 → 重建路径挑中下一个分身 → 「一模一样的消息又回来了」。
+        // 修：删除时连坐——同父、同角色、同内容的兄弟分身一起删（精确匹配，误伤面为零）。
+        let twins = (nodeMap.values.filter {
+            $0.id != deletedId && $0.parentId == node.parentId &&
+            $0.role == node.role && $0.content == node.content && !$0.isDeleted
+        })
+        for twin in twins {
+            twin.isDeleted = true
+            twin.deletedAt = Date()
+        }
         try? node.modelContext?.save()
         currentPath.removeAll { $0.id == deletedId }
 
