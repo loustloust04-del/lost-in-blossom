@@ -23,11 +23,12 @@ struct ToolBarView: View {
                 HStack(spacing: 0) {
             ForEach(pinnedTools) { tool in
                 let isSelected = tool.id == selectedToolId
-                // Button → onTapGesture（0a3edb2e 之后兔兔仍说「不灵敏不丝滑」：
-                // ScrollView 里的 Button 要先过拖拽判定才收 tap，天生一拍延迟；
-                // 裸 tap gesture 即点即发）。动画改 matchedGeometryEffect：
-                // 底色胶囊是「同一个视图」在工具间飞——不依赖每个 label 的隐式动画，
-                // 前两刀都死在那条路上（value 版被换枝吞、镜像版实机也没跑起来）。
+                // 九渡：Button + 源头 withAnimation（粟粟原版驱动；六渡底座下终于能跑）
+                Button {
+                    withAnimation(springAnim) {
+                        selectedToolId = tool.id
+                    }
+                } label: {
                 HStack(spacing: isSelected ? 5 : 0) {
                     Image(systemName: tool.icon)
                         .font(.system(size: 14, weight: .medium))
