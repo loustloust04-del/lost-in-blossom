@@ -11,7 +11,7 @@ function cookie(): string {
   try { return readFileSync(COOKIE_PATH, 'utf-8').trim(); } catch { return ''; }
 }
 
-async function ncm(path: string, params: Record<string, string | number> = {}): Promise<any> {
+export async function ncm(path: string, params: Record<string, string | number> = {}): Promise<any> {
   const q = new URLSearchParams({ ...Object.fromEntries(
     Object.entries(params).map(([k, v]) => [k, String(v)])), timestamp: String(Date.now()) });
   const ck = cookie();

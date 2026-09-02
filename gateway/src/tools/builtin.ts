@@ -5,6 +5,7 @@ import { GMAIL_TOOLS, callGmailTool } from './gmail';
 import { VITALS_TOOLS, callVitalsTool, CONSOLE_TOOLS, callConsoleTool } from '../vitals';
 import { PHONE_STATUS_TOOLS, callPhoneStatusTool } from '../phone-status';
 import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
+import { PLAYLIST_TOOLS, callPlaylistTool } from '../playlist';
 import { INTIMACY_TOOLS, callIntimacyTool, WISH_TOOLS, callWishTool } from '../intimacy';
 import { FABLELINE_TOOLS, callFablelineTool } from '../fableline';
 import { PREREAD_TOOLS, callPrereadTool } from '../preread';
@@ -30,6 +31,7 @@ export const BUILTIN_TOOLS = [
   ...VITALS_TOOLS,
   ...PHONE_STATUS_TOOLS,
   ...NOWPLAYING_TOOLS,
+  ...PLAYLIST_TOOLS,
   ...HOWISSHE_TOOLS,
   ...INTIMACY_TOOLS,
   ...WISH_TOOLS,
@@ -187,6 +189,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (phoneResult !== null) return phoneResult;
   const musicResult = await callNowPlayingTool(name, input);
   if (musicResult !== null) return musicResult;
+  const playlistResult = await callPlaylistTool(name, input);
+  if (playlistResult !== null) return playlistResult;
   const intimacyResult = await callIntimacyTool(name, input);
   if (intimacyResult !== null) return intimacyResult;
   const wishResult = await callWishTool(name, input);
