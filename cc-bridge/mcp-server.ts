@@ -289,30 +289,49 @@ const FALLBACK_PROXY_TOOLS = [
   },
 ] as const
 
-/// 启动时向网关要真实工具表；失败就用上面的兜底。
-let PROXY_TOOLS: any[] = FALLBACK_PROXY_TOOLS as any[]
-try {
-  const r = await fetch(`${GATEWAY_URL}/api/mcp/tools`, {
-    headers: GATEWAY_TOKEN ? { Authorization: `Bearer ${GATEWAY_TOKEN}` } : {},
-    signal: AbortSignal.timeout(8000),
-  })
-  const d: any = await r.json()
-  const builtin = (d?.tools ?? []).filter((t: any) => t.source === "builtin")
-  if (builtin.length) {
-    PROXY_TOOLS = builtin.map((t: any) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema ?? { type: "object", properties: {} },
-    }))
-    console.error(`[mcp] 从网关拉到 ${PROXY_TOOLS.length} 个工具`)
-  }
-} catch (e: any) {
-  console.error("[mcp] 拉网关工具表失败，用兜底名单:", e?.message)
-}
-
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
 const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now"])
+
+/// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
+///
+/// 09-03：从「启动时拉一次」改成「tools/list 时拉 + 60s 缓存」。
+/// 旧版的代价：这个 MCP 是 stdio 型，进程生命周期绑在 CC 上——网关加了新工具，
+/// 除非重启 CC 否则他永远看不见。歌单六件装好后他的原话是「歌单工具可能还在注册中」，
+/// 差一点就成了「装好了他却用不了」。现在网关加工具，他下一次列工具就有了。
+let PROXY_TOOLS: any[] = FALLBACK_PROXY_TOOLS as any[]
+let lastToolFetch = 0
+const TOOLS_TTL_MS = 60_000
+
+async function refreshProxyTools(force = false): Promise<void> {
+  if (!force && Date.now() - lastToolFetch < TOOLS_TTL_MS) return
+  try {
+    const r = await fetch(`${GATEWAY_URL}/api/mcp/tools`, {
+      headers: GATEWAY_TOKEN ? { Authorization: `Bearer ${GATEWAY_TOKEN}` } : {},
+      signal: AbortSignal.timeout(8000),
+    })
+    const d: any = await r.json()
+    const builtin = (d?.tools ?? []).filter((t: any) => t.source === "builtin")
+    if (builtin.length) {
+      const next = builtin.map((t: any) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema ?? { type: "object", properties: {} },
+      }))
+      // 本地实现的工具网关拉不到，每次都要补回来，否则刷新一次就消失
+      for (const t of FALLBACK_PROXY_TOOLS as any[]) {
+        if (LOCAL_ONLY.has(t.name) && !next.some((x: any) => x.name === t.name)) next.push(t)
+      }
+      PROXY_TOOLS = next
+      PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
+      lastToolFetch = Date.now()
+      console.error(`[mcp] 从网关拉到 ${PROXY_TOOLS.length} 个工具`)
+    }
+  } catch (e: any) {
+    console.error("[mcp] 拉网关工具表失败，沿用手上这份:", e?.message)
+  }
+}
+
 for (const t of FALLBACK_PROXY_TOOLS as any[]) {
   if (LOCAL_ONLY.has(t.name) && !PROXY_TOOLS.some(x => x.name === t.name)) {
     PROXY_TOOLS.push(t)
@@ -320,7 +339,11 @@ for (const t of FALLBACK_PROXY_TOOLS as any[]) {
 }
 
 
-const PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
+// 09-03：refreshProxyTools 会重新赋值它，所以是 let 不是 const
+let PROXY_TOOL_NAMES = new Set(PROXY_TOOLS.map(t => t.name))
+
+// 启动时先拉一次（拿不到就沿用兜底名单，不阻塞启动）
+await refreshProxyTools(true)
 
 async function proxyToGateway(name: string, input: any): Promise<string> {
   try {
@@ -448,7 +471,10 @@ const server = new Server(
   { capabilities: { tools: {} } }
 )
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  // 每次列工具前刷一遍（60s 缓存）——网关加了新工具，他下一次列就能看见，不用重启 CC
+  await refreshProxyTools()
+  return {
   tools: [
     {
       name: "reply",
@@ -482,7 +508,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     ...PROXY_TOOLS,
   ],
-}))
+  }
+})
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
