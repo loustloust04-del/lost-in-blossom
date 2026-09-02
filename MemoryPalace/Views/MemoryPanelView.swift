@@ -5,6 +5,8 @@ import SwiftData
 
 struct RightPanelView: View {
     @Binding var selectedToolId: String
+    /// 冷启动缓存：去过的面板 id（首帧种子在 onAppear 里种）
+    @State private var visitedToolIds: [String] = []
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
 
@@ -26,7 +28,19 @@ struct RightPanelView: View {
         // 都被清空。唯一会动的「影子」是 onAppear 补飞（40ms 后错位归位），所以怪。
         // 修：拿 ZStack 当身份稳定的底座包住 switch——换枝发生在 ZStack **里面**，
         // inset 的 ToolBarView 从此常驻不再重建。粟粟同款结构能动，就是这一层的差别。
-        ZStack { panelContent }
+        ZStack {
+            ForEach(visitedToolIds, id: \.self) { id in
+                panelView(id)
+                    .opacity(id == selectedToolId ? 1 : 0)
+                    .allowsHitTesting(id == selectedToolId)
+            }
+        }
+        .onChange(of: selectedToolId) { _, new in
+            if !visitedToolIds.contains(new) { visitedToolIds.append(new) }
+        }
+        .onAppear {
+            if visitedToolIds.isEmpty { visitedToolIds = [selectedToolId] }
+        }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 ToolBarView(selectedToolId: $selectedToolId)
                     .background(Theme.sidebarBg)
@@ -37,8 +51,14 @@ struct RightPanelView: View {
     }
 
     @ViewBuilder
-    private var panelContent: some View {
-        switch selectedToolId {
+    /// 兔兔 09-02 亲手定位的冷启动惩罚：面板切走就拆、切回重盖，重面板
+    /// （浏览器/音乐/刻痕）首次构建的几百毫秒里动画卡、点击被吞——「都加载过
+    /// 就不卡了」。解法照她说的：**去过的面板留着**（visited 缓存 + 透明度切换），
+    /// 每个面板一生只冷启动一次；切换从「拆盖」变「淡入淡出」，顺带永久加固
+    /// 六渡的身份稳定。代价：常驻内存随去过的面板数上涨，浏览器/终端保活反而是福利。
+    @ViewBuilder
+    private func panelView(_ id: String) -> some View {
+        switch id {
         case "home":
             ConsoleView()
         case "calendar":
