@@ -5,6 +5,15 @@ import SwiftData
 
 struct RightPanelView: View {
     @Binding var selectedToolId: String
+    /// 静默门：isActive=false 时恒等（SwiftUI 跳过子树 diff），active 恒不等（正常更新）
+    private struct CachedPanelGate: View, Equatable {
+        let id: String
+        let isActive: Bool
+        let content: AnyView
+        static func == (l: Self, r: Self) -> Bool { !l.isActive && !r.isActive && l.id == r.id }
+        var body: some View { content }
+    }
+
     /// 冷启动缓存：去过的面板 id（首帧种子在 onAppear 里种）
     @State private var visitedToolIds: [String] = []
     var viewModel: ConversationViewModel
@@ -30,13 +39,24 @@ struct RightPanelView: View {
         // inset 的 ToolBarView 从此常驻不再重建。粟粟同款结构能动，就是这一层的差别。
         ZStack {
             ForEach(visitedToolIds, id: \.self) { id in
-                panelView(id)
+                // 兔兔 09-02 二报：养了几个面板后回聊天页打字卡——每次键击 ContentView
+                // 重算→rootView 重挂→所有活面板陪跑 diff。静默门：隐藏面板等价短路
+                // （Equatable 恒等→SwiftUI 跳过其子树 diff），键击成本回到单面板级。
+                CachedPanelGate(id: id, isActive: id == selectedToolId,
+                                content: AnyView(panelView(id)))
+                    .equatable()
                     .opacity(id == selectedToolId ? 1 : 0)
                     .allowsHitTesting(id == selectedToolId)
             }
         }
         .onChange(of: selectedToolId) { _, new in
-            if !visitedToolIds.contains(new) { visitedToolIds.append(new) }
+            // LRU 限养 3 只：当前 + 最近两只，老的放生（下次去重付一次冷启动税）。
+            // 内存与陪跑成本双兜底；浏览器/音乐这种常用的基本一直在窝里。
+            if let i = visitedToolIds.firstIndex(of: new) { visitedToolIds.remove(at: i) }
+            visitedToolIds.append(new)
+            while visitedToolIds.count > 3 {
+                visitedToolIds.removeFirst()
+            }
         }
         .onAppear {
             if visitedToolIds.isEmpty { visitedToolIds = [selectedToolId] }
