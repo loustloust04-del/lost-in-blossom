@@ -9,15 +9,14 @@ struct ToolBarView: View {
 
     @State private var showDrawer = false
     @State private var draggingToolId: String? = nil
-    /// 胶囊视觉位（selectedToolId 的镜像）。四修（09-02，兔兔三报仍瞬移）：
-    /// 隐式 value 版、@State 镜像版、matchedGeometry+@State 版实机全灭——三种机制
-    /// 同死指向同一件事：page2 挂在 UIHostingController.rootView 整体重挂的管线上
-    /// （PagingContainerView.updatePages），切工具那次更新里 ToolBarView 身份大概率
-    /// 被重建，@State 归零、onChange 不触发、matched 没有「上一帧」可飞。
-    /// 对策：镜像态换 **AppStorage 底**（重建也带着旧位置），双保险驱动——
-    /// 身份还在→onChange 显式事务；身份被重建→onAppear 发现错位，下一拍动画归位。
-    /// 两条路殊途同归：胶囊总是「从旧工具飞到新工具」。
-    @AppStorage("dockCapsuleVisualId") private var capsuleId: String = ""
+    /// 胶囊视觉位（selectedToolId 的镜像）。八渡定案（09-02，「拆探针楼就歪」破的）：
+    /// 探针期动画活着的真正原因——withAnimation 里除了 capsuleId 还 toggle 了绿豆的
+    /// @State：**@State 变更同步落在事务内**，把整次更新钉在动画里。拆掉绿豆后事务里
+    /// 只剩 @AppStorage——AppStorage 走 UserDefaults 通知链回灌，**出了事务才到视图**，
+    /// 动画白包。四渡换 AppStorage 是为了防身份重建，但六渡（ZStack 底座）已根治重建，
+    /// 这层盔甲不再需要——换回 @State，变更同步在事务内，动画天然生效。
+    /// 侦察史留档：五渡口供 i涨a涨c0t0 定罪重建；「拆脚手架楼歪」定罪 AppStorage 出事务。
+    @State private var capsuleId: String = ""
 
     private var pinnedTools: [RightPanelTool] {
         toolManager?.pinnedTools ?? []
