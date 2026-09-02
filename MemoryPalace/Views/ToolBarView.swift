@@ -34,8 +34,6 @@ struct ToolBarView: View {
     /// 让实机自己报数。i=本视图被重建次数 a=onAppear c=onChange t=withAnimation 执行数
     /// 滑点=同事务驱动的位移测试球：它滑=事务活着（是胶囊机制的锅）；它瞬移=事务整个被吞
     @State private var probeDotRight = false
-    /// 胶囊滑移的几何配对命名空间（matchedGeometryEffect）
-    @Namespace private var pillNS
 
     private var pinnedTools: [RightPanelTool] {
         toolManager?.pinnedTools ?? []
@@ -79,17 +77,18 @@ struct ToolBarView: View {
                 .foregroundColor(isSelected ? Theme.textSecondary : Theme.textMuted)
                 .padding(.horizontal, isSelected ? 14 : 10)
                 .frame(height: 36)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill(Theme.branchIndicator.opacity(0.14))
-                            .matchedGeometryEffect(id: "dockPill", in: pillNS)
-                    }
-                }
+                // 七渡=手感校准（兔兔：粟粟是「新胶囊撑开把旁边顶走」，不是药丸飞行）。
+                // 六渡修稳身份后她的原版机制能活了：底色常驻随选中渐显（不做条件插拔，
+                // 插拔没法插值），宽度/间距/内距的变化都发生在 onChange 的显式事务里
+                // ——文字长出来、旁边被顶开，就是她那个手感。matchedGeometry 药丸退役。
+                .background(
+                    Capsule()
+                        .fill(Theme.branchIndicator.opacity(isSelected ? 0.14 : 0))
+                )
                 .opacity(draggingToolId == tool.id ? 0.3 : 1)
                 .contentShape(Capsule())
                 .onTapGesture {
-                    // 真选中即时赋值（面板零延迟），胶囊飞行走镜像态的动画事务
+                    // 真选中即时赋值（面板零延迟），胶囊撑开走镜像态的动画事务
                     selectedToolId = tool.id
                 }
                 .onDrag {
@@ -150,13 +149,10 @@ struct ToolBarView: View {
                 .foregroundColor(isHomeSelected ? Theme.textSecondary : Theme.textMuted)
                 .padding(.horizontal, 10)
                 .frame(height: 36)
-                .background {
-                    if isHomeSelected {
-                        Capsule()
-                            .fill(Theme.branchIndicator.opacity(0.14))
-                            .matchedGeometryEffect(id: "dockPill", in: pillNS)
-                    }
-                }
+                .background(
+                    Capsule()
+                        .fill(Theme.branchIndicator.opacity(isHomeSelected ? 0.14 : 0))
+                )
                 .contentShape(Capsule())
                 .onTapGesture { selectedToolId = "home" }
         }
