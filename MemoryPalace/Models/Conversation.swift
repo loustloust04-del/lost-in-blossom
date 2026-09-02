@@ -6,7 +6,7 @@ final class Conversation {
     #Index<Conversation>(
         [\.profileId],
         [\.profileId, \.lastOpenedAt],
-        [\.profileId, \.isDeleted, \.lastOpenedAt]
+        [\.profileId, \.isTrashed, \.lastOpenedAt]
     )
 
     @Attribute(.unique) var id: String
@@ -23,7 +23,7 @@ final class Conversation {
     var nodeCount: Int = 0
     var lastOpenedAt: Date?
 
-    var isDeleted: Bool = false
+    var isTrashed: Bool = false
     var deletedAt: Date?
 
     /// "chatgpt", "claude", "api", "sillytavern"
@@ -85,7 +85,7 @@ final class MessageNode {
     #Index<MessageNode>(
         [\.profileId],
         [\.profileId, \.conversationId],
-        [\.profileId, \.conversationId, \.isDeleted]
+        [\.profileId, \.conversationId, \.isTrashed]
     )
 
     @Attribute(.unique) var id: String
@@ -103,7 +103,7 @@ final class MessageNode {
     var isFavorite: Bool = false
     var isPinned: Bool = false
     var pinnedAt: Date? = nil
-    var isDeleted: Bool = false
+    var isTrashed: Bool = false
     var deletedAt: Date?
 
     /// 结构化分段（Claude importer v2 写入）。JSON 编码的 [MessageSegment]。

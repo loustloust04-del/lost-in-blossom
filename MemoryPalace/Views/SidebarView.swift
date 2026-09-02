@@ -1498,7 +1498,7 @@ struct SidebarView: View {
     }
 
     /// 把当前 tab 翻译成搜索范围。
-    /// - 「全部」/「回收站」：nil（不限；回收站搜索仍受 performSearch 里 isDeleted==false 的约束）
+    /// - 「全部」/「回收站」：nil（不限；回收站搜索仍受 performSearch 里 isTrashed==false 的约束）
     /// - 「收藏」：所有 isFavorite 的 conv id
     /// - 自定义 tag：这个 tag 的 FavoriteItem 里对应的 conv id（空 tag 返回空 Set → 搜不到任何东西）
     private func scopeForCurrentTab() -> Set<String>? {

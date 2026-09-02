@@ -78,7 +78,7 @@ struct SearchFilter {
     /// 当前 tab 对应的对话 id 范围。
     /// nil = 不限（「全部」/「回收站」）；非 nil = 只搜这些 conv（空 Set 表示 tab 没任何对话 → 直接返回空结果）。
     var conversationIdScope: Set<String>? = nil
-    /// 回收站模式：搜已删除的对话（`conv.isDeleted == true`）；默认 false 只搜未删除。
+    /// 回收站模式：搜已删除的对话（`conv.isTrashed == true`）；默认 false 只搜未删除。
     var includeDeletedConversations: Bool = false
 
     var hasActiveFilters: Bool {
@@ -261,7 +261,7 @@ enum SearchService {
                     let wantDeleted = filter.includeDeletedConversations
                     let allConvDesc = FetchDescriptor<Conversation>(
                         predicate: #Predicate<Conversation> {
-                            conv in conv.profileId == scopedProfileId && conv.isDeleted == wantDeleted
+                            conv in conv.profileId == scopedProfileId && conv.isTrashed == wantDeleted
                         }
                     )
                     let allConvs = (try? context.fetch(allConvDesc)) ?? []
@@ -309,7 +309,7 @@ enum SearchService {
             desc = FetchDescriptor<MessageNode>(
                 predicate: #Predicate<MessageNode> { node in
                     node.profileId == pid &&
-                    node.isDeleted == false &&
+                    node.isTrashed == false &&
                     (node.role == "user" || node.role == "assistant") &&
                     node.content.localizedStandardContains(search)
                 },
@@ -319,7 +319,7 @@ enum SearchService {
             desc = FetchDescriptor<MessageNode>(
                 predicate: #Predicate<MessageNode> { node in
                     node.profileId == pid &&
-                    node.isDeleted == false && node.role == "user" &&
+                    node.isTrashed == false && node.role == "user" &&
                     node.content.localizedStandardContains(search)
                 },
                 sortBy: [SortDescriptor(\MessageNode.createTime, order: .reverse)]
@@ -328,7 +328,7 @@ enum SearchService {
             desc = FetchDescriptor<MessageNode>(
                 predicate: #Predicate<MessageNode> { node in
                     node.profileId == pid &&
-                    node.isDeleted == false && node.role == "assistant" &&
+                    node.isTrashed == false && node.role == "assistant" &&
                     node.content.localizedStandardContains(search)
                 },
                 sortBy: [SortDescriptor(\MessageNode.createTime, order: .reverse)]
@@ -357,7 +357,7 @@ enum SearchService {
             let desc = FetchDescriptor<Conversation>(
                 predicate: #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == wantDeleted &&
+                    conv.isTrashed == wantDeleted &&
                     conv.createTime >= startDate && conv.createTime <= endDate
                 }
             )
@@ -371,7 +371,7 @@ enum SearchService {
             let desc = FetchDescriptor<Conversation>(
                 predicate: #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == wantDeleted &&
+                    conv.isTrashed == wantDeleted &&
                     conv.title.localizedStandardContains(search) &&
                     conv.createTime >= startDate && conv.createTime <= endDate
                 }
@@ -381,7 +381,7 @@ enum SearchService {
             let desc = FetchDescriptor<Conversation>(
                 predicate: #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == wantDeleted && conv.title.localizedStandardContains(search)
+                    conv.isTrashed == wantDeleted && conv.title.localizedStandardContains(search)
                 }
             )
             return (try? context.fetch(desc)) ?? []
@@ -496,7 +496,7 @@ enum SearchService {
                 // 4. 关联对话标题
                 let convIds = Set(matched.map(\.conversationId))
                 let convDesc = FetchDescriptor<Conversation>(
-                    predicate: #Predicate<Conversation> { c in c.profileId == pid && c.isDeleted == false }
+                    predicate: #Predicate<Conversation> { c in c.profileId == pid && c.isTrashed == false }
                 )
                 let allConvs = (try? context.fetch(convDesc)) ?? []
                 let convMap = Dictionary(uniqueKeysWithValues: allConvs.filter { convIds.contains($0.id) }.map { ($0.id, $0) })

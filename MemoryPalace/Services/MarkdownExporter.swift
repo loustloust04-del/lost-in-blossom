@@ -328,7 +328,7 @@ enum MarkdownExporter {
 
     /// Check if a node should be included in export
     private static func isDisplayable(_ node: MessageNode) -> Bool {
-        (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isDeleted
+        (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isTrashed
     }
 
     // MARK: - Node Loading Helpers (for batch export)

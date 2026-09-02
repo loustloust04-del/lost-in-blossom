@@ -232,7 +232,7 @@ struct ProjectDetailView: View {
         let optProjectId: String? = projectId
         _conversations = Query(
             filter: #Predicate<Conversation> { conv in
-                conv.projectId == optProjectId && conv.profileId == pid && !conv.isDeleted
+                conv.projectId == optProjectId && conv.profileId == pid && !conv.isTrashed
             },
             sort: \Conversation.updateTime,
             order: .reverse

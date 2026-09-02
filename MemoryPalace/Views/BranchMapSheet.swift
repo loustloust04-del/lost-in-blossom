@@ -372,7 +372,7 @@ extension BranchMapSheet {
 
         func isDisplayable(_ id: String) -> Bool {
             guard let n = nodeMap[id] else { return false }
-            return (n.role == "user" || n.role == "assistant") && !n.content.isEmpty && !n.isDeleted
+            return (n.role == "user" || n.role == "assistant") && !n.content.isEmpty && !n.isTrashed
         }
 
         /// 跳过 system/tool/empty 节点，返回该 id 下"最近 displayable 后代"列表

@@ -68,7 +68,7 @@ struct ConversationSnapshot: Codable {
         folderId = conversation.folderId
         nodeCount = conversation.nodeCount
         lastOpenedAt = conversation.lastOpenedAt
-        isDeleted = conversation.isDeleted
+        isDeleted = conversation.isTrashed
         deletedAt = conversation.deletedAt
         provider = conversation.provider
         importBatchId = conversation.importBatchId
@@ -83,7 +83,7 @@ struct ConversationSnapshot: Codable {
         conversation.folderId = folderId
         conversation.nodeCount = nodeCount
         conversation.lastOpenedAt = lastOpenedAt
-        conversation.isDeleted = isDeleted
+        conversation.isTrashed = isDeleted
         conversation.deletedAt = deletedAt
         conversation.provider = provider
         conversation.importBatchId = importBatchId
@@ -129,7 +129,7 @@ struct MessageNodeSnapshot: Codable {
         childrenIds = node.childrenIds
         conversationId = node.conversationId
         isFavorite = node.isFavorite
-        isDeleted = node.isDeleted
+        isDeleted = node.isTrashed
         deletedAt = node.deletedAt
         segmentsData = node.segmentsData
     }
@@ -143,7 +143,7 @@ struct MessageNodeSnapshot: Codable {
         node.childrenIds = childrenIds
         node.conversationId = conversationId
         node.isFavorite = isFavorite
-        node.isDeleted = isDeleted
+        node.isTrashed = isDeleted
         node.deletedAt = deletedAt
         node.segmentsData = segmentsData
     }

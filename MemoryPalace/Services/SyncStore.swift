@@ -217,7 +217,7 @@ enum SyncStore {
     }
 
     /// 导出该楼层有变化的对话（updateTime > 已导出指纹）。
-    /// S4：含软删对话（带 isDeleted=true）——回收站状态也要传播，对端跟着进回收站。
+    /// S4：含软删对话（带 isTrashed=true）——回收站状态也要传播，对端跟着进回收站。
     /// ⚠️ 必须在后台 context 上跑：大楼层初次全量导出会卡死主线程（Mac 实测事故）。
     static func exportChanged(profileId: String, context: ModelContext, progress: ((String) -> Void)? = nil) -> ExportResult {
         var result = ExportResult()
@@ -265,7 +265,7 @@ enum SyncStore {
                         imageDescsData: node.imageDescsData
                     )
                 },
-                isDeleted: conversation.isDeleted,
+                isDeleted: conversation.isTrashed,
                 deletedAt: conversation.deletedAt
             )
 
@@ -463,7 +463,7 @@ enum SyncStore {
                     existing.memoryEnabled = document.memoryEnabled
                     existing.selectedModelId = document.selectedModelId
                     // S4：软删状态走 LWW（对端删→本地进回收站，对端恢复→本地恢复）
-                    existing.isDeleted = document.isDeleted ?? false
+                    existing.isTrashed = document.isDeleted ?? false
                     existing.deletedAt = document.deletedAt
                     result.conversationsUpdated += 1
                     dirty = true
@@ -481,7 +481,7 @@ enum SyncStore {
                 created.memoryEnabled = document.memoryEnabled
                 created.selectedModelId = document.selectedModelId
                 // S4：对端软删的对话首次到货 → 直接建成回收站状态
-                created.isDeleted = document.isDeleted ?? false
+                created.isTrashed = document.isDeleted ?? false
                 created.deletedAt = document.deletedAt
                 context.insert(created)
                 conversation = created

@@ -168,7 +168,7 @@ enum UnifiedContainerMigration {
             new.folderId = old.folderId
             new.nodeCount = old.nodeCount
             new.lastOpenedAt = old.lastOpenedAt
-            new.isDeleted = old.isDeleted
+            new.isTrashed = old.isTrashed
             new.deletedAt = old.deletedAt
             new.importBatchId = old.importBatchId
             new.memoryEnabled = old.memoryEnabled
@@ -197,7 +197,7 @@ enum UnifiedContainerMigration {
             new.isFavorite = old.isFavorite
             new.isPinned = old.isPinned
             new.pinnedAt = old.pinnedAt
-            new.isDeleted = old.isDeleted
+            new.isTrashed = old.isTrashed
             new.deletedAt = old.deletedAt
             unifiedCtx.insert(new)
             counter += 1

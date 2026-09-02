@@ -2350,7 +2350,7 @@ extension BubbleView: Equatable {
             && lhs.node.content == rhs.node.content
             && lhs.node.isPinned == rhs.node.isPinned
             && lhs.node.isFavorite == rhs.node.isFavorite
-            && lhs.node.isDeleted == rhs.node.isDeleted
+            && lhs.node.isTrashed == rhs.node.isTrashed
             && lhs.hasBranches == rhs.hasBranches
             && lhs.branchInfo?.branchNodeId == rhs.branchInfo?.branchNodeId
             && lhs.branchInfo?.branchCount == rhs.branchInfo?.branchCount

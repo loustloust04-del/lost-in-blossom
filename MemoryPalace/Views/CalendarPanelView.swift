@@ -13,7 +13,7 @@ struct CalendarPanelView: View {
         self.viewModel = viewModel
         self.profileId = profileId
         _allConversations = Query(
-            filter: #Predicate<Conversation> { $0.profileId == profileId && !$0.isDeleted },
+            filter: #Predicate<Conversation> { $0.profileId == profileId && !$0.isTrashed },
             sort: \Conversation.createTime,
             order: .forward
         )

@@ -211,14 +211,14 @@ extension ConversationViewModel {
         struct NI {
             let role: String
             let hasContent: Bool
-            let isDeleted: Bool
+            let isTrashed: Bool
             let parentId: String?
             let childrenIds: [String]
         }
         var infoMap: [String: NI] = [:]
         infoMap.reserveCapacity(nodes.count)
         for n in nodes {
-            infoMap[n.id] = NI(role: n.role, hasContent: !n.content.isEmpty, isDeleted: n.isDeleted, parentId: n.parentId, childrenIds: n.childrenIds)
+            infoMap[n.id] = NI(role: n.role, hasContent: !n.content.isEmpty, isTrashed: n.isTrashed, parentId: n.parentId, childrenIds: n.childrenIds)
         }
 
         // 反向 trace mainPathIds + 找 rootId
@@ -260,7 +260,7 @@ extension ConversationViewModel {
             var currentId: String? = rootId
             while let nid = currentId, let info = infoMap[nid], !visited.contains(nid) {
                 visited.insert(nid)
-                let isDisplayable = (info.role == "user" || info.role == "assistant") && info.hasContent && !info.isDeleted
+                let isDisplayable = (info.role == "user" || info.role == "assistant") && info.hasContent && !info.isTrashed
                 let children = effectiveChildren[nid] ?? []
                 if isDisplayable {
                     pathNodeIds.insert(nid)
@@ -293,7 +293,7 @@ extension ConversationViewModel {
             let id: String
             let role: String
             let hasContent: Bool
-            let isDeleted: Bool
+            let isTrashed: Bool
             let parentId: String?
             let childrenIds: [String]
         }
@@ -301,7 +301,7 @@ extension ConversationViewModel {
         var infoMap: [String: NodeInfo] = [:]
         infoMap.reserveCapacity(nodes.count)
         for node in nodes {
-            infoMap[node.id] = NodeInfo(id: node.id, role: node.role, hasContent: !node.content.isEmpty, isDeleted: node.isDeleted, parentId: node.parentId, childrenIds: node.childrenIds)
+            infoMap[node.id] = NodeInfo(id: node.id, role: node.role, hasContent: !node.content.isEmpty, isTrashed: node.isTrashed, parentId: node.parentId, childrenIds: node.childrenIds)
         }
 
         // Chase missing ancestors on background context
@@ -321,7 +321,7 @@ extension ConversationViewModel {
                     predicate: #Predicate<MessageNode> { node in node.id == targetId && node.profileId == targetProfileId }
                 )
                 if let found = try? bgContext.fetch(desc).first {
-                    infoMap[found.id] = NodeInfo(id: found.id, role: found.role, hasContent: !found.content.isEmpty, isDeleted: found.isDeleted, parentId: found.parentId, childrenIds: found.childrenIds)
+                    infoMap[found.id] = NodeInfo(id: found.id, role: found.role, hasContent: !found.content.isEmpty, isTrashed: found.isTrashed, parentId: found.parentId, childrenIds: found.childrenIds)
                     if let pid = found.parentId, !pid.isEmpty, infoMap[pid] == nil {
                         nextChase.insert(pid)
                     }
@@ -379,7 +379,7 @@ extension ConversationViewModel {
 
             while let nid = currentId, let info = infoMap[nid], !visited.contains(nid) {
                 visited.insert(nid)
-                let isDisplayable = (info.role == "user" || info.role == "assistant") && info.hasContent && !info.isDeleted
+                let isDisplayable = (info.role == "user" || info.role == "assistant") && info.hasContent && !info.isTrashed
                 let children = effectiveChildren[nid] ?? []
 
                 if isDisplayable {
@@ -403,7 +403,7 @@ extension ConversationViewModel {
         }
 
         let displayableCount = infoMap.values.filter {
-            ($0.role == "user" || $0.role == "assistant") && $0.hasContent && !$0.isDeleted
+            ($0.role == "user" || $0.role == "assistant") && $0.hasContent && !$0.isTrashed
         }.count
 
         return TreeData(
@@ -579,7 +579,7 @@ extension ConversationViewModel {
         while let nid = currentId, let node = nodeMap[nid], !visited.contains(nid) {
             visited.insert(nid)
 
-            let isDisplayable = (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isDeleted
+            let isDisplayable = (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isTrashed
             let children = effectiveChildrenMap[nid] ?? []
 
             if isDisplayable {
@@ -663,7 +663,7 @@ extension ConversationViewModel {
         var currentId: String? = childId
         while let nid = currentId, let node = nodeMap[nid], !visited.contains(nid) {
             visited.insert(nid)
-            let isDisplayable = (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isDeleted
+            let isDisplayable = (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isTrashed
             if isDisplayable { count += 1 }
             let children = effectiveChildrenMap[nid] ?? []
             if children.isEmpty {
@@ -780,7 +780,7 @@ extension ConversationViewModel {
         var current: String? = nodeId
         while let nid = current, let node = nodeMap[nid], !visited.contains(nid) {
             visited.insert(nid)
-            if (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isDeleted {
+            if (node.role == "user" || node.role == "assistant") && !node.content.isEmpty && !node.isTrashed {
                 return node
             }
             current = (effectiveChildrenMap[nid] ?? []).first

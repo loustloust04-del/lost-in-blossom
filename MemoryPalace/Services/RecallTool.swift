@@ -131,7 +131,7 @@ enum RecallTool {
             desc = FetchDescriptor<MessageNode>(
                 predicate: #Predicate<MessageNode> { node in
                     node.profileId == pid && node.conversationId == cid &&
-                    node.isDeleted == false &&
+                    node.isTrashed == false &&
                     (node.role == "user" || node.role == "assistant") &&
                     node.content.localizedStandardContains(search)
                 },
@@ -141,7 +141,7 @@ enum RecallTool {
             desc = FetchDescriptor<MessageNode>(
                 predicate: #Predicate<MessageNode> { node in
                     node.profileId == pid &&
-                    node.isDeleted == false &&
+                    node.isTrashed == false &&
                     (node.role == "user" || node.role == "assistant") &&
                     node.content.localizedStandardContains(search)
                 },
@@ -156,13 +156,13 @@ enum RecallTool {
         let pid = profileId
         let exact = idOrPrefix
         let exactDesc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.id == exact && $0.profileId == pid && $0.isDeleted == false }
+            predicate: #Predicate<Conversation> { $0.id == exact && $0.profileId == pid && $0.isTrashed == false }
         )
         if let conv = try? context.fetch(exactDesc).first { return conv.id }
         guard idOrPrefix.count >= 8 else { return nil }
         // 前缀匹配：#Predicate 无 hasPrefix，楼层内未删对话量级小，内存过滤可接受
         let allDesc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false }
+            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isTrashed == false }
         )
         let matches = ((try? context.fetch(allDesc)) ?? []).filter { $0.id.hasPrefix(idOrPrefix) }
         return matches.count == 1 ? matches[0].id : nil
@@ -196,11 +196,11 @@ enum RecallTool {
 
             if pathCache[cid] == nil {
                 let convDesc = FetchDescriptor<Conversation>(
-                    predicate: #Predicate<Conversation> { $0.id == cid && $0.profileId == pid && $0.isDeleted == false }
+                    predicate: #Predicate<Conversation> { $0.id == cid && $0.profileId == pid && $0.isTrashed == false }
                 )
                 guard let conv = try? context.fetch(convDesc).first else { deadConvs.insert(cid); continue }
                 let nodesDesc = FetchDescriptor<MessageNode>(
-                    predicate: #Predicate<MessageNode> { $0.conversationId == cid && $0.profileId == pid && $0.isDeleted == false }
+                    predicate: #Predicate<MessageNode> { $0.conversationId == cid && $0.profileId == pid && $0.isTrashed == false }
                 )
                 let allNodes = (try? context.fetch(nodesDesc)) ?? []
                 let mainSet = ConversationViewModel.computeMainPathSet(nodes: allNodes, currentNodeId: conv.currentNodeId)

@@ -25,7 +25,7 @@ enum ContextInheritance {
         let pid = source.profileId
         var fetch = FetchDescriptor<MessageNode>(
             predicate: #Predicate<MessageNode> {
-                $0.conversationId == sid && $0.profileId == pid && $0.isDeleted == false
+                $0.conversationId == sid && $0.profileId == pid && $0.isTrashed == false
             },
             sortBy: [SortDescriptor(\.createTime, order: .reverse)]
         )

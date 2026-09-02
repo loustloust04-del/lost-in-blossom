@@ -11,7 +11,7 @@ import SwiftData
 // 调用方 pattern：
 // ```swift
 // let desc = FetchDescriptor<Conversation>(
-//     predicate: #Predicate { $0.profileId == currentProfileId && $0.isDeleted == false },
+//     predicate: #Predicate { $0.profileId == currentProfileId && $0.isTrashed == false },
 //     sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)]
 // )
 // ```

@@ -30,7 +30,7 @@ enum ConversationListStore {
     static func hasActiveConversations(profileId: String, context: ModelContext) -> Bool {
         let pid = profileId
         var desc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false }
+            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isTrashed == false }
         )
         desc.fetchLimit = 1
         return ((try? context.fetchCount(desc)) ?? 0) > 0
@@ -56,7 +56,7 @@ enum ConversationListStore {
         let pid = profileId
         let descriptor = FetchDescriptor<MessageNode>(
             predicate: #Predicate<MessageNode> { node in
-                node.profileId == pid && node.isFavorite == true && node.isDeleted == false
+                node.profileId == pid && node.isFavorite == true && node.isTrashed == false
             },
             sortBy: [SortDescriptor(\MessageNode.createTime, order: .reverse)]
         )
@@ -72,7 +72,7 @@ enum ConversationListStore {
         let pid = profileId
         let descriptor = FetchDescriptor<MessageNode>(
             predicate: #Predicate<MessageNode> { node in
-                node.profileId == pid && node.isDeleted == true
+                node.profileId == pid && node.isTrashed == true
             },
             sortBy: [SortDescriptor(\MessageNode.deletedAt, order: .reverse)]
         )
@@ -87,7 +87,7 @@ enum ConversationListStore {
     static func favoriteConversationIds(profileId: String, context: ModelContext) -> Set<String> {
         let pid = profileId
         let desc = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isDeleted == false && $0.isFavorite == true }
+            predicate: #Predicate<Conversation> { $0.profileId == pid && $0.isTrashed == false && $0.isFavorite == true }
         )
         let convs = (try? context.fetch(desc)) ?? []
         return Set(convs.map(\.id))
@@ -140,19 +140,19 @@ enum ConversationListStore {
 
     /// CC Bridge session → 占用它的对话标题映射（CCSessionPickerSheet 用）。
     /// excludingConversationId / excludingSession：当前对话和默认 session 不算占用。
-    /// TODO: 谓词可下推（ccBridgeSessionName != nil && isDeleted == false），对话多时这里是全表扫
+    /// TODO: 谓词可下推（ccBridgeSessionName != nil && isTrashed == false），对话多时这里是全表扫
     static func ccSessionOwners(
         excludingConversationId: String,
         excludingSession: String,
         context: ModelContext
     ) -> [String: String] {
         var descriptor = FetchDescriptor<Conversation>(
-            predicate: #Predicate<Conversation> { $0.isDeleted == false }
+            predicate: #Predicate<Conversation> { $0.isTrashed == false }
         )
         guard let all = try? context.fetch(descriptor) else { return [:] }
         var map: [String: String] = [:]
         for c in all {
-            guard !c.isDeleted, c.id != excludingConversationId,
+            guard !c.isTrashed, c.id != excludingConversationId,
                   let name = c.ccBridgeSessionName,
                   !name.isEmpty, name != excludingSession else { continue }
             map[name] = c.title
@@ -184,14 +184,14 @@ enum ConversationListStore {
             if hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && ids.contains(conv.id) &&
+                    conv.isTrashed == false && ids.contains(conv.id) &&
                     conv.title.localizedStandardContains(kw) &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             } else {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && ids.contains(conv.id) &&
+                    conv.isTrashed == false && ids.contains(conv.id) &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             }
@@ -199,13 +199,13 @@ enum ConversationListStore {
             if hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && ids.contains(conv.id) &&
+                    conv.isTrashed == false && ids.contains(conv.id) &&
                     conv.title.localizedStandardContains(kw)
                 }
             } else {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && ids.contains(conv.id)
+                    conv.isTrashed == false && ids.contains(conv.id)
                 }
             }
         }
@@ -311,27 +311,27 @@ enum ConversationListStore {
             if favoritesOnly && hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true &&
+                    conv.isTrashed == false && conv.isFavorite == true &&
                     conv.title.localizedStandardContains(kw) &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             } else if favoritesOnly {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true &&
+                    conv.isTrashed == false && conv.isFavorite == true &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             } else if hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false &&
+                    conv.isTrashed == false &&
                     conv.title.localizedStandardContains(kw) &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             } else {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false &&
+                    conv.isTrashed == false &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             }
@@ -339,22 +339,22 @@ enum ConversationListStore {
             if favoritesOnly && hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true &&
+                    conv.isTrashed == false && conv.isFavorite == true &&
                     conv.title.localizedStandardContains(kw)
                 }
             } else if favoritesOnly {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && conv.isFavorite == true
+                    conv.isTrashed == false && conv.isFavorite == true
                 }
             } else if hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == false && conv.title.localizedStandardContains(kw)
+                    conv.isTrashed == false && conv.title.localizedStandardContains(kw)
                 }
             } else {
                 return #Predicate<Conversation> { conv in
-                    conv.profileId == pid && conv.isDeleted == false
+                    conv.profileId == pid && conv.isTrashed == false
                 }
             }
         }
@@ -374,14 +374,14 @@ enum ConversationListStore {
             if hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == true &&
+                    conv.isTrashed == true &&
                     conv.title.localizedStandardContains(kw) &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             } else {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == true &&
+                    conv.isTrashed == true &&
                     conv.createTime >= s && conv.createTime <= e
                 }
             }
@@ -389,11 +389,11 @@ enum ConversationListStore {
             if hasKeyword {
                 return #Predicate<Conversation> { conv in
                     conv.profileId == pid &&
-                    conv.isDeleted == true && conv.title.localizedStandardContains(kw)
+                    conv.isTrashed == true && conv.title.localizedStandardContains(kw)
                 }
             } else {
                 return #Predicate<Conversation> { conv in
-                    conv.profileId == pid && conv.isDeleted == true
+                    conv.profileId == pid && conv.isTrashed == true
                 }
             }
         }
