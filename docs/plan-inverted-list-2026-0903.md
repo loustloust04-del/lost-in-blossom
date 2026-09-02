@@ -1,6 +1,6 @@
 # plan：反转列表——聊天页白屏的根治（照粟粟的路走）
 
-> 状态：**Draft，等兔兔批注**。批注直接写在本文加 `⬅ 兔兔：`，没意见回「go」。
+> 状态：**兔兔 09-03 否决直接上（心有余悸）——07-02 试过整体回滚，见 §七**。降为 B 计划；先走 §七 的 A 刀。批注直接写在本文加 `⬅ 兔兔：`，没意见回「go」。
 > 2026-09-03 Fable。前情：发送白屏第五刀 `280c30a0` 后兔兔说「还是好严重」→ 去读了粟粟那边怎么做的。
 > 粟粟原件：`/root/projects/SusuPalace` origin/master，commit 链 `5ccfb2b1`→`9b7af5ff`→`764c79e3`→`e8cc596b`→`3aa82aac`，
 > 收官文档 `docs/review-reversed-list.md` / `docs/plan-stream-follow-controller.md` / `docs/handoffs/handoff-keyboard-follow-2026-08-26.md`。
@@ -96,3 +96,19 @@ CardFlowView：
 2. 昨天那刀 `280c30a0` 要不要先 revert 回前天的状态顶着（如果你觉得比前天还糟就 revert；差不多就不动，第 0 刀整个替掉）
 3. 第 0 刀我今晚就能下；第 1 刀键盘要真机来回验，最好你在
 4. 第 3 刀流式补偿先不立项，对吧？
+
+## 七、兔兔提醒后补：我们 07-02 已经试过一次，狼狈回滚（`BUGREPORT-INVERTED-LIST-ROLLBACK.md`）
+三连回归：①编辑模式 inline TextEditor（UITextView 底）双翻转只吃到一层→镜像；②长按菜单 lift preview 错位 + 镜像残影；
+③思考链 UI 消失（根因未查）。当时 Phase 1-5 直接上 main，回滚整刀。
+
+**三个雷今天的状态**
+- ② 有解：粟粟回滚后 4 天做了 UIKit 桥（`3aa82aac`），真机仍颠倒（`233c2ebd`）后改 Telegram 式浮层——零件 `BubbleContextMenuBridge` + `BubbleMenuOverlayView` 已在我们仓（`592074d4`），未接线
+- ① 有解：她的 inline 编辑用纯 SwiftUI `TextField(axis: .vertical)`（`df35d2ea`），不是 UITextView，翻转正确。**但我们比七月多了 WebView 气泡（`MessageContentWebView`，WKWebView 也是 UIKit 底）**——同一类雷，须逐个验
+- ③ 未知：她那边思考链在反转列表里正常，说明可解，但根因没人查过
+
+**所以先不翻。A 刀（小、可回滚、不碰显示层）**：只拆粟粟钉死的元凶——「七个触发 × 三步走 `proxy.scrollTo`」全表 mount 风暴。
+回底改走 **UIKit 直写 contentOffset**（她自己冷弹回底也这么做：「UIKit 绝对 offset，scrollTo 对 lazy 远端不可靠」`0942c8a2`），
+一个写手，`__bottom_sentinel__` 只留给搜索/回底按钮的 `.center` 跳转。列表方向不变、气泡不翻、编辑/菜单/思考链/贴纸全不碰。
+
+**B 计划（反转）若还要走，规矩**：分支 + 单独出包 + 兔兔真机过四件套（长按菜单、编辑、思考链、贴纸拖拽）+ WebView 气泡，
+全过才合 main；任何一件不过，分支死，main 不动。
