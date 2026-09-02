@@ -53,7 +53,9 @@ struct ToolBarView: View {
                         .fill(Theme.branchIndicator.opacity(isSelected ? 0.14 : 0))
                 )
                 .opacity(draggingToolId == tool.id ? 0.3 : 1)
-                .contentShape(Capsule())
+                // 点不准修①：命中区扩成整块矩形并向外扩 4pt——图标间的透明缝、
+                // 胶囊圆角外的死角全都吃点击（视觉不变，只改热区）
+                .contentShape(Rectangle().inset(by: -4))
                 }
                 .buttonStyle(.plain)
                 .onDrag {
@@ -79,7 +81,12 @@ struct ToolBarView: View {
                     }
                 }
             }
+                // 点不准修②：尾巴留 8pt 呼吸位——最后一个工具不再贴死玻璃边，
+                // 滚到底时它能完整露出、周围有可点区域
+                .padding(.trailing, 8)
                 } // inner tools HStack
+            // 点不准修③：内容不超宽时禁回弹——短列表被拽一下的橡皮筋会吞掉紧跟的点击
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             } // horizontal ScrollView
 
             // 抽屉按钮
