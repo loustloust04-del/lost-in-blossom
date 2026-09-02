@@ -3,7 +3,19 @@ import UniformTypeIdentifiers
 
 // MARK: - Tool Bar (选中展开文字，长按拖拽排序)
 
+/// 五渡侦察计数器（struct 会被无限重建，数据必须住在外面）
+final class DockProbe {
+    static var inits = 0
+    static var appears = 0
+    static var changes = 0
+    static var anims = 0
+}
+
 struct ToolBarView: View {
+    init(selectedToolId: Binding<String>) {
+        self._selectedToolId = selectedToolId
+        DockProbe.inits += 1
+    }
     @Binding var selectedToolId: String
     @Environment(RightPanelToolManager.self) private var toolManager: RightPanelToolManager?
 
@@ -18,6 +30,10 @@ struct ToolBarView: View {
     /// 身份还在→onChange 显式事务；身份被重建→onAppear 发现错位，下一拍动画归位。
     /// 两条路殊途同归：胶囊总是「从旧工具飞到新工具」。
     @AppStorage("dockCapsuleVisualId") private var capsuleId: String = ""
+    /// 五渡侦察（临时探针，查明后拆）：四种动画机制实机全灭，不再隔空猜——
+    /// 让实机自己报数。i=本视图被重建次数 a=onAppear c=onChange t=withAnimation 执行数
+    /// 滑点=同事务驱动的位移测试球：它滑=事务活着（是胶囊机制的锅）；它瞬移=事务整个被吞
+    @State private var probeDotRight = false
     /// 胶囊滑移的几何配对命名空间（matchedGeometryEffect）
     @Namespace private var pillNS
 
@@ -102,6 +118,17 @@ struct ToolBarView: View {
                 } // inner tools HStack
             } // horizontal ScrollView
 
+            // 五渡侦察面板（临时）：i重建 a出现 c变更 t动画 + 滑点（事务活性测试球）
+            HStack(spacing: 3) {
+                Text("i\(DockProbe.inits) a\(DockProbe.appears) c\(DockProbe.changes) t\(DockProbe.anims)")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(Theme.textMuted.opacity(0.75))
+                ZStack(alignment: probeDotRight ? .trailing : .leading) {
+                    Capsule().fill(Theme.textMuted.opacity(0.15)).frame(width: 22, height: 8)
+                    Circle().fill(Theme.branchIndicator).frame(width: 8, height: 8)
+                }
+            }
+
             // 抽屉按钮
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -135,6 +162,7 @@ struct ToolBarView: View {
         }
         .animation(springAnim, value: pinnedTools.map(\.id))
         .onAppear {
+            DockProbe.appears += 1
             if capsuleId.isEmpty {
                 capsuleId = selectedToolId          // 首装：直接落位不演
             } else if capsuleId != selectedToolId {
@@ -146,7 +174,12 @@ struct ToolBarView: View {
             }
         }
         .onChange(of: selectedToolId) { _, new in
-            withAnimation(switchAnim) { capsuleId = new }
+            DockProbe.changes += 1
+            withAnimation(switchAnim) {
+                DockProbe.anims += 1
+                capsuleId = new
+                probeDotRight.toggle()   // 滑点与胶囊同一个事务
+            }
         }
         .padding(4)
         .glassEffectCompat(tint: Color.white.opacity(0.06), in: Capsule())
