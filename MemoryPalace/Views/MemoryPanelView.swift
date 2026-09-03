@@ -5,13 +5,25 @@ import SwiftData
 
 struct RightPanelView: View {
     @Binding var selectedToolId: String
-    /// 静默门：isActive=false 时恒等（SwiftUI 跳过子树 diff），active 恒不等（正常更新）
-    private struct CachedPanelGate: View, Equatable {
+    /// 静默门：isActive=false 时恒等（SwiftUI 跳过子树 diff），active 恒不等（正常更新）。
+    /// 09-03：content 从 `AnyView` 改成**惰性闭包**。旧版 `AnyView(panelView(id))` 是构造
+    /// 参数，在造 gate 那一刻就求值了——`.equatable()` 只能短路 body，短路不了参数构造，
+    /// 于是每次 body 跑都把 7 个面板全 init 一遍（ConsoleView 带 7 个 @Query）。
+    /// 改闭包后：短路 ⇒ body 不跑 ⇒ 闭包不调用 ⇒ panelView(id) 根本不执行。
+    /// 对照组：粟粟 upstream/master 裸 switch 每次只构造 1 个面板，所以她不卡。
+    private struct CachedPanelGate<Content: View>: View, Equatable {
         let id: String
         let isActive: Bool
-        let content: AnyView
+        let content: () -> Content
+
+        init(id: String, isActive: Bool, @ViewBuilder content: @escaping () -> Content) {
+            self.id = id
+            self.isActive = isActive
+            self.content = content
+        }
+
         static func == (l: Self, r: Self) -> Bool { !l.isActive && !r.isActive && l.id == r.id }
-        var body: some View { content }
+        var body: some View { content() }
     }
 
     /// 冷启动缓存：去过的面板 id（首帧种子在 onAppear 里种）
@@ -42,8 +54,7 @@ struct RightPanelView: View {
                 // 兔兔 09-02 二报：养了几个面板后回聊天页打字卡——每次键击 ContentView
                 // 重算→rootView 重挂→所有活面板陪跑 diff。静默门：隐藏面板等价短路
                 // （Equatable 恒等→SwiftUI 跳过其子树 diff），键击成本回到单面板级。
-                CachedPanelGate(id: id, isActive: id == selectedToolId,
-                                content: AnyView(panelView(id)))
+                CachedPanelGate(id: id, isActive: id == selectedToolId) { panelView(id) }
                     .equatable()
                     .opacity(id == selectedToolId ? 1 : 0)
                     .allowsHitTesting(id == selectedToolId)
