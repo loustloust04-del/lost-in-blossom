@@ -1,4 +1,12 @@
 import { WebSocketServer, WebSocket } from "ws"
+import {
+  initAskUser, handleHookEvent as handleAskUserHook, resolveOnReply as askUserResolveOnReply,
+  getPending as askUserPending, pendingList as askUserPendingList,
+  askUiAlive, driveAnswer as askUserDrive, markDriven as askUserMarkDriven, formatAnswers as askUserFormatAnswers,
+  questionFramePayload as askUserQuestionFrame, resolveDeclined as resolveAskUserDeclined,
+  resolvedFrames as askUserResolvedFrames,
+} from "./askuser"
+import type { AskUserIO, AskAnswer } from "./askuser"
 import { createServer } from "node:http"
 import { getStatus, forge, startAutoForge } from "./session-manager.ts"
 import { execFileSync, spawn } from "node:child_process"
@@ -173,6 +181,16 @@ export function setTmuxRunner(runner: TmuxRunner) { tmux = runner }
 
 // ── App clients (/ws) + MCP clients (/mcp) ───────────────────────────────────
 const appClients = new Set<WebSocket>()
+
+// ── 问问题 CC 桥（TASK-askuser-cc-port-0903 刀1，移植自粟粟 askuser.ts）──
+const askUserIO: AskUserIO = {
+  sendLiteral: (text, session) => { execFileSync("tmux", ["send-keys", "-t", session, "-l", text]) },
+  sendKey: (key, session) => { execFileSync("tmux", ["send-keys", "-t", session, key]) },
+  capturePane: (session) => {
+    try { return execFileSync("tmux", ["capture-pane", "-t", session, "-p", "-S", "-40"]).toString() } catch { return "" }
+  },
+  sleep: (s) => new Promise<void>((resolve) => setTimeout(resolve, s * 1000)),
+}
 const mcpClients = new Set<WebSocket>()
 
 // 60s reply buffer — replay to App clients that reconnect mid-reply
@@ -232,6 +250,9 @@ const deviceTokenByClient = new Map<WebSocket, string>()
 const BRIDGE_DIR = process.env.MP_CC_BRIDGE_DIR
   ?? (process.cwd().endsWith("/cc-bridge") ? process.cwd() : join(process.cwd(), "cc-bridge"))
 const DEVICE_TOKENS_PATH = join(BRIDGE_DIR, "device-tokens.json")
+initAskUser(BRIDGE_DIR, (frame) => {
+  for (const c of appClients) { try { c.send(frame) } catch {} }
+})
 
 function loadDeviceTokens(): [string, number][] {
   try {
@@ -667,6 +688,20 @@ export function startHub(): WebSocketServer {
     // 和 CC 传)，所以这里额外接受「同机直连」。光看 remoteAddress 不够：nginx :8890 把
     // /cc/ 剥前缀反代到 7890，外部请求进来 remoteAddress 也是回环——但那种请求必带
     // X-Real-IP / X-Forwarded-For，据此把反代来的流量挡在门外。
+    if (u.pathname === "/agent/ask-user" && req.method === "POST") {
+      const viaProxy2 = !!(req.headers["x-real-ip"] || req.headers["x-forwarded-for"])
+      if (viaProxy2) { res.writeHead(403); res.end("forbidden"); return }
+      let body2 = ""
+      req.on("data", (chunk) => { body2 += chunk; if (body2.length > 100_000) { res.writeHead(413); res.end(); req.destroy() } })
+      req.on("end", () => {
+        let o: any
+        try { o = JSON.parse(body2) } catch { res.writeHead(400); res.end("{}"); return }
+        const r = handleAskUserHook(o, () => TMUX_SESSION)
+        res.writeHead(200, { "content-type": "application/json" })
+        res.end(JSON.stringify(r))
+      })
+      return
+    }
     if (u.pathname === "/internal/notify" && req.method === "POST") {
       const viaProxy = !!(req.headers["x-real-ip"] || req.headers["x-forwarded-for"])
       const tokenOk = !!HUB_TOKEN && token === HUB_TOKEN
@@ -780,6 +815,17 @@ export function startHub(): WebSocketServer {
     if (pathname === "/ws") {
       // ── App client ──────────────────────────────────────────────────────────
       appClients.add(ws)
+      // 问问题 CC 桥：pending 重发（先验 TUI 还挂着；死了按 declined 收账）+ resolved 补发
+      for (const p of askUserPendingList()) {
+        if (askUiAlive(askUserIO.capturePane(p.sessionName ?? TMUX_SESSION), p.questions)) {
+          try { ws.send(askUserQuestionFrame(p)) } catch {}
+        } else {
+          resolveAskUserDeclined(p.toolUseId, "revalidate")
+        }
+      }
+      for (const f of askUserResolvedFrames()) {
+        try { ws.send(f) } catch {}
+      }
       console.log(`[hub] App connected (total ${appClients.size}) from ${remote}`)
 
       // Replay recent replies so reconnecting clients don't miss anything
@@ -1007,6 +1053,29 @@ export function startHub(): WebSocketServer {
         }
 
         // ── Focus / blur ──────────────────────────────────────────────────────
+        else if (msg.type === "ask_user_answer") {
+          // 问问题 CC 桥：app 答案 → TUI 键序驱动（单 session，无 stream 分支）。
+          // 权威收账走 PostToolUse hook；skip=Esc 无 hook，驱动成功即 declined 收账。
+          const auToolUseId = typeof msg.tool_use_id === "string" ? msg.tool_use_id : ""
+          const auP = auToolUseId ? askUserPending(auToolUseId) : undefined
+          if (!auP) {
+            try { ws.send(JSON.stringify({ type: "ask_user_stale", tool_use_id: auToolUseId })) } catch {}
+          } else {
+            const auSkip = msg.skip === true
+            const auAnswers: AskAnswer[] | null = Array.isArray(msg.answers) ? msg.answers : null
+            void (async () => {
+              const r = await askUserDrive(auP, auAnswers, auSkip, askUserIO)
+              if (r.ok) {
+                if (auSkip) resolveAskUserDeclined(auToolUseId, "app_skip")
+                else if (auAnswers) askUserMarkDriven(auToolUseId, askUserFormatAnswers(auP.questions, auAnswers))
+                console.log(`[hub] askuser drive ok tool_use=${auToolUseId.slice(0, 12)} skip=${auSkip}`)
+              } else {
+                console.warn(`[hub] askuser drive fail (${r.reason}) tool_use=${auToolUseId.slice(0, 12)}`)
+                try { ws.send(JSON.stringify({ type: "ask_user_stale", tool_use_id: auToolUseId, reason: r.reason })) } catch {}
+              }
+            })()
+          }
+        }
         else if (msg.type === "choice_answer") {
           const raw = JSON.stringify(msg)
           for (const c of mcpClients) {
@@ -1113,6 +1182,7 @@ export function startHub(): WebSocketServer {
         }
 
         else if (msg.type === "reply" && typeof msg.chat_id === "string" && typeof msg.content === "string") {
+          askUserResolveOnReply(msg.chat_id)
           // 幂等：mcp-server 的 reply 有 3 次重试（ws.send 抛错≠帧没送达，帧进 OS 缓冲后
           // 连接异常关闭照样抛）——重试帧带同一个 mp_msg_id，这里按它去重。不去重的话
           // 每条重试帧分到新 reply_id，app 端 reply_id dedup 全部失效 → 落两遍。
