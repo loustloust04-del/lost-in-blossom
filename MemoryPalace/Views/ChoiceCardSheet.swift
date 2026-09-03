@@ -1,3 +1,5 @@
+// ⚠️ 已退役（2026-09-03 选择卡收敛）：ask_choice 帧改喂 AskUserQuestionSheet（新皮接老线），
+// .ccAskChoice 通知不再有人发，本 sheet 不会再被触发。留档一版，下次大扫除删。
 import SwiftUI
 
 /// Caelum 弹的选择卡：她点一下就行，不用打字。

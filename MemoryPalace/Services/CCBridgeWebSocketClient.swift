@@ -636,17 +636,17 @@ final class CCBridgeWebSocketClient: NSObject {
             // v1 no-op；后续版本可用于确认送达
             break
         case "ask_choice":
-            // Caelum 弹的选择卡：她点一下就行
+            // 选择卡收敛（09-03，兔兔点单）：老 ask_choice 线端到端全通、新官方式 sheet
+            // 更漂亮——新皮接老线：帧改喂 AskUserQuestionSheet（toolUseId 带 choice: 前缀
+            // 走老答案帧回去），NotificationCenter/ChoiceCardSheet 那套退役。
             let askId = (obj["ask_id"] as? String) ?? ""
             let question = (obj["question"] as? String) ?? ""
             let options = (obj["options"] as? [String]) ?? []
             let multi = (obj["multi"] as? Bool) ?? false
             if !askId.isEmpty, !question.isEmpty, options.count >= 2 {
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: .ccAskChoice, object: nil,
-                        userInfo: ["askId": askId, "question": question,
-                                   "options": options, "multi": multi])
+                let q = AskUserTool.ParsedQuestion(question: question, options: options, multiSelect: multi)
+                DispatchQueue.main.async { [weak self] in
+                    self?.onAskUserQuestion?("", "choice:" + askId, [q])
                 }
             }
         case "book_note":

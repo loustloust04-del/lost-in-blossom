@@ -77,6 +77,21 @@ extension ConversationViewModel {
         }
         guard let cc = pendingCCQuestion else { return }
         pendingCCQuestion = nil
+        // 老 ask_choice 线（choice: 前缀）：单题，答案按**选项文本**回 choice_answer 帧
+        if cc.toolUseId.hasPrefix("choice:") {
+            let askId = String(cc.toolUseId.dropFirst("choice:".count))
+            let q = cc.questions[0]
+            switch cc.collectedAnswers.first ?? nil {
+            case .options(let idxs):
+                let picked = idxs.compactMap { q.options.indices.contains($0) ? q.options[$0] : nil }
+                CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, picked: picked)
+            case .text(let t):
+                CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, text: t)
+            case nil:
+                CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, skipped: true)
+            }
+            return
+        }
         // 用下标而非文本——CC 那头是方向键+回车选的，要的是位置不是内容。
         let answers: [[String: Any]] = cc.collectedAnswers.map { v in
             switch v {
@@ -104,6 +119,11 @@ extension ConversationViewModel {
         }
         guard let cc = pendingCCQuestion else { return }
         pendingCCQuestion = nil
+        if cc.toolUseId.hasPrefix("choice:") {
+            let askId = String(cc.toolUseId.dropFirst("choice:".count))
+            CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, skipped: true)
+            return
+        }
         CCBridgeWebSocketClient.shared.sendAskUserAnswer(toolUseId: cc.toolUseId, answers: nil, skip: true)
     }
 }
