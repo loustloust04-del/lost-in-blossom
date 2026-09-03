@@ -4,7 +4,12 @@ import SwiftData
 // MARK: - Right Panel (Tool-based Container)
 
 struct RightPanelView: View {
-    @Binding var selectedToolId: String
+    // 09-03：@Binding 换 env。selectedToolId 的所有权从 ContentView 搬到 ToolSelection，
+    // 订阅落在 dash HC 内部，切工具只失效本视图一棵，不再引爆三页大锤。
+    @Environment(ToolSelection.self) private var toolSel: ToolSelection?
+
+    /// 只读投影；env 缺失时兜底 "home"（同仓库其它 @Environment 的防御性 optional 写法）
+    private var selectedToolId: String { toolSel?.id ?? "home" }
     /// 静默门：isActive=false 时恒等（SwiftUI 跳过子树 diff），active 恒不等（正常更新）。
     /// 09-03：content 从 `AnyView` 改成**惰性闭包**。旧版 `AnyView(panelView(id))` 是构造
     /// 参数，在造 gate 那一刻就求值了——`.equatable()` 只能短路 body，短路不了参数构造，
@@ -73,7 +78,10 @@ struct RightPanelView: View {
             if visitedToolIds.isEmpty { visitedToolIds = [selectedToolId] }
         }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                ToolBarView(selectedToolId: $selectedToolId)
+                ToolBarView(selectedToolId: Binding(
+                    get: { toolSel?.id ?? "home" },
+                    set: { toolSel?.id = $0 }
+                ))
                     .background(Theme.sidebarBg)
                     .zIndex(selectedToolId == "calendar" ? 0 : 1)
             }

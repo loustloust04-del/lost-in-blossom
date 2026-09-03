@@ -117,3 +117,21 @@ final class RightPanelToolManager {
         RightPanelTool(id: "marks",       name: "刻痕",    icon: "heart.text.square",                   order: 12),
     ]
 }
+
+// MARK: - Tool Selection
+
+/// 右栏当前选中的工具 id。
+///
+/// 09-03：从 ContentView 的 `@State` 搬出来。原来改它 ⇒ ContentView(942 行) body 全量重算
+/// ⇒ PagingContainerView.updateUIViewController ⇒ updatePages 三页大锤 ⇒ 三个
+/// UIHostingController.rootView 全换 ⇒ CardFlowView(2679 行整棵聊天树) + 写作间 + 桌面页
+/// 全部重 diff。对话越长这一锤越沉 = 「反复切才卡」。
+///
+/// @Observable 的订阅**按属性读取**建立：ContentView 只在闭包里**写** `id`、body 里从不
+/// **读**，⇒ 不订阅 ⇒ 切工具不重算 ContentView ⇒ 大锤不落。
+/// 同款手法先例：ProviderManager / PresetManager 的订阅从 ContentView 收敛到
+/// Representable 层（ContentView.swift:28-30）。
+@Observable
+final class ToolSelection {
+    var id: String = "home"
+}

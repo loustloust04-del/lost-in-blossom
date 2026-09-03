@@ -51,7 +51,7 @@ struct ContentView: View {
     /// 2026-08-24 兔兔定，对齐粟粟的 page2 逻辑：dock 最右 🏠 回桌面、平常停桌面。
     /// 「home」case 与 dock 键 07-09 afbec0f4 就做好了，只有这个默认值一直没改，
     /// 所以桌面态从来没被看见过。
-    @State private var selectedToolId: String = "home"
+    @State private var toolSelection = ToolSelection()
     @State private var stickerVM = StickerViewModel()
     @State private var isFullscreen = false
     @State private var isFullscreenTransitioning = false
@@ -179,7 +179,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showStickerLibrary)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {
-                selectedToolId = "sticker"
+                toolSelection.id = "sticker"
                 isRightPanelVisible = true
             }
         }
@@ -187,7 +187,7 @@ struct ContentView: View {
         .onChange(of: rightPanelNavigator?.pendingTarget) { _, target in
             guard let t = target else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
-                selectedToolId = t.tool
+                toolSelection.id = t.tool
                 iOSPage = 1
             }
         }
@@ -421,10 +421,12 @@ struct ContentView: View {
                 .environment(\.modelContext, modelContext)
                 .environment(manager)
                 .environment(wb)
+                .environment(toolSelection)
         } else {
             page
                 .environment(\.modelContext, modelContext)
                 .environment(manager)
+                .environment(toolSelection)
         }
     }
 
@@ -768,7 +770,7 @@ struct ContentView: View {
 
     /// 右滑 page 2: 右栏插件系统
     private var iOSDashboardPage: some View {
-        RightPanelView(selectedToolId: $selectedToolId, viewModel: viewModel, stickerVM: stickerVM)
+        RightPanelView(viewModel: viewModel, stickerVM: stickerVM)
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.sidebarBg.ignoresSafeArea())
