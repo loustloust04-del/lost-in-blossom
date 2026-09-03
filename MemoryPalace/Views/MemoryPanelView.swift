@@ -10,6 +10,15 @@ struct RightPanelView: View {
 
     /// 只读投影；env 缺失时兜底 "home"（同仓库其它 @Environment 的防御性 optional 写法）
     private var selectedToolId: String { toolSel?.id ?? "home" }
+    /// 常驻白名单：切走后仍值得付内存房租的「现场持有者」
+    private static let residentWhitelist: Set<String> = ["browser", "ccTerminal"]
+
+    /// 画面名单 = 白名单驻民 + 当前（当前若非驻民，切走即拆——粟粟式）
+    private var displayIds: [String] {
+        let cur = selectedToolId
+        return visitedToolIds.contains(cur) ? visitedToolIds : visitedToolIds + [cur]
+    }
+
     /// 静默门：isActive=false 时恒等（SwiftUI 跳过子树 diff），active 恒不等（正常更新）。
     /// 09-03：content 从 `AnyView` 改成**惰性闭包**。旧版 `AnyView(panelView(id))` 是构造
     /// 参数，在造 gate 那一刻就求值了——`.equatable()` 只能短路 body，短路不了参数构造，
@@ -55,7 +64,7 @@ struct RightPanelView: View {
         // 修：拿 ZStack 当身份稳定的底座包住 switch——换枝发生在 ZStack **里面**，
         // inset 的 ToolBarView 从此常驻不再重建。粟粟同款结构能动，就是这一层的差别。
         ZStack {
-            ForEach(visitedToolIds, id: \.self) { id in
+            ForEach(displayIds, id: \.self) { id in
                 // 兔兔 09-02 二报：养了几个面板后回聊天页打字卡——每次键击 ContentView
                 // 重算→rootView 重挂→所有活面板陪跑 diff。静默门：隐藏面板等价短路
                 // （Equatable 恒等→SwiftUI 跳过其子树 diff），键击成本回到单面板级。
@@ -66,16 +75,20 @@ struct RightPanelView: View {
             }
         }
         .onChange(of: selectedToolId) { _, new in
-            // 兔兔 09-02 三报定案：「单个都不卡，反复切才卡」——LRU 限养 3 是庸医针：
-            // 她实际在 7 个工具间轮切，容量 3 意味着几乎每切必有一只被放生+一只重孵，
-            // 冷启动税从一生一次退化成每切必付，反复拆建还越积越沉；remove+append
-            // 重排也让 ZStack 每切洗一次牌。拔针：只进不出、顺序稳定——打字成本由
-            // 静默门兜住（隐藏面板恒等短路），内存若真爆（app 被系统杀）再做
-            // 「带善后的定向放生」，不做粗暴轮换。
-            if !visitedToolIds.contains(new) { visitedToolIds.append(new) }
+            // 兔兔 09-03 终局口供「512 完全体仍打字卡」→ 重新定案：刀1刀2 已把计算
+            // 成本砍到底还卡 = 凶手是**内存**。7 个重面板全常驻（浏览器内核上百兆）
+            // 把 iOS 18 老机的 RAM 塞爆，键盘一来系统拆墙。回看她最早的口供
+            // 「加载过就不卡」——那时还是裸架构！暖的是**服务层缓存**（不随视图拆），
+            // 房间重盖本就毫秒级。正解=选择性保命：只有真持有「现场」的两位
+            // （浏览器网页/终端会话）值得付房租，其余回归粟粟式切走即拆。
+            if Self.residentWhitelist.contains(new), !visitedToolIds.contains(new) {
+                visitedToolIds.append(new)
+            }
         }
         .onAppear {
-            if visitedToolIds.isEmpty { visitedToolIds = [selectedToolId] }
+            if visitedToolIds.isEmpty, Self.residentWhitelist.contains(selectedToolId) {
+                visitedToolIds = [selectedToolId]
+            }
         }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 ToolBarView(selectedToolId: Binding(
