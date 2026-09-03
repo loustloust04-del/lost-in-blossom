@@ -42,6 +42,8 @@ final class CCBridgeWebSocketClient: NSObject {
 
     /// CC 选择卡题面到达。由 ContentView 注册，落进 viewModel.pendingCCQuestion。
     @ObservationIgnored var onAskUserQuestion: ((String, String, [AskUserTool.ParsedQuestion]) -> Void)?
+    /// 问问题收账帧：关卡防悬挂
+    @ObservationIgnored var onAskUserResolved: ((String) -> Void)?
     /// T6 DJ：music_command 帧（songId, title, artist）——他放歌给她
     @ObservationIgnored var onMusicCommand: ((String, String, String) -> Void)?
 
@@ -558,6 +560,14 @@ final class CCBridgeWebSocketClient: NSObject {
             let mcArtist = (obj["artist"] as? String) ?? ""
             DispatchQueue.main.async { [weak self] in
                 self?.onMusicCommand?(songId, mcTitle, mcArtist)
+            }
+
+        case "ask_user_resolved":
+            // 问问题 CC 桥（刀3）：收账帧——别处答掉/他的 turn 结束（Esc/超时 declined）
+            // 时关卡防悬挂。v1 只做关卡；Q/A 气泡落对话跟刀（ccMessageId=askuser:<id> 去重）。
+            guard let rToolUseId = obj["tool_use_id"] as? String else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.onAskUserResolved?(rToolUseId)
             }
 
         case "ask_user_question":

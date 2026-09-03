@@ -538,6 +538,12 @@ struct CardFlowView: View {
                     chatId: chatId, toolUseId: toolUseId, questions: questions
                 )
             }
+            // 问问题收账：别处已答/declined → 静默关卡（不回帧）
+            CCBridgeWebSocketClient.shared.onAskUserResolved = { toolUseId in
+                if viewModel.pendingCCQuestion?.toolUseId == toolUseId {
+                    viewModel.pendingCCQuestion = nil
+                }
+            }
             // API 通路：ToolCallLoop 在 AskUserGate 挂起，题面从这儿进 sheet
             AskUserGate.shared.onQuestions = { questions in
                 viewModel.pendingAPIQuestion = PendingAPIQuestion(questions: questions)
