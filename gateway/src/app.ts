@@ -29,6 +29,7 @@ import { nowPlayingRoutes } from './nowplaying';
 import { listenRoutes } from './listen';
 
 import { musicRoutes } from './music';
+import { screencastRoutes } from './screencast';
 import { livelineRoutes } from './liveline';
 import { intimacyRoutes } from './intimacy';
 import { fablelineRoutes } from './fableline';
@@ -903,6 +904,7 @@ nowPlayingRoutes(app);
 listenRoutes(app);
 
 musicRoutes(app);
+screencastRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);
 fablelineRoutes(app);

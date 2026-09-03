@@ -4,6 +4,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { latestFrame, isLive } from './screencast';
 
 const PEEK_DIR = join(process.cwd(), 'data', 'peek');
 const META = join(PEEK_DIR, 'pending.json');
@@ -75,7 +76,7 @@ export function latestPeek(): { app: string; base64: string; mediaType: string; 
 
 export const SEE_SCREEN_TOOL = {
   name: 'see_screen',
-  description: '看兔兔手机屏幕：有一分钟内的新截图就直接给，没有就去拍一张。她让我看屏幕、说「看这个」，或者我想知道她在干嘛时用。想要绝对最新的一张就用 peek_screen。',
+  description: '看兔兔手机屏幕。她要是开着屏幕共享，拿到的就是几秒前的实时画面；没开就退回截图（一分钟内的直接用，更旧就去拍一张）。她让我看屏幕、说「看这个」，或者我想知道她在干嘛时用。想要绝对最新的一张就用 peek_screen。',
   input_schema: { type: 'object' as const, properties: {}, required: [] as string[] },
 };
 
@@ -90,6 +91,17 @@ function imagePayload(p: { app: string; base64: string; mediaType: string }, not
 /// 所以 CC 无需重载即获得「自动截图」能力。
 /// __peek_image__ 结构：各消费方（loop.ts / cc-bridge mcp-server）识别后各自组装成 image block。
 export async function callSeeScreen(): Promise<string> {
+  // 屏幕直播开着的话直接吃当前帧：~2.5s 一张，比发邮件叫醒手机快一个数量级。
+  // 用 isLive() 而不是自报的 active——broadcastFinished 的 POST 常发不出去（screencast.ts 红线 2）。
+  if (isLive()) {
+    const f = latestFrame();
+    if (f) {
+      return imagePayload(
+        { app: '', base64: f.base64, mediaType: 'image/jpeg' },
+        `屏幕共享开着，这是 ${Math.round(f.ageMs / 1000)} 秒前的画面。`,
+      );
+    }
+  }
   const p = latestPeek();
   if (p && Date.now() - p.ts < SEE_FRESH_MS) return imagePayload(p);
   // 没有 / 太旧 → 自动触发一次完整偷看
