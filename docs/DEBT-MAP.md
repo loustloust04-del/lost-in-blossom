@@ -96,6 +96,11 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
   两套并存，建议下刀二选一收敛：要么给 ask_user_question 补 mcp 工具+hub 转发，
   要么让 Opus 的新 sheet 接到 ask_choice 帧上、删旧 UI。等拍
 
+## page2 卡顿战役 · 已结案（09-03 兔兔验收「修的差不多了」）
+终局架构：裸 switch + 常驻白名单{browser,ccTerminal} + 惰性静默门 + ToolSelection 拆锤。
+战役全程见 SESSION-LOG-DAY22/23；血泪定律：**打字(日常呼吸)优先级永远高于动画(妆)**；
+内存是老机上比 CPU 更早爆的账；「加载过就不卡」暖的是服务缓存不是视图。
+
 ## page2 整体打磨（进行中）
 - [x] 胶囊九渡结案（撑开顶走+同口弹簧）；尾部点不准三针；冷启动 visited 缓存根治
 - [x] 探针全拆（两案结案）
