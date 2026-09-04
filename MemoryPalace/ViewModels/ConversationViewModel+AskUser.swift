@@ -137,3 +137,69 @@ extension ConversationViewModel {
 // 用户答完再原样接着跑，答案走 tool_result 回灌。
 // 粟粟的实现在 ConversationViewModel.swift:1480-1620，结构可参照。
 // 兔兔主要用 CC，故本刀先通 CC 侧；API 侧另起一刀。
+
+
+extension ConversationViewModel {
+    /// 收账帧（粟粟同款）：关卡 + Q/A 气泡落对话（ccMessageId=askuser:<id> 去重）
+    @MainActor
+    func handleCCAskUserResolved(chatId: String, toolUseId: String, questions raw: [[String: Any]],
+                                 answers: [String: String]?, context: ModelContext) {
+        if pendingCCQuestion?.toolUseId == toolUseId { pendingCCQuestion = nil }
+        guard let questions = AskUserTool.parseCCQuestions(raw) else { return }
+        let content = questions.map { q in
+            "Q: \(q.question)\nA: \(answers?[q.question] ?? AskUserTool.skippedAnswer)"
+        }.joined(separator: "\n\n")
+        insertCCUserMessage(chatId: chatId, content: content, ccMessageId: "askuser:\(toolUseId)", context: context)
+    }
+
+    @MainActor
+    func handleCCAskUserStale(toolUseId: String) {
+        guard pendingCCQuestion?.toolUseId == toolUseId else { return }
+        pendingCCQuestion = nil
+        transientNotice = TransientNotice("这个问题已经失效了")
+    }
+
+    /// CC 桥 user 消息落地（Q/A 泡）：上树 + currentPath 同步；ccMessageId 双层查重
+    @MainActor
+    private func insertCCUserMessage(chatId: String, content: String, ccMessageId: String, context: ModelContext) {
+        let convDesc = FetchDescriptor<Conversation>(predicate: #Predicate<Conversation> { $0.id == chatId })
+        guard let conversation = try? context.fetch(convDesc).first else { return }
+        let pid = conversation.profileId
+        if selectedConversation?.id == chatId,
+           nodeMap.values.contains(where: { $0.ccMessageId == ccMessageId }) { return }
+        let dupDesc = FetchDescriptor<MessageNode>(
+            predicate: #Predicate<MessageNode> { $0.conversationId == chatId && $0.ccMessageId == ccMessageId })
+        if let hit = try? context.fetch(dupDesc), !hit.isEmpty { return }
+        let newId = UUID().uuidString
+        let parentId = conversation.currentNodeId
+        let node = MessageNode(
+            id: newId, role: "user", content: content, contentType: "text",
+            createTime: Date(), parentId: parentId.isEmpty ? nil : parentId,
+            childrenIds: [], conversationId: chatId, profileId: pid
+        )
+        node.ccMessageId = ccMessageId
+        context.insert(node)
+        let isCurrent = (selectedConversation?.id == chatId)
+        if !parentId.isEmpty {
+            if isCurrent, let parent = nodeMap[parentId] {
+                if !parent.childrenIds.contains(newId) { parent.childrenIds.append(newId) }
+            } else {
+                let parentDesc = FetchDescriptor<MessageNode>(
+                    predicate: #Predicate<MessageNode> { $0.id == parentId && $0.profileId == pid })
+                if let parent = try? context.fetch(parentDesc).first, !parent.childrenIds.contains(newId) {
+                    parent.childrenIds.append(newId)
+                }
+            }
+        }
+        conversation.currentNodeId = newId
+        conversation.updateTime = Date()
+        if isCurrent {
+            nodeMap[newId] = node
+            effectiveChildrenMap[newId] = []
+            if !parentId.isEmpty { effectiveChildrenMap[parentId, default: []].append(newId) }
+            currentPath.append(node)
+        }
+        markConversationDirty()
+        try? context.save()
+    }
+}

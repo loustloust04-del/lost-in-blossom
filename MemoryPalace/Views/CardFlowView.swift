@@ -538,11 +538,13 @@ struct CardFlowView: View {
                     chatId: chatId, toolUseId: toolUseId, questions: questions
                 )
             }
-            // 问问题收账：别处已答/declined → 静默关卡（不回帧）
-            CCBridgeWebSocketClient.shared.onAskUserResolved = { toolUseId in
-                if viewModel.pendingCCQuestion?.toolUseId == toolUseId {
-                    viewModel.pendingCCQuestion = nil
-                }
+            // 问问题收账（粟粟同款全签名）：关卡 + Q/A 气泡落对话
+            CCBridgeWebSocketClient.shared.onAskUserResolved = { chatId, toolUseId, questions, answers in
+                viewModel.handleCCAskUserResolved(chatId: chatId, toolUseId: toolUseId,
+                                                  questions: questions, answers: answers, context: modelContext)
+            }
+            CCBridgeWebSocketClient.shared.onAskUserStale = { toolUseId in
+                viewModel.handleCCAskUserStale(toolUseId: toolUseId)
             }
             // API 通路：ToolCallLoop 在 AskUserGate 挂起，题面从这儿进 sheet
             AskUserGate.shared.onQuestions = { questions in
