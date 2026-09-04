@@ -43,3 +43,19 @@
 
 执行者：任一窗口认领（写明「按 TASK-askuser-cc-port-0903 刀 N 施工」）；
 派工/审查：Fable（主窗口）；验收：兔兔。
+
+---
+## 0904 战况更新（Fable 主窗口）
+- ✅ 刀1/2/3 落地 + Caelum 重生穿钩 + **CC 车道实机首卡成功**（兔兔实拍：吃药喝水拉窗帘卡）
+- ✅ Q/A 气泡落对话已补（a684c92d，粟粟 handleCCAskUserResolved/insertCCUserMessage 移植）
+- ⚠️ 撞车教训：共享工作区被切到别的分支，commit 落错窝——**开工必看 git branch**（血律六）
+
+## 跟刀两件（下一场/并行窗口认领）
+1. **UI 版式对齐粟粟**：我们的 sheet 是旧版式（「选一个」标题+圆圈+跳过/发送脚条），
+   她的是数字徽章+右上 X+1/3 翻页+行内 Type your answer。她的
+   MemoryPalace/Views/AskUserQuestionSheet.swift（196 行，镜像已最新）直接对照重写我们的
+   （203 行）；注意保留我们 API 双源接口（activeAskQuestions/recordUserAnswer/complete/dismiss）
+2. **API 车道不通诊断**：她的 API 道也通（兔兔实拍 deepseek）。查她 ask_user 在 API 侧怎么
+   注册/执行（她 ToolRegistry 无 ask_user——可能走 gateway builtin 或 provider 层），对照我们的
+   AskUserGate/ToolRegistry 链路找断点；我们的现症=模型嘴上说弹了、卡没出（可能工具没进
+   请求，或 deepseek family 被 gate 掉）
