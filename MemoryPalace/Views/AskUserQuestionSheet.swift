@@ -1,10 +1,3 @@
-// 选择卡 sheet——Caelum 拿不准往哪走时弹出来让兔兔点，而不是让她打字。
-// 2026-08-24 自粟粟搬入（她 08-04 做的 ask-user 线，对齐官端 AskUserQuestion）。
-//
-// 双源无感：题面走 viewModel.activeAskQuestions，答案走 recordUserAnswer/
-// completeActiveAskCard/dismissActiveAskCard 四个接口，
-// API 通路与 CC 桥通路各自实现，UI 这层完全不关心数据从哪来。
-
 import SwiftUI
 
 /// 问问题（ask_user）选择卡：官端同款底部小 sheet（壳照 ThinkingSheet）。
