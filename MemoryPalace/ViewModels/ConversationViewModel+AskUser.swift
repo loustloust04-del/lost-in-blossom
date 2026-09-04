@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import SwiftData   // ModelContext（146/164 行用到）
 
 // MARK: - 选择卡（ask_user）状态机
 //
