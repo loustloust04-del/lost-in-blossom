@@ -72,13 +72,25 @@ jobs:
           
           echo "✅ Signing certificate installed"
 
-      - name: Install provisioning profile
+      - name: Install provisioning profiles
         env:
           MOBILEPROVISION_BASE64: ${{ secrets.MOBILEPROVISION_BASE64 }}
+          MOBILEPROVISION_WIDGET_BASE64: ${{ secrets.MOBILEPROVISION_WIDGET_BASE64 }}
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$MOBILEPROVISION_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/mp-bunny.mobileprovision
-          echo "✅ Provisioning profile installed"
+          # 09-05：粟粟重签了六张（带 App Group），这里先装主 App + Widget 两张。
+          # profile 锁 bundle id：一张只管一个 target，扩展必须各自有一张。
+          DIR=~/Library/MobileDevice/Provisioning\ Profiles
+          mkdir -p "$DIR"
+          echo "$MOBILEPROVISION_BASE64" | base64 --decode > "$DIR/mp-bunny.mobileprovision"
+          if [ -n "$MOBILEPROVISION_WIDGET_BASE64" ]; then
+            echo "$MOBILEPROVISION_WIDGET_BASE64" | base64 --decode > "$DIR/mp-bunny-widget.mobileprovision"
+          fi
+          # 装完点名核对，别只信 exit code——空 secret 会 decode 出 0 字节文件而不报错
+          for f in "$DIR"/*.mobileprovision; do
+            NAME=$(security cms -D -i "$f" 2>/dev/null | plutil -extract Name raw - 2>/dev/null || echo "解析失败")
+            echo "  · $(basename "$f") → $NAME ($(wc -c < "$f") 字节)"
+          done
+          echo "✅ Provisioning profiles installed"
 
       - name: Inspect provisioning profile entitlements
         run: |
@@ -156,6 +168,8 @@ jobs:
             <dict>
               <key>com.susu.MemoryPalace.ios</key>
               <string>MP iOS Dev - Bunny</string>
+              <key>com.susu.MemoryPalace.ios.Widget</key>
+              <string>MP iOS Dev - Bunny Widget</string>
             </dict>
           </dict>
           </plist>
