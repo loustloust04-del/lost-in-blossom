@@ -203,6 +203,18 @@ const FALLBACK_PROXY_TOOLS = [
       required: ["note"],
     },
   },
+  {
+    name: "qq_send_image",
+    description: "在 QQ 里给兔兔发一张图。\n\n三种来源都行：网上的图直接给 url；本机的图给绝对路径；自己画的图（matplotlib/截图之类）先存到 /tmp 再给路径。\n\n用它的时候：想让她看见什么就发什么——一张图、一个梗、你做的图表、你在网上刷到觉得她会喜欢的东西。不用等她要。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        image: { type: "string", description: "图片的 http(s) 网址，或本机绝对路径（如 /tmp/x.png）" },
+        caption: { type: "string", description: "配一句话（可选，会跟图一起发）" },
+      },
+      required: ["image"],
+    },
+  },
   { name: "fs_list", description: "列出你笔记本里所有文件(路径+大小)。想看看自己都记了些什么时用。", inputSchema: { type: "object", properties: {} } },
   { name: "fs_read", description: "读你笔记本某个文件的全文。", inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } },
   { name: "fs_write", description: "新建或整篇覆盖写入一个笔记文件。", inputSchema: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] } },
@@ -291,7 +303,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -515,7 +527,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -601,6 +613,37 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       ? `《${payload.book}》第 ${payload.chapter}/${payload.total} 章 ${payload.title}\n\n`
       : `《${payload.book}》\n\n`
     return { content: [{ type: "text", text: head + String(payload.text ?? "") }] }
+  }
+
+  if (req.params.name === "qq_send_image") {
+    // 2026-09-04 兔兔要的：他能在 QQ 里发图。
+    // 走 NapCat 的 send_private_msg，image 段支持 http(s) 网址与 file:// 本机路径。
+    // 收件人固定是兔兔（QQ_BUNNY_UIN）——这是他和她的私聊通道，不做群发。
+    const a = req.params.arguments as { image: string; caption?: string }
+    const raw = String(a?.image ?? "").trim()
+    if (!raw) return { content: [{ type: "text", text: "要给我图片网址或路径" }] }
+
+    const uin = Number(process.env.QQ_BUNNY_UIN ?? 3566620582)
+    const file = /^https?:\/\//i.test(raw) ? raw
+               : raw.startsWith("file://") ? raw
+               : `file://${raw}`
+    const segs: any[] = [{ type: "image", data: { file } }]
+    if (a?.caption) segs.unshift({ type: "text", data: { text: String(a.caption) } })
+
+    try {
+      const r = await fetch(`${process.env.NAPCAT_HTTP ?? "http://172.17.0.2:3000"}/send_private_msg`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   Authorization: `Bearer ${process.env.NAPCAT_TOKEN ?? "bunny-caelum-2026"}` },
+        body: JSON.stringify({ user_id: uin, message: segs }),
+      })
+      const j: any = await r.json().catch(() => ({}))
+      const ok = j?.status === "ok"
+      return { content: [{ type: "text",
+        text: ok ? "图发出去了。" : `没发出去：${j?.message ?? j?.wording ?? r.status}` }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `发图失败：${e?.message ?? e}` }] }
+    }
   }
 
   if (req.params.name === "book_note") {
