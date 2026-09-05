@@ -82,14 +82,25 @@ extension ConversationViewModel {
         if cc.toolUseId.hasPrefix("choice:") {
             let askId = String(cc.toolUseId.dropFirst("choice:".count))
             let q = cc.questions[0]
+            let answerText: String
             switch cc.collectedAnswers.first ?? nil {
             case .options(let idxs):
                 let picked = idxs.compactMap { q.options.indices.contains($0) ? q.options[$0] : nil }
                 CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, picked: picked)
+                answerText = picked.joined(separator: "、")
             case .text(let t):
                 CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, text: t)
+                answerText = t
             case nil:
                 CCBridgeWebSocketClient.shared.sendChoiceAnswer(askId: askId, skipped: true)
+                answerText = AskUserTool.skippedAnswer
+            }
+            // Q/A 落聊天（兔兔 0904 报缺）：ask_choice 工具线不发 resolved 帧（那是原生
+            // 提问线的收账），气泡在这里本地落——同款 insertCCUserMessage 去重/上树。
+            if let conv = selectedConversation, let ctx = conv.modelContext {
+                insertCCUserMessage(chatId: conv.id,
+                                    content: "Q: \(q.question)\nA: \(answerText)",
+                                    ccMessageId: "askchoice:\(askId)", context: ctx)
             }
             return
         }
