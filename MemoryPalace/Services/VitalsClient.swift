@@ -88,6 +88,19 @@ enum VitalsSyncService {
             waterCount: ctx.waterCount, foodCount: ctx.meals.count, meals: localMeals, date: localDate
         ) else { return }
 
+        // 0906 兔兔报「清完又混回来」：本地今天这条里可能残留着昨天被回灌的饭。
+        // 昨天那条 DailyContext 里出现过的同名条目 = 残留，清掉再合并。
+        if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: Date())) {
+            let dayAfter = Calendar.current.startOfDay(for: Date())
+            let desc = FetchDescriptor<DailyContext>(
+                predicate: #Predicate<DailyContext> { $0.date >= yesterday && $0.date < dayAfter })
+            if let prev = try? context.fetch(desc).first {
+                let prevNames = Set(prev.meals.map(\.description))
+                let before = ctx.meals.count
+                ctx.meals.removeAll { prevNames.contains($0.description) }
+                if ctx.meals.count != before { try? context.save() }
+            }
+        }
         // 回写：服务端合并后的数更大 = Caelum 记过我们没有的，补进本地
         var changed = false
         if merged.water.count > ctx.waterCount { ctx.waterCount = merged.water.count; changed = true }

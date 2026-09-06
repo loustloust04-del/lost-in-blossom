@@ -71,7 +71,46 @@ struct ConsoleView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.sidebarBg.ignoresSafeArea())
-        .task {
+        // 兔兔 0906：控制台没有刷新入口——数据只在进页面那一次拉，跨日或服务端
+        // 改过都看不到新的。下拉即全量重拉（与首次进入同一套）。
+        .refreshable { await refreshAll() }
+        .task { await refreshAll() }
+        .alert("添加待办", isPresented: $showAddTodo) {
+            TextField("要做的事…", text: $newTodoText)
+            Button("取消", role: .cancel) { newTodoText = "" }
+            Button("添加") { todo.add(newTodoText); newTodoText = "" }
+        }
+        .sheet(isPresented: $showMemoBoard, onDismiss: {
+            Task { latestBoardPost = await BoardClient.fetch().last }
+        }) { MemoBoardView() }
+        .sheet(isPresented: $showAnniversaries, onDismiss: {
+            Task { anniversaries = await AnniversaryClient.fetch() }
+        }) { AnniversaryManageSheet() }
+        .sheet(isPresented: $showTweets) { TweetsFeedSheet() }
+        .sheet(isPresented: $showMurmurs) { MurmurFeedSheet(items: murmurs) }
+        .sheet(isPresented: $showPeriod, onDismiss: {
+            Task { if let snap = await PeriodClient.fetch() { periodPred = snap.prediction } }
+        }) { PeriodSheet() }
+        .sheet(isPresented: $showSleep) {
+            if let ctx = todayCtx { SleepSheet(context: ctx) }
+        }
+        .sheet(isPresented: $showCare) {
+            CareView(contexts: allContexts, vitals: vitalsData, period: periodPred)
+        }
+        .sheet(isPresented: $showLog) {
+            LogView(contexts: allContexts, todayNotes: vitalsData?.notes ?? [])
+        }
+        .sheet(isPresented: $showScreenDetail) {
+            ScreenTimeDetailView(initial: screenData)
+        }
+        .sheet(isPresented: $showMeds, onDismiss: {
+            Task { medsData = await MedsClient.fetch() }
+        }) { MedsSheet() }
+    }
+
+    /// 控制台全量刷新：首次进入（.task）与下拉（.refreshable）共用同一套
+    @MainActor
+    private func refreshAll() async {
             // 健康数据双向同步（本地 SwiftData ↔ Gateway 药品柜 ↔ Caelum）
             if let pid = profileManager?.currentProfile.id {
                 await HealthSyncService.sync(context: modelContext, profileId: pid)
@@ -110,38 +149,6 @@ struct ConsoleView: View {
             }
             // Pocket Browser：若已开启，连上让 Caelum 能借手机浏览
             PocketClient.shared.startIfEnabled()
-        }
-        .alert("添加待办", isPresented: $showAddTodo) {
-            TextField("要做的事…", text: $newTodoText)
-            Button("取消", role: .cancel) { newTodoText = "" }
-            Button("添加") { todo.add(newTodoText); newTodoText = "" }
-        }
-        .sheet(isPresented: $showMemoBoard, onDismiss: {
-            Task { latestBoardPost = await BoardClient.fetch().last }
-        }) { MemoBoardView() }
-        .sheet(isPresented: $showAnniversaries, onDismiss: {
-            Task { anniversaries = await AnniversaryClient.fetch() }
-        }) { AnniversaryManageSheet() }
-        .sheet(isPresented: $showTweets) { TweetsFeedSheet() }
-        .sheet(isPresented: $showMurmurs) { MurmurFeedSheet(items: murmurs) }
-        .sheet(isPresented: $showPeriod, onDismiss: {
-            Task { if let snap = await PeriodClient.fetch() { periodPred = snap.prediction } }
-        }) { PeriodSheet() }
-        .sheet(isPresented: $showSleep) {
-            if let ctx = todayCtx { SleepSheet(context: ctx) }
-        }
-        .sheet(isPresented: $showCare) {
-            CareView(contexts: allContexts, vitals: vitalsData, period: periodPred)
-        }
-        .sheet(isPresented: $showLog) {
-            LogView(contexts: allContexts, todayNotes: vitalsData?.notes ?? [])
-        }
-        .sheet(isPresented: $showScreenDetail) {
-            ScreenTimeDetailView(initial: screenData)
-        }
-        .sheet(isPresented: $showMeds, onDismiss: {
-            Task { medsData = await MedsClient.fetch() }
-        }) { MedsSheet() }
     }
 
     private func ensureTodayContext() { DailyContextStore.ensureToday(context: modelContext) }
