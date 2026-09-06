@@ -1,3 +1,16 @@
+// 2026-09-06：最后防线。
+// 兔兔那天 QQ 与 App 同时断线——查 hub.log 末尾是 APNs 推送连接超时时，
+// Bun 在 node:net 里抛了未捕获的 TypeError，把整个 hub 拖死了。
+// APNs 那处已单独加固（apns.ts），但同类风险不止一处：
+// hub 是 QQ / App / tmux 三边的总枢纽，它死了一切都断。
+// 宁可带着一条错误日志继续跑，也不要整个进程消失。
+process.on("uncaughtException", (err: any) => {
+  console.error("[hub] ⚠️ 未捕获异常（已兜住，进程继续）:", err?.stack ?? err)
+})
+process.on("unhandledRejection", (reason: any) => {
+  console.error("[hub] ⚠️ 未处理的 Promise 拒绝（已兜住）:", reason?.stack ?? reason)
+})
+
 import { WebSocketServer, WebSocket } from "ws"
 import {
   initAskUser, handleHookEvent as handleAskUserHook, resolveOnReply as askUserResolveOnReply,

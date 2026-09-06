@@ -74,9 +74,26 @@ export async function sendPush(
   }
 
   return new Promise((resolve) => {
-    const client = http2.connect(HOST)
-    client.on("error", (err) => {
-      resolve({ ok: false, error: `http2: ${err.message}` })
+    // 2026-09-06：APNs 连接超时会让 Bun 在 node:net 的 internalConnectMultipleTimeout
+    // 里抛未捕获异常（TypeError: null is not an object），**把整个 hub 拖死**——
+    // 兔兔那天 QQ 与 App 同时断线就是这么来的（hub.log 末尾即此栈）。
+    // client.on("error") 接不住那个（它发生在连接建立阶段的定时器里），
+    // 故这里再加一层：连不上就自己了结，别拖着进程。
+    let settled = false
+    const done = (r: APNsResult) => { if (!settled) { settled = true; resolve(r) } }
+
+    let client: any
+    try { client = http2.connect(HOST) }
+    catch (e: any) { return done({ ok: false, error: `http2 connect: ${e?.message}` }) }
+
+    const killTimer = setTimeout(() => {
+      try { client.destroy() } catch {}
+      done({ ok: false, error: "http2: connect timeout(15s)" })
+    }, 15_000)
+    const resolve2 = (r: APNsResult) => { clearTimeout(killTimer); done(r) }
+
+    client.on("error", (err: any) => {
+      resolve2({ ok: false, error: `http2: ${err?.message ?? err}` })
     })
 
     const apnsPayload = JSON.stringify({
@@ -110,13 +127,13 @@ export async function sendPush(
     req.on("end", () => {
       client.close()
       if (status === 200) {
-        resolve({ ok: true, status, apnsId })
+        resolve2({ ok: true, status, apnsId })
       } else {
         const errReason = (() => {
           try { return (JSON.parse(responseBody) as any).reason ?? responseBody }
           catch { return responseBody }
         })()
-        resolve({ ok: false, status, apnsId, error: errReason })
+        resolve2({ ok: false, status, apnsId, error: errReason })
       }
     })
 
