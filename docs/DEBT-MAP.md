@@ -411,3 +411,15 @@ Caelum 跑的一直是这个好的（`/proc/<pid>/exe` 显示为 `(deleted)` 即
 
 **教训**：一条链路上每个环节都「失败即静默返回」，等于给自己蒙眼。
 以后写这类后台定时任务，失败路径至少要留一行**能被看见**的痕迹。
+
+## 选择卡（问问题）· 0904 战况
+- [x] **CC 车道全链路通车**：hub 模块移植（粟粟 askuser.ts + 21 单测全绿）/ 钩子装进
+  Caelum settings（备份 .bak-20260903）/ Caelum 重生穿钩 / **实机首卡成功**（他用来
+  催兔兔吃药喝水拉窗帘）/ 老 ChoiceCardSheet 连根拔除，两条线统一粟粟同款脸
+- [x] Q/A 落聊天：原生线走 resolved 帧、ask_choice 线本地落（车道错位补齐，4caf7077）
+- [ ] **API 车道仍不通**（兔兔三报）：现症=模型嘴上说弹了、卡没出。断点候选：工具没进
+  请求 / 网关代理层吞掉 / family 门控。粟粟 API 道是通的但接法与我们不同（她 ToolRegistry
+  里没有 ask_user，疑走 gateway builtin）——下一场带新鲜脑子专门诊断，情报在
+  docs/TASK-askuser-cc-port-0903.md 末尾
+- 血律六：**开工先看 git branch**（0903 共享工作区被切到别的分支，三刀 commit 落错窝，
+  push 静默空推；已用独立 worktree /tmp/bp-main 作业）
