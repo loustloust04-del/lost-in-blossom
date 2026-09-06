@@ -62,7 +62,8 @@ enum ToolCallLoop {
             // ── 选择卡（ask_user）：挂起工具循环等用户点选（AskUserGate 详注）──
             if call.name == AskUserTool.toolName {
                 if let qs = AskUserTool.parse(inputJSON: call.argumentsJSON) {
-                    let answers = await AskUserGate.shared.ask(qs)
+                    // execute 不在 MainActor 上；闸门是 @MainActor，显式跳过去调用
+                    let answers = await MainActor.run { AskUserGate.shared }.ask(qs)
                     let text = answers.map { AskUserTool.resultText(questions: qs, answers: $0) }
                         ?? "（选择卡未能弹出：界面不在前台或已有一张卡挂着。可以直接用文字问她。）"
                     outcomes.append(ToolOutcome(id: call.id, name: call.name, text: text, isError: answers == nil))

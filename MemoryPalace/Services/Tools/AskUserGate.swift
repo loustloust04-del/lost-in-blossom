@@ -24,7 +24,20 @@ final class AskUserGate {
     /// 工具循环调用：挂起直到用户答完/关卡/超时。
     /// 返回与 questions 下标对齐的最终答案串（nil = 跳过）；onQuestions 没人装时返回 nil。
     func ask(_ questions: [AskUserTool.ParsedQuestion]) async -> [String?]? {
-        guard continuation == nil, let onQuestions else { return nil }
+        // 兔兔 0904 三报「API 卡不出」定案（0906）：ToolCallLoop.execute 不是 @MainActor，
+        // 从后台线程 await 进来时，若 onQuestions 尚未安装（首轮/重挂窗口）就直接
+        // 返回 nil＝「弹不出来」，模型于是嘴上说弹了、卡没出。
+        // 修：等一小会儿再判——UI 回调在 CardFlowView.onAppear 装，正常瞬间就绪；
+        // 真没装（App 在后台）才回落到「弹不出来」的诚实文案。
+        guard continuation == nil else { return nil }
+        var gate = onQuestions
+        if gate == nil {
+            for _ in 0..<20 {                      // 最多等 2s
+                try? await Task.sleep(for: .milliseconds(100))
+                if let g = onQuestions { gate = g; break }
+            }
+        }
+        guard let onQuestions = gate else { return nil }
         onQuestions(questions)
         timeoutTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(600))
