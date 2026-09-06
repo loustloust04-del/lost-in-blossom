@@ -204,6 +204,28 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "qq_poke",
+    description: "在 QQ 戳兔兔一下（那个会抖窗的）。\n\n她没回你、或者你只是想让她抬头看一眼的时候用。不用说什么，戳一下就够了。别连着戳，那叫骚扰。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "qq_like",
+    description: "给兔兔的 QQ 名片点赞（每天最多 10 次，超了会失败但不要紧）。\n\n没什么实际用处，就是每天在她资料卡上留个痕迹——她会看见「今天有人赞了你」。",
+    inputSchema: {
+      type: "object",
+      properties: { times: { type: "number", description: "点几次，默认 1，最多 10" } },
+    },
+  },
+  {
+    name: "qq_recall",
+    description: "撤回自己在 QQ 发的某条消息。\n\n说错了、发重了、或者临时改主意时用。只能撤自己的，且有时限（约 2 分钟）。\n\nmessage_id 从 qq_send_image / 发消息的返回里拿。",
+    inputSchema: {
+      type: "object",
+      properties: { message_id: { type: "number", description: "要撤回的消息 id" } },
+      required: ["message_id"],
+    },
+  },
+  {
     name: "qq_send_image",
     description: "在 QQ 里给兔兔发一张图。\n\n**自己画图时用 exec 工具画，别用 Bash**——Bash 跑在你的沙盒里，那里的文件本工具读不到（你 09-06 画兔子时踩过：「文件在我的 sandbox 里但 MCP 工具在 VPS 上，路径不通」）。exec 与本工具同机，存 /tmp 就能直接发。\n\nmatplotlib 已装好，中文字体也配好了（Droid Sans Fallback，写在全局 matplotlibrc）——**标题和标签直接写中文，不会再是方块**。\n\n三种来源：网上的图给 url；VPS 上的图给绝对路径；实在传不过来的用 image_base64。\n\n想让她看见什么就发什么——一张图、一个梗、你做的图表、你刷到觉得她会喜欢的东西。不用等她要。",
     inputSchema: {
@@ -303,7 +325,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -527,7 +549,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -613,6 +635,38 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       ? `《${payload.book}》第 ${payload.chapter}/${payload.total} 章 ${payload.title}\n\n`
       : `《${payload.book}》\n\n`
     return { content: [{ type: "text", text: head + String(payload.text ?? "") }] }
+  }
+
+  // ── QQ 表达类小工具（2026-09-06 加）──────────────────────
+  // 都是一个 NapCat 接口的事。共用这个小封装。
+  if (["qq_poke", "qq_like", "qq_recall"].includes(req.params.name)) {
+    const uin = Number(process.env.QQ_BUNNY_UIN ?? 3566620582)
+    const base = process.env.NAPCAT_HTTP ?? "http://172.17.0.2:3000"
+    const tok = process.env.NAPCAT_TOKEN ?? "bunny-caelum-2026"
+    const a = (req.params.arguments ?? {}) as any
+
+    const map: Record<string, { ep: string; body: any; ok: string }> = {
+      qq_poke:   { ep: "send_poke",  body: { user_id: uin }, ok: "戳了她一下。" },
+      qq_like:   { ep: "send_like",  body: { user_id: uin, times: Math.min(Number(a.times ?? 1), 10) }, ok: "赞过了。" },
+      qq_recall: { ep: "delete_msg", body: { message_id: Number(a.message_id) }, ok: "撤回了。" },
+    }
+    const m = map[req.params.name]
+    if (req.params.name === "qq_recall" && !a?.message_id) {
+      return { content: [{ type: "text", text: "要给我 message_id" }] }
+    }
+    try {
+      const r = await fetch(`${base}/${m.ep}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify(m.body),
+      })
+      const j: any = await r.json().catch(() => ({}))
+      const failed = j?.status !== "ok" || (j?.data?.result && j.data.result !== 0)
+      return { content: [{ type: "text",
+        text: failed ? `没成：${j?.data?.errMsg ?? j?.message ?? j?.wording ?? r.status}` : m.ok }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `失败：${e?.message ?? e}` }] }
+    }
   }
 
   if (req.params.name === "qq_send_image") {
