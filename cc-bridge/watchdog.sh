@@ -1,7 +1,4 @@
 #!/bin/bash
-#
-# ⚠️ 真身在 /root/projects/BunnyBridge/watchdog.sh（cron 每 15 分钟跑那个）。
-# BunnyBridge 不是 git 仓库，这里是版本控制的副本——改了任何一边都要同步另一边。
 # CC Bridge 看门狗 — 每 15 分钟跑一次，兔兔再也不用手动重启
 export HOME=/root
 export PATH=/usr/local/bin:/root/.local/bin:/root/.bun/bin:$PATH
@@ -16,6 +13,21 @@ if ! ss -tln 2>/dev/null | grep -q ':7890 '; then
     cd /root/projects/BunnyPalace/cc-bridge && setsid nohup bash -c 'export HOME=/root && export PATH=/root/.bun/bin:$PATH && export MP_CC_HUB_TOKEN="SH74v-IveupxWPr-6TU0CH0GDvfIxSDC" && export MP_CC_WORKDIR=/root/projects/BunnyBridge && export CC_INJECT_SUMMARY=$(cat /root/projects/BunnyPalace/cc-bridge/.context-state 2>/dev/null || echo 0) && exec bun run hub.ts >> /tmp/hub.log 2>&1' < /dev/null > /dev/null 2>&1 &
     sleep 4
     log "hub 重启完成"
+fi
+
+# 1.5 检查 QQ 桥是否在跑（2026-09-06 补）
+#     兔兔那天在 QQ 里撞到「连不上 hub」——真凶是 hub 挂在两次巡逻的空档里。
+#     顺带发现：QQ 桥根本不在看门狗管辖内，跑在 tmux qqbridge 里，VPS 一重启就没。
+#     探端口 3010（NapCat 反向 WS 连进来的那个），不探 tmux 会话名——
+#     会话名靠不住（见上面 hub 那条的教训）。
+if ! ss -tln 2>/dev/null | grep -q ':3010 '; then
+    log "QQ 桥端口 3010 未监听，重启 qq-bridge..."
+    tmux kill-session -t qqbridge 2>/dev/null
+    tmux new-session -d -s qqbridge -c /root/projects/BunnyPalace 2>/dev/null
+    sleep 1
+    tmux send-keys -t qqbridge '/root/.bun/bin/bun cc-bridge/qq-bridge.ts' Enter
+    sleep 4
+    log "QQ 桥重启完成"
 fi
 
 # 2. 检查 CC 是否在跑（重启 = 指名 resume 最新主记忆本，绝不裸 claude 开空白本）
