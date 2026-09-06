@@ -309,6 +309,21 @@ final class CCBridgeWebSocketClient: NSObject {
     /// 选择卡答案回 hub，驱动 tmux TUI 键序。
     /// answers 每项二选一：["indices": [Int]]（按位置选）或 ["text": String]（自由输入）。
     /// skip=true 时 answers 传 nil——hub 发 Esc 整卡撤销（TUI 语义只支持整卡，不能逐题跳）。
+    /// 通知里的快速回复：不开 App，直接把话经 hub 送给他。
+    /// 2026-09-06 兔兔提的——长按推送就能回，不用绑在聊天页面上。
+    /// 走的是与 App 内发消息同一条 chat 帧，所以他那边看到的没有区别。
+    func sendQuickReply(text: String, chatId: String?) {
+        let cid = chatId ?? UserDefaults.standard.string(forKey: "pendingPushChatId") ?? ""
+        guard !cid.isEmpty else { return }
+        send([
+            "type": "chat",
+            "chat_id": cid,
+            "message_id": UUID().uuidString,
+            "content": text,
+            "user": "兔兔（通知快速回复）",
+        ]) { _ in }
+    }
+
     func sendAskUserAnswer(toolUseId: String, answers: [[String: Any]]?, skip: Bool = false) {
         var frame: [String: Any] = ["type": "ask_user_answer", "tool_use_id": toolUseId]
         if skip { frame["skip"] = true } else if let answers { frame["answers"] = answers }

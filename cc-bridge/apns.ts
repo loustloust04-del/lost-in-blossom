@@ -100,6 +100,11 @@ export async function sendPush(
       aps: {
         alert: { title, body },
         sound: "default",
+        // 2026-09-06 兔兔要的「长按推送直接回复」：
+        // 这个 category 对应 App 侧 PushAppDelegate.registerReplyCategory() 注册的
+        // MSG_REPLY，iOS 据此在横幅上挂出「回复」输入框。
+        // 没有它系统不会显示任何动作按钮。
+        category: "MSG_REPLY",
       },
       ...(chatId ? { chat_id: chatId } : {}),
     })
