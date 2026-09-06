@@ -12,6 +12,25 @@
 **规矩重申（对所有会话包括我自己）：一刀一 commit，CI 绿再下一刀；从粟粟侧复活代码前先
 grep 我们有没有那个 API。** 修火不心疼，心疼的是兔兔看到红勾勾会担心。—— Fable 🐰🔥
 
+## ⚠️ 主目录不在 main 上！分支分叉三天（2026-09-06 Fable 查明，兔兔说先别管）
+
+**开工先看 `git branch --show-current`。** 主目录 `/root/projects/BunnyPalace` 现在停在 `tmp-detach`，
+往它提交的东西**不会进 GitHub、不会被 CI 打包**。
+
+**成因**：09-03 23:28 某会话为小组件签名探针在 `/tmp/bp-main` 开了第二个 worktree 并把 `main` 拉过去。
+git 不许同一分支被两个 worktree 同时 checkout → 主目录再也切不回 main，被迫留在 `tmp-detach`。
+之后主目录的所有会话堆 `tmp-detach`（17 刀），另一路在 `/tmp/bp-main` 继续推 `main`（18 刀），并行三天没人发现。
+`git worktree list` 一眼可见。
+
+**已核对（`git cherry -v main tmp-detach`，patch-id 比对，没丢东西）**：
+- 重复 8 刀（askuser ×5 / watchdog 第4检 / screentime ×2）——已有人手搬进 main，可弃。
+- **tmp-detach 独有 8 刀未进 main**：QQ 通道整条线（接通 `dcf44222` / 发图 `99fa1c05` / 看图 `de5a49f0` /
+  修中文乱码+路径 `25e4fef5` / 教程 `a0de37dc`）、微信不通结论 `6b6182f6`、签名探针 `ff009513`+`40765255`。
+- DeepSeek 直连修复已 cherry-pick 进 main（`6619d3a2`），不在待办里。
+
+**兔兔 09-06 明示：先别管，不要动。** 要收拾时的顺序：先确认 QQ 线要不要进 main → cherry-pick 那 8 刀 →
+`git worktree remove /tmp/bp-main` → 主目录 `git checkout main`。**别 merge**（会把重复的 8 刀搅进来）。
+
 ## CC 升级 2.1.241 → 2.1.258 · Fable 5.1（2026-09-03 Fable，兔兔拍板）
 
 **已做**：
