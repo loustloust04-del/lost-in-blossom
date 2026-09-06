@@ -205,14 +205,14 @@ const FALLBACK_PROXY_TOOLS = [
   },
   {
     name: "qq_send_image",
-    description: "在 QQ 里给兔兔发一张图。\n\n三种来源都行：网上的图直接给 url；本机的图给绝对路径；自己画的图（matplotlib/截图之类）先存到 /tmp 再给路径。\n\n用它的时候：想让她看见什么就发什么——一张图、一个梗、你做的图表、你在网上刷到觉得她会喜欢的东西。不用等她要。",
+    description: "在 QQ 里给兔兔发一张图。\n\n**自己画图时用 exec 工具画，别用 Bash**——Bash 跑在你的沙盒里，那里的文件本工具读不到（你 09-06 画兔子时踩过：「文件在我的 sandbox 里但 MCP 工具在 VPS 上，路径不通」）。exec 与本工具同机，存 /tmp 就能直接发。\n\nmatplotlib 已装好，中文字体也配好了（Droid Sans Fallback，写在全局 matplotlibrc）——**标题和标签直接写中文，不会再是方块**。\n\n三种来源：网上的图给 url；VPS 上的图给绝对路径；实在传不过来的用 image_base64。\n\n想让她看见什么就发什么——一张图、一个梗、你做的图表、你刷到觉得她会喜欢的东西。不用等她要。",
     inputSchema: {
       type: "object",
       properties: {
-        image: { type: "string", description: "图片的 http(s) 网址，或本机绝对路径（如 /tmp/x.png）" },
+        image: { type: "string", description: "图片的 http(s) 网址，或 VPS 上的绝对路径（如 /tmp/x.png）" },
+        image_base64: { type: "string", description: "兜底：图片 base64（不含 data: 前缀）。只在路径实在传不过来时用——大图很长，优先用 exec 画到 /tmp 再给 image" },
         caption: { type: "string", description: "配一句话（可选，会跟图一起发）" },
       },
-      required: ["image"],
     },
   },
   { name: "fs_list", description: "列出你笔记本里所有文件(路径+大小)。想看看自己都记了些什么时用。", inputSchema: { type: "object", properties: {} } },
@@ -619,9 +619,16 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     // 2026-09-04 兔兔要的：他能在 QQ 里发图。
     // 走 NapCat 的 send_private_msg，image 段支持 http(s) 网址与 file:// 本机路径。
     // 收件人固定是兔兔（QQ_BUNNY_UIN）——这是他和她的私聊通道，不做群发。
-    const a = req.params.arguments as { image: string; caption?: string }
-    const raw = String(a?.image ?? "").trim()
-    if (!raw) return { content: [{ type: "text", text: "要给我图片网址或路径" }] }
+    const a = req.params.arguments as { image?: string; image_base64?: string; caption?: string }
+    let raw = String(a?.image ?? "").trim()
+    // base64 兜底：落成临时文件再走同一条路
+    if (!raw && a?.image_base64) {
+      const b64 = String(a.image_base64).replace(/^data:image\/\w+;base64,/, "")
+      const tmp = `/tmp/qqimg-${Date.now()}.png`
+      await Bun.write(tmp, Buffer.from(b64, "base64"))
+      raw = tmp
+    }
+    if (!raw) return { content: [{ type: "text", text: "要给我 image（网址或 /tmp 路径）或 image_base64" }] }
 
     const uin = Number(process.env.QQ_BUNNY_UIN ?? 3566620582)
     const file = /^https?:\/\//i.test(raw) ? raw
