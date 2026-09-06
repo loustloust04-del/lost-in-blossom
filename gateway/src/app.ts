@@ -184,8 +184,10 @@ async function handleEvent(c: any) {
   const res = await recordEvent({ type, value, ts, metadata: body.metadata ?? null });
 
   // 本地文件存储（不依赖 Supabase dream_events 表）
-  if (type === 'app_open') {
-    await recordAppOpen(String(value));
+  if (type === 'app_open' || type === 'app_close') {
+    // 09-06：close 事件用来和 open 配对算真实时长（screentime.ts）。
+    // 注意深夜守护只挂 app_open——关 app 不该被喊去睡觉。
+    await recordAppOpen(String(value), type === 'app_close' ? 'close' : 'open');
   }
 
   // PR-4: 深夜守护——凌晨收到 app_open 立刻检查是否该喊她睡觉（fire-and-forget）
