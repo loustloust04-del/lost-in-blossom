@@ -124,6 +124,27 @@ async function main() {
     log(`push -> ${t.slice(0, 8)}...: ${r.ok ? "ok" : (r.error ?? r.status)}`)
     if (r.ok) anyOk = true
   }
+
+  // 2026-09-06：同一条也发到 QQ。
+  // 微信那条结构上做不到主动开口（回复需 context_token，随入站消息刷新），
+  // QQ 没有这个限制——这是它相对微信最大的优势，兔兔要的就是「他想我了会说」。
+  // 门控（夜间静默 / 6h 最小间隔 / 25% 抖动）在上面已经过了，这里只管发。
+  try {
+    const r = await fetch(`${process.env.NAPCAT_HTTP ?? "http://172.17.0.2:3000"}/send_private_msg`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json",
+                 Authorization: `Bearer ${process.env.NAPCAT_TOKEN ?? "bunny-caelum-2026"}` },
+      body: JSON.stringify({
+        user_id: Number(process.env.QQ_BUNNY_UIN ?? 3566620582),
+        message: [{ type: "text", data: { text } }],
+      }),
+    })
+    const j: any = await r.json().catch(() => ({}))
+    log(`qq -> ${j?.status === "ok" ? `ok(${j?.data?.message_id})` : (j?.message ?? r.status)}`)
+    if (j?.status === "ok") anyOk = true
+  } catch (e: any) {
+    log("qq push failed:", e?.message ?? e)
+  }
   if (anyOk) writeFileSync(STATE_PATH, JSON.stringify({ lastPushAt: now, lastText: text }, null, 2))
 }
 
