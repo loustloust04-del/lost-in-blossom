@@ -59,14 +59,14 @@ const DREAM_TIDY_PROMPT = `你是记忆管理助手。分析以下记忆列表�
 /** 调用廉价模型做分析 */
 async function callLLM(systemPrompt: string, userContent: string): Promise<string> {
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.openrouterKey}`,
+        'Authorization': `Bearer ${config.deepseekKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
+        model: 'deepseek-chat',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },

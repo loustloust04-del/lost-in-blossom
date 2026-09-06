@@ -47,14 +47,14 @@ async function generateDesire(context: DesireContext): Promise<string> {
   const prompt = DESIRE_PROMPT.replace('{{CONTEXT}}', contextStr);
 
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.openrouterKey}`,
+        'Authorization': `Bearer ${config.deepseekKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
+        model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.8,
         max_tokens: 100,
@@ -241,14 +241,14 @@ async function generateNightGuard(appName: string, healthNote: string): Promise<
     .replace('{{APP}}', appName)
     .replace('{{HEALTH}}', healthNote);
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.openrouterKey}`,
+        'Authorization': `Bearer ${config.deepseekKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
+        model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.9,
         max_tokens: 80,

@@ -157,14 +157,14 @@ export async function extractMemoriesIfNeeded(
     }
 
     // 调廉价模型
-    const extractModel = 'deepseek/deepseek-chat';
-    const apiUrl = `https://openrouter.ai/api/v1/chat/completions`;
+    const extractModel = 'deepseek-chat';
+    const apiUrl = 'https://api.deepseek.com/v1/chat/completions';
 
     const res = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.openrouterKey}`,
+        'Authorization': `Bearer ${config.deepseekKey}`,
       },
       body: JSON.stringify({
         model: extractModel,
