@@ -55,6 +55,8 @@ export async function getScreenTime(): Promise<any> {
   const MAX_SESSION_MS = 15 * 60 * 1000;
   /// 短于这个的不计时长（只记次数）——路过不是使用
   const MIN_SESSION_MS = 20 * 1000;
+  /// 没有 close、且离下一个事件超过 MAX 的孤儿 open：几乎必然是锁屏了，保守按这个记
+  const ORPHAN_ASSUME_MS = 60 * 1000;
 
   const appMinutes: Record<string, { sessions: number; minutes: number; measured: number }> = {};
   const touch = (app: string) => {
@@ -62,9 +64,25 @@ export async function getScreenTime(): Promise<any> {
     return appMinutes[app];
   };
 
-  /// 每个 app 手上那个还没关的 open，等它的 close。记下标是为了收尾时能找『紧接着的下一个』
+  /// 每个 app 手上那个还没关的 open，等它的 close。记下标是为了结账时能找『紧接着的下一个』
   const pending: Record<string, number> = {};
   const pendingAt: Record<string, { ts: number; idx: number }> = {};
+
+  /// 给一个没等到 close 的 open 结账（连开、收尾两处都走这里）。
+  /// 09-06 兔兔实测揪出：这两处原本各写了一遍逻辑，孤儿判断只加在收尾那份，
+  /// 于是 05:27 的哔哩哔哩从连开分支溜过去、按上限记满 15 分钟。同一件事只写一遍。
+  const settleOrphan = (app: string, startTs: number, startIdx: number) => {
+    const nextEv = data.opens[startIdx + 1];
+    const gap = (nextEv?.ts ?? Date.now()) - startTs;
+    const a = touch(app);
+    a.sessions += 1;
+    if (gap > MAX_SESSION_MS) {
+      // 离下一个事件太远，几乎必然是锁屏睡了，保守记，别往多了猜
+      a.minutes += ORPHAN_ASSUME_MS / 60000;
+    } else if (gap >= MIN_SESSION_MS) {
+      a.minutes += gap / 60000;
+    }
+  };
 
   for (let i = 0; i < data.opens.length; i++) {
     const ev = data.opens[i];
@@ -73,9 +91,20 @@ export async function getScreenTime(): Promise<any> {
     if (kind === 'close') {
       const start = pending[ev.app];
       if (start === undefined) continue;      // 没有配对的 open（漏了/跨天），丢掉不猜
+      const idx = pendingAt[ev.app].idx;
       delete pending[ev.app];
       delete pendingAt[ev.app];
-      const dur = Math.min(ev.ts - start, MAX_SESSION_MS);
+
+      // ⚠️ 09-06 兔兔实测揪出：配对必须设时限。她在编辑器里手点 ▶️ 发了一个测试 close，
+      // 它跟凌晨 05:27 那个 open 配上了对——中间隔 201 分钟，被上限砍成 15 分钟记账。
+      // 隔这么久的 close 不可能是那次会话的收尾（app 早被系统回收了），
+      // 当作『那个 open 没等到 close』处理，走保守的孤儿逻辑。
+      if (ev.ts - start > MAX_SESSION_MS) {
+        settleOrphan(ev.app, start, idx);
+        continue;
+      }
+
+      const dur = ev.ts - start;
       const a = touch(ev.app);
       a.sessions += 1;
       a.measured += 1;
@@ -90,12 +119,7 @@ export async function getScreenTime(): Promise<any> {
     // 那三小时被整段算给 QQ（撞满 15 分钟上限），QQ 从 11.7 分虚胖到 60.3 分。
     // 必须用**紧接着的下一个事件**（不论哪个 app）来结账，这点旧算法是对的。
     if (pending[ev.app] !== undefined) {
-      const prevIdx = pendingAt[ev.app].idx;
-      const nextEv = data.opens[prevIdx + 1];
-      const dur = Math.min((nextEv?.ts ?? ev.ts) - pending[ev.app], MAX_SESSION_MS);
-      const a = touch(ev.app);
-      a.sessions += 1;
-      if (dur >= MIN_SESSION_MS) a.minutes += dur / 60000;
+      settleOrphan(ev.app, pending[ev.app], pendingAt[ev.app].idx);
     }
     pending[ev.app] = ev.ts;
     pendingAt[ev.app] = { ts: ev.ts, idx: i };
@@ -108,11 +132,7 @@ export async function getScreenTime(): Promise<any> {
   // 时间跨度被拉满到 15 分钟上限——QQ 因此从 11.7 分被算成 60.3 分。
   // 正确做法是记住每个 pending 的事件下标，从那之后往后找第一个不同 app 的事件。
   for (const [app, info] of Object.entries(pendingAt)) {
-    const nextEv = data.opens.slice(info.idx + 1).find(o => o.app !== app);
-    const dur = Math.min((nextEv?.ts ?? Date.now()) - info.ts, MAX_SESSION_MS);
-    const a = touch(app);
-    a.sessions += 1;
-    if (dur >= MIN_SESSION_MS) a.minutes += dur / 60000;
+    settleOrphan(app, info.ts, info.idx);
   }
 
   const apps = Object.entries(appMinutes)
