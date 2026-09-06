@@ -29,7 +29,7 @@ enum VitalsClient {
 
     /// 把 App 本地记的饮水/进食推给网关合并（取两边较大者，meals 追加未见过的）。
     /// 返回合并后的服务端状态，供调用方回写本地——一次往返完成双向同步。
-    static func merge(waterCount: Int, foodCount: Int, meals: [String]) async -> VitalsResponse? {
+    static func merge(waterCount: Int, foodCount: Int, meals: [String], date: String) async -> VitalsResponse? {
         let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
         let token = UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? ""
         guard let url = URL(string: "\(base)/api/vitals/merge") else { return nil }
@@ -39,7 +39,7 @@ enum VitalsClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 8
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "water_count": waterCount, "food_count": foodCount, "meals": meals,
+            "water_count": waterCount, "food_count": foodCount, "meals": meals, "date": date,
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req) else { return nil }
         // merge 返回 {ok, water, food}，补上 notes/date 后复用 VitalsResponse 解码
@@ -78,8 +78,14 @@ enum VitalsSyncService {
         guard let ctx = DailyContextStore.ensureToday(context: context) else { return }
 
         let localMeals = ctx.meals.map(\.description).filter { !$0.isEmpty }
+        // 0906：带上本地「今天」的日期——服务端据此拒收跨日上报（兔兔报「清完又混回来」：
+        // App 缓存着昨天的清单，一同步就把归档过的旧饭灌回今天）
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        df.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        let localDate = df.string(from: Date())
         guard let merged = await VitalsClient.merge(
-            waterCount: ctx.waterCount, foodCount: ctx.meals.count, meals: localMeals
+            waterCount: ctx.waterCount, foodCount: ctx.meals.count, meals: localMeals, date: localDate
         ) else { return }
 
         // 回写：服务端合并后的数更大 = Caelum 记过我们没有的，补进本地

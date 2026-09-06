@@ -175,6 +175,14 @@ export function vitalsRoutes(app: Hono) {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid JSON' }, 400); }
     const data = await load();
+    // 0906 第二真凶（兔兔报「清完又混回来了」）：App 侧缓存着昨天的清单，一上报
+    // 就把归档过的旧饭原样灌回今天——合并只比数量、从不问日期。加日期闸：
+    // 客户端带 date 且不是今天 → 直接忽略（它在推陈年旧账）。
+    const clientDate = typeof body.date === 'string' ? body.date : '';
+    if (clientDate && clientDate !== data.date) {
+      console.log(`[vitals] ⏭ 忽略跨日上报 client=${clientDate} server=${data.date}`);
+      return c.json({ ok: true, skipped: 'stale-date', water: data.water, food: data.food });
+    }
     const now = new Date().toISOString();
     let touched = false;
 
@@ -191,10 +199,18 @@ export function vitalsRoutes(app: Hono) {
       touched = true;
     }
     if (Array.isArray(body.meals)) {
+      // 归档过的条目不再收（防「昨天的饭被重新灌进今天」）
+      const hist = await vitalsHistory();
+      const archived = new Set<string>();
+      for (const day of Object.values(hist)) for (const m of day.food?.meals ?? []) archived.add(m);
       for (const m of body.meals.slice(0, 20)) {
         const name = String(m || '').slice(0, 80);
-        if (name && !data.food.meals.includes(name)) { data.food.meals.push(name); touched = true; }
+        if (name && !data.food.meals.includes(name) && !archived.has(name)) {
+          data.food.meals.push(name); touched = true;
+        }
       }
+      // 计数跟着实际条目走，别让旧 count 撑着虚高
+      if (data.food.count < data.food.meals.length) { data.food.count = data.food.meals.length; touched = true; }
     }
     if (touched) await save(data);
     return c.json({ ok: true, water: data.water, food: data.food });
