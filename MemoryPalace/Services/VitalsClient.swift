@@ -27,6 +27,26 @@ enum VitalsClient {
         return try? JSONDecoder().decode(VitalsResponse.self, from: data)
     }
 
+    /// 服务端历史归档里出现过的所有饭名（用来认出本地的「昨日残留」）
+    static func archivedMealNames(days: Int = 3) async -> Set<String> {
+        let base = UserDefaults.standard.string(forKey: "gatewayBaseURL") ?? "https://blossom.amberrib.com"
+        let token = UserDefaults.standard.string(forKey: "gatewayAuthToken") ?? ""
+        guard let url = URL(string: "\(base)/api/vitals/history?days=\(days)") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 8
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        var names: Set<String> = []
+        for (_, day) in obj {
+            if let d = day as? [String: Any], let food = d["food"] as? [String: Any],
+               let meals = food["meals"] as? [String] {
+                names.formUnion(meals)
+            }
+        }
+        return names
+    }
+
     /// 把 App 本地记的饮水/进食推给网关合并（取两边较大者，meals 追加未见过的）。
     /// 返回合并后的服务端状态，供调用方回写本地——一次往返完成双向同步。
     static func merge(waterCount: Int, foodCount: Int, meals: [String], date: String) async -> VitalsResponse? {
@@ -88,31 +108,27 @@ enum VitalsSyncService {
             waterCount: ctx.waterCount, foodCount: ctx.meals.count, meals: localMeals, date: localDate
         ) else { return }
 
-        // 0906 兔兔报「清完又混回来」：本地今天这条里可能残留着昨天被回灌的饭。
-        // 昨天那条 DailyContext 里出现过的同名条目 = 残留，清掉再合并。
-        if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: Date())) {
-            let dayAfter = Calendar.current.startOfDay(for: Date())
-            let desc = FetchDescriptor<DailyContext>(
-                predicate: #Predicate<DailyContext> { $0.date >= yesterday && $0.date < dayAfter })
-            if let prev = try? context.fetch(desc).first {
-                let prevNames = Set(prev.meals.map(\.description))
-                let before = ctx.meals.count
-                ctx.meals.removeAll { prevNames.contains($0.description) }
-                if ctx.meals.count != before { try? context.save() }
+        // 0906 兔兔三报「清完又混回来/刷新也不行」：上一刀按「本地昨天那条」比对太窄——
+        // 那两条饭是 Caelum 在服务端记的，本地昨天压根没有，比对永远落空。
+        // 改服务端权威：凡在**服务端历史归档**里出现过的饭名，就是被回灌进今天的残留，清掉。
+        let archived = await VitalsClient.archivedMealNames()
+        if !archived.isEmpty {
+            let before = ctx.meals.count
+            ctx.meals.removeAll { archived.contains($0.description) }
+            if ctx.meals.count != before {
+                try? context.save()
+                print("[Vitals] 清掉 \(before - ctx.meals.count) 条昨日残留")
             }
         }
         // 回写：服务端合并后的数更大 = Caelum 记过我们没有的，补进本地
         var changed = false
         if merged.water.count > ctx.waterCount { ctx.waterCount = merged.water.count; changed = true }
-        for name in merged.food.meals where !localMeals.contains(name) {
+        for name in merged.food.meals where !localMeals.contains(name) && !archived.contains(name) {
             ctx.meals.append(MealEntry(description: name))
             changed = true
         }
-        // 服务端餐数更多但没给出名字（Caelum 用了 vitals_food 未填 meal）：补占位保证计数一致
-        while ctx.meals.count < merged.food.count {
-            ctx.meals.append(MealEntry(description: "未记录"))
-            changed = true
-        }
+        // （0906 撤掉「补占位」：服务端 count 陈旧时会凭空造出「未记录」条目，
+        //  正是控制台餐数虚高的来源之一。计数以真实条目为准。）
         if changed { try? context.save() }
     }
 }
