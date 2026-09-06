@@ -87,7 +87,11 @@ struct FileLibraryPanelView: View {
                 Task {
                     try? await NotebookRemoteStore.write(c.path, content: merged)
                     await WikiLinkIndex.shared.invalidate()
-                    await MainActor.run { saveConflict = nil; editingFile = nil; reload() }
+                    await MainActor.run {
+                        previews[c.path] = String(merged.prefix(280))
+                        GatewayCache.save("notebook-previews", previews)
+                        saveConflict = nil; editingFile = nil; reload()
+                    }
                 }
             }
             Button("用我的覆盖他的", role: .destructive) {
@@ -95,7 +99,11 @@ struct FileLibraryPanelView: View {
                 Task {
                     try? await NotebookRemoteStore.write(c.path, content: c.mine)
                     await WikiLinkIndex.shared.invalidate()
-                    await MainActor.run { saveConflict = nil; editingFile = nil; reload() }
+                    await MainActor.run {
+                        previews[c.path] = String(c.mine.prefix(280))
+                        GatewayCache.save("notebook-previews", previews)
+                        saveConflict = nil; editingFile = nil; reload()
+                    }
                 }
             }
             Button("先看他的版本", role: .cancel) {
@@ -122,7 +130,12 @@ struct FileLibraryPanelView: View {
                 Task {
                     try? await NotebookRemoteStore.rename(old, to: new)
                     await WikiLinkIndex.shared.invalidate()
-                    await MainActor.run { renamingPath = nil; reload() }
+                    await MainActor.run {
+                        previews[new] = previews[old]          // 预览跟着改名走
+                        previews[old] = nil
+                        GatewayCache.save("notebook-previews", previews)
+                        renamingPath = nil; reload()
+                    }
                 }
             }
             Button("取消", role: .cancel) { renamingPath = nil }
@@ -144,7 +157,15 @@ struct FileLibraryPanelView: View {
                         try? await NotebookRemoteStore.write(f.path, content: newContent)
                         // 内容变了，双链索引失效重建
                         await WikiLinkIndex.shared.invalidate()
-                        await MainActor.run { editingFile = nil; reload() }
+                        await MainActor.run {
+                            // 兔兔 0904 报：保存成功但列表仍显示空/旧内容——预览缓存
+                            // 只给「没预览的文件」补，改过的老路径永远命中旧值。
+                            // 落地即刷：本地先写成新预览，再 reload 兜底。
+                            previews[f.path] = String(newContent.prefix(280))
+                            GatewayCache.save("notebook-previews", previews)
+                            editingFile = nil
+                            reload()
+                        }
                     }
                 },
                 onCancel: { editingFile = nil },
@@ -469,6 +490,14 @@ struct FileLibraryPanelView: View {
                 // 预览改成后台慢慢补：原来是进页面就把每个文件全文读一遍，
                 // 文件多了就是几十次串行网络请求，这才是「点进去要等一会儿」的真凶
                 var p: [String: String] = GatewayCache.load("notebook-previews", as: [String: String].self) ?? [:]
+                // 陈旧校验：文件大小和预览长度对不上（Caelum 在别处写过、或本地漏刷）
+                // 就丢掉旧预览重拉——短文件按全文比，长文件只看有没有预览。
+                for meta in list {
+                    if let cached = p[meta.path], meta.bytes < 280,
+                       cached.utf8.count != meta.bytes {
+                        p[meta.path] = nil
+                    }
+                }
                 for meta in list where p[meta.path] == nil {
                     if let content = try? await NotebookRemoteStore.read(meta.path) {
                         p[meta.path] = String(content.prefix(280))
