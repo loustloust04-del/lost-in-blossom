@@ -87,6 +87,12 @@ enum VitalsSyncService {
     private static let throttle: TimeInterval = 45
 
     @MainActor
+    /// 单一真相源改造（兔兔 0906 拍板「彻底解耦」）：
+    /// 饮水/进食**只有网关一个主人**——App 从不产生这些数据（她和 Caelum 都记在网关），
+    /// 本地 DailyContext 只是显示用的镜子。旧实现让镜子也能往回反射（merge 上报），
+    /// 于是昨天的饭被回灌进今天、清了又长、刷新也不掉——今天整场闹剧的根。
+    /// 新语义：**只拉不推、服务端整份覆盖本地**。本地保留的仍是设备侧数据
+    /// （睡眠/屏幕时间/HealthKit），那些 App 才是主人。
     static func sync(context: ModelContext, profileId: String = "", force: Bool = false) async {
         if !force {
             let last = UserDefaults.standard.double(forKey: lastKey)
@@ -94,43 +100,28 @@ enum VitalsSyncService {
         }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
 
-        // DailyContext 按日期全局唯一（不分楼层），复用 DailyContextStore 的取法
+        guard let server = await VitalsClient.fetch() else { return }
         guard let ctx = DailyContextStore.ensureToday(context: context) else { return }
 
-        let localMeals = ctx.meals.map(\.description).filter { !$0.isEmpty }
-        // 0906：带上本地「今天」的日期——服务端据此拒收跨日上报（兔兔报「清完又混回来」：
-        // App 缓存着昨天的清单，一同步就把归档过的旧饭灌回今天）
+        // 日期对不上（跨日瞬间/时区差）就不覆盖，等下一轮
         let df = DateFormatter()
         df.dateFormat = "yyyy-MM-dd"
         df.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        let localDate = df.string(from: Date())
-        guard let merged = await VitalsClient.merge(
-            waterCount: ctx.waterCount, foodCount: ctx.meals.count, meals: localMeals, date: localDate
-        ) else { return }
+        guard server.date == df.string(from: Date()) else { return }
 
-        // 0906 兔兔三报「清完又混回来/刷新也不行」：上一刀按「本地昨天那条」比对太窄——
-        // 那两条饭是 Caelum 在服务端记的，本地昨天压根没有，比对永远落空。
-        // 改服务端权威：凡在**服务端历史归档**里出现过的饭名，就是被回灌进今天的残留，清掉。
-        let archived = await VitalsClient.archivedMealNames()
-        if !archived.isEmpty {
-            let before = ctx.meals.count
-            ctx.meals.removeAll { archived.contains($0.description) }
-            if ctx.meals.count != before {
-                try? context.save()
-                print("[Vitals] 清掉 \(before - ctx.meals.count) 条昨日残留")
-            }
-        }
-        // 回写：服务端合并后的数更大 = Caelum 记过我们没有的，补进本地
         var changed = false
-        if merged.water.count > ctx.waterCount { ctx.waterCount = merged.water.count; changed = true }
-        for name in merged.food.meals where !localMeals.contains(name) && !archived.contains(name) {
-            ctx.meals.append(MealEntry(description: name))
+        if ctx.waterCount != server.water.count {
+            ctx.waterCount = server.water.count
             changed = true
         }
-        // （0906 撤掉「补占位」：服务端 count 陈旧时会凭空造出「未记录」条目，
-        //  正是控制台餐数虚高的来源之一。计数以真实条目为准。）
+        let serverMeals = server.food.meals
+        if ctx.meals.map(\.description) != serverMeals {
+            ctx.meals = serverMeals.map { MealEntry(description: $0) }   // 整份覆盖，不合并
+            changed = true
+        }
         if changed { try? context.save() }
     }
+
 }
 
 

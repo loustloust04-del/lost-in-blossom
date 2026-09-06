@@ -231,13 +231,13 @@ struct ConsoleView: View {
             HStack(alignment: .top, spacing: 0) {
                 trioCell(icon: "drop", label: "饮水") {
                     // max 创可贴：Caelum 记网关(vitals)、App 记本地互不见，取大者先保证不丢显示；正解=扩展双向同步(DEBT-MAP)
-                    let w = max(todayCtx?.waterCount ?? 0, vitalsData?.water.count ?? 0)
+                    let w = vitalsData?.water.count ?? todayCtx?.waterCount ?? 0   // 网关唯一真相
                     bigNum("\(w)", "/6", size: 26)
                     dotsRow(on: w, total: 6).padding(.top, 6)
                 }
                 trioDivider
                 trioCell(icon: "fork.knife", label: "进食") {
-                    let count = max(todayCtx?.meals.count ?? 0, vitalsData?.food.count ?? 0)
+                    let count = vitalsData?.food.meals.count ?? todayCtx?.meals.count ?? 0   // 网关唯一真相
                     let goal = vitalsData?.food.goal ?? 3
                     bigNum("\(count)", "/\(goal)", size: 26)
                     Text(vitalsData?.food.meals.last ?? todayCtx?.meals.last?.description ?? "未记录")

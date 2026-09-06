@@ -442,3 +442,13 @@ Caelum 跑的一直是这个好的（`/proc/<pid>/exe` 显示为 `(deleted)` 即
   docs/TASK-askuser-cc-port-0903.md 末尾
 - 血律六：**开工先看 git branch**（0903 共享工作区被切到别的分支，三刀 commit 落错窝，
   push 静默空推；已用独立 worktree /tmp/bp-main 作业）
+
+## 生活数据（vitals）· 单一真相源改造 0906 ✅
+兔兔拍板「彻底解耦」。改造前：饮水/进食有两个主人（网关 + App 本地 DailyContext），
+双向 merge 靠「取较大者/追加未见过」互相猜——今天一整场闹剧（清完又混回来/刷新
+不掉/餐数虚高/凭空冒出"未记录"）全是它生的。
+改造后：**网关是唯一真相源**（她和 Caelum 都记在那儿），App 只拉不推、整份覆盖本地
+镜子；日期对不上就不覆盖。本地 DailyContext 继续持有设备侧数据（睡眠/屏幕时间/
+HealthKit）——那些 App 才是主人。显示层不再 max(本地, 服务端)。
+遗留：merge 端点保留（未来若做 App 侧输入 UI 再启用，且必须带 date）；
+CareView 历史趋势仍读本地缓存（每日快照），跨日后自然分页。
