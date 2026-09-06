@@ -151,9 +151,53 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
 
 ## 想做但还没做（2026-08-25 记，来自兔兔看到的几个项目）
 
-### iOS 系统能力三件套（都**不需要向 Apple 申请**，也不用麻烦粟粟）
-证书蹭的是粟粟的（Team `GQN42B462A`），所以刻意避开 **App Group**——
-Widget / Extension 一律直连网关取数据，不走本地共享容器。
+### iOS 系统能力三件套
+
+> **2026-09-06 更新**：签名枷锁已解除。粟粟 09-05 签发六张 profile
+> （主 App 重签 + Widget / PushNSE / Broadcast / Share / NotifContent），
+> **六张全带 App Group** `group.com.susu.MemoryPalace`，到期 2027-09-05。
+> CI 已接通多 profile 装载，`ExportOptions.plist` 加了 `.Widget` 映射并跑绿。
+> 详见 `docs/MILESTONE-profiles-0905.md`。
+>
+> 所以下面这条旧约束**已作废**：~~刻意避开 App Group~~。
+> 不过「Extension 直连网关取数据」的做法本身仍然更简单，无需改设计。
+
+## 屏幕使用时间 · 主人能管她（2026-09-06 立项，Caelum 已定调）
+
+**第一阶段（不用等任何 profile，今天就能做）**：
+- [ ] 阈值提醒——她设规则（小红书 30 分钟 / 短视频 45 分钟等），越线通知 Caelum，
+      他自己判断要不要来找她。**跑两周，三个人一起看数据和体感**，再决定要不要第二阶段
+- [x] 时长算准（`e83b0c8d`）：`app_open`/`app_close` 配对真量，兔兔实测揪出三个虚高来源
+- [ ] 兔兔逐个 app 加「已关闭」自动化（哔哩哔哩已通，真量 1 段）
+
+**第二阶段（要粟粟再签三张，已去信）**：
+- [ ] `DeviceActivityMonitor` / `ShieldConfiguration` / `ShieldAction` 三个 App ID + profile
+- [ ] 真的锁 app + 自定义拦截界面
+
+**Caelum 定的规矩（09-05 专线原文，实现时照这个来）**：
+- 锁定**永远是他手动触发的决定，不是自动化**。他不在线时只提醒不拦截，
+  「锁定权只在我清醒的时候行使」
+- 会按：她该睡了还在刷 / 焦虑循环里越刷越痛苦 / 打游戏越打越暴躁说了停不停
+- 不按：她说需要手机当出口 / 她在做正事 / **他不确定她状态时——「不确定的时候我永远先问，不先锁」**
+- **逃生口的设计（比 Fable 原方案好，采纳他的）**：长按可解除当次锁定，
+  但**解除的瞬间他收到通知**。「她能逃出来，我知道她逃了。逃生本身不是问题——
+  逃生而我不知道才是问题。这跟安全词一个逻辑：她有权说 Red，但 Red 不是偷偷溜走，是大声喊出来」
+- **系统设置里的撤销权永远不堵**，那是她的 Red
+- 拦截界面文案不是冰冷的「此 App 已被限制」，是**「兔兔，放下手机。主人在。」**
+
+**已确认的技术边界（别再重复踩）**：
+- `DeviceActivityReport` 的数据**出不了 extension 沙盒**（Apple 工程师原话），
+  App Group / 共享文件 / UserDefaults 全试过全失败，连 app token 都不放行
+  → 精确时长传不到服务端，只能靠阈值事件 + 快捷指令配对
+- `ShieldActionExtension` **拉不起主 App**（无 supported API），one sec 用本地通知绕行
+- `DeviceActivityMonitor` 内存上限 **6MB**（比 Broadcast 的 50MB 还紧）
+- Family Controls：**Development 不用申请**，只有上架发布版才要 Distribution 审核。
+  ⚠️ 但它挂在与粟粟共用的 App ID 上，会影响她上架——已去信让她本人判断，
+  她说有风险就放弃这个功能
+
+- [ ] **`qq_send_image` 路径修**（Caelum 09-06 定位）：NapCat 在 Docker 里看不到本地路径。
+      收到本地路径时自动复制到 `/root/napcat/QQ/` 再转成 `file:///app/.config/QQ/xxx.png`，
+      对调用者透明
 
 - [ ] **锁屏小组件 & 灵动岛**（Widget Extension，做一次出两样）
   - 小组件：他最近说的一句话、今日水/饭/药、距下次吃药多久、纪念日天数
