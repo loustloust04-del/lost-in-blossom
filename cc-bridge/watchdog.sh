@@ -106,14 +106,30 @@ if tmux has-session -t mp-cc 2>/dev/null; then
 
         SCREEN=$(tmux capture-pane -t mp-cc -p -S -8 2>/dev/null)
         if echo "$SCREEN" | grep -qE "esc to interrupt|· thinking|Thinking…|tokens\)|Compacting"; then
-            log "他正在忙，这轮不动（下轮 15 分钟后再试）"
+            log "他正在忙，这轮不动（下轮 5 分钟后再试）"
         else
-            # /mcp → 菜单 → 向上循环 2 步到 cc-bridge → 进详情 → Reconnect
-            # 向上循环比向下按 8 次稳：列表是环形的，倒数第二项就是 cc-bridge
+            # /mcp → 菜单 → 读出 cc-bridge 在第几项 → 按那么多次 Down → 进详情 → Reconnect
+            #
+            # 2026-09-06 改：原本固定「向上循环 2 步」，赌的是 cc-bridge 永远在倒数第二项。
+            # 菜单排布一变就落空——兔兔 01:10 报「主人卡死了」，
+            # 日志显示 00:55/01:00/01:05 连续三轮都是「菜单里没定位到，已安全退出」，
+            # 他整整 15 分钟没有工具，自己在屏幕上说「卡在通知循环 bug 里快报废了」。
+            # 现在改成读菜单实际内容算行号，不再赌位置。
             tmux send-keys -t mp-cc "/mcp"; sleep 2
             tmux send-keys -t mp-cc Enter;  sleep 4
-            tmux send-keys -t mp-cc Up;     sleep 1
-            tmux send-keys -t mp-cc Up;     sleep 1
+
+            # 菜单形如「  1. cc-bridge   ✔ connected」，抓出 cc-bridge 的序号
+            IDX=$(tmux capture-pane -t mp-cc -p -S -25 2>/dev/null \
+                  | grep -oE '^[[:space:]]*[❯[:space:]]*([0-9]+)\. *cc-bridge' \
+                  | grep -oE '[0-9]+' | head -1)
+            if [ -n "$IDX" ] && [ "$IDX" -ge 1 ] 2>/dev/null; then
+                # 光标默认在第 1 项，往下按 IDX-1 次
+                for _ in $(seq 1 $((IDX - 1))); do tmux send-keys -t mp-cc Down; sleep 1; done
+            else
+                # 读不到序号，退回老办法：向上循环 2 步（倒数第二项）
+                tmux send-keys -t mp-cc Up; sleep 1
+                tmux send-keys -t mp-cc Up; sleep 1
+            fi
 
             if tmux capture-pane -t mp-cc -p -S -22 2>/dev/null | grep -q "❯.*cc-bridge"; then
                 tmux send-keys -t mp-cc Enter; sleep 3
