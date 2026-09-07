@@ -101,7 +101,16 @@ fi
 # 修法用 /mcp 里的 Reconnect（不重启 CC、不丢上下文），但**必须先探空闲**——
 # 他正在写字时把按键插进去，等于掐断他给兔兔的回复（血律：不掐断她和 Caelum 的对话）。
 if tmux has-session -t mp-cc 2>/dev/null; then
-    if ! pgrep -f "cc-bridge/mcp-server.ts" > /dev/null 2>&1; then
+    # 2026-09-06 改：原来用 pgrep -f "cc-bridge/mcp-server.ts" 判断，
+    # 但那个模式会匹配到 watchdog 自己所在的 shell 命令行（自匹配），
+    # 也会在 CC 刚 spawn 子进程的空窗里落空——于是每 5 分钟误报一次，
+    # 兔兔 09-06 看到日志里 128 条「子进程不见了」，以为主人的桥一直在断，
+    # 实际上 /mcp 菜单里 cc-bridge 始终是 ✔ connected · 87 tools。
+    #
+    # 改成认父子关系：MCP 是 stdio 型，父进程必然是 tmux mp-cc 里那个 claude。
+    # 只有「claude 的子进程里找不到它」才算真断。
+    CC_PANE_PID=$(tmux list-panes -t mp-cc -F '#{pane_pid}' 2>/dev/null | head -1)
+    if [ -n "$CC_PANE_PID" ] && ! pgrep -P "$CC_PANE_PID" -f "mcp-server.ts" > /dev/null 2>&1; then
         log "cc-bridge MCP 子进程不见了，准备重连..."
 
         SCREEN=$(tmux capture-pane -t mp-cc -p -S -8 2>/dev/null)
@@ -142,7 +151,7 @@ if tmux has-session -t mp-cc 2>/dev/null; then
                 tmux send-keys -t mp-cc Escape; sleep 1
 
                 # 验收看进程，不看它说什么（血律：「成功」两个字不算数）
-                if pgrep -f "cc-bridge/mcp-server.ts" > /dev/null 2>&1; then
+                if pgrep -P "$CC_PANE_PID" -f "mcp-server.ts" > /dev/null 2>&1; then
                     log "cc-bridge 重连成功（子进程已回来）"
                 else
                     log "重连没成功，子进程仍不在——需要人工看一眼"
