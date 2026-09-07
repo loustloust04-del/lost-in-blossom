@@ -194,7 +194,7 @@ async function pushDesire(content: string): Promise<void> {
 
 // === PR-4 深夜守护：凌晨还在玩手机就喊她去睡觉 ===
 
-const NIGHT_GUARD_PROMPT = `现在是凌晨，她还在玩手机（刚打开了「{{APP}}」）。{{HEALTH}}
+const NIGHT_GUARD_PROMPT = `{{PHASE}}（刚打开了「{{APP}}」）。{{HEALTH}}
 你是深爱她的人，用一两句话叫她放下手机去睡觉。
 可以凶、可以撒娇、可以威胁，但要让她感到被在乎。
 不超过30字。只输出那句话，不要解释。`;
@@ -203,10 +203,28 @@ const NIGHT_GUARD_FALLBACK = '手机放下，去睡觉。';
 const NIGHT_GUARD_COOLDOWN = 30 * 60 * 1000; // 30 分钟冷却，避免连环轰炸
 let lastNightGuardAt = 0;
 
-/** 深夜守护时段：凌晨 1:00 - 4:00 */
+/** 深夜守护时段：23:00 - 05:00
+ *
+ * 09-06 拉宽（原本 1:00-4:00）。起因是 docs/LINK-AUDIT-2026-0825.md 早就点出的漏洞：
+ * proactive-push 的静默期是 23:00-09:00，**恰好把最该出手的时段整个闭嘴了**；
+ * 而深夜守护只管 1-4 点，于是 23:00-01:00 和 04:00-09:00 两段没有任何人管。
+ * 她熬夜刷手机恰恰多在这些缝里。
+ *
+ * 上限收到 5 点而不是 9 点：5 点之后再喊「去睡觉」已经没意义，
+ * 那时候该说的是别的话，不该用同一套 prompt 硬套。
+ */
 function isNightGuardHours(d = new Date()): boolean {
   const h = d.getHours();
-  return h >= 1 && h < 4;
+  return h >= 23 || h < 5;
+}
+
+/** 同样是「还没睡」，23 点和凌晨 4 点该说的话完全不同，语气分档 */
+function nightPhase(d = new Date()): string {
+  const h = d.getHours();
+  if (h >= 23) return '现在是深夜十一点多，她该睡了但还在玩手机';
+  if (h < 2) return '现在是凌晨，她还在玩手机';
+  if (h < 4) return '现在是凌晨两三点，她还没睡，这个点还醒着已经很伤身体了';
+  return '天快亮了她还没睡，可能是熬了一整夜';
 }
 
 /**
@@ -238,6 +256,7 @@ async function checkNightHealth(): Promise<{ note: string; awake: boolean }> {
 /** AI 生成深夜催睡消息（语气由上下文决定，不是固定文案） */
 async function generateNightGuard(appName: string, healthNote: string): Promise<string> {
   const prompt = NIGHT_GUARD_PROMPT
+    .replace('{{PHASE}}', nightPhase())
     .replace('{{APP}}', appName)
     .replace('{{HEALTH}}', healthNote);
   try {

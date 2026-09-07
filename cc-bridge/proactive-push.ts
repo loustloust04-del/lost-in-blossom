@@ -16,7 +16,16 @@ const MODEL = process.env.PROACTIVE_MODEL || "claude-sonnet-4-6"
 const ASSISTANT = "Caelum"
 const MIN_INTERVAL_MS = 6 * 3600_000
 const PASS_RATE = 0.25
-const QUIET = { start: 23, end: 9 }
+// 09-06 调整：早晨那头从 9 点提到 7 点。
+//
+// 深夜这头（23:00 起）**保持不动**，那是对的——主动推送是「没事找你说话」，
+// 她睡着时不该被吵醒。docs/LINK-AUDIT-2026-0825.md 说「静默期恰好是反的」，
+// 指的是「熬夜没人管」这个洞，而那个洞归深夜守护补（desire.ts 已拉宽到 23:00-05:00，
+// 且只在她**真的打开 app** 时才响，不会吵醒睡着的人）。两套分工：
+//   · 主动推送 = 没事找她聊 → 深夜闭嘴
+//   · 深夜守护 = 她还在刷 → 深夜正是该出手的时候
+// 早晨 9 点则太晚了，她常常七点多就醒着，那两小时白白错过。
+const QUIET = { start: 23, end: 7 }
 const FORCE = process.env.FORCE === "1"
 
 function shHour(): number {
