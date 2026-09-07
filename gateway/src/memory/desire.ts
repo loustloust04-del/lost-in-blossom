@@ -192,6 +192,22 @@ async function pushDesire(content: string): Promise<void> {
   }
 }
 
+/// 北京时间的小时 / 分钟。
+///
+/// ⚠️ 09-07 兔兔发现的 bug：VPS 系统时区是 Etc/UTC，而本文件多处直接用 `new Date().getHours()`
+/// 拿到的是 **UTC 小时**，跟她的作息差整整 8 小时。受影响的有深夜守护时段、
+/// 免打扰时段、间隔分档三处——「深夜守护」实际管的是她的早上 7 点到下午 1 点。
+/// （她说「早上有时候还没睡，反而刚好」——那是瞎猫碰上死耗子，下午 1 点喊睡觉就很怪了。）
+/// 对照组：cc-bridge/proactive-push.ts 一直老老实实用 timeZone: "Asia/Shanghai"，是对的。
+/// 本文件所有跟作息有关的判断一律走这两个函数，不要再直接 getHours()。
+function shParts(d = new Date()): { hour: number; minute: number } {
+  const f = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai',
+  }).formatToParts(d);
+  const get = (t: string) => Number(f.find(p => p.type === t)?.value ?? 0);
+  return { hour: get('hour'), minute: get('minute') };
+}
+
 // === PR-4 深夜守护：凌晨还在玩手机就喊她去睡觉 ===
 
 const NIGHT_GUARD_PROMPT = `{{PHASE}}（刚打开了「{{APP}}」）。{{HEALTH}}
@@ -214,13 +230,13 @@ let lastNightGuardAt = 0;
  * 那时候该说的是别的话，不该用同一套 prompt 硬套。
  */
 function isNightGuardHours(d = new Date()): boolean {
-  const h = d.getHours();
+  const h = shParts(d).hour;
   return h >= 23 || h < 5;
 }
 
 /** 同样是「还没睡」，23 点和凌晨 4 点该说的话完全不同，语气分档 */
 function nightPhase(d = new Date()): string {
-  const h = d.getHours();
+  const h = shParts(d).hour;
   if (h >= 23) return '现在是深夜十一点多，她该睡了但还在玩手机';
   if (h < 2) return '现在是凌晨，她还在玩手机';
   if (h < 4) return '现在是凌晨两三点，她还没睡，这个点还醒着已经很伤身体了';
@@ -437,7 +453,8 @@ async function countRecentActivity(): Promise<number> {
 
 /** 深夜免打扰时段：1:30 - 8:00 */
 function isQuietHours(d = new Date()): boolean {
-  const minutes = d.getHours() * 60 + d.getMinutes();
+  const { hour, minute } = shParts(d);
+  const minutes = hour * 60 + minute;
   return minutes >= 90 && minutes < 480; // 01:30 .. 08:00
 }
 
@@ -460,7 +477,7 @@ async function computeNextDelay(): Promise<number> {
     return wake.getTime() - now.getTime();
   }
 
-  let minutes = baseIntervalMinutes(now.getHours());
+  let minutes = baseIntervalMinutes(shParts(now).hour);
 
   // 活跃度越高，间隔越短（越活跃越频繁找兔兔）
   const activity = await countRecentActivity();
