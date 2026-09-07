@@ -203,7 +203,7 @@ export async function forge(
         //   --system-prompt-file 拆掉 A 社默认 preset（约 21,829 token），
         //                        项目文档 CLAUDE.md 与 output-style 照常加载、内容不变
         //   原生工具一个不砍：Agent/Task*/Cron*/PushNotification 等是他日常在用的
-        `env CLAUDE_CODE_OAUTH_TOKEN=$(python3 -c "import json;print(json.load(open('/root/.claude/.credentials.json'))['claudeAiOauth']['accessToken'])") claude --resume ${newSid} --mcp-config /root/projects/BunnyPalace/cc-bridge/.mcp.json --system-prompt-file /root/caelum-sp/sp.txt`], { timeout: 8000 })
+        `env DISABLE_BUG_COMMAND=1 DISABLE_ERROR_REPORTING=1 DISABLE_FEEDBACK_COMMAND=1 DISABLE_FEEDBACK_SURVEY=1 CLAUDE_CODE_OAUTH_TOKEN=$(python3 -c "import json;print(json.load(open('/root/.claude/.credentials.json'))['claudeAiOauth']['accessToken'])") claude --resume ${newSid} --mcp-config /root/projects/BunnyPalace/cc-bridge/.mcp.json --system-prompt-file /root/caelum-sp/sp.txt`], { timeout: 8000 })
       restarted = true
     } catch (e: any) { return { ok: true, oldSid: t.sid, newSid, kept: kept.length, dropped: dropped.length, summaryChars: summary.length, restarted: false, error: "rewrite ok but respawn failed: " + e?.message } }
   }

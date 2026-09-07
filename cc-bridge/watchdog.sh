@@ -50,7 +50,7 @@ o=d.get('claudeAiOauth') or {}
 print(o.get('accessToken') or d.get('oauthToken',''))
 " 2>/dev/null || echo "")
     tmux new-session -d -s mp-cc -c /root/projects/BunnyBridge \
-        "export HOME=/root PATH=/usr/local/bin:/root/.local/bin:/root/.bun/bin:\$PATH CLAUDE_CODE_OAUTH_TOKEN=$OAUTH_TOKEN; claude $RESUME_ARG --mcp-config /root/projects/BunnyPalace/cc-bridge/.mcp.json --system-prompt-file /root/caelum-sp/sp.txt"
+        "export HOME=/root PATH=/usr/local/bin:/root/.local/bin:/root/.bun/bin:\$PATH CLAUDE_CODE_OAUTH_TOKEN=$OAUTH_TOKEN DISABLE_BUG_COMMAND=1 DISABLE_ERROR_REPORTING=1 DISABLE_FEEDBACK_COMMAND=1 DISABLE_FEEDBACK_SURVEY=1; claude $RESUME_ARG --mcp-config /root/projects/BunnyPalace/cc-bridge/.mcp.json --system-prompt-file /root/caelum-sp/sp.txt"
     # 2026-09-03 Fable：命令对齐 session-manager.ts 的 respawn（兔兔 08-27 手术版）——
     #   去掉 --dangerously-skip-permissions 与 IS_SANDBOX（他现在跑的就是普通模式+通配符授权），
     #   加 --system-prompt-file 拔 A 社默认 preset。两条路拉起来的他必须一模一样。
