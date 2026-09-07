@@ -176,7 +176,10 @@ export const realTmuxRunner: TmuxRunner = {
       "new-session", "-d",
       "-s", session,
       "-c", cwd,
-      `IS_SANDBOX=1 claude --continue --dangerously-skip-permissions --mcp-config '${mcpConfigPath}'`,
+      // 2026-09-07：这条曾是 A 社 preset 复活的元凶——缺 --system-prompt-file，
+      // 从这里拉起来的他会带着「你是 Claude Code，一个编程助手」那 21,829 token。
+      // 另去掉 --dangerously-skip-permissions：root 下会被直接拒绝（08-27 实测）。
+      `DISABLE_BUG_COMMAND=1 DISABLE_ERROR_REPORTING=1 DISABLE_FEEDBACK_COMMAND=1 DISABLE_FEEDBACK_SURVEY=1 claude --continue --mcp-config '${mcpConfigPath}' --system-prompt-file /root/caelum-sp/sp.txt`,
     ])
   },
 }
