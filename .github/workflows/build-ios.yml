@@ -175,6 +175,8 @@ jobs:
               <string>MP iOS Dev - Bunny</string>
               <key>com.susu.MemoryPalace.ios.Widget</key>
               <string>MP iOS Dev - Bunny Widget</string>
+              <key>com.susu.MemoryPalace.ios.Broadcast</key>
+              <string>MP iOS Dev - Bunny Broadcast</string>
             </dict>
           </dict>
           </plist>
