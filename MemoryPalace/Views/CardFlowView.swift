@@ -526,11 +526,18 @@ struct CardFlowView: View {
             // CC 选择卡：pendingCCQuestion 非 nil 时弹出。
             // 答完或关掉都会经 ConversationViewModel+AskUser 回帧，驱动 tmux 里的 TUI 键序。
             // 挂在 CardFlowView 而非 InputFieldContainer——后者没有 viewModel（08-31 编译错的原因）。
+            // 弹出条件一比一照粟粟（CardFlowView:1280）：**只在这张卡所属的那个对话里弹**。
+            // 我们原本写的是 activeAskQuestions != nil——不管兔兔在哪个对话都弹出来，
+            // 卡是给 A 会话的、她正在看 B 会话，照样糊她一脸。
             .sheet(isPresented: Binding(
-            get: { viewModel.activeAskQuestions != nil },
-            set: { if !$0 { viewModel.dismissActiveAskCard() } }
+                get: {
+                    let convId = viewModel.selectedConversation?.id
+                    if let c = viewModel.pendingCCQuestion { return c.chatId == convId }
+                    return false
+                },
+                set: { if !$0 { viewModel.dismissActiveAskCard() } }
             )) {
-            AskUserQuestionSheet(viewModel: viewModel)
+                AskUserQuestionSheet(viewModel: viewModel)
             }
             .onAppear {
             CCBridgeWebSocketClient.shared.onAskUserQuestion = { chatId, toolUseId, questions in
