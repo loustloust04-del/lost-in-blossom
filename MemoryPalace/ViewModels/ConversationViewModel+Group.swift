@@ -15,7 +15,11 @@ extension ConversationViewModel {
         context: ModelContext
     ) async {
         let userName = UserDefaults.standard.string(forKey: "userName") ?? "我"
-        let maxReplies = 3  // 每轮最多几个角色回复
+        // 链深上限（学粟粟 Agora 的 maxChainDepth，语义比「每轮最多 N 条」准）：
+        // 兔兔说话 = 深度 0；因兔兔而说 = 1；AI 因 AI 而说 = 逐级 +1，到顶自动断。
+        // 可调（设置-群聊「一轮最多接几手」），缺省 3。
+        let maxChainDepth = max(1, UserDefaults.standard.integer(forKey: "groupMaxChainDepth") == 0
+                                ? 3 : UserDefaults.standard.integer(forKey: "groupMaxChainDepth"))
         print("[GroupV5] ═══ 新一轮 ═══ 用户: \(userText.prefix(50))... 参与者: \(participants.map(\.name))")
 
         BreadcrumbLog.shared.add("👥", "群聊: \(userText.prefix(30))...")
@@ -32,17 +36,20 @@ extension ConversationViewModel {
         var lastSpeakerId: String? = nil
         var repliesThisRound = 0
 
-        while repliesThisRound < maxReplies {
+        while repliesThisRound < maxChainDepth {
             // 手动停止（⋯ 菜单）→ 整轮刹车
             if groupRoundCancelled {
                 print("[GroupV5] 🛑 轮次被手动停止")
                 break
             }
-            // 用户插话 → 发言预算清零：成员围绕新消息重新回起，插话不落空
+            // Owner 抢权（学粟粟：她一发言，房间里排队的深链 mention 全 fail）。
+            // 我们这边等价语义：兔兔插话 → 链深归零、lastSpeaker 清空，成员**围绕她的新
+            // 消息**重选重说；已经在生成的那条让它说完（不打断已开口的人）。
             if groupInterjectionPending {
                 groupInterjectionPending = false
                 repliesThisRound = 0
-                print("[GroupV5] 💬 检测到插话，发言预算重置")
+                lastSpeakerId = nil
+                print("[GroupV5] 💬 兔兔插话 → 抢权：链深归零，围绕新消息重选")
             }
             let history = groupHistoryItems()
 
@@ -94,7 +101,7 @@ extension ConversationViewModel {
                lastMsg.senderId == speaker.id {
                 let mentions = GroupChatScheduler.extractMentions(
                     from: lastMsg.content, participants: participants)
-                if !mentions.isEmpty && repliesThisRound < maxReplies {
+                if !mentions.isEmpty && repliesThisRound < maxChainDepth {
                     print("[GroupV5] \(speaker.name) @提及了 \(mentions.map(\.name))，追加一轮")
                     // 下一轮选人会自动命中被 @ 的角色
                 }

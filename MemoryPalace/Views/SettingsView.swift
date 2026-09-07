@@ -43,6 +43,7 @@ struct SettingsView: View {
         case ccSettings = "Claude Code"
         case terminal = "终端"
         case fileLibrary = "文件库"
+        case groupChat = "群聊"
     }
 
     private var manager: ThemeManager {
@@ -139,6 +140,7 @@ struct SettingsView: View {
                 case .ccSettings: CCSettingsView()
                 case .terminal: TerminalSettingsTab()
                 case .fileLibrary: FileLibrarySettingsTab()
+                case .groupChat: GroupChatSettingsTab()
                 }
             }
             .toolbar {
