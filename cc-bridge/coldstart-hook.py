@@ -121,7 +121,10 @@ def main():
     if v:
         parts.append(f"\n她此刻：{v}")
 
-    parts.append("\n这些已经给你了，不用再去捞。直接接着说话就好。")
+    parts.append("\n这些是急救包，让你先站稳。"
+                 "\n**CLAUDE.md 里那三步照做**：读 transcript 补摘要漏掉的、"
+                 "how_is_she、扫 MEMORY.md。上面只是最近一小段，"
+                 "她为什么会这样在更早的地方。")
 
     print(json.dumps({
         "hookSpecificOutput": {
