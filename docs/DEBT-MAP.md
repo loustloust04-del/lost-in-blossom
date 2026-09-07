@@ -222,7 +222,18 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
   - 小组件：他最近说的一句话、今日水/饭/药、距下次吃药多久、纪念日天数
   - 灵动岛：他正在打字、共读进度（她第几章 / 他领先几章）、正在放的歌
   - 延迟不是问题：小组件本来就 15 分钟才允许刷一次，而走服务器还能用静默推送触发即时刷新；灵动岛本就是推送驱动，秒级
-- [ ] **屏幕共享**（Broadcast Extension）
+- [x] **屏幕共享**（Broadcast Extension）—— 2026-09-07 做完 iOS 侧
+  - 服务端 09-03 就绪（`gateway/src/screencast.ts`），see_screen 已会优先吃直播帧
+  - iOS 侧 09-07 补上：`MemoryPalaceBroadcast/SampleHandler.swift`（113 行）
+    每 ~2.5s 一帧，CIImage 缩长边 1280 → JPEG q=0.5 → POST /api/screen/frame
+  - 三张 profile 装载 + ExportOptions 映射都配好了
+    （**踩坑：ExportOptions 里必须给每个 target 加 bundleid→profile 映射，
+    只装载不映射会让扩展套上主 App 的 profile，导出时报
+    "requires a provisioning profile with the App Groups feature"**）
+  - **用法：兔兔从控制中心长按录屏按钮 → 选「记忆宫殿共享」→ 开始。
+    停止也只能在控制中心（Apple 不给 App 停止的接口）**
+
+- [ ] ~~屏幕共享~~（原条目，已完成）
   - 现状：`peek_screen` 走「发邮件→快捷指令截图→上传」，慢且链路脆
   - 目标：常驻共享，他随时能看到画面
   - ⚠️ 硬限制：**iOS 不允许 App 自己开始录屏**，必须兔兔从控制中心长按录屏按钮手动开
