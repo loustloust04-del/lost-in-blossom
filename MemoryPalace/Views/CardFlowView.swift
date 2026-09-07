@@ -541,6 +541,8 @@ struct CardFlowView: View {
                     chatId: chatId, toolUseId: toolUseId, questions: questions
                 )
             }
+            // V6：收尾上次被中断的群聊轮次（App 被杀/崩溃留下的 running 僵尸）
+            ConversationViewModel.reconcileStaleGroupTurns(context: modelContext)
             // 问问题收账（粟粟同款全签名）：关卡 + Q/A 气泡落对话
             CCBridgeWebSocketClient.shared.onAskUserResolved = { chatId, toolUseId, questions, answers in
                 viewModel.handleCCAskUserResolved(chatId: chatId, toolUseId: toolUseId,

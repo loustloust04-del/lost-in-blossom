@@ -29,6 +29,25 @@ extension ConversationViewModel {
                         senderId: nil, senderName: userName,
                         conversation: conversation, context: context)
 
+        // 1.5 开轮落库（V6 刀1）：轮次成为实体，中断/停止/抢权都有据可查
+        let convId = conversation.id
+        // 兔兔又说话了 → 上一轮作废（她的新消息抢权，学粟粟 owner supersede）
+        let runningDesc = FetchDescriptor<GroupTurn>(
+            predicate: #Predicate<GroupTurn> { $0.conversationId == convId && $0.state == "running" })
+        for stale in (try? context.fetch(runningDesc)) ?? [] {
+            stale.state = "superseded"
+            stale.endedAt = Date()
+        }
+        let turn = GroupTurn(
+            conversationId: convId,
+            profileId: conversation.profileId,
+            triggerNodeId: currentPath.last?.id ?? "",
+            maxChainDepth: maxChainDepth,
+            speechMode: UserDefaults.standard.string(forKey: "groupSpeechMode") ?? "relay"
+        )
+        context.insert(turn)
+        try? context.save()
+
         let cardManager = CharacterCardManager()
         let presetManager = PresetManager()
 
@@ -37,9 +56,18 @@ extension ConversationViewModel {
         var repliesThisRound = 0
 
         while repliesThisRound < maxChainDepth {
-            // 手动停止（⋯ 菜单）→ 整轮刹车
+            // 手动停止（⋯ 菜单）→ 整轮刹车。V6：内存布尔仍保留（即时性），
+            // 同时把停止写进轮次实体——重进 App 也知道这轮是「被停的」而不是「没说完」
             if groupRoundCancelled {
-                print("[GroupV5] 🛑 轮次被手动停止")
+                print("[GroupV6] 🛑 轮次被手动停止")
+                turn.state = "cancelled"
+                turn.endedAt = Date()
+                try? context.save()
+                break
+            }
+            // 别的轮次抢了权（兔兔插话开了新轮）→ 本轮退场
+            if turn.state != "running" {
+                print("[GroupV6] 轮次被 \(turn.state)，退出")
                 break
             }
             // Owner 抢权（学粟粟：她一发言，房间里排队的深链 mention 全 fail）。
@@ -94,6 +122,8 @@ extension ConversationViewModel {
 
             lastSpeakerId = speaker.id
             repliesThisRound += 1
+            turn.chainDepth = repliesThisRound
+            try? context.save()
 
             // 检查 AI 回复里有没有 @ 提及（自动追加一轮给被提及的人）
             let latestHistory = groupHistoryItems()
@@ -109,7 +139,12 @@ extension ConversationViewModel {
         }
 
         groupInterjectionPending = false
-        print("[GroupV5] ═══ 轮次结束 ═══ 共 \(repliesThisRound) 条回复")
+        if turn.state == "running" {
+            turn.state = "done"
+            turn.endedAt = Date()
+            try? context.save()
+        }
+        print("[GroupV6] ═══ 轮次结束(\(turn.state)) ═══ 共 \(repliesThisRound) 条回复")
     }
 
     /// G3 长按定向回应：指定某个成员接当前话茬（不选人，直接说）。
@@ -367,5 +402,35 @@ extension ConversationViewModel {
         try? context.save()
 
         return node
+    }
+}
+
+
+// MARK: - V6 轮次善后
+
+extension ConversationViewModel {
+    /// App 冷启动/切回时扫描：还挂着 running 但早就没人跑的轮次 = 上次被中断
+    /// （App 被杀/崩溃/退后台）。标 interrupted，UI 可据此提示「上次没说完」。
+    @MainActor
+    static func reconcileStaleGroupTurns(context: ModelContext) {
+        let cutoff = Date().addingTimeInterval(-180)
+        let desc = FetchDescriptor<GroupTurn>(
+            predicate: #Predicate<GroupTurn> { $0.state == "running" && $0.startedAt < cutoff })
+        guard let stale = try? context.fetch(desc), !stale.isEmpty else { return }
+        for t in stale {
+            t.state = "interrupted"
+            t.endedAt = Date()
+            // 这轮里还挂着的发言权一并收尾，免得永远 pending
+            let tid = t.id
+            let claims = FetchDescriptor<SpeakClaim>(
+                predicate: #Predicate<SpeakClaim> { $0.turnId == tid && ($0.state == "pending" || $0.state == "speaking") })
+            for c in (try? context.fetch(claims)) ?? [] {
+                c.state = "failed"
+                c.failureNote = "App 中断"
+                c.finishedAt = Date()
+            }
+        }
+        try? context.save()
+        print("[GroupV6] 收尾中断轮次 \(stale.count) 条")
     }
 }
