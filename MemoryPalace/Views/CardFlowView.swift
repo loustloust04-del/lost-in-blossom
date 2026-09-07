@@ -300,6 +300,9 @@ struct CardFlowView: View {
                         // [white-screen-fix] App 回前台会重布局、易白屏，而 isCurrentConvLoading 不变化
                         // 触发不到下面那条兜底 → 这里补一刀。
                         if phase == .active {
+                            // 通知里回过的话补进对话（2026-09-06 兔兔报的 bug：
+                            // 快速回复只发了 WS 没落库，她自己那条不出现在对话框里）
+                            viewModel.flushPendingQuickReplies(context: modelContext)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 scrollToLastMessage(proxy: proxy, force: true)
                             }

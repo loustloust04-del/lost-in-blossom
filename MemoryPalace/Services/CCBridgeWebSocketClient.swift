@@ -320,8 +320,41 @@ final class CCBridgeWebSocketClient: NSObject {
             "chat_id": cid,
             "message_id": UUID().uuidString,
             "content": text,
-            "user": "兔兔（通知快速回复）",
+            // 2026-09-06 兔兔说不要标「通知快速回复」——
+            // 他本来就能从她说话的样子看出她在忙，标签反而让那条显得生分。
         ]) { _ in }
+
+        // 排队等 App 前台时补写进对话。
+        // 2026-09-06 兔兔实测：「通过通知回复的话，不会落在我们的对话框里，
+        // 只有主人的在，我的不在」——因为这里原本只发 WS，没落库
+        // （App 内发消息走 sendMessage，那条会先建 user 节点再发）。
+        // 不在通知 handler 里直接写 SwiftData：后台唤醒只有几十秒，
+        // 建容器 + 找会话 + 维护 parentId 链，失败了反而丢消息。
+        // 而她本来也是打开 App 才看对话框，延迟补写足够。
+        Self.enqueuePendingQuickReply(chatId: cid, text: text)
+    }
+
+    // MARK: - 通知快速回复的补写队列
+
+    private static let quickReplyQueueKey = "pendingQuickReplies"
+
+    static func enqueuePendingQuickReply(chatId: String, text: String) {
+        var q = UserDefaults.standard.array(forKey: quickReplyQueueKey) as? [[String: Any]] ?? []
+        q.append(["chatId": chatId, "text": text, "at": Date().timeIntervalSince1970])
+        // 留个上限，异常情况下别无限涨
+        if q.count > 50 { q = Array(q.suffix(50)) }
+        UserDefaults.standard.set(q, forKey: quickReplyQueueKey)
+    }
+
+    /// 取出并清空队列（由 ConversationViewModel 在前台时消费）
+    static func drainPendingQuickReplies() -> [(chatId: String, text: String, at: Date)] {
+        let q = UserDefaults.standard.array(forKey: quickReplyQueueKey) as? [[String: Any]] ?? []
+        UserDefaults.standard.removeObject(forKey: quickReplyQueueKey)
+        return q.compactMap {
+            guard let c = $0["chatId"] as? String, let t = $0["text"] as? String else { return nil }
+            let at = ($0["at"] as? TimeInterval).map(Date.init(timeIntervalSince1970:)) ?? Date()
+            return (c, t, at)
+        }
     }
 
     func sendAskUserAnswer(toolUseId: String, answers: [[String: Any]]?, skip: Bool = false) {

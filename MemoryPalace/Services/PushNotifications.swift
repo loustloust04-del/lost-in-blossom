@@ -61,7 +61,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             title: "回复",
             options: [],                 // 不加 .authenticationRequired：锁屏也能直接回
             textInputButtonTitle: "发送",
-            textInputPlaceholder: "跟他说点什么…"
+            textInputPlaceholder: ""   // 兔兔说不需要占位
         )
         let category = UNNotificationCategory(
             identifier: replyCategoryId,
