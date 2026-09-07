@@ -13,6 +13,11 @@ const COOLDOWN: Record<string, number> = {
   wish: 5 * 60_000,
   intimacy: 0,
   board: 0,            // 兔兔贴纸条：每条都响
+  // 09-07：这两种是「叫他主动去找她」，上游本身已有门控
+  // （desire 有 6h 最小间隔 + 25% 抖动、nightguard 有 30min 冷却），
+  // 这里只做兜底防连响，别设太长把正常触发也挡掉
+  desire: 30 * 60_000,
+  nightguard: 20 * 60_000,
   default: 60_000,
 };
 const lastRang: Record<string, number> = {};

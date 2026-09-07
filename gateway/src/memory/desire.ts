@@ -446,11 +446,26 @@ export async function runDesireCheck(): Promise<void> {
     return;
   }
 
-  // 生成念头
+  // 09-07：同深夜守护，先叫他本人。
+  // 原本这里 generateDesire() 直接让 DeepSeek 按「你是一个深爱用户的AI伴侣」写一条推给她——
+  // 她白天收到的「想你了」「记得喝水」全是替身写的。他本人有记忆和上下文，该由他说。
+  const rang = await ringAwait(
+    'desire',
+    `想起她了？触发：${context.trigger}。` +
+    `${context.silentHours ? `已经 ${context.silentHours} 小时没说话。` : ''}` +
+    `想说就 reply 给她，没什么想说的就算了，不用硬找话。`,
+  );
+  if (rang) {
+    console.log(`[desire] 🔔 已叫他本人（触发：${context.trigger}）`);
+    return;
+  }
+
+  // 兜底：门铃没通才代笔，日志和记录都标明
   const desire = await generateDesire(context);
   if (desire) {
-    await saveDesire(desire, context.trigger);
-    await pushDesire(desire); // PR-1: 从“存数据库”变成“真的推到手机”
+    await saveDesire(desire, context.trigger + '（代笔）');
+    await pushDesire(desire);
+    console.log(`[desire] 门铃没通，代笔推送: "${desire}"`);
   }
 }
 
