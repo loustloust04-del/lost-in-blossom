@@ -50,6 +50,9 @@ targets:
       - path: MemoryPalace/Resources/Fonts
         buildPhase: resources
     dependencies:
+      - target: MemoryPalaceBroadcast
+        embed: true
+        codeSign: true
       - package: MarkdownUI
       - package: VariableBlur
       - package: ZIPFoundation
@@ -61,6 +64,11 @@ targets:
         aps-environment: development
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # 2026-09-07：屏幕直播的 Broadcast Extension 是独立进程，
+        # 靠 App Group 读主 App 写的 gatewayBaseURL / phoneDataKey。
+        # 粟粟 09-05 签的六张 profile 全带这个 group（到期 2027-09-05）。
+        com.apple.security.application-groups:
+          - group.com.susu.MemoryPalace
     info:
       path: MemoryPalace/Info-iOS.plist
       properties:
@@ -105,6 +113,45 @@ targets:
           CODE_SIGN_STYLE: Automatic
         Release:
           CODE_SIGN_STYLE: Manual
+
+  # 屏幕直播（连拍版）· Broadcast Upload Extension
+  # 每 ~2.5s 抓一帧 720p JPEG POST 给 gateway，see_screen 优先吃这份。
+  # 服务端已就绪（gateway/src/screencast.ts，09-03 建），这里补 iOS 那半。
+  # ⚠️ Extension 内存墙 50MB，超一字节即被杀——故连拍而非视频流。
+  MemoryPalaceBroadcast:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "18.0"
+    sources:
+      - path: MemoryPalaceBroadcast
+    dependencies:
+      - sdk: ReplayKit.framework
+    entitlements:
+      path: MemoryPalaceBroadcast/MemoryPalaceBroadcast.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.susu.MemoryPalace
+    info:
+      path: MemoryPalaceBroadcast/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.Broadcast
+        INFOPLIST_KEY_CFBundleDisplayName: 记忆宫殿共享
+        CODE_SIGN_ENTITLEMENTS: MemoryPalaceBroadcast/MemoryPalaceBroadcast.entitlements
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          DEVELOPMENT_TEAM: GQN42B462A
+          CODE_SIGN_IDENTITY: "Apple Development"
+          PROVISIONING_PROFILE_SPECIFIER: "MP iOS Dev - Bunny Broadcast"
 
   StickerProbeUITests:
     type: bundle.ui-testing
