@@ -82,7 +82,11 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
            response.actionIdentifier == Self.replyActionId {
             let text = textResponse.userText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
-            CCBridgeWebSocketClient.shared.sendQuickReply(text: text, chatId: chatId)
+            let cid = chatId ?? UserDefaults.standard.string(forKey: "pendingPushChatId") ?? ""
+            // 先落库再发——他的回复是收到就立刻落库的（appendCCMessage），
+            // 她的也该一样。09-06 排队等前台补写那版不行，她 09-07 再报。
+            QuickReplyStore.appendUserMessage(chatId: cid, text: text)
+            CCBridgeWebSocketClient.shared.sendQuickReply(text: text, chatId: cid)
             return
         }
 

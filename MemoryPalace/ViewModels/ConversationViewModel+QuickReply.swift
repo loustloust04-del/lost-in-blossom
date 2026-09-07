@@ -1,47 +1,69 @@
 import Foundation
 import SwiftData
 
-// MARK: - 通知快速回复的补写
+// MARK: - 通知快速回复：立刻落库
 //
-// 2026-09-06 兔兔实测报的 bug：「通过通知回复的话，不会落在我们的对话框里，
+// 2026-09-06 兔兔第一次报：「通过通知回复的话，不会落在我们的对话框里，
 // 只有主人的在，我的不在。」
+// 当时的修法是「排队等 App 前台补写」——09-07 她再报还是不行。
 //
-// 根因：CCBridgeWebSocketClient.sendQuickReply 只发了 WS 帧，没落库。
-// App 内正常发消息走 sendMessage，那条会先建一个 user 节点再发；
-// 通知回复发生在 App 后台，拿不到 ModelContext 与 viewModel，所以当时跳过了。
+// 查明真正的原因：他的回复走 appendCCMessage，是**收到就立刻落库**的；
+// 而我把她的话排进队列等前台。于是她看到的永远是「只有他的，没有我的」，
+// 而且切回 App 那一刻队列才补，时机对不上就更乱。
 //
-// 解法：发的时候排队（UserDefaults），App 回前台时补写。
-// 不在通知 handler 里直接动 SwiftData——后台唤醒只有几十秒，
-// 建容器 + 找会话 + 维护 parentId 链，中途失败反而丢消息。
-// 而兔兔本来也是打开 App 才看对话框，延迟补写足够。
-extension ConversationViewModel {
+// 她的原话：「我觉得从那里回复，应该跟我就在那个 chat 页面回复的消息一样。
+// 我看微信和 QQ 都能做到及时地出现。」——对，就该一样。
+//
+// 现在改成：通知 handler 里直接写 SwiftData，与 appendCCMessage 同一条路
+// （建 container → 找 conversation → 挂 parentId → insert）。
+// 后台唤醒有约 30 秒，插一条记录用不了一秒。
+enum QuickReplyStore {
 
-    /// App 回前台时调。把通知里回过的话补进对应会话。
-    @MainActor
-    func flushPendingQuickReplies(context: ModelContext) {
-        let pending = CCBridgeWebSocketClient.drainPendingQuickReplies()
-        guard !pending.isEmpty else { return }
+    /// 通知里回复后立刻落库。返回是否成功。
+    /// 在通知 handler（App 可能在后台）里调用，自己建 ModelContainer。
+    @discardableResult
+    static func appendUserMessage(chatId: String, text: String) -> Bool {
+        guard !chatId.isEmpty, !text.isEmpty else { return false }
+        let container = MemoryPalaceApp.makeUnifiedContainer()
+        let ctx = ModelContext(container)
 
-        for item in pending {
-            // chat_id 即 conversation.id（hub 协议里两者同一）
-            guard let convo = selectedConversation, convo.id == item.chatId else {
-                // 不是当前打开的这个会话——放回队列，等她切过去时再补，
-                // 别写进错误的对话里
-                CCBridgeWebSocketClient.enqueuePendingQuickReply(chatId: item.chatId, text: item.text)
-                continue
+        // 找到那个会话
+        let convoDesc = FetchDescriptor<Conversation>(
+            predicate: #Predicate { $0.id == chatId }
+        )
+        guard let convo = try? ctx.fetch(convoDesc).first else { return false }
+
+        // 挂在当前节点后面——与 appendCCMessage 同一套：
+        // 拿不到 parent 就用 conversation.currentNodeId，绝不在空路径上造新根
+        // （那会让整条历史被绕过，兔兔实测过「聊天记录被整个吞掉」）
+        let parentId: String? = convo.currentNodeId.isEmpty ? nil : convo.currentNodeId
+
+        let nodeId = UUID().uuidString
+        let node = MessageNode(
+            id: nodeId,
+            role: "user",
+            content: text,
+            contentType: "text",
+            createTime: Date(),
+            parentId: parentId,
+            childrenIds: [],
+            conversationId: convo.id,
+            profileId: convo.profileId
+        )
+        ctx.insert(node)
+
+        // 接上父节点的 childrenIds
+        if let pid = parentId {
+            let pDesc = FetchDescriptor<MessageNode>(predicate: #Predicate { $0.id == pid })
+            if let parent = try? ctx.fetch(pDesc).first,
+               !parent.childrenIds.contains(nodeId) {
+                parent.childrenIds.append(nodeId)
             }
-            // 已经有同样内容的相邻 user 节点就跳过（防重复补写）
-            if let last = currentPath.last, last.role == "user", last.content == item.text { continue }
-
-            _ = insertGroupNode(
-                role: "user",
-                content: item.text,
-                senderId: nil,
-                senderName: nil,
-                conversation: convo,
-                context: context
-            )
         }
-        try? context.save()
+        convo.currentNodeId = nodeId
+        convo.updateTime = Date()
+
+        do { try ctx.save(); return true }
+        catch { return false }
     }
 }
