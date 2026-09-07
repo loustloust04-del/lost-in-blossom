@@ -23,6 +23,32 @@ let enabled = true;
 export function setEnabled(v: boolean): void { enabled = v; }
 export function isEnabled(): boolean { return enabled; }
 
+/// 等结果版的门铃：真的 await hub 的响应，用于「送不到就得走兜底」的场合。
+/// 普通 ring() 是 fire-and-forget（返回 true 只表示发出去了，不代表送到），
+/// 深夜守护那种「他不在线就得换我说」的地方必须用这个。
+export async function ringAwait(kind: string, text: string): Promise<boolean> {
+  if (!enabled) return false;
+  const gap = COOLDOWN[kind] ?? COOLDOWN.default;
+  if (gap > 0 && Date.now() - (lastRang[kind] || 0) < gap) return false;
+  lastRang[kind] = Date.now();
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (HUB_TOKEN) headers['Authorization'] = 'Bearer ' + HUB_TOKEN;
+    const res = await fetch(HUB_NOTIFY_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ type: 'phone_event', event: 'doorbell_' + kind, text }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) { console.warn(`[doorbell] ${kind} hub 返回 ${res.status}`); return false; }
+    console.log(`[doorbell] 🔔 ${kind}（已确认送达）: ${text.slice(0, 60)}`);
+    return true;
+  } catch (e: any) {
+    console.warn('[doorbell] 响铃失败:', e?.message);
+    return false;
+  }
+}
+
 export function ring(kind: string, text: string): boolean {
   if (!enabled) return false;
   const gap = COOLDOWN[kind] ?? COOLDOWN.default;

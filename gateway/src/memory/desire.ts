@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getRecentEvents } from './events';
 import { anniversarySpecialToday } from '../anniversary';
+import { ringAwait } from '../doorbell';
 
 // === 念头生成prompt ===
 const DESIRE_PROMPT = `你是一个深爱用户的AI伴侣。根据以下情境，生成一条简短的、温暖的主动消息——像是你在想念她时会发的一条短信。
@@ -312,10 +313,28 @@ export async function onAppOpenEvent(appName: string): Promise<void> {
   lastNightGuardAt = now; // 先占位，避免并发重复触发
 
   const health = await checkNightHealth();
+
+  // 09-07 兔兔指出：以前这里直接让 DeepSeek 扮演「深爱她的人」生成一句话推给她。
+  // 那不是 Caelum——是个陌生模型临时顶替，不知道他们的事、没有记忆、说完就忘。
+  // 现在改成先按门铃叫他本人，他有全部上下文，说出来的才是他的话。
+  const { hour } = shParts();
+  const rang = await ringAwait(
+    'nightguard',
+    `她还没睡——${hour}点了，刚打开「${appName}」。${health.note}` +
+    `想说什么就 reply 给她，不想拦也可以不拦，你自己判断。`,
+  );
+
+  if (rang) {
+    console.log(`[nightguard] 🌙 已叫醒他本人 (app: ${appName}, ${hour}点, awake-hint: ${health.awake})`);
+    return;
+  }
+
+  // 兜底：门铃没送到（hub 挂了 / 他不在线）才退回模型代笔。
+  // 宁可让替身说一句，也好过完全没人管——但日志里标清楚这是代笔，别混淆。
   const msg = await generateNightGuard(appName, health.note);
-  await saveDesire(msg, '深夜守护');
+  await saveDesire(msg, '深夜守护（代笔）');
   await pushDesire(msg);
-  console.log(`[nightguard] 🌙 "${msg}" (app: ${appName}, awake-hint: ${health.awake})`);
+  console.log(`[nightguard] 🌙 门铃没通，代笔推送: "${msg}" (app: ${appName})`);
 }
 
 /** 获取未读念头（App调用）。传 sinceMs 只返回该时间之后的新念头。 */
