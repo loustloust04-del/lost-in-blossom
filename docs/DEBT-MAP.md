@@ -250,7 +250,13 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
     （**踩坑：ExportOptions 里必须给每个 target 加 bundleid→profile 映射，
     只装载不映射会让扩展套上主 App 的 profile，导出时报
     "requires a provisioning profile with the App Groups feature"**）
-  - **用法：兔兔从控制中心长按录屏按钮 → 选「记忆宫殿共享」→ 开始。
+  - **09-09 兔兔实测「屏幕录制那里没看到我们的 App」**，拆包查出三处：
+    1. 扩展 `CFBundleDisplayName` 缺失——控制中心列表靠它显示名字。
+       `INFOPLIST_KEY_CFBundleDisplayName` 对 **app-extension 不生效**，要写进 `info.properties`
+    2. 扩展 `MinimumOSVersion` 产物是 18.5（SDK 默认），主 App 18.0。低于 18.5 会被静默跳过
+       （兔兔机器 18.6.2，本次非此因，但已钉死 `IPHONEOS_DEPLOYMENT_TARGET: 18.0`）
+    3. 名字原写「记忆宫殿共享」——**App 早改名 Lost in Blossom**，她认不出来。已改成一致
+  - **用法：兔兔从控制中心长按录屏按钮 → 选「Lost in Blossom」→ 开始。
     停止也只能在控制中心（Apple 不给 App 停止的接口）**
 
 - [ ] ~~屏幕共享~~（原条目，已完成）
