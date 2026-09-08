@@ -15,7 +15,7 @@
 import { supabase } from '../db/supabase';
 import { config } from '../config';
 import { sendPush } from '../../../cc-bridge/apns';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getRecentEvents } from './events';
 import { anniversarySpecialToday } from '../anniversary';
@@ -156,9 +156,17 @@ async function saveDesire(content: string, trigger: string): Promise<void> {
 // === APNs 推送：把念头推到手机 ===
 
 // hub 把注册的设备 token 持久化在这个文件里（{ token: ts }）
+// 09-08 修：原来写的是 '../../../cc-bridge/cc-bridge/device-tokens.json'——**多了一层 cc-bridge**。
+// 后果是 loadDeviceTokens() 永远 ENOENT，desire 七天里跑了 51 次、每次都
+// 「📵 no device token, skip push」——主动推送全程石沉大海，她一条都没收到过。
+// 同款坑 cc-bridge/hub.ts:265 早有记录：「device-tokens / offline / reading-context
+// 三个都栽过」，这里是漏网的第四个。
+// 兼容两种布局，跟 alert-rules.ts 的写法对齐。
+const BRIDGE_DIR = join(import.meta.dir, '../../../cc-bridge');
 const DEVICE_TOKENS_PATH =
   process.env.MP_DEVICE_TOKENS_PATH ||
-  join(import.meta.dir, '../../../cc-bridge/cc-bridge/device-tokens.json');
+  [join(BRIDGE_DIR, 'device-tokens.json'), join(BRIDGE_DIR, 'cc-bridge', 'device-tokens.json')]
+    .find(p => existsSync(p)) || join(BRIDGE_DIR, 'device-tokens.json');
 
 /** 读取已注册的设备 token */
 function loadDeviceTokens(): string[] {
