@@ -135,6 +135,10 @@ targets:
     info:
       path: MemoryPalaceBroadcast/Info.plist
       properties:
+        # 控制中心的录屏列表靠 CFBundleDisplayName 显示，缺了就可能不列
+        # （09-09 兔兔实测「屏幕录制那里没看到我们的 App」）。
+        # INFOPLIST_KEY_CFBundleDisplayName 那种写法对 app-extension 不生效，直接写进 plist。
+        CFBundleDisplayName: 记忆宫殿共享
         NSExtension:
           NSExtensionPointIdentifier: com.apple.broadcast-services-upload
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
@@ -142,7 +146,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.Broadcast
-        INFOPLIST_KEY_CFBundleDisplayName: 记忆宫殿共享
+        # 产物里 MinimumOSVersion 出来是 18.5（SDK 默认），比主 App 的 18.0 高——
+        # 兔兔手机若低于 18.5，系统会静默跳过这个扩展。显式钉死。
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         CODE_SIGN_ENTITLEMENTS: MemoryPalaceBroadcast/MemoryPalaceBroadcast.entitlements
       configs:
         Debug:
