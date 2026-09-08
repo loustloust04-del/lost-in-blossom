@@ -6,9 +6,9 @@ const r = await fetch(`${GW}/api/mcp/tools`, { headers: { Authorization: `Bearer
 const d: any = await r.json()
 const builtin = (d.tools ?? []).filter((t: any) => t.source === "builtin")
 
-// mcp-server.ts 的 LOCAL_ONLY：网关拉不到、本地实现的
-const LOCAL_ONLY = ["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "qq_poke", "qq_like", "qq_recall"]
 const src = await Bun.file("/root/projects/BunnyPalace/cc-bridge/mcp-server.ts").text()
+// LOCAL_ONLY 从源码里读，不手抄——加了本地工具这里自动跟上（09-09：dispatch_coder 就是这么漏的）
+const LOCAL_ONLY: string[] = eval("[" + src.match(/const LOCAL_ONLY = new Set\(\[([\s\S]*?)\]\)/)![1] + "]")
 const fb = eval("[" + src.match(/const FALLBACK_PROXY_TOOLS = \[([\s\S]*?)\n\] as const/)![1] + "]")
 const replyDef = eval("(" + src.match(/\{\s*name: "reply",[\s\S]*?\n    \},\n/)![0].replace(/,\n$/, "") + ")")
 
