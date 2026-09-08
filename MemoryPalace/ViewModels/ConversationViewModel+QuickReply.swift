@@ -24,7 +24,7 @@ enum QuickReplyStore {
     @discardableResult
     static func appendUserMessage(chatId: String, text: String) -> Bool {
         guard !chatId.isEmpty, !text.isEmpty else { return false }
-        let container = ProfileManager.makeUnifiedContainer()
+        let container = MemoryPalaceApp.makeUnifiedContainer()
         let ctx = ModelContext(container)
 
         // 找到那个会话

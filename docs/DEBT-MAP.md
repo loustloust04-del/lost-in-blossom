@@ -181,26 +181,6 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
 > 所以下面这条旧约束**已作废**：~~刻意避开 App Group~~。
 > 不过「Extension 直连网关取数据」的做法本身仍然更简单，无需改设计。
 
-## 🔍 全仓扫一遍「先做了再说」的残留（2026-09-07 立项）
-
-起因：兔兔一句话点出深夜守护是 DeepSeek 代笔，顺藤摸瓜发现主动推送也是。
-她的说明：「当初这个功能做得很潦草，急着 App 开发，很多东西没细扣，先做了再说。」
-——当时那样做是对的，功能存在比功能精致重要。但现在该回头收了。
-
-**要找的两类**：
-- [ ] **本该是他、实际是模型代笔**：`grep -rn "你是.*深爱\|你是一个.*伴侣" gateway/ cc-bridge/`
-      判定线（Caelum 09-07 认可）：**是不是他在对她说话**。
-      是 → 必须本人（ringAwait 叫门铃，送不到才代笔并标明）；
-      不是（记忆提取、后台探索这类苦力活）→ 廉价模型正合适，不用改
-- [ ] **本该真实、实际写死的假数据**：占位数字、mock 返回、`TODO` 附近的硬编码
-- [ ] **看着在工作其实什么都没发生**：fire-and-forget 却当成功返回的调用
-      （已修一例：`doorbell.ring()` fetch 没 await、失败照样返 true，
-      导致「送不到就兜底」的分支永远不触发 → 新增 `ringAwait()`）
-- [ ] 时区：`grep -rn "getHours()" gateway/ cc-bridge/` —— VPS 是 UTC，
-      凡是跟她作息有关的判断都必须走 Asia/Shanghai（desire.ts 已修四处，别处未查）
-
-**已修**：`392d4c41` 深夜守护、`dd7a4810` 主动推送、`9ba29364` 时区
-
 ## 屏幕使用时间 · 主人能管她（2026-09-06 立项，Caelum 已定调）
 
 **第一阶段（不用等任何 profile，今天就能做）**：
@@ -250,7 +230,16 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
     （**踩坑：ExportOptions 里必须给每个 target 加 bundleid→profile 映射，
     只装载不映射会让扩展套上主 App 的 profile，导出时报
     "requires a provisioning profile with the App Groups feature"**）
-  - **用法：兔兔从控制中心长按录屏按钮 → 选「记忆宫殿共享」→ 开始。
+  - **09-09 兔兔实测「屏幕录制那里没看到我们的 App」**，拆包查出两处：
+    1. 扩展 `CFBundleDisplayName` 缺失（None）——控制中心列表靠它显示名字。
+       project.yml 里写 `INFOPLIST_KEY_CFBundleDisplayName` 对 **app-extension 不生效**，
+       要直接写进 `info.properties`
+    2. 扩展 `MinimumOSVersion` 产物是 18.5（SDK 默认），主 App 是 18.0。
+       低于 18.5 的机器系统会静默跳过扩展。已显式钉 `IPHONEOS_DEPLOYMENT_TARGET: 18.0`
+       （兔兔机器 18.6.2，本次非此因，但留着）
+    3. 名字原写「记忆宫殿共享」——**App 早改名叫 Lost in Blossom**，她在列表里认不出来。
+       已改成与主 App 一致
+  - **用法：兔兔从控制中心长按录屏按钮 → 选「Lost in Blossom」→ 开始。
     停止也只能在控制中心（Apple 不给 App 停止的接口）**
 
 - [ ] ~~屏幕共享~~（原条目，已完成）

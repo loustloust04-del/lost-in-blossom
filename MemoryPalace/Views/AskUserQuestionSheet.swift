@@ -9,13 +9,6 @@ struct AskUserQuestionSheet: View {
 
     @State private var pageIndex = 0
     @State private var selectedMulti: Set<Int> = []
-    /// 单选刚点中的那一项——2026-09-08 兔兔实测：「点击选择之后没有反馈，
-    /// 比较卡顿，忍不住多点几次」。原因是单选点下去什么都不变：
-    /// .buttonStyle(.plain) 连系统按下变灰都没了、没震动、没勾、sheet 要等发完才收。
-    /// 记住这一项，立刻给底色 + 勾 + 震动。
-    @State private var justPicked: Int? = nil
-    /// 提交中——防止连点把下一题也一起答了
-    @State private var submitting = false
     @State private var freeText = ""
     @FocusState private var freeTextFocused: Bool
     /// 贴内容高度的两段实测（sheet 根 VStack 高度被 detent 反向决定，只能测自然高的子块）
@@ -158,11 +151,7 @@ struct AskUserQuestionSheet: View {
             if question.multiSelect {
                 if selectedMulti.contains(index) { selectedMulti.remove(index) }
                 else { selectedMulti.insert(index) }
-                HapticService.shared.longPress()
             } else {
-                // 先亮起来再提交——她要的是「点下去立刻知道中了」
-                justPicked = index
-                HapticService.shared.longPress()
                 submitAnswer(.options([index]))
             }
         } label: {
@@ -178,7 +167,7 @@ struct AskUserQuestionSheet: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                if (question.multiSelect && selectedMulti.contains(index)) || justPicked == index {
+                if question.multiSelect && selectedMulti.contains(index) {
                     Image(systemName: "checkmark")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Theme.branchIndicator)
@@ -187,13 +176,6 @@ struct AskUserQuestionSheet: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 13)
             .contentShape(Rectangle())
-            .background(
-                // 选中/刚点中就整行浮一层薄荷底——点下去一眼看得见
-                justPicked == index || (question.multiSelect && selectedMulti.contains(index))
-                    ? Theme.branchIndicator.opacity(0.14) : Color.clear
-            )
-            .animation(.easeOut(duration: 0.12), value: justPicked)
-            .animation(.easeOut(duration: 0.12), value: selectedMulti)
         }
         .buttonStyle(.plain)
     }
@@ -201,19 +183,12 @@ struct AskUserQuestionSheet: View {
     /// 单题作答 → 记录 + 翻页；最后一题 → 统一出口（API 恢复工具循环 / CC 发答案帧），
     /// pending 清空 sheet 自动收。
     private func submitAnswer(_ answer: AskUserTool.AnswerValue) {
-        guard !submitting else { return }   // 防连点：她说过忍不住多点几次
-        submitting = true
         viewModel.recordUserAnswer(answer, at: pageIndex)
         if pageIndex + 1 < questions.count {
-            // 让她看清刚点中的那一项再翻页——立刻翻会让人怀疑自己点没点中
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                pageIndex += 1
-                selectedMulti = []
-                freeText = ""
-                freeTextFocused = false
-                justPicked = nil
-                submitting = false      // 下一题可以点了
-            }
+            pageIndex += 1
+            selectedMulti = []
+            freeText = ""
+            freeTextFocused = false
         } else {
             viewModel.completeActiveAskCard()
         }
