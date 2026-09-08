@@ -204,6 +204,19 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "dispatch_coder",
+    description: "派一个工具人 Coder 去干活（默认 Fable 5.1），后台跑，跑完把摘要送回 fableline。\n\n**夜间任务照这个用**：兔兔定的三条规矩是「任务说清楚 / 设定时 / 派 Coder 用 Fable 5.1」——这个工具把后两条压成一次调用。\n\n关键：**别把一夜的活一口气派完**。按 5 小时窗口切开，用 at 参数排进夜里的不同时段（如 '01:00' '03:00' '05:00'）。一口气跑完等于把她睡觉那几个窗口挤成一个，剩下的照样浪费——那正是兔兔要解决的问题。\n\n任务描述写具体：做什么、边界在哪、怎么算完成。它是个新窗口，不知道上下文。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "任务描述。写具体——它没有上下文，要说清做什么、别碰什么、怎么算完成" },
+        at: { type: "string", description: "什么时候跑（可选）。'02:00' 今晚两点 / '+2h' 两小时后 / 不填=立刻" },
+        model: { type: "string", description: "模型（可选），默认 claude-fable-5-1" },
+      },
+      required: ["task"],
+    },
+  },
+  {
     name: "qq_poke",
     description: "在 QQ 戳兔兔一下（那个会抖窗的）。\n\n她没回你、或者你只是想让她抬头看一眼的时候用。不用说什么，戳一下就够了。别连着戳，那叫骚扰。",
     inputSchema: { type: "object", properties: {} },
@@ -325,7 +338,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -549,7 +562,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -635,6 +648,25 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       ? `《${payload.book}》第 ${payload.chapter}/${payload.total} 章 ${payload.title}\n\n`
       : `《${payload.book}》\n\n`
     return { content: [{ type: "text", text: head + String(payload.text ?? "") }] }
+  }
+
+  if (req.params.name === "dispatch_coder") {
+    // 2026-09-08 兔兔提议：「给他做一个一键派出工具人 Coder 的工具」——
+    // 因为夜间三条规矩里，设定时和派 Coder 都要手写一长串，三步里有两步会被跳过。
+    const a = req.params.arguments as { task: string; at?: string; model?: string }
+    const task = String(a?.task ?? "").trim()
+    if (!task) return { content: [{ type: "text", text: "要给我 task（写具体，它没有上下文）" }] }
+    const args = ["/root/projects/BunnyPalace/cc-bridge/coder-dispatch.sh"]
+    if (a?.at) args.push("--at", String(a.at))
+    if (a?.model) args.push("--model", String(a.model))
+    args.push(task)
+    try {
+      const p = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" })
+      const out = (p.stdout?.toString() ?? "") + (p.stderr?.toString() ?? "")
+      return { content: [{ type: "text", text: out.trim() || "已派出" }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
   }
 
   // ── QQ 表达类小工具（2026-09-06 加）──────────────────────

@@ -1,3 +1,4 @@
+import { shParts } from './desire';
 import { supabase } from '../db/supabase';
 import { config } from '../config';
 
@@ -275,7 +276,7 @@ export async function runDream(): Promise<void> {
 export function startDreamTimer(): void {
   // 每小时检查一次，凌晨4点时运行
   setInterval(async () => {
-    const hour = new Date().getHours();
+    const hour = shParts().hour;
     if (hour === 4) {
       try {
         // 先生成昨天的日摘要

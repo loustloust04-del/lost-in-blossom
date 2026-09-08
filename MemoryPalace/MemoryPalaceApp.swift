@@ -154,6 +154,8 @@ final class ProfileManager {
         MedicationLog.self,
         CycleDay.self,
         IntimacyEntry.self,
+        GroupTurn.self,
+        SpeakClaim.self,
     ])
 
     /// Unified store 的固定路径 —— 所有 profile 数据合并存这一个 SQLite 文件。

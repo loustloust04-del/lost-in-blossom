@@ -113,6 +113,29 @@ extension ConversationViewModel {
             }
         }
         CCBridgeWebSocketClient.shared.sendAskUserAnswer(toolUseId: cc.toolUseId, answers: answers)
+
+        // Q/A 泡**立刻**落库，不等 resolved 帧回来。
+        // 2026-09-08 兔兔实测：她的答案排在他的回复后面了——
+        // 因为 resolved 是他答完才回传的，那时他的回复早已落库并把
+        // conversation.currentNodeId 更新成了自己，她的答案就挂到了他后面。
+        // 她选在先，落库却在后。
+        // 老的 ask_choice 线（上面那段）本来就是点完立刻落的，新线对齐它。
+        // resolved 帧到达时 insertCCUserMessage 的 ccMessageId 去重会挡住重复落库。
+        if let conv = selectedConversation, conv.id == cc.chatId, let ctx = conv.modelContext {
+            let qa = zip(cc.questions, cc.collectedAnswers).map { q, v -> String in
+                let a: String
+                switch v {
+                case .options(let idxs):
+                    a = idxs.compactMap { q.options.indices.contains($0) ? q.options[$0] : nil }
+                          .joined(separator: "、")
+                case .text(let t): a = t
+                case nil:          a = AskUserTool.skippedAnswer
+                }
+                return "Q: \(q.question)\nA: \(a)"
+            }.joined(separator: "\n\n")
+            insertCCUserMessage(chatId: conv.id, content: qa,
+                                ccMessageId: "askuser:\(cc.toolUseId)", context: ctx)
+        }
     }
 
     /// sheet 的 X / 下拽提前关。CC 侧是「整卡跳过」发 Esc——

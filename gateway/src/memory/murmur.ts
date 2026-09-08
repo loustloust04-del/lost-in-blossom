@@ -1,3 +1,4 @@
+import { shParts } from './desire';
 /**
  * PR-5 · 碎碎念（AI 日记 / 内心独白）
  *
@@ -152,7 +153,7 @@ export async function getRecentMurmurs(limit = 10): Promise<any[]> {
 export function startMurmurTimer(): void {
   let lastRunHour = -1;
   setInterval(() => {
-    const hour = new Date().getHours();
+    const hour = shParts().hour;
     if ((hour === 4 || hour === 14) && hour !== lastRunHour) {
       lastRunHour = hour;
       runMurmur().catch(err => console.error('[murmur] timer error:', err?.message ?? err));
