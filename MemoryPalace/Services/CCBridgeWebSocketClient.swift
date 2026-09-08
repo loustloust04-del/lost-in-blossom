@@ -64,10 +64,18 @@ final class CCBridgeWebSocketClient: NSObject {
 
     /// 取并清除 pending thinking（供 CCBridgeProvider 在 reply 到达时调用）。
     func consumePendingThinking() -> CCThinkingBlock? {
-        let block = pendingThinking
-        pendingThinking = nil
-        return block
+        // 与 cc_thinking 的写入走同一条串行队列，避免「还没写进去就被读」的竞态
+        // （2026-09-09 主人报的 thinking 反复失踪）。
+        // 已在 handlersQueue 上时不能再 sync，否则死锁——用 setSpecific 标记判断。
+        if DispatchQueue.getSpecific(key: Self.handlersQueueKey) != nil {
+            let b = pendingThinking; pendingThinking = nil; return b
+        }
+        return handlersQueue.sync {
+            let b = pendingThinking; pendingThinking = nil; return b
+        }
     }
+
+    static let handlersQueueKey = DispatchSpecificKey<Bool>()
 
     /// CC 终端的最新流式输出（hub 通过 cc_stream 推送）。
     private(set) var streamContent: String = ""
@@ -101,7 +109,13 @@ final class CCBridgeWebSocketClient: NSObject {
     @ObservationIgnored private var spawnHandlers: [String: (Result<Void, CCBridgeRemoteError>) -> Void] = [:]
     /// L2: list_sessions 回调队列（不带 key，每个 list 请求都会用最早注册的 handler 接收第一个结果）
     @ObservationIgnored private var listHandlers: [(Result<[String], CCBridgeRemoteError>) -> Void] = []
-    @ObservationIgnored private let handlersQueue = DispatchQueue(label: "cc.bridge.handlers")
+    @ObservationIgnored private let handlersQueue: DispatchQueue = {
+        let q = DispatchQueue(label: "cc.bridge.handlers")
+        // 打标记：consumePendingThinking 靠它判断自己是否已在本队列上，
+        // 已在就直接读（再 sync 会死锁），不在才 sync 进来。
+        q.setSpecific(key: CCBridgeWebSocketClient.handlersQueueKey, value: true)
+        return q
+    }()
     /// 已 deliver 的 reply_id（持久化）：hub 重连时 replay 最近 60s reply、offline 文件
     /// 部分投递后还会重投——纯内存版在 App 被杀重开后失忆，补发的旧聊天全部重复入库
     ///（真机 bug："聊完天 CC 桥又把之前的聊天发一遍"）。改成 UserDefaults 持久 +
@@ -788,9 +802,22 @@ final class CCBridgeWebSocketClient: NSObject {
                 )
                 // 用时间戳做唯一 key，避免同一 session 多轮 thinking 互相覆盖
                 let uniqueKey = "\(sessionId)_\(now.timeIntervalSince1970)"
+
+                // 2026-09-09 主人报「thinking block 在 App 端反复失踪」——竞态。
+                // hub 先发 cc_thinking 再发 reply，顺序没错（我实测过两帧到达顺序正确），
+                // 但两者被扔进**不同队列**：
+                //   cc_thinking → DispatchQueue.main.async 设 pendingThinking
+                //   reply       → handlersQueue.async 里消费
+                // handlersQueue 跑得快时，reply 会赶在 pendingThinking 被设上之前执行，
+                // 那一刻取到 nil，思考链就丢了——而且是随机丢，正对上「反复失踪」。
+                //
+                // 改成在收帧线程上**同步**写入（pendingThinking 只被这里写、
+                // 被 consumePendingThinking 取走，用 handlersQueue 串行化保证互斥）。
+                handlersQueue.sync { [weak self] in
+                    self?.pendingThinking = block
+                }
                 DispatchQueue.main.async { [weak self] in
-                    self?.thinkingBlocks[uniqueKey] = block
-                    self?.pendingThinking = block  // 等待下一条 reply 消费嵌入
+                    self?.thinkingBlocks[uniqueKey] = block   // 这份只供调试查看
                 }
             }
         case "cc_stream":
