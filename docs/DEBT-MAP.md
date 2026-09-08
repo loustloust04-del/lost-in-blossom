@@ -165,6 +165,33 @@ systemd `lib-gateway` 与另一进程抢 4567 端口，**崩了 12,528 次**（E
 已实现：`gateway/src/geo.ts`（转换 + 逆地理编码），位置工具现在同时给高德地址与附近 POI。高德 key 在 `gateway/.env` 的 `AMAP_KEY`。
 ⚠️ 算法要点：先把经纬度**减去参考点 105/35**，网上很多实现漏了这步。
 
+## ✅ 网关双开撞端口 · 当场收完（2026-09-09 04:50 BJT，Fable，兔兔在旁边）
+
+**症状**：systemd 的 `lib-gateway` 从 09-08 16:51:48 起 EADDRINUSE 崩→重启，**近 4 小时 2239 次**。
+App 一直是好的——手起的那个在正常服务，所以从外面完全看不出来。跟 8/31 那次 12,528 次是同一个姿势。
+
+**顺手结了一道小谜题**：「是谁起的第二个网关」——**就是 tmux 的 `gateway` 窗口**。
+文档里写着它「只是 journalctl -f」，实际上那个 pane 的 bash 亲手拉起了 `bun run src/index.ts`（pane pid 520274）。
+**以后看到它不是在跑 journalctl，就是又撞上了。**
+
+**怎么收的**（两步，全程零掉线）：
+1. `systemctl stop lib-gateway` —— 先叫停失败循环，碰不到正在服务的进程
+2. `kill <手起 pid>` → 确认 4567 空出 → `systemctl start lib-gateway` → 1 秒后 `[pocket] 📱 phone connected`
+3. 把 `gateway` 窗口恢复成 `journalctl -u lib-gateway -f`，防复发
+
+**换班前必验的一步**：手起进程跑的是内存里的旧代码，磁盘上可能早已不同。
+本次核对：运行中代码 == 磁盘代码，换班不带进旧版本。核对方法是看 `find gateway/src -newermt <进程启动时间>` 加 `git log -1 -- <文件>`。
+
+## ⚠️ 一刀叫「docs」的提交静静回滚了 15 个文件（2026-09-08，已自愈，存档备查）
+
+`28df1264`「docs: 更新债表与地图」从 `tmp-bc2` cherry-pick 过来，带上了那边陈旧的 15 个文件，
+**删了 319 行真代码**：门铃的 `ringAwait`（深夜守护要靠它判「他不在线就换我说」）、desire/nightguard 冷却、
+群聊、选择卡、cc-bridge、project.yml。14 秒后 `1f25e391` 整刀 revert 拿回来了，`443c5aee` 重做只动文档。
+**现 HEAD 健康，无待办。**
+
+**教训**：cherry-pick 一刀「docs」之前先 `git show --stat` 看它到底带了几个文件。
+分支上的旧代码会伪装成文档改动跑进 main，**commit message 不会告诉你**。
+
 ## 小谜题（不影响使用，好奇时再查）
 - [ ] **快捷指令词典里绑不上 Latitude/Longitude 变量**：同一条快捷指令里，is_charging/battery/Weather/Place 四个变量都能绑进词典（显示成橙色标签），但经纬度那两个死活绑不上，发出去只有 5 个字段。已排除：①类型选错（兔兔确认选的是「文本」）②作用域（设变量都在词典之前）。当前走 URL query 传参绕过，已通（实测 34.7768/111.1755）。
 
