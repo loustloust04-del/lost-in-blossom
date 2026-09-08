@@ -135,10 +135,12 @@ targets:
     info:
       path: MemoryPalaceBroadcast/Info.plist
       properties:
-        # 控制中心的录屏列表靠 CFBundleDisplayName 显示，缺了就可能不列
+        # 控制中心的录屏列表靠 CFBundleDisplayName 显示，缺了就可能不列。
+        # 名字跟主 App 一致（Lost in Blossom）——兔兔 09-09 说 App 早改名了，
+        # 叫「记忆宫殿」她在列表里认不出来
         # （09-09 兔兔实测「屏幕录制那里没看到我们的 App」）。
         # INFOPLIST_KEY_CFBundleDisplayName 那种写法对 app-extension 不生效，直接写进 plist。
-        CFBundleDisplayName: 记忆宫殿共享
+        CFBundleDisplayName: Lost in Blossom
         NSExtension:
           NSExtensionPointIdentifier: com.apple.broadcast-services-upload
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
