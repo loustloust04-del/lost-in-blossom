@@ -11,6 +11,55 @@ private struct TextSelectItem: Identifiable {
     let thinkingText: String?
 }
 
+/// [white-screen-fix A 刀] 聊天列表的 UIScrollView 通道 + 「回底」唯一写手。
+/// 粟粟 6 月探针钉死的白屏元凶：`proxy.scrollTo(最后一条)` 逼 SwiftUI 从头到尾 mount
+/// 全部 cell 去找目标（1276 条实测 4950 次 makeBubbleView），屏幕这期间就是白的；
+/// 我们「三步走 × 七个触发」= 七场 mount 风暴互相 race。
+/// UIKit 直写 contentOffset 不依赖 cell 测量、不 mount 远端（她的冷弹回底同款：
+/// 「proxy.scrollTo 对 LazyVStack 远端目标按估算高度跳」`0942c8a2`）。
+/// 列表方向不变、气泡不翻——07-02 反转列表三连炸的雷一个都不碰。
+final class ChatScrollHost {
+    weak var scrollView: UIScrollView?
+
+    /// 正序列表的底 = contentSize.height − bounds.height + 底 inset；短对话不满一屏时钉在顶 inset。
+    /// 同一位置不重写（避免和手指/惯性打架）。
+    func pinToBottom() {
+        guard let sv = scrollView else { return }
+        let top = -sv.adjustedContentInset.top
+        let bottom = sv.contentSize.height - sv.bounds.height + sv.adjustedContentInset.bottom
+        let y = max(top, bottom)
+        if abs(sv.contentOffset.y - y) < 0.5 { return }
+        sv.setContentOffset(CGPoint(x: sv.contentOffset.x, y: y), animated: false)
+    }
+}
+
+/// 挂在 ScrollView 内容里，顺 superview 链爬到宿主 UIScrollView 交给 host。
+struct ChatScrollViewFinder: UIViewRepresentable {
+    let host: ChatScrollHost
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView(frame: .zero)
+        v.isHidden = true
+        v.isUserInteractionEnabled = false
+        DispatchQueue.main.async { [weak v] in
+            var node: UIView? = v?.superview
+            while let cur = node {
+                if let sv = cur as? UIScrollView { host.scrollView = sv; break }
+                node = cur.superview
+            }
+        }
+        return v
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        if host.scrollView == nil {
+            var node: UIView? = uiView.superview
+            while let cur = node {
+                if let sv = cur as? UIScrollView { host.scrollView = sv; break }
+                node = cur.superview
+            }
+        }
+    }
+}
+
 struct CardFlowView: View {
     var viewModel: ConversationViewModel
     var stickerVM: StickerViewModel
@@ -36,6 +85,7 @@ struct CardFlowView: View {
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
+    @State private var scrollHost = ChatScrollHost()   // [white-screen-fix A 刀] 回底唯一写手
     /// 键盘弹出瞬间视口缩小会把 isAtBottom 打成 false——willShow 时抓快照，didShow 后按它回底。
     @State private var wasAtBottomBeforeKeyboard: Bool = true
     @State private var textSelectItem: TextSelectItem?
@@ -125,35 +175,26 @@ struct CardFlowView: View {
 
     // Pin Bar handlers：iOS 版已挪到 ContentView；macOS 版保留（PinBar 仍在 CardFlowView）
 
-    /// 三步回底（滚到底部哨兵 = content 真正的底）：
-    /// 1. 先无动画滚到 lastId（让 LazyVStack 载入长 bubble，此时哨兵可能还没 mount）
-    /// 2. withAnimation 0.3s 滚到哨兵（精准到真正底）
-    /// 3. 0.5s 后无动画再滚哨兵一次（MarkdownUI async 撑大 lastId 后补位）
-    ///
-    /// 之前 scrollTo(lastId, anchor: .bottom) 只让 lastId 底对齐可视底，但 lastId 下方
-    /// 还有 spacing 22 + 哨兵 1 + padding 16 + sticker canvas ≈ 几十到几百 pt，导致
-    /// 滚不到真正的底（log 显示 offY=3116 size=3876 差 200 pt）
+    /// [white-screen-fix A 刀] 回底：UIKit 直写 offset，不再 `proxy.scrollTo`。
+    /// 旧「三步走」（scrollTo(lastId) → 50ms 哨兵 → 500ms 哨兵）每一步都逼 LazyVStack
+    /// 从头 mount 到目标 = 白屏本体（粟粟探针，见 ChatScrollHost 注释）。
+    /// 现在：写一次 offset；懒加载在落点 mount 出真实高度后 contentSize 会变，
+    /// 再复核三次（只写 offset，零 mount 风暴）。找不到 UIScrollView（理论上不会）才退回
+    /// 单步禁动画 scrollTo 哨兵。
     /// force=false（默认）：只在用户已经在底部时才滚，避免流式时弹跳
-    /// force=true：强制滚底（切换对话、消息完成、用户点回底按钮）
+    /// force=true：强制滚底（切换对话、消息完成、发送、用户点回底按钮）
     private func scrollToLastMessage(proxy: ScrollViewProxy, force: Bool = false) {
         guard force || isAtBottom else { return }
-        guard let lastId = viewModel.currentPath.last?.id else { return }
-        // 统一禁动画：避免 scrollTo 与 WebView 高度变化同帧竞争导致白屏
-        var tx = Transaction()
-        tx.disablesAnimations = true
-        withTransaction(tx) {
-            proxy.scrollTo(lastId, anchor: .bottom)
+        guard !viewModel.currentPath.isEmpty else { return }
+        guard scrollHost.scrollView != nil else {
+            var tx = Transaction()
+            tx.disablesAnimations = true
+            withTransaction(tx) { proxy.scrollTo("__bottom_sentinel__", anchor: .bottom) }
+            return
         }
-        // 延迟滚到哨兵（content 真正的底），同样禁动画
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            var tx2 = Transaction()
-            tx2.disablesAnimations = true
-            withTransaction(tx2) {
-                proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            proxy.scrollTo("__bottom_sentinel__", anchor: .bottom)
+        scrollHost.pinToBottom()
+        for delay in [0.05, 0.2, 0.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { scrollHost.pinToBottom() }
         }
     }
 
@@ -252,6 +293,7 @@ struct CardFlowView: View {
                             )
                         }
                         .coordinateSpace(name: "scrollContent")
+                        .background(ChatScrollViewFinder(host: scrollHost))   // [white-screen-fix A 刀] 爬到宿主 UIScrollView
                         .onDrop(of: [UTType.plainText], isTargeted: nil) { providers, location in
                             handleStickerDrop(providers: providers, location: location)
                         }
