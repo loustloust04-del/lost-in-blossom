@@ -90,23 +90,41 @@ extension ConversationViewModel {
             )
 
             guard let speaker else {
-                print("[GroupV5] 选人返回 nil，本轮结束")
+                print("[GroupV6] 选人返回 nil，本轮结束")
                 break
             }
 
+            // V6 刀2：发言权落库。谁欠一句话从此可查——模型报错不再静默消失。
+            // reason：被兔兔显式 @ = mentioned；选人选中 = selected。
+            let mentionedByUser = GroupChatScheduler.extractMentions(
+                from: userText, participants: participants).contains { $0.id == speaker.id }
+            let claim = SpeakClaim(
+                turnId: turn.id,
+                conversationId: convId,
+                participantId: speaker.id,
+                participantName: speaker.name,
+                reason: repliesThisRound == 0 && mentionedByUser ? "mentioned" : "selected"
+            )
+            context.insert(claim)
+            try? context.save()
+
             // 解析模型
             guard let model = providerManager.model(byId: speaker.model) else {
-                print("[GroupV5] ❌ \(speaker.name): 模型 '\(speaker.model)' 找不到")
-                insertGroupNode(role: "assistant",
-                                content: "⚠️ 模型 \(speaker.model) 未找到",
-                                senderId: speaker.id, senderName: speaker.name,
-                                conversation: conversation, context: context)
+                // 失败带原因落 claim（UI 显示「XX 没说上话（模型未找到）」），
+                // 不再往对话里插一条假装是他说的 ⚠️ 泡
+                print("[GroupV6] ❌ \(speaker.name): 模型 '\(speaker.model)' 找不到")
+                claim.state = "failed"
+                claim.failureNote = "模型 \(speaker.model) 未找到"
+                claim.finishedAt = Date()
+                try? context.save()
                 repliesThisRound += 1
                 continue
             }
 
             // 说话
-            print("[GroupV5] \(speaker.name): 开始发言 (#\(repliesThisRound + 1))")
+            claim.state = "speaking"
+            try? context.save()
+            print("[GroupV6] \(speaker.name): 开始发言 (#\(repliesThisRound + 1))")
             await groupSpeak(
                 participant: speaker,
                 allParticipants: participants,
@@ -118,7 +136,18 @@ extension ConversationViewModel {
                 providerManager: providerManager,
                 context: context
             )
-            print("[GroupV5] \(speaker.name): 发言完成")
+            // 收尾：说出来了就 done（挂上那条消息节点）；一个字都没有 = 失败带因
+            let spoken = currentPath.last
+            if let spoken, spoken.senderId == speaker.id, !spoken.content.isEmpty {
+                claim.state = "done"
+                claim.resultNodeId = spoken.id
+            } else {
+                claim.state = "failed"
+                claim.failureNote = claim.failureNote ?? "没有返回内容"
+            }
+            claim.finishedAt = Date()
+            try? context.save()
+            print("[GroupV6] \(speaker.name): 发言完成(\(claim.state))")
 
             lastSpeakerId = speaker.id
             repliesThisRound += 1
