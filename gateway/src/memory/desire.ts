@@ -201,7 +201,7 @@ async function pushDesire(content: string): Promise<void> {
 /// （她说「早上有时候还没睡，反而刚好」——那是瞎猫碰上死耗子，下午 1 点喊睡觉就很怪了。）
 /// 对照组：cc-bridge/proactive-push.ts 一直老老实实用 timeZone: "Asia/Shanghai"，是对的。
 /// 本文件所有跟作息有关的判断一律走这两个函数，不要再直接 getHours()。
-function shParts(d = new Date()): { hour: number; minute: number } {
+export function shParts(d = new Date()): { hour: number; minute: number } {
   const f = new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai',
   }).formatToParts(d);
