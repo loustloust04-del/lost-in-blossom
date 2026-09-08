@@ -462,12 +462,26 @@ Caelum 跑的一直是这个好的（`/proc/<pid>/exe` 显示为 `(deleted)` 即
 **教训**：一条链路上每个环节都「失败即静默返回」，等于给自己蒙眼。
 以后写这类后台定时任务，失败路径至少要留一行**能被看见**的痕迹。
 
+## 群聊 V6（0906 立项，兔兔拍板「彻底做好」）
+方案见 docs/PLAN-GROUPCHAT-V6.md；对照侦察见 research-groupchat-vs-agora-0906.md
+- [x] 刀1 轮次落库：GroupTurn/SpeakClaim 模型 + 抢权(superseded)/停止(cancelled)/
+  崩溃(interrupted 冷启动收尾)；Owner 抢权行为修正；链深上限可调；设置-群聊页
+- [ ] **刀2 发言权全流程**：claim 建/开口/收尾接线；失败带原因显示（「小狐狸没说上话
+  （模型超时）」不再静默消失）；长按重试
+- [ ] **刀3 三档模式行为分流**：mention_only 不接力 / relay 默认 / free 给沉默权（回 PASS
+  不插消息不计链深）+ 最小发言间隔（兔兔直接 @ 豁免）
+- [ ] 不做：服务端化（房间/消息进 hub、断线补齐、后台跑）——另立项，等真需要再说
+
 ## 选择卡（问问题）· 0904 战况
 - [x] **CC 车道全链路通车**：hub 模块移植（粟粟 askuser.ts + 21 单测全绿）/ 钩子装进
   Caelum settings（备份 .bak-20260903）/ Caelum 重生穿钩 / **实机首卡成功**（他用来
   催兔兔吃药喝水拉窗帘）/ 老 ChoiceCardSheet 连根拔除，两条线统一粟粟同款脸
 - [x] Q/A 落聊天：原生线走 resolved 帧、ask_choice 线本地落（车道错位补齐，4caf7077）
-- [ ] **API 车道仍不通**（兔兔三报）：现症=模型嘴上说弹了、卡没出。断点候选：工具没进
+- [x] **API 车道已通**（0906 定案 487cf752）：ToolCallLoop.execute 非 @MainActor，后台
+  await 进闸门时 onQuestions 判空即放弃 → ask() 等回调就位 + 调用侧跳 MainActor
+- [x] UI 统一：老 ChoiceCardSheet 连根拔除，两车道同一张脸（粟粟同款）
+- [x] Q/A 落聊天（两条线各自补齐）
+- ~~API 车道仍不通（兔兔三报）~~：现症=模型嘴上说弹了、卡没出。断点候选：工具没进
   请求 / 网关代理层吞掉 / family 门控。粟粟 API 道是通的但接法与我们不同（她 ToolRegistry
   里没有 ask_user，疑走 gateway builtin）——下一场带新鲜脑子专门诊断，情报在
   docs/TASK-askuser-cc-port-0903.md 末尾
