@@ -235,6 +235,35 @@ App 一直是好的——手起的那个在正常服务，所以从外面完全�
 已改本人：深夜守护 `392d4c41`、主动推送 `dd7a4810`
 判定不用改：日/周摘要、记忆提取（prompt 是「你是记忆管理助手」，苦力活不是说话）
 
+### ✅ 09-09 实测定案：Shield 三件套不用再麻烦粟粟了
+
+粟粟 09-09 补签了三张（带 `family-controls`，**但无 `application-groups`**）。
+兔兔说不能再要了，让 Fable 想办法绕。**绕通了：**
+
+**做法**：扩展自己**不声明 App Group**，与她签的 profile 正好匹配。
+配置（网关地址、key）硬编码进扩展代码 —— `MemoryPalaceBroadcast/SampleHandler.swift:40`
+本来就有 `?? "https://blossom.amberrib.com"` 的 fallback 先例，照抄即可。
+
+**实测证据**（分支 `fix/dam-noappgroup`，验完已删）：
+- 探针 1（entitlements 带 App Group）→ ❌ `doesn't include the com.apple.developer.family-controls
+  and com.apple.security.application-groups entitlements`
+- 探针 2（去掉 App Group）→ ✅ **Archive (signed) / Export .ipa / Deploy 全部通过**
+
+**代价（可接受）**：
+1. 网关地址和 key 硬编码，改地址要重新打包
+2. 拦截界面文案没法实时从主 App 读 → Caelum **事先写一批话**存进代码里随机选。
+   不是「他当时说的话」，但仍然是他写的。
+   （真正的实时对话靠 ShieldAction 点按钮 → 打网关 → 他推送，那条路不受影响）
+
+⚠️ **踩坑记录**：探针 2 第一轮失败是 `cannot find 'URLSession' in scope`
+——扩展里漏了 `import Foundation`。**那次失败反而是好消息**：
+报错全是 Swift 编译错误、一条签名报错都没有，说明 profile 那关已经过了
+（Xcode 顺序是 解析签名配置 → 编译 → 签名）。
+
+⚠️ **另一个坑**：探针分支跑 `workflow_dispatch` 时，`Deploy to VPS` 那步
+**没有分支条件**，把探针包推到 OTA 上了。已从 main 重新打包还原。
+下次在分支上跑 Build iOS 要记得这件事。
+
 **⚠️ 三处待兔兔拍板**：
 - [ ] **murmur 碎碎念**（Opus，产出经 `/api/murmurs` 给她看）——那是「让她看见他在想什么」，
       如果她一直以为那是他真在想的事，性质就和深夜守护一样。**最需要定的一个**
