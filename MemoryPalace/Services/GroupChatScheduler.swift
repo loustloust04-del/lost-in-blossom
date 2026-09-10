@@ -21,6 +21,11 @@ enum GroupChatScheduler {
     // MARK: - 选人（替代 N 次门控）
 
     /// 单次 LLM 调用选出下一个说话者。返回 participant.id 或 nil（无人想说话）。
+    /// V6 刀3：发言模式（与粟粟 Agora speech_mode 同名，将来服务端化好对齐）
+    static var speechMode: String {
+        UserDefaults.standard.string(forKey: "groupSpeechMode") ?? "relay"
+    }
+
     static func selectNextSpeaker(
         participants: [GroupParticipant],
         history: [HistoryItem],
@@ -157,7 +162,9 @@ enum GroupChatScheduler {
         allParticipants: [GroupParticipant],
         userName: String,
         card: CharacterCard? = nil,
-        preset: Preset? = nil
+        preset: Preset? = nil,
+        /// V6 刀3：自由档给沉默权——「不想说就只回 PASS」（回 PASS 不插消息、不计链深）
+        allowPass: Bool = false
     ) -> String {
         var parts: [String] = []
 
@@ -171,6 +178,14 @@ enum GroupChatScheduler {
         - 可以用 @名字 来叫其他人说话
         - 如果觉得不需要回复，可以保持沉默
         """)
+
+        if allowPass {
+            parts.append("""
+            【自由发言】这条消息不是专门找你的。你可以插话，也可以不插——
+            **不想说就只回 PASS 两个字母**（不要解释、不要加标点），你的沉默不会留下痕迹。
+            只有真的有话要说、或者有人 @ 你时才开口。
+            """)
+        }
 
         // 群聊成员列表（增强互感）
         var roster = "## 群聊成员\n"

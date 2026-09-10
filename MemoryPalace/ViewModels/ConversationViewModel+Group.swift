@@ -125,7 +125,10 @@ extension ConversationViewModel {
             claim.state = "speaking"
             try? context.save()
             print("[GroupV6] \(speaker.name): 开始发言 (#\(repliesThisRound + 1))")
+            let mode = GroupChatScheduler.speechMode
+            let allowPass = (mode == "free" && claim.reason != "mentioned")
             await groupSpeak(
+                allowPass: allowPass,
                 participant: speaker,
                 allParticipants: participants,
                 userName: userName,
@@ -138,7 +141,23 @@ extension ConversationViewModel {
             )
             // 收尾：说出来了就 done（挂上那条消息节点）；一个字都没有 = 失败带因
             let spoken = currentPath.last
-            if let spoken, spoken.senderId == speaker.id, !spoken.content.isEmpty {
+            let raw = (spoken?.senderId == speaker.id ? spoken?.content : nil) ?? ""
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            // 自由档沉默：回 PASS = 他选择不插话——撤掉这条、无痕、不计链深
+            let isPass = allowPass && (trimmed.uppercased() == "PASS"
+                                       || trimmed.uppercased() == "PASS。"
+                                       || trimmed.uppercased() == "PASS.")
+            if isPass, let node = spoken {
+                node.isTrashed = true
+                currentPath.removeAll { $0.id == node.id }
+                claim.state = "passed"
+                claim.finishedAt = Date()
+                try? context.save()
+                print("[GroupV6] \(speaker.name): 选择沉默（PASS）")
+                lastSpeakerId = speaker.id
+                continue        // 不计链深，让下一位有机会
+            }
+            if !trimmed.isEmpty, let spoken {
                 claim.state = "done"
                 claim.resultNodeId = spoken.id
             } else {
@@ -154,6 +173,16 @@ extension ConversationViewModel {
             turn.chainDepth = repliesThisRound
             try? context.save()
 
+            // 最小发言间隔（房间级节奏，学粟粟 min_speak_interval）：
+            // 刚有人说过就先别急着接——治「几个角色瞬间刷屏」。被兔兔直接 @ 的豁免。
+            let gap = UserDefaults.standard.integer(forKey: "groupMinSpeakIntervalSec")
+            if gap > 0 { try? await Task.sleep(for: .seconds(Double(gap))) }
+
+            // mention_only 档：只认兔兔消息里的 @，AI 之间不接力 → 说完这手就收
+            if mode == "mention_only" {
+                print("[GroupV6] 仅@档：不接力，本轮收")
+                break
+            }
             // 检查 AI 回复里有没有 @ 提及（自动追加一轮给被提及的人）
             let latestHistory = groupHistoryItems()
             if let lastMsg = latestHistory.last,
@@ -212,6 +241,7 @@ extension ConversationViewModel {
     /// 单个角色发言。
     @MainActor
     private func groupSpeak(
+        allowPass: Bool = false,
         participant: GroupParticipant,
         allParticipants: [GroupParticipant],
         userName: String,
@@ -225,7 +255,7 @@ extension ConversationViewModel {
         // 组装增强版 system prompt（含成员列表）
         let systemPrompt = GroupChatScheduler.buildSystemPrompt(
             for: participant, allParticipants: allParticipants,
-            userName: userName, card: card, preset: preset
+            userName: userName, card: card, preset: preset, allowPass: allowPass
         )
 
         // 车道判定：CC 天生只读消息正文、丢弃 systemPrompt，且需要路由头才发得回。
