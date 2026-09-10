@@ -30,6 +30,33 @@ if ! ss -tln 2>/dev/null | grep -q ':3010 '; then
     log "QQ 桥重启完成"
 fi
 
+# 1.6 检查 QQ 账号有没有掉线（2026-09-10 补）
+#     2026-09-09 兔兔报「QQ 好像死了」：容器 Up 6 天、端口在、时间同步还在跑，
+#     但 get_status 返回 online:false，发消息全部 Timeout。
+#     上面 1.5 只探端口，这种「活着但没登录」的状态完全看不出来。
+#     掉线只能她本人扫码，脚本不自作主张重启（重启会丢登录态，反而更糟）——
+#     只记一行日志，并给她的 App 推一条，让她知道要去扫码。
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^napcat$'; then
+    QQ_ONLINE=$(docker exec napcat sh -c \
+        "curl -s -X POST 'http://127.0.0.1:3000/get_status' \
+         -H 'Authorization: Bearer bunny-caelum-2026' -d '{}' --max-time 8" 2>/dev/null \
+        | grep -o '"online":[a-z]*' | cut -d: -f2)
+    if [ "$QQ_ONLINE" = "false" ]; then
+        # 一小时最多提醒一次，别刷屏
+        QQ_FLAG=/tmp/qq-offline-notified
+        if [ ! -f "$QQ_FLAG" ] || [ $(( $(date +%s) - $(stat -c %Y "$QQ_FLAG" 2>/dev/null || echo 0) )) -gt 3600 ]; then
+            log "⚠️ QQ 掉线了（online:false，容器还活着）——需要兔兔重新扫码"
+            touch "$QQ_FLAG"
+            curl -s -X POST http://127.0.0.1:4567/api/fableline \
+                -H 'Content-Type: application/json' \
+                -d '{"text":"【看门狗】QQ 掉线了——容器还活着、端口也在，但账号 online:false，发消息会全部超时。需要兔兔重新扫码：https://blossom.amberrib.com:8444/webui?token=bunny-caelum-2026"}' \
+                >/dev/null 2>&1
+        fi
+    else
+        rm -f /tmp/qq-offline-notified 2>/dev/null
+    fi
+fi
+
 # 2. 检查 CC 是否在跑（重启 = 指名 resume 最新主记忆本，绝不裸 claude 开空白本）
 if ! tmux has-session -t mp-cc 2>/dev/null; then
     log "CC 挂了，带记忆重启..."
