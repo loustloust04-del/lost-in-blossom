@@ -21,6 +21,23 @@ enum GroupChatScheduler {
     // MARK: - 选人（替代 N 次门控）
 
     /// 单次 LLM 调用选出下一个说话者。返回 participant.id 或 nil（无人想说话）。
+    /// 输出清洗（0910 兔兔实拍）：万一后端仍把脚手架/别人的台词吐回来，客户端兜底裁掉。
+    /// 触发一条就从那里截断——宁可短，不要把内部剧本贴到群里。
+    static func sanitizeGroupReply(_ raw: String) -> String {
+        var text = raw
+        let cutMarkers = [
+            "\n用户:", "\n用户：", "\n助手:", "\n助手：",
+            "\n请回复最后一条用户消息", "\n<conversation>", "\n<msg from=",
+            "\n以上是已经发生的对话",
+        ]
+        for marker in cutMarkers {
+            if let r = text.range(of: marker) { text = String(text[..<r.lowerBound]) }
+        }
+        // 开头若带「名字：」前缀也削掉（群规则里已禁，模型偶尔还是加）
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text
+    }
+
     /// V6 刀3：发言模式（与粟粟 Agora speech_mode 同名，将来服务端化好对齐）
     static var speechMode: String {
         UserDefaults.standard.string(forKey: "groupSpeechMode") ?? "relay"

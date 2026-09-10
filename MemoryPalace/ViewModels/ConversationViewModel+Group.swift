@@ -140,6 +140,15 @@ extension ConversationViewModel {
                 context: context
             )
             // 收尾：说出来了就 done（挂上那条消息节点）；一个字都没有 = 失败带因
+            // 0910：脚手架泄漏兜底——落库前清洗（真凶已在 gateway/claude-p 修，这是第二道锁）
+            if let node = currentPath.last, node.senderId == speaker.id {
+                let cleaned = GroupChatScheduler.sanitizeGroupReply(node.content)
+                if cleaned != node.content {
+                    print("[GroupV6] 🧹 清掉脚手架泄漏 \(node.content.count) → \(cleaned.count)")
+                    node.content = cleaned
+                    try? context.save()
+                }
+            }
             let spoken = currentPath.last
             let raw = (spoken?.senderId == speaker.id ? spoken?.content : nil) ?? ""
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
