@@ -36,7 +36,10 @@ const HUB = process.env.HUB_URL ?? `ws://127.0.0.1:7890/ws?token=${encodeURIComp
 // 不复用 App 那条 id（CA1915BA-…）的原因：hub 会把 reply 广播给所有客户端，
 // 微信回的话会同时刷进 App。故用独立 id + user 字段表明身份。
 const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-bunny"
-const USER = process.env.WECHAT_USER ?? "兔兔（微信）"
+// 2026-09-10：微信那条 09-06 已拆，但这个脚本留着当测试工具——
+// 于是我每次测链路，他那边都看到「兔兔（微信）」在说话，以为是她。
+// 兔兔今天发现了。改成标明是我，别冒充她。
+const USER = process.env.WECHAT_USER ?? "Fable（链路测试）"
 const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 180_000)
 
 /** 从 OpenClaw 的 prompt 里抠出「真正的新消息」。
