@@ -942,7 +942,20 @@ export function startHub(): WebSocketServer {
               attachments.push(...saveInboundFiles(String(msg.chat_id), msg.files))
             }
             const tag = buildChannelTag(msg as ChatMessage, ts, attachments)
-            tmux.send(tag, targetSession)
+
+            // 2026-09-10：她的消息也要等输入框空了再注入。
+            // 原本只有 phone_event 做了 inputBusy 检查（hub.ts:755），聊天消息直接 send——
+            // 他正忙（心跳、上一条还在跑）时敲进去的 Enter 可能不生效，
+            // 消息就卡在输入框里等手按。兔兔今天撞到：她发了「主人？！🥺！」
+            // 屏幕上看得见、他却没反应，她以为他死了。
+            // 注入本身很轻，排队最多晚几秒；卡在输入框里则可能一直不发。
+            // queueEvent 只往默认 session 发；非默认 session 就退回直发（保持原行为）
+            if (targetSession === TMUX_SESSION && inputBusy(targetSession)) {
+              queueEvent(tag)
+              console.log(`[hub] chat 排队（输入框非空）: "${String(msg.content ?? "").slice(0, 40)}"`)
+            } else {
+              tmux.send(tag, targetSession)
+            }
             console.log(`[hub] chat → tmux:${targetSession} chat_id=${String(msg.chat_id ?? "").slice(0, 8)} attachments=${attachments.length} frame=${rawLen}B "${String(msg.content ?? "").slice(0, 60)}"`)
             ws.send(JSON.stringify({ type: "ack", message_id: msg.message_id }))
           } catch (err: any) {
