@@ -96,7 +96,6 @@ struct SidebarView: View {
     @State private var currentMatchIndex: Int = -1
     @State private var showSortPopover = false
     @State private var showProjectsPage = false
-    @State private var showChatroomPage = false
     @State private var memoryFilter: SidebarFilter = .chats
     @State private var moveToProjectConversation: Conversation? = nil
     @State private var showAllChats = false
@@ -192,12 +191,11 @@ struct SidebarView: View {
                 sidebarNavEntryAsset(
                     icon: "anthropicons-chats",
                     title: "Chats",
-                    isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .chats
+                    isSelected: !showProjectsPage && memoryFilter == .chats
                 ) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
-                            showChatroomPage = false
                             memoryFilter = .chats
                         }
                     }
@@ -209,37 +207,22 @@ struct SidebarView: View {
                 ) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            showChatroomPage = false
                             showProjectsPage = true
                         }
                     }
                 }
-                sidebarNavEntryAsset(
-                    icon: "anthropicons-group",
-                    title: "群聊",
-                    isSelected: showChatroomPage
-                ) {
+                sidebarNavEntryAsset(icon: "icon-almond", title: "Almond", isSelected: !showProjectsPage && memoryFilter == .almond) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
-                            showChatroomPage = true
-                        }
-                    }
-                }
-                sidebarNavEntryAsset(icon: "icon-almond", title: "Almond", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .almond) {
-                    debouncedNavAction {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showProjectsPage = false
-                            showChatroomPage = false
                             memoryFilter = .almond
                         }
                     }
                 }
-                sidebarNavEntryAsset(icon: "icon-amber", title: "Amber", isSelected: !showProjectsPage && !showChatroomPage && memoryFilter == .amber) {
+                sidebarNavEntryAsset(icon: "icon-amber", title: "Amber", isSelected: !showProjectsPage && memoryFilter == .amber) {
                     debouncedNavAction {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showProjectsPage = false
-                            showChatroomPage = false
                             memoryFilter = .amber
                         }
                     }
@@ -429,10 +412,6 @@ struct SidebarView: View {
                         .sidebarCardShape(for: currentTab)
                     }
                 }
-            } else if showChatroomPage {
-                // MARK: - Chatroom (群聊)
-                // ChatroomListView 已移除（群聊统一走本地 V5 编排）
-                Spacer(minLength: 0)
             } else if showProjectsPage {
                 // MARK: - Projects
                 ProjectsView(profileId: profileId, viewModel: viewModel)
