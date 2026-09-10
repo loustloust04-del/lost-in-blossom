@@ -311,7 +311,13 @@ struct BubbleModeRow: View {
     // iMessage 式只有最后一块带尾巴。
     private var bubbleStack: some View {
         // B6 A2'：blocks 数提到闭包外给 .animation(value:) 用，避免二次算 parsedContent
-        let parsed: (thinking: String?, blocks: [String]) = isComplex ? (nil, []) : parsedContent
+        // 2026-09-10 补完第三刀：「复杂消息不拆块」与「不给思考链」**是两件事**，拆开。
+        // 粟粟原版把两者塞进同一个三元（ChatBubbleStyle:314），
+        // 于是 CC 回复（几乎每条都带工具段 → isComplex）思考链全程拿不到。
+        // 我们的长按菜单「他当时在想…」自己从三个源提取、绕开了这里所以没事，
+        // 但 bubbleInlineThinking 逃生开关一直是半残的：打开了 CC 回复照样没有灰泡。
+        let parsed: (thinking: String?, blocks: [String]) =
+            isComplex ? (parsedContent.thinking, []) : parsedContent
         // CC 入场 reveal：进行中只放出前 N 块；partial 态（流式 or reveal）尾部挂 dots 泡
         let shownBlocks = revealedCount.map { Array(parsed.blocks.prefix($0)) } ?? parsed.blocks
         let showPartialDots = isLiveStreaming || revealedCount != nil
@@ -327,6 +333,12 @@ struct BubbleModeRow: View {
                 }
             }
             if isComplex {
+                // 逃生开关打开时，复杂消息也给灰泡（与下面纯文本分支同一套条件）
+                if UserDefaults.standard.bool(forKey: "bubbleInlineThinking"),
+                   let thinking = parsed.thinking ?? (showCCThinking ? node.ccThinking : nil),
+                   !thinking.isEmpty {
+                    ThinkingBubble(text: thinking, nodeId: node.id, profileId: node.profileId)
+                }
                 // 附件消息不拆块：reveal 前奏=dots 一拍，然后整泡弹入
                 if revealedCount == 0 {
                     singleBubble(hasTail: true) { typingDots }
