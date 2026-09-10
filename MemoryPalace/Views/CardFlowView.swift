@@ -226,6 +226,15 @@ struct CardFlowView: View {
                                             }
                                         )
                                 }
+                                // 群聊：谁没说上话（V6 刀2.5，失败凭证可见化 + 重试）
+                                if let conv = viewModel.selectedConversation, conv.kind == "group" {
+                                    GroupClaimStatusRow(conversationId: conv.id) { pid in
+                                        guard let pm = providerManager else { return }
+                                        viewModel.groupRequestReply(participantId: pid,
+                                                                    providerManager: pm,
+                                                                    context: modelContext)
+                                    }
+                                }
                                 // 底部哨兵：scrollToLastMessage 精准回底 target
                                 Color.clear
                                     .frame(height: 1)
