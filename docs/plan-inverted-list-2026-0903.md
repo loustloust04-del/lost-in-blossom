@@ -1,6 +1,6 @@
 # plan：反转列表——聊天页白屏的根治（照粟粟的路走）
 
-> 状态：**兔兔 09-03 否决直接上（心有余悸）——07-02 试过整体回滚，见 §七**。降为 B 计划；先走 §七 的 A 刀。批注直接写在本文加 `⬅ 兔兔：`，没意见回「go」。
+> 状态：**A 刀已上 main（e868baa2，09-11）白屏死了；兔兔 09-12 拍板 B 计划开工，分支 `b/inverted`，独立通道 `/dl/b/install`，见 §八**。批注直接写在本文加 `⬅ 兔兔：`，没意见回「go」。
 > 2026-09-03 Fable。前情：发送白屏第五刀 `280c30a0` 后兔兔说「还是好严重」→ 去读了粟粟那边怎么做的。
 > 粟粟原件：`/root/projects/SusuPalace` origin/master，commit 链 `5ccfb2b1`→`9b7af5ff`→`764c79e3`→`e8cc596b`→`3aa82aac`，
 > 收官文档 `docs/review-reversed-list.md` / `docs/plan-stream-follow-controller.md` / `docs/handoffs/handoff-keyboard-follow-2026-08-26.md`。
@@ -112,3 +112,25 @@ CardFlowView：
 
 **B 计划（反转）若还要走，规矩**：分支 + 单独出包 + 兔兔真机过四件套（长按菜单、编辑、思考链、贴纸拖拽）+ WebView 气泡，
 全过才合 main；任何一件不过，分支死，main 不动。
+
+## 八、B 分支进度（2026-09-12 凌晨 Fable，兔兔在线吃瓜）
+分支 `b/inverted`（基于 main 849e5142）。CI：分支自己的 build-ios.yml 把包部署到 `/var/www/lib-dl/b/`，
+安装页 `https://blossom.amberrib.com/dl/b/install`（manifest 名带「B 试验包」）。**正式包 `/dl/install` 不碰。**
+nginx 位置块加在 sites-enabled/mcp（备份 /root/mcp.nginx.bak-*）。同一 Bundle ID，装 B 会覆盖正式包，数据同仓不丢；
+装回正式包去 `/dl/install`。
+
+| 砖 | commit | 内容 | 状态 |
+|---|---|---|---|
+| 1 | b56118d0 | 彩色字 `{color:}` / 剧透 `\|\|…\|\|` 原生 AttributedString 渲染，WebView 请出气泡（含 \`\`\` 的先回落 WebView） | 已出包 |
+| 2 | 1ad35e04 | 反转列表本体：FlippedUpsideDown；ForEach reversed + cell 翻回正；defaultScrollAnchor 全删；pinToBottom 写 offset 原点；isAtBottom 离原点 200pt；GeometryReader 当安全区容器（frame 停在输入条/键盘上，底部零 inset；只忽略顶部安全区）；贴纸每张自己翻回正（粟粟 764c79e3 修正）；scrollsToTop 关 | 烤中 |
+| 3 | b59e2ee9 | 长按菜单换 Telegram 式浮层（BubbleMenuLiftWrapper + nodeMenuSpecs），系统 contextMenu 只留 macOS | 烤中 |
+
+**七月三雷今日状态**：①编辑框——早已是 `TextField(axis:.vertical)` 纯 SwiftUI，不再是 UITextView（雷已不在）；
+②长按菜单——砖 3；③思考链——未查，**真机验**。加一颗：WebView 气泡——砖 1 拆掉大半（只剩含代码块的彩色消息）。
+
+**兔兔真机验收单（B 包）**：长对话秒开不白 / 发送不白 / 他回复落地不白 / 在底吐字钉底 / 键盘弹收跟手 /
+上滑读历史时他说话不拽回 / 长按菜单不颠倒 / 编辑框正 / 思考链在 / 贴纸位置方向拖拽对 / 彩色字剧透块 / 搜索跳转 / 群聊。
+任何一件不过 → 分支上修，main 不动。
+
+**已知未做**：流式跟随补偿（上滑读历史时他吐字会漂，粟粟 StreamFollowController）；渲染窗口可放宽（反转后 LazyVStack
+只 mount 视口附近）；顶部 blur 采样（粟粟 diag-blur）；半秒颠倒闪烁（isLoading 切换重建）。
