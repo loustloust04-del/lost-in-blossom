@@ -2174,9 +2174,18 @@ struct BubbleView: View {
                     if displayText.isEmpty && isStreaming {
                         TypingDotsView()
                     } else if !displayText.isEmpty {
-                        let needsWebView = displayText.contains("{color:")
-                        if needsWebView {
-                            // 富文本消息：WebView 渲染（保留 {color:} 支持）
+                        let needsRich = RichBubbleText.needsRich(displayText)
+                        let needsWebView = needsRich && !RichBubbleText.canRenderNatively(displayText)
+                        if needsRich && !needsWebView {
+                            // [B 计划·砖 1] 彩色字 / 剧透块原生渲染——不再各背一个 WebView
+                            RichBubbleText(
+                                text: displayText,
+                                baseColor: Theme.textPrimary,
+                                spoilerBg: Theme.textMuted,
+                                font: .system(size: 13.5 * (fontScale > 0 ? fontScale : 1.0))
+                            )
+                        } else if needsWebView {
+                            // 富文本 + 围栏代码块：暂留 WebView（原生 inline Markdown 画不了折叠代码块）
                             MessageContentWebView(
                                 content: displayText,
                                 themeColors: [
