@@ -34,6 +34,10 @@ final class ConversationViewModel {
     /// 此前 ForEach 直接吃整条 currentPath——聊到上千条时每条都要参与布局与几何测量，
     /// 于是白屏、左右滑卡死、连打字都卡（兔兔实测）。LazyVStack 只省绘制不省布局。
     static let renderWindowStep = 60
+    /// 打开对话时先画多少条。兔兔 09-12：「点开长对话明显卡顿、白、划不动」——打开那一下
+    /// 要同步生成整个窗口的气泡（Markdown 排版，有的带 WebView），60 条是主线程上几百毫秒
+    /// 到一两秒。24 条稳稳超过一屏，打开成本先砍一大半；上滑到顶再按 step 补。
+    static let initialRenderWindow = 24
     /// 窗口**起点**（currentPath 下标），不是窗口长度。
     /// 之前记的是长度 `suffix(60)`：每发一条（尾部 +2）顶上就被挤掉 2 条——正在被布局的
     /// 列表同帧一头长一头缩，钉底锚点跟不上，屏幕露出没画的区域＝兔兔说的「发完消息整页
@@ -57,7 +61,7 @@ final class ConversationViewModel {
     }
 
     /// 切对话 / 重建路径时收回窗口（按当时的 currentPath 算，须在 currentPath 赋值之后调）
-    func resetRenderWindow() { renderStart = max(0, currentPath.count - Self.renderWindowStep) }
+    func resetRenderWindow() { renderStart = max(0, currentPath.count - Self.initialRenderWindow) }
     var branchChoices: [String: Int] = [:] // nodeId -> chosen child index
     var isLoading: Bool = false
 
