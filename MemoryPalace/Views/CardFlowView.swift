@@ -419,6 +419,7 @@ struct CardFlowView: View {
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
                         // [keyboard-ride] 在底才跟：内容和键盘同曲线一起升；上滑读历史的不动
                         wasAtBottomBeforeKeyboard = isAtBottom
+                        FrameHitchProbe.mark("键盘弹起")
                         scrollHost.rideWithKeyboard(note, follow: isAtBottom)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { note in
@@ -443,6 +444,7 @@ struct CardFlowView: View {
                         // 对话加载完成 → 滚到最后一条（applyTreeData 只在搜索跳转时设 scrollToNodeId，
                         // 普通切对话不会自动滚，ScrollView 保留上一对话的 offset，所以要在这里兜底）
                         if !loading, !viewModel.currentPath.isEmpty {
+                            FrameHitchProbe.mark("打开对话(\(viewModel.currentPath.count)条)")
                             // B20 修复：先把 currentPathCount 同步给 stickerVM，再 migrate 飞远的贴纸
                             stickerVM.currentPathCount = viewModel.currentPath.count
                             stickerVM.migrateStickerPositions(context: modelContext)
@@ -464,6 +466,7 @@ struct CardFlowView: View {
                         let justSent = viewModel.currentPath.suffix(n - old).contains { $0.role == "user" }
                         guard justSent || isAtBottom else { return }
                         scrollHost.arm()   // [armed-pin] 当下 + 下一圈 + 几何一变都钉，不留白帧
+                        FrameHitchProbe.mark(justSent ? "发送" : "收到消息")
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             scrollToLastMessage(proxy: proxy, force: true)
                         }

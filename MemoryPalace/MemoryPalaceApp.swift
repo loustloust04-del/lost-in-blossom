@@ -377,6 +377,7 @@ struct MemoryPalaceApp: App {
     init() {
         UserDefaults.standard.register(defaults: ["localMemoryEnabled": true])
         let t0 = CFAbsoluteTimeGetCurrent()
+        FrameHitchProbe.shared.start()   // 掉帧探针：卡要有数字（面包屑 📉）
         // Phase 3.1: 尽早初始化通知 delegate（须在 willFinishLaunchingWithOptions 前完成）
         _ = LocalNotificationService.shared
         // Phase 3.2: BGTask 注册必须早于 didFinishLaunching
