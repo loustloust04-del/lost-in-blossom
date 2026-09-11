@@ -242,13 +242,26 @@ function updateTheme(vars) {
 
 // ── 高度通知 ──
 // 渲染完成后把内容高度通知 Swift 侧，用于动态调整 WKWebView 的 frame。
+// 兔兔 2026-09-12「幸运气泡特别长」根因：懒加载下网页开始画字时 WKWebView 可能还没排好版、
+// 宽度 0 或极窄，字竖着排，量出几千 px；之后宽度正常了却只在 render/图片加载时才通知，
+// 宽度变化从不重量，那根长条就永远留着。修：宽度没排好不量；宽度一变就重量。
+var lastNotifiedWidth = 0;
 function notifyHeight() {
     var el = document.getElementById('content');
     if (!el) return;
+    var w = document.documentElement.clientWidth;
+    if (w < 50) return;                 // 还没排好版，此刻的高度是假的
+    lastNotifiedWidth = w;
     var h = el.scrollHeight;
     if (h <= 0) h = 44;
     if (h > 5000) h = 5000;
     window.webkit.messageHandlers.heightChanged.postMessage(h);
+}
+window.addEventListener('resize', function() {
+    if (document.documentElement.clientWidth !== lastNotifiedWidth) notifyHeight();
+});
+if (window.ResizeObserver) {
+    new ResizeObserver(function() { notifyHeight(); }).observe(document.getElementById('content'));
 }
 
 // 监听图片加载完成后重新通知高度
