@@ -31,6 +31,32 @@ final class ChatScrollHost {
         if abs(sv.contentOffset.y - y) < 0.5 { return }
         sv.setContentOffset(CGPoint(x: sv.contentOffset.x, y: y), animated: false)
     }
+
+    /// 键盘当前盖住列表的高度（去掉 home 条那段，它本来就在 adjustedContentInset 里）
+    private var keyboardOverlap: CGFloat = 0
+
+    /// [keyboard-ride] 让内容和键盘同一条曲线一起走。
+    /// 兔兔 09-12 真机：「键盘先升上去，聊天界面才把最后一条露出来」——之前是等 keyboardDidShow
+    /// 再 +0.05s 一把写到底，内容永远落后键盘一整个动画。粟粟同款：读通知里的终态 frame /
+    /// 时长 / 曲线，用 UIView.animate 按同一曲线推 contentOffset，两者同帧同速。
+    /// show / hide / 键盘换高（emoji 键盘）都走这一个口，按 overlap 差值推，不重复。
+    func rideWithKeyboard(_ note: Notification, follow: Bool) {
+        guard let sv = scrollView, let window = sv.window,
+              let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+        else { return }
+        let endInWindow = window.convert(end, from: nil)
+        let overlap = max(0, window.bounds.maxY - endInWindow.minY - window.safeAreaInsets.bottom)
+        let delta = overlap - keyboardOverlap
+        keyboardOverlap = overlap
+        guard follow, abs(delta) > 0.5 else { return }
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        let curve = (note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
+        let target = CGPoint(x: sv.contentOffset.x, y: sv.contentOffset.y + delta)
+        UIView.animate(withDuration: duration, delay: 0,
+                       options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) {
+            sv.contentOffset = target
+        }
+    }
 }
 
 /// 挂在 ScrollView 内容里，顺 superview 链爬到宿主 UIScrollView 交给 host。
@@ -360,10 +386,16 @@ struct CardFlowView: View {
                     // defaultScrollAnchor(.sizeChanges) 只认 content size 不认视口变化 →
                     // 打字时原本贴底的内容被键盘顶乱（真机 bug："打着字白屏，要手动下滑找"）。
                     // 在底才滚，不打扰上滑读历史。
-                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+                        // [keyboard-ride] 在底才跟：内容和键盘同曲线一起升；上滑读历史的不动
                         wasAtBottomBeforeKeyboard = isAtBottom
+                        scrollHost.rideWithKeyboard(note, follow: isAtBottom)
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { note in
+                        scrollHost.rideWithKeyboard(note, follow: isAtBottom || wasAtBottomBeforeKeyboard)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                        // 动画结束后校一次（ride 落准了就是 no-op，差 0.5pt 内不写）
                         if wasAtBottomBeforeKeyboard {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 scrollToLastMessage(proxy: proxy, force: true)
