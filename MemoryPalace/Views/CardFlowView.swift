@@ -153,6 +153,8 @@ struct CardFlowView: View {
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
     @State private var scrollHost = ChatScrollHost()   // [white-screen-fix A 刀] 回底唯一写手
+    /// [B·砖3] Telegram 式长按浮层：environment 给树内 marker 递 model；浮层本体由 Presenter 挂 window 层
+    @StateObject private var bubbleMenuModel = BubbleMenuOverlayModel()
     /// 键盘弹出瞬间视口缩小会把 isAtBottom 打成 false——willShow 时抓快照，didShow 后按它回底。
     @State private var wasAtBottomBeforeKeyboard: Bool = true
     @State private var textSelectItem: TextSelectItem?
@@ -528,6 +530,7 @@ struct CardFlowView: View {
                     .scrollDismissesKeyboard(.immediately)
                     }   // GeometryReader（安全区容器）
                     .ignoresSafeArea(.container, edges: .top)
+                    .environment(\.bubbleMenuOverlayModel, bubbleMenuModel)   // [B·砖3] 树内 marker 拿 model
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if showStickerPanel {
                             // 透明占位：把滚动内容推上去，真正的面板在外层 overlay
@@ -1950,6 +1953,59 @@ struct BubbleView: View {
     @State private var showArtifactCanvas = false
     @State private var detectedArtifact: ArtifactContent? = nil
     @State private var messageWebViewHeight: CGFloat = 44
+
+    // MARK: - [B·砖3] 长按菜单条目（Telegram 式浮层）——与 macOS .contextMenu 同一份条件逻辑
+    private func nodeMenuSpecs() -> [MenuActionSpec] {
+        var specs: [MenuActionSpec] = []
+        if isUser, onEdit != nil {
+            specs.append(MenuActionSpec(title: "编辑", systemImage: "pencil", dividerAfter: true) {
+                editText = node.content
+                isEditing = true
+            })
+        }
+        if !isUser, let onRegenerate, !isStreaming {
+            specs.append(MenuActionSpec(title: "重新生成", systemImage: "arrow.counterclockwise", dividerAfter: true, handler: onRegenerate))
+        }
+        if !isUser, !isStreaming {
+            specs.append(MenuActionSpec(title: "朗读", systemImage: "speaker.wave.2") {
+                SpeechService.shared.speak(nodeId: node.id, text: SpeechService.speakableText(from: node))
+            })
+            specs.append(MenuActionSpec(title: "停止朗读", systemImage: "speaker.slash", dividerAfter: true) {
+                SpeechService.shared.stop()
+            })
+        }
+        if !groupMembers.isEmpty, let onGroupReply, !isStreaming {
+            // 浮层没有子菜单：一人一条「让 X 接话」
+            for (i, member) in groupMembers.enumerated() {
+                specs.append(MenuActionSpec(title: "让 \(member.name) 接话", systemImage: "bubble.left.and.bubble.right",
+                                            dividerAfter: i == groupMembers.count - 1) { onGroupReply(member.id) })
+            }
+        }
+        specs.append(MenuActionSpec(title: node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star") {
+            let willFav = !node.isFavorite
+            onToggleFavorite()
+            HapticService.shared.longPress()
+            onNotice?(willFav ? "已收藏" : "已取消收藏")
+        })
+        specs.append(MenuActionSpec(title: "收藏到文件夹...", systemImage: "folder.badge.plus") { showFolderPicker = true })
+        specs.append(MenuActionSpec(title: node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin", dividerAfter: true) {
+            let willPin = !node.isPinned
+            onTogglePin()
+            HapticService.shared.longPress()
+            onNotice?(willPin ? "已钉住" : "已取消钉住")
+        })
+        specs.append(MenuActionSpec(title: "复制文本", systemImage: "doc.on.doc") {
+            UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+            HapticService.shared.copyText()
+            onNotice?("已复制")
+        })
+        specs.append(MenuActionSpec(title: "选取文本", systemImage: "text.cursor", dividerAfter: true) { isSelectingText = true })
+        specs.append(MenuActionSpec(title: "删除", systemImage: "trash", isDestructive: true) {
+            HapticService.shared.deleteAction()
+            onSoftDelete()
+        })
+        return specs
+    }
     @State private var isSelectingText = false
     @State private var isEditing = false
     @State private var editText = ""
@@ -2077,7 +2133,9 @@ struct BubbleView: View {
                 .padding(.horizontal, 4)
             }
 
-            // Bubble
+            // Bubble（[B·砖3] iOS 包 BubbleMenuLiftWrapper：长按走自定义浮层，不用系统 contextMenu——
+            // 反转列表下系统 lift 快照会颠倒（七月三雷之二）；浮层零件 592074d4 早已进仓，这里接线）
+            BubbleMenuLiftWrapper(isUser: isUser, cornerRadius: chatBubbleMode ? bubbleModeCornerRadius : bubbleCornerRadius, actions: nodeMenuSpecs()) {
             VStack(alignment: .leading, spacing: 6) {
                 // 流式优化：streaming 时直接读 streamingContentText（绕过 SwiftData），完成后读 node.content
                 let sourceText = isStreaming && !streamingContentText.isEmpty ? streamingContentText : node.content
@@ -2349,9 +2407,11 @@ struct BubbleView: View {
                     }
                 }
             }
+            }   // BubbleMenuLiftWrapper
             .if(isUser) { view in
                 view.frame(maxWidth: 500, alignment: .trailing)
             }
+            #if os(macOS)
             .contextMenu {
                 if isUser, onEdit != nil {
                     Button(action: {
@@ -2433,6 +2493,7 @@ struct BubbleView: View {
                     Label("删除", systemImage: "trash")
                 }
             }
+            #endif
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
 
