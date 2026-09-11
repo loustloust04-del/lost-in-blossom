@@ -19,12 +19,36 @@ private struct TextSelectItem: Identifiable {
 /// 「proxy.scrollTo 对 LazyVStack 远端目标按估算高度跳」`0942c8a2`）。
 /// 列表方向不变、气泡不翻——07-02 反转列表三连炸的雷一个都不碰。
 final class ChatScrollHost {
-    weak var scrollView: UIScrollView?
+    weak var scrollView: UIScrollView? {
+        didSet {
+            // [armed-pin] 武装期内 contentSize 一变（新气泡量出真高）就同步钉底——KVO 在 setter 里
+            // 同步回调，赶在这一帧提交之前，不等定时器
+            sizeObs = scrollView?.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
+                self?.pinIfArmed()
+            }
+        }
+    }
+    private var sizeObs: NSKeyValueObservation?
+    private var armedUntil: CFTimeInterval = 0
+
+    /// [armed-pin] 发送那一刻武装 0.6s：期间滚动几何一变就钉底。
+    /// 兔兔 09-12 真机（A 刀后）：「发长消息的一瞬间闪一下白」——长消息时输入框长到五六行，
+    /// 发送瞬间缩回一行，底 inset 突然少一百多 pt，offset 还停在旧底，多出来的那截没画=白帧，
+    /// 而回底挂在 0.1s 后的定时器上，中间那几帧就是她看到的闪。短消息输入框不缩所以没事。
+    func arm(for seconds: CFTimeInterval = 0.6) {
+        armedUntil = CACurrentMediaTime() + seconds
+        pinToBottom()                                   // 当下按旧几何先钉一次
+        DispatchQueue.main.async { [weak self] in self?.pinToBottom() }   // 下一圈 runloop（inset 已落）再钉
+    }
+    func pinIfArmed() {
+        guard CACurrentMediaTime() < armedUntil else { return }
+        pinToBottom()
+    }
 
     /// 正序列表的底 = contentSize.height − bounds.height + 底 inset；短对话不满一屏时钉在顶 inset。
-    /// 同一位置不重写（避免和手指/惯性打架）。
+    /// 同一位置不重写（避免和手指/惯性打架）；手指按着/拖着时不写，不抢她的手。
     func pinToBottom() {
-        guard let sv = scrollView else { return }
+        guard let sv = scrollView, !sv.isTracking, !sv.isDragging else { return }
         let top = -sv.adjustedContentInset.top
         let bottom = sv.contentSize.height - sv.bounds.height + sv.adjustedContentInset.bottom
         let y = max(top, bottom)
@@ -366,6 +390,12 @@ struct CardFlowView: View {
                     } action: { _, atBottom in
                         isAtBottom = atBottom
                     }
+                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                        // [armed-pin] 底 inset（输入框缩回）或内容高度一变 → 武装期内同步钉底
+                        geometry.contentInsets.bottom + geometry.contentSize.height
+                    } action: { _, _ in
+                        scrollHost.pinIfArmed()
+                    }
                     .onAppear {
                         // [white-screen-fix] 首次/视图重建进入：defaultScrollAnchor 对含 WebView 的
                         // 动态高度气泡锚不准 → 白屏（需手动下滑才显示）。显式滚底兜底，延迟等 layout 落定。
@@ -433,6 +463,7 @@ struct CardFlowView: View {
                         guard n > old else { return }
                         let justSent = viewModel.currentPath.suffix(n - old).contains { $0.role == "user" }
                         guard justSent || isAtBottom else { return }
+                        scrollHost.arm()   // [armed-pin] 当下 + 下一圈 + 几何一变都钉，不留白帧
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             scrollToLastMessage(proxy: proxy, force: true)
                         }
