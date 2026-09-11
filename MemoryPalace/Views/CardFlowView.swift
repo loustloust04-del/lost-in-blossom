@@ -1088,7 +1088,10 @@ private struct InputFieldContainer: View {
     /// 因为正是那一刻才真的看不全前文。
     /// 13pt 字行高约 16pt + vertical padding 20，6 行封顶约 116pt，取 110 留余量。
     /// （933bd5a7 做过一次，后来被覆盖成字数阈值，08-31 修回。）
-    private var inputAtMaxHeight: Bool { fieldHeight >= 110 }
+    /// 09-12 兔兔：「全屏编辑器没了」——不是被删，是旧版排法（slimInputBar=false）的 TextField
+    /// 从来没量过高度，fieldHeight 恒 0，按钮永远不出；而且旧版 15pt × 5 行封顶约 102pt，
+    /// 就算量了也过不了 110。两边各按各的行高定阈值：细版 110，旧版 92。
+    private var inputAtMaxHeight: Bool { fieldHeight >= (slimInputBar ? 110 : 92) }
     /// 键盘是否已开始升起。驱动源用 keyboardWillShow 而非 isFocused——
     /// 粟粟 2026-08-16 真机终验记过这个坑：isFocused 驱动会让「输入框先闪下 10pt、
     /// 模型选择器异位、再上滑」的起步预抖。willShow 与键盘同一时刻，混不进可感范围。
@@ -1282,6 +1285,11 @@ private struct InputFieldContainer: View {
                     .padding(.horizontal, 15)
                     .padding(.top, 10)
                     .padding(.bottom, 2)
+                    // 到顶时右上角浮着展开按钮，给首行末尾让出位置（同细版）
+                    .padding(.trailing, inputAtMaxHeight ? 26 : 0)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { h in
+                        fieldHeight = h
+                    }
             }
 
             // ── 控件行：细版 = + | 文本 | 发送；旧版 = + | 模型 | ✨ | Spacer | 发送 ──
