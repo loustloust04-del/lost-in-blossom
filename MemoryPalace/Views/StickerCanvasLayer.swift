@@ -127,6 +127,9 @@ struct StickerCanvasLayer: View {
             }
         )
         // 右键菜单（仅 macOS；iOS 由编辑模式的 UIContextMenuInteraction 处理）
+        // [反转列表] ScrollView 翻了一次，贴纸自己再翻回正；.position 在外层 = positionY 仍是
+        // 物理 scrollContent y，和气泡 midY / onDrop / 拖拽同一坐标系（粟粟 764c79e3）
+        .flippedUpsideDown()
         .position(x: sticker.positionX, y: sticker.positionY)
         .zIndex(Double(sticker.zIndex))
         // 长按进入编辑模式 + 选中（0.3s，比默认 0.5s 快）
@@ -340,6 +343,7 @@ struct StickerSelectionOverlay: View {
                 }
             }
             .rotationEffect(.degrees(sticker.rotation))
+            .flippedUpsideDown()   // [反转列表] 选中框同贴纸一起翻回正
             .position(x: sticker.positionX, y: sticker.positionY)
     }
 
