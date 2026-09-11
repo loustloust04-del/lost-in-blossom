@@ -18,9 +18,28 @@ private struct TextSelectItem: Identifiable {
 /// UIKit 直写 contentOffset 不依赖 cell 测量、不 mount 远端（她的冷弹回底同款：
 /// 「proxy.scrollTo 对 LazyVStack 远端目标按估算高度跳」`0942c8a2`）。
 /// 列表方向不变、气泡不翻——07-02 反转列表三连炸的雷一个都不碰。
+// ── [B 计划·反转列表] ──────────────────────────────────────────────────────
+// ScrollView 整体翻转（rotation π + scaleX −1，走 CALayer transform），每个 cell 再翻回正，
+// ForEach 吃 reversed。于是 offset 0 = 最新消息：进对话不用找、新消息插在物理顶自动出现、
+// 在底吐字最后一行天然钉底。学 Stream Chat SwiftUI / 粟粟 5ccfb2b1。
+// 七月回滚三雷的今日拆法：编辑框已是纯 SwiftUI TextField；WebView 气泡已原生化（砖 1）；
+// 长按菜单接 BubbleMenuOverlay（砖 3）；思考链真机验。
+struct FlippedUpsideDown: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.radians(.pi))
+            .scaleEffect(x: -1, y: 1, anchor: .center)
+    }
+}
+extension View {
+    func flippedUpsideDown() -> some View { modifier(FlippedUpsideDown()) }
+}
+
 final class ChatScrollHost {
     weak var scrollView: UIScrollView? {
         didSet {
+            // 反转后「点状态栏回顶」会滚到视觉底（offset 0），关掉
+            scrollView?.scrollsToTop = false
             // [armed-pin] 武装期内 contentSize 一变（新气泡量出真高）就同步钉底——KVO 在 setter 里
             // 同步回调，赶在这一帧提交之前，不等定时器
             sizeObs = scrollView?.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
@@ -45,13 +64,11 @@ final class ChatScrollHost {
         pinToBottom()
     }
 
-    /// 正序列表的底 = contentSize.height − bounds.height + 底 inset；短对话不满一屏时钉在顶 inset。
+    /// [反转列表] 视觉底 = 物理顶 = offset 原点（−顶 inset）。不再和 contentSize 打交道。
     /// 同一位置不重写（避免和手指/惯性打架）；手指按着/拖着时不写，不抢她的手。
     func pinToBottom() {
         guard let sv = scrollView, !sv.isTracking, !sv.isDragging else { return }
-        let top = -sv.adjustedContentInset.top
-        let bottom = sv.contentSize.height - sv.bounds.height + sv.adjustedContentInset.bottom
-        let y = max(top, bottom)
+        let y = -sv.adjustedContentInset.top
         if abs(sv.contentOffset.y - y) < 0.5 { return }
         sv.setContentOffset(CGPoint(x: sv.contentOffset.x, y: y), animated: false)
     }
@@ -239,7 +256,7 @@ struct CardFlowView: View {
         guard scrollHost.scrollView != nil else {
             var tx = Transaction()
             tx.disablesAnimations = true
-            withTransaction(tx) { proxy.scrollTo("__bottom_sentinel__", anchor: .bottom) }
+            withTransaction(tx) { proxy.scrollTo("__bottom_sentinel__", anchor: .top) }   // 反转：哨兵在物理顶
             return
         }
         scrollHost.pinToBottom()
@@ -273,6 +290,11 @@ struct CardFlowView: View {
                 }
 
                 ScrollViewReader { proxy in
+                    // [反转列表] GeometryReader 是「安全区容器」：它不忽略底部安全区（输入条 + 键盘），
+                    // 所以里面的 ScrollView 的 frame 本身停在输入条之上、底部零 inset——反转后
+                    // 才不会把 inset 落到错边；它只忽略顶部安全区，好让内容照旧伸到状态栏下，
+                    // 并把状态栏高度读出来补进视觉顶留白。
+                    GeometryReader { geo in
                     ScrollView {
                         // 方案 2 v2：恢复 ZStack sibling 结构（之前 .overlay() 把 sticker overlay
                         // frame 锁定到 LazyVStack 大小，sticker 拖到 LazyVStack 之外就接不到 touch）。
@@ -282,29 +304,27 @@ struct CardFlowView: View {
                         // 详见 docs/plan-sticker-pan-relationship-fix-2026-04-25.md 方案 2 v2。
                         ZStack(alignment: .topLeading) {
                             LazyVStack(spacing: bubbleSpacing) {
-                                // 只渲染尾部窗口，滑到顶自动往前扩一段。
-                                // 整条 path 直接喂 ForEach 时，上千条消息全都要参与布局与几何测量，
-                                // LazyVStack 只省绘制不省布局 —— 白屏/滑动卡死/打字卡都是这么来的。
-                                if viewModel.hasMoreAbove {
-                                    Button {
-                                        withAnimation(.none) { viewModel.expandRenderWindow() }
-                                    } label: {
-                                        Text("看更早的消息")
-                                            .font(.system(size: Theme.F.caption))
-                                            .foregroundColor(Theme.textMuted)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
+                                // [反转列表] 物理顺序 = 视觉倒序：这里第一项是视觉底。
+                                // 哨兵留在物理顶，proxy 回落路径用 scrollTo(anchor: .top)
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("__bottom_sentinel__")
+                                // 群聊：谁没说上话（V6 刀2.5，失败凭证可见化 + 重试）——视觉底
+                                if let conv = viewModel.selectedConversation, conv.kind == "group" {
+                                    GroupClaimStatusRow(conversationId: conv.id) { pid in
+                                        guard let pm = providerManager else { return }
+                                        viewModel.groupRequestReply(participantId: pid,
+                                                                    providerManager: pm,
+                                                                    context: modelContext)
                                     }
-                                    .buttonStyle(.plain)
-                                    .onAppear {
-                                        // 滑到顶就自动扩，不用真去点
-                                        viewModel.expandRenderWindow()
-                                    }
+                                    .flippedUpsideDown()
                                 }
-                                ForEach(viewModel.visiblePath, id: \.id) { node in
+                                ForEach(viewModel.visiblePath.reversed(), id: \.id) { node in
                                     makeBubbleView(for: node)
+                                        .flippedUpsideDown()   // cell 翻回正
                                         .id(node.id)
-                                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                        // 新消息插在物理顶：从物理顶滑入 = 视觉底滑入
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
                                         // 贴纸定位追踪：每条气泡记录 midY。旧版用 .task(id: midY)——
                                         // 滚动时每帧每条可见气泡 cancel+新建一个 async Task，是滚动卡顿
                                         // 大户。改 iOS 18 原生 onGeometryChange：同步闭包、值变才回调、
@@ -317,19 +337,24 @@ struct CardFlowView: View {
                                             }
                                         )
                                 }
-                                // 群聊：谁没说上话（V6 刀2.5，失败凭证可见化 + 重试）
-                                if let conv = viewModel.selectedConversation, conv.kind == "group" {
-                                    GroupClaimStatusRow(conversationId: conv.id) { pid in
-                                        guard let pm = providerManager else { return }
-                                        viewModel.groupRequestReply(participantId: pid,
-                                                                    providerManager: pm,
-                                                                    context: modelContext)
+                                // 只渲染尾部窗口，滑到（视觉）顶自动往前扩一段——物理末尾 = 视觉顶
+                                if viewModel.hasMoreAbove {
+                                    Button {
+                                        withAnimation(.none) { viewModel.expandRenderWindow() }
+                                    } label: {
+                                        Text("看更早的消息")
+                                            .font(.system(size: Theme.F.caption))
+                                            .foregroundColor(Theme.textMuted)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 10)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .flippedUpsideDown()
+                                    .onAppear {
+                                        // 滑到顶就自动扩，不用真去点
+                                        viewModel.expandRenderWindow()
                                     }
                                 }
-                                // 底部哨兵：scrollToLastMessage 精准回底 target
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id("__bottom_sentinel__")
                             }
                             // 新消息入场动画：路径长度变化时触发 ForEach item transition
                             .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
@@ -341,6 +366,8 @@ struct CardFlowView: View {
                                 stickerVM: stickerVM,
                                 profileId: profileManager?.currentProfile.id ?? ""
                             )
+                            // [反转列表] 画布**不**整体翻（会让坐标系和 bubblePositions 反），
+                            // 每张贴纸在层内自己翻回正（粟粟 764c79e3 的修正）
                         }
                         .coordinateSpace(name: "scrollContent")
                         .background(ChatScrollViewFinder(host: scrollHost))   // [white-screen-fix A 刀] 爬到宿主 UIScrollView
@@ -348,17 +375,16 @@ struct CardFlowView: View {
                             handleStickerDrop(providers: providers, location: location)
                         }
                     }
-                    // [scroll-anchor] 滚动优化 Round 2（反转列表已回滚，见
-                    // docs/BUGREPORT-INVERTED-LIST-ROLLBACK.md）：iOS 17/18 原生锚定，
-                    // 零 transform 零兼容雷。语义：初始显示在底部；用户在底部时内容
-                    // 增长（流式 token / WebView 撑高 / 新消息）自动钉底；用户上滑
-                    // 读历史时保持位置不打扰。
-                    // 注意必须用 iOS 18 分角色版本、且**不设 .alignment**：
-                    // 无参版 .defaultScrollAnchor(.bottom) 连带把不满一屏的短对话
-                    // 也底部对齐（消息沉底、上方大片空白），真机回归确认过。
-                    .defaultScrollAnchor(.bottom, for: .initialOffset)
-                    .defaultScrollAnchor(.bottom, for: .sizeChanges)
-                    .contentMargins(.top, 50, for: .scrollContent)
+                    // [反转列表] 整个 ScrollView 翻转；offset 0 = 最新。defaultScrollAnchor 不再需要。
+                    .flippedUpsideDown()
+                    .clipped()
+                    // 视觉顶 nav 区留白（物理底）；视觉底离输入条一点距离（物理顶）
+                    .contentMargins(.bottom, 50 + geo.safeAreaInsets.top, for: .scrollContent)
+                    .contentMargins(.top, 6, for: .scrollContent)
+                    // 反转后 safe area 的 bottom inset 会落到物理底=视觉顶（错边）。让 ScrollView
+                    // 的 frame 本身停在输入条/键盘之上（见下方 GeometryReader 容器），底部零 inset；
+                    // 键盘弹起容器变矮，offset 0 的最新消息跟着上去。顶部照旧伸到状态栏下。
+                    .ignoresSafeArea(.container, edges: .top)
                     // 路线 C + PinBar 挪位后：PinBar 已进 ContentView.iOSChatTopBar HStack。
                     // 这里只剩 blur + gradient 130pt 的视觉柔化层（z 层：blur < nav HStack）。
                     .overlay(alignment: .top) {
@@ -383,10 +409,8 @@ struct CardFlowView: View {
                     }
 
                     .onScrollGeometryChange(for: Bool.self) { geometry in
-                        // tolerance 200pt：content 下方有 padding + 哨兵 + sticker canvas
-                        // 大约这么多 pt，用户视觉"到底"时 offset 距离数学 size 还有 100-200pt
-                        geometry.contentOffset.y + geometry.containerSize.height
-                            >= geometry.contentSize.height - 200
+                        // [反转列表] 视觉底 = offset 原点；离原点 200pt 内算在底
+                        geometry.contentOffset.y + geometry.contentInsets.top < 200
                     } action: { _, atBottom in
                         isAtBottom = atBottom
                     }
@@ -419,10 +443,8 @@ struct CardFlowView: View {
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
                         // [keyboard-ride] 在底才跟：内容和键盘同曲线一起升；上滑读历史的不动
                         wasAtBottomBeforeKeyboard = isAtBottom
-                        scrollHost.rideWithKeyboard(note, follow: isAtBottom)
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { note in
-                        scrollHost.rideWithKeyboard(note, follow: isAtBottom || wasAtBottomBeforeKeyboard)
+                        // [反转列表] 键盘避让由容器变矮完成（offset 0 跟着上去），不再推 offset
+                        _ = note
                     }
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                         // 动画结束后校一次（ride 落准了就是 no-op，差 0.5pt 内不写）
@@ -504,6 +526,8 @@ struct CardFlowView: View {
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
                     .scrollDismissesKeyboard(.immediately)
+                    }   // GeometryReader（安全区容器）
+                    .ignoresSafeArea(.container, edges: .top)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if showStickerPanel {
                             // 透明占位：把滚动内容推上去，真正的面板在外层 overlay
