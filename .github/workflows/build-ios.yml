@@ -3,7 +3,9 @@ name: Build iOS
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # b/** = B 计划试验分支（2026-09-12）：同一套签名出包，但部署到独立通道 /dl/b/，
+    # 正式包 /dl/install 一根毛不动。分支上的 push 用的是分支自己这份 workflow。
+    branches: [main, 'b/**']
     paths-ignore: ['docs/**', '*.md', '.gitignore', 'cc-bridge/**', 'gateway/**', 'mcp-bridge/**', 'design/**']
 
 jobs:
@@ -205,12 +207,19 @@ jobs:
         run: |
           echo "${{ secrets.VPS_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            LostInBlossom.ipa root@172.245.88.103:/root/projects/lib-web/LostInBlossom.ipa
-          scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            LostInBlossom.ipa root@172.245.88.103:/var/www/lib-dl/LostInBlossom.ipa
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              LostInBlossom.ipa root@172.245.88.103:/root/projects/lib-web/LostInBlossom.ipa
+            scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              LostInBlossom.ipa root@172.245.88.103:/var/www/lib-dl/LostInBlossom.ipa
+            echo "✅ Deployed signed IPA to VPS (正式 /dl/install)"
+          else
+            # B 计划试验包：只进 /dl/b/，正式通道不碰
+            scp -P 48722 -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              LostInBlossom.ipa root@172.245.88.103:/var/www/lib-dl/b/LostInBlossom.ipa
+            echo "✅ Deployed B build to VPS (试验 /dl/b/install)"
+          fi
           rm -f /tmp/deploy_key
-          echo "✅ Deployed signed IPA to VPS"
 
       - name: Cleanup keychain
         if: always()
