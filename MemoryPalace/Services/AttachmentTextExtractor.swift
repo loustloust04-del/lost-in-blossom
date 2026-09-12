@@ -66,8 +66,12 @@ enum AttachmentTextExtractor {
 
         // 能提取文本的（pdf/代码/文本）仍提取，给非-CC provider 用；不能的（zip/xlsx 等）空文本但带原始文件
         var extracted = ""
-        if type?.conforms(to: .pdf) == true || url.pathExtension.lowercased() == "pdf" {
+        let ext = url.pathExtension.lowercased()
+        if type?.conforms(to: .pdf) == true || ext == "pdf" {
             extracted = (try? extractPDF(url: url, name: name)) ?? ""
+        } else if OfficeTextExtractor.supportedExtensions.contains(ext), let raw = rawData {
+            // docx / xlsx / pptx：zip 套 xml，原生抽（09-12 多附件线）
+            extracted = OfficeTextExtractor.extract(data: raw, ext: ext) ?? ""
         } else if isTextFile(type: type, extension: url.pathExtension) {
             extracted = (try? extractText(url: url, name: name)) ?? ""
         }
