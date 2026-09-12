@@ -124,6 +124,8 @@ final class ConversationViewModel {
         let context: ModelContext
         let conversationId: String
     }
+    /// 多附件草稿按对话暂存（09-12）：切对话不丢；App 生命周期内有效，跨重启持久化另做
+    var draftAttachments: [String: [PendingChatAttachment]] = [:]
     var scrollToNodeId: String? = nil
     var pendingScrollNodeId: String? = nil
     var highlightedNodeId: String? = nil
