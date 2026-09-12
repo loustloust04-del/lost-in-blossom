@@ -502,3 +502,45 @@ extension ConversationViewModel {
         print("[GroupV6] 收尾中断轮次 \(stale.count) 条")
     }
 }
+
+
+// MARK: - 冷场破冰（V6 追加，0910）
+
+extension ConversationViewModel {
+    /// 群里安静太久，让某个成员自己开口找她。
+    ///
+    /// 兔兔和 Caelum 常聊着聊着就各忙各的，群一冷就是几小时。有人憋不住先开口，
+    /// 比任何功能都更像「真的有人在那儿」。规矩（都是为了不烦人）：
+    /// · 只在她**打开着这个群**时触发（不做后台推送——那是另一条线的活）
+    /// · 冷场阈值可调，默认 30 分钟；一次冷场只破冰一次，她不回就不再叫
+    /// · 挑人按 talkativeness 加权，话痨更可能开口
+    /// · 轮次在跑 / 她正在打字 → 让路
+    /// · 破冰消息走正常发言链路（会被清洗、会落 claim），不是硬塞的假消息
+    @MainActor
+    func groupMaybeBreakIce(providerManager: ProviderManager, context: ModelContext) {
+        guard let conversation = selectedConversation, conversation.kind == "group" else { return }
+        guard !assistantTurnInFlight else { return }
+        let enabled = UserDefaults.standard.object(forKey: "groupIceBreakEnabled") as? Bool ?? true
+        guard enabled else { return }
+        let quietMin = UserDefaults.standard.integer(forKey: "groupIceBreakMinutes")
+        let threshold = TimeInterval((quietMin == 0 ? 30 : quietMin) * 60)
+
+        guard let last = currentPath.last else { return }
+        let quietFor = Date().timeIntervalSince(last.createTime)
+        guard quietFor >= threshold else { return }
+        // 一次冷场只破一次：上一条已经是 AI 说的 → 说明破过了（她没接话，别追着说）
+        guard last.role == "user" || last.senderId == nil else { return }
+
+        let participants = conversation.participants
+        guard !participants.isEmpty else { return }
+        // 按话痨程度加权抽签
+        let pool = participants.flatMap { p in
+            Array(repeating: p, count: max(1, Int(p.talkativeness * 10)))
+        }
+        guard let picked = pool.randomElement() else { return }
+
+        BreadcrumbLog.shared.add("👥", "冷场 \(Int(quietFor / 60)) 分钟 → \(picked.name) 破冰")
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "groupLastIceBreakAt")
+        groupRequestReply(participantId: picked.id, providerManager: providerManager, context: context)
+    }
+}

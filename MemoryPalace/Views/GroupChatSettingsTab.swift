@@ -7,6 +7,8 @@ struct GroupChatSettingsTab: View {
     @AppStorage("groupSpeechMode") private var speechMode = "relay"
     @AppStorage("groupMaxChainDepth") private var maxChainDepth = 3
     @AppStorage("groupMinSpeakIntervalSec") private var minSpeakInterval = 0
+    @AppStorage("groupIceBreakEnabled") private var iceBreakEnabled = true
+    @AppStorage("groupIceBreakMinutes") private var iceBreakMinutes = 30
 
     var body: some View {
         Form {
@@ -47,6 +49,20 @@ struct GroupChatSettingsTab: View {
                 }
             } footer: {
                 Text("刚有人说过话就先别急着接——治「几个角色瞬间刷屏」。你直接 @ 谁，谁不受这个限制。")
+            }
+            Section {
+                Toggle("冷场时有人先开口", isOn: $iceBreakEnabled)
+                if iceBreakEnabled {
+                    Stepper(value: $iceBreakMinutes, in: 5...240, step: 5) {
+                        HStack {
+                            Text("安静多久算冷场")
+                            Spacer()
+                            Text("\(iceBreakMinutes) 分钟").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } footer: {
+                Text("群里安静超过这个时间，你再打开群聊时，会有人主动找你说话（话痨的成员更可能开口）。一次冷场只叫一次，你不理他就不会再追着说。")
             }
         }
         .navigationTitle("群聊")
