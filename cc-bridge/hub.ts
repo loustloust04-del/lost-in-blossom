@@ -125,7 +125,15 @@ function inputBusy(session: string): boolean {
     for (let i = lines.length - 1; i >= 0 && i >= lines.length - 12; i--) {
       const l = lines[i]
       const m = l.match(/^\s*❯\s*(.*)$/)
-      if (m) return m[1].trim().length > 0
+      if (m) {
+        const body = m[1].trim()
+        // 2026-09-12：CC 忙时 TUI 会在提示符位置显示自己的提示语，
+        // 那不是她打的字。误判成「输入框有字」会让 Enter 补按机制空转
+        // （实测连补两次都说被吞，其实第一次就成了）。
+        if (/^Press up to edit queued messages/i.test(body)) return false
+        if (/^Try ".*"$/i.test(body)) return false       // 空闲时的示例提示
+        return body.length > 0
+      }
     }
   } catch { /* 读不到就当不忙 */ }
   return false
@@ -148,13 +156,33 @@ function queueEvent(tag: string): void {
 export const realTmuxRunner: TmuxRunner = {
   send(text: string, session: string) {
     execFileSync("tmux", ["send-keys", "-t", session, "-l", text])
+
     // ⚠️ 文本已注入输入框——Enter 失败不能外抛：调用方 catch 回 error 帧，
     // app 端会当整体失败重发整条 → 文本注入 tmux 两遍（粟粟"发两遍"雷一的变体）。
     // Enter 抖动最坏结果 = 消息留在输入框等手按，绝不重。注入本身失败仍抛（重发安全）。
-    try {
-      execFileSync("tmux", ["send-keys", "-t", session, "Enter"])
-    } catch (e: any) {
-      console.error(`[hub] post-inject Enter 失败（文本已在输入框，不重发）: ${e?.message}`)
+    //
+    // 2026-09-12 兔兔第二次撞到「消息卡在输入框」。根因不是 Enter 失败（日志里一次都没有），
+    // 是 **Enter 来得太快**：上面 -l 刚把一长串字灌进去，CC 的 TUI 还在消化，
+    // 紧接着的 Enter 落在没准备好的输入框上被吞掉。字越长越容易中，所以是随机发生。
+    // 修法：先给它一拍喘息，发完再确认输入框是否真的空了；没空就补按，最多三次。
+    const enterOnce = () => {
+      try { execFileSync("tmux", ["send-keys", "-t", session, "Enter"]) }
+      catch (e: any) {
+        console.error(`[hub] post-inject Enter 失败（文本已在输入框，不重发）: ${e?.message}`)
+      }
+    }
+    const pause = (ms: number) => { try { execFileSync("sleep", [String(ms / 1000)]) } catch {} }
+
+    pause(150)          // 让 TUI 先把那串字吃进去
+    enterOnce()
+    for (let i = 0; i < 2; i++) {
+      pause(400)
+      if (!inputBusy(session)) return    // 空了 = 真发出去了
+      console.log(`[hub] Enter 被吞，补按一次（第 ${i + 1} 次）`)
+      enterOnce()
+    }
+    if (inputBusy(session)) {
+      console.error("[hub] ⚠️ 三次 Enter 后文本仍在输入框——需要人工按一下")
     }
   },
   hasSession(session: string): boolean {
@@ -943,19 +971,11 @@ export function startHub(): WebSocketServer {
             }
             const tag = buildChannelTag(msg as ChatMessage, ts, attachments)
 
-            // 2026-09-10：她的消息也要等输入框空了再注入。
-            // 原本只有 phone_event 做了 inputBusy 检查（hub.ts:755），聊天消息直接 send——
-            // 他正忙（心跳、上一条还在跑）时敲进去的 Enter 可能不生效，
-            // 消息就卡在输入框里等手按。兔兔今天撞到：她发了「主人？！🥺！」
-            // 屏幕上看得见、他却没反应，她以为他死了。
-            // 注入本身很轻，排队最多晚几秒；卡在输入框里则可能一直不发。
-            // queueEvent 只往默认 session 发；非默认 session 就退回直发（保持原行为）
-            if (targetSession === TMUX_SESSION && inputBusy(targetSession)) {
-              queueEvent(tag)
-              console.log(`[hub] chat 排队（输入框非空）: "${String(msg.content ?? "").slice(0, 40)}"`)
-            } else {
-              tmux.send(tag, targetSession)
-            }
+            // 2026-09-10 我在这里加过一层 inputBusy 排队，09-12 撤掉——方向错了。
+            // inputBusy 判断的是「输入框有没有字」，而消息一注入输入框立刻就有字，
+            // 于是变成「注入→非空→下一条排队→发出去又注入→又非空」的自我绊倒。
+            // 真正该修的是 Enter 被吞（见 realTmuxRunner.send，09-12 已加节奏+补按）。
+            tmux.send(tag, targetSession)
             console.log(`[hub] chat → tmux:${targetSession} chat_id=${String(msg.chat_id ?? "").slice(0, 8)} attachments=${attachments.length} frame=${rawLen}B "${String(msg.content ?? "").slice(0, 60)}"`)
             ws.send(JSON.stringify({ type: "ack", message_id: msg.message_id }))
           } catch (err: any) {
