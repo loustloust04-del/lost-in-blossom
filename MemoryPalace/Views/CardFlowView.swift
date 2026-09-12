@@ -599,13 +599,16 @@ struct CardFlowView: View {
                 .opacity(0)
                 .frame(width: 0, height: 0)
             }
-            .onChange(of: viewModel.selectedConversation?.id) { _, convId in
+            .onChange(of: viewModel.selectedConversation?.id) { oldId, convId in
                 loadStickersForConversation(convId)
                 isAtBottom = true   // 避免上一对话的 false 泄漏到新对话（会让 safeAreaInset 错位）
                 // 清除上一对话残留的附件
                 pendingFileData = nil
                 pendingFileName = nil
                 pendingImageData = nil
+                // 多附件随对话暂存/取回（09-12）：切走时存起来，切回来时还在
+                if let oldId { viewModel.draftAttachments[oldId] = pendingAttachments }
+                pendingAttachments = convId.flatMap { viewModel.draftAttachments[$0] } ?? []
             }
             .onAppear {
                 loadStickersForConversation(viewModel.selectedConversation?.id)
@@ -1044,6 +1047,7 @@ struct ChatInputBar: View {
         pendingFileData.wrappedValue = nil
         pendingFileName.wrappedValue = nil
         pendingAttachments.wrappedValue = []
+        if let cid = viewModel.selectedConversation?.id { viewModel.draftAttachments[cid] = nil }
         return true
     }
 }
