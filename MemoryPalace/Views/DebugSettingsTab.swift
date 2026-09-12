@@ -1,6 +1,10 @@
 import SwiftUI
+import SwiftData
 
 struct IOSDebugPage: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ProfileManager.self) private var profileManager: ProfileManager?
+    @State private var stressNotice = ""
     @AppStorage(DebugRenderSettings.themeBackgroundModeKey)
     private var backgroundModeRaw: String = DebugThemeBackgroundMode.original.rawValue
 
@@ -67,6 +71,33 @@ struct IOSDebugPage: View {
             } footer: {
                 Text("调查：页码点飘到列表中。proxy.safeAreaInsets.bottom 在 safe-area 内 GeometryReader 里返回 0，padding 不足；可试 UIApplication 拿真值 / safeAreaInset modifier / VStack flex frame。")
                     .font(.caption)
+                    .foregroundColor(Theme.textMuted)
+            }
+            .listRowBackground(Theme.mainBg)
+
+            // 压力对话：给白屏/卡顿一个随时能复现的靶子（配面包屑 📉 掉帧探针）
+            Section {
+                ForEach([300, 800, 1500], id: \.self) { n in
+                    Button(action: {
+                        let pid = profileManager?.currentProfile.id ?? ""
+                        guard !pid.isEmpty else { stressNotice = "没有当前楼层"; return }
+                        let conv = StressConversationFactory.make(count: n, profileId: pid, context: modelContext)
+                        stressNotice = "已生成「\(conv.title)」，回侧栏打开它"
+                    }) {
+                        Text("生成压力对话（\(n) 条）")
+                            .font(.system(size: Theme.F.body))
+                            .foregroundColor(Theme.textPrimary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !stressNotice.isEmpty {
+                    Text(stressNotice).font(.caption).foregroundColor(Theme.textMuted)
+                }
+            } header: {
+                Text("压力对话")
+            } footer: {
+                Text("长短消息、彩色字、剧透、代码块、思考链、列表全混在里面。打开它、发消息、上滑，然后看面包屑里的 📉 掉帧记录。标题带 🧪，删掉即可。")
+                    .font(.caption2)
                     .foregroundColor(Theme.textMuted)
             }
             .listRowBackground(Theme.mainBg)
