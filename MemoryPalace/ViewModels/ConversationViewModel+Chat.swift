@@ -412,7 +412,7 @@ extension ConversationViewModel {
     /// 返回 true = 已受理（发出或排队）；false = 被 guard 拦下（无对话 / 预算闸 / 空群）。
     /// drainPendingSends 用返回值决定是否把 pending 塞回队列，不静默丢消息。
     @discardableResult
-    func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) -> Bool {
+    func sendMessage(_ text: String, imageData: Data? = nil, fileData: Data? = nil, fileName: String? = nil, attachments: [PendingChatAttachment] = [], model: ProviderModel, profile: Profile, preset: Preset, providerManager: ProviderManager, context: ModelContext) -> Bool {
         // 清洗零宽字符（iOS输入法切换时偷偷插入）
         // 09-03 兔兔报：😵‍💫 发出去变成 😵💫——旧版把 U+200D 一起删了，
         // 而 ZWJ 正是 emoji 组合序列的粘合剂。改成只删「孤立的」连接符，见 stripStrayInvisibles。
@@ -439,6 +439,7 @@ extension ConversationViewModel {
                 }
                 // 别的对话在跑 → 仍排队（跨对话并发会打架全局流式状态，防护保留）
                 queuePendingSend(text, imageData: imageData, fileData: fileData, fileName: fileName,
+                                 attachments: attachments,
                                  model: model, profile: profile, preset: preset,
                                  providerManager: providerManager, context: context,
                                  conversation: conversation)
@@ -468,10 +469,21 @@ extension ConversationViewModel {
         //   双发会互相打架 replyTimer/replyHandler）
         if isCCLane ? (ccTurnConversationId != nil) : assistantTurnInFlight {
             queuePendingSend(text, imageData: imageData, fileData: fileData, fileName: fileName,
+                             attachments: attachments,
                              model: model, profile: profile, preset: preset,
                              providerManager: providerManager, context: context,
                              conversation: conversation)
             return true
+        }
+
+        // 多附件 · API 车道拒发抽不出文本的文件（兔兔 09-12 拍板：只允许能抽文本的；CC 车道不限，
+        // 因为 hub 落盘后 Caelum 用 Read 什么都能读）
+        if !isCCLane {
+            let unreadable = attachments.filter { !$0.isImage && $0.extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if !unreadable.isEmpty {
+                transientNotice = TransientNotice("「\(unreadable.map(\.name).joined(separator: "、"))」抽不出文字，这类文件只有 Caelum 能读")
+                return false
+            }
         }
 
         guard preCheckBudget(text: text, model: model, profile: profile, preset: preset, providerManager: providerManager) else { return false }
@@ -483,6 +495,33 @@ extension ConversationViewModel {
         // 附件管线对齐粟粟：content = 用户文字 + [附件] 全文（发给模型），
         // attachmentSegments = 文字段 + 附件卡段（气泡渲染折叠卡片，不再把全文铺进气泡）。
         let (userContent, userContentType, attachmentSegments): (String, String, [MessageSegment]?) = {
+            // ── 多附件（09-12，兔兔要粟粟那边的「一次发多张/多文件」）──
+            // 图 → 每张一个 image block（OpenAI 兼容层 / CC 都按 block 数组吃，早就是多张就绪）；
+            // 非图 → CC 车道每个一个 file block（hub saveInboundFiles 整批落盘）+ 文字里附抽取文本；
+            //        API 车道只走抽取文本（抽不出的在上面已拒）。气泡：附件卡段。
+            if !attachments.isEmpty {
+                let images = attachments.filter(\.isImage)
+                let others = attachments.filter { !$0.isImage }
+                var blocks: [[String: Any]] = []
+                for img in images {
+                    guard let d = img.imageData else { continue }
+                    blocks.append(["type": "image", "source": ["type": "base64", "media_type": img.mimeType ?? "image/jpeg", "data": d.base64EncodedString()]])
+                }
+                if isCCLane {
+                    for f in others {
+                        guard let d = f.fileData else { continue }
+                        blocks.append(["type": "file", "name": f.name, "media_type": f.mimeType ?? "application/octet-stream", "data": d.base64EncodedString()])
+                    }
+                }
+                let modelText = ChatAttachmentPromptBuilder.modelInput(text: text, attachments: others)
+                let segs = others.isEmpty ? nil : ChatAttachmentPromptBuilder.segments(text: text, attachments: others)
+                if blocks.isEmpty {
+                    return (modelText, "text", segs)
+                }
+                blocks.append(["type": "text", "text": modelText])
+                let json = (try? JSONSerialization.data(withJSONObject: blocks)).flatMap { String(data: $0, encoding: .utf8) } ?? modelText
+                return (json, "multimodal_text", segs)
+            }
             if let data = imageData {
                 let b64 = data.base64EncodedString()
                 let blocks: [[String: Any]] = [
@@ -824,11 +863,13 @@ extension ConversationViewModel {
 
     /// 入队 + 用户提示。两个调用点：群聊闸门、单聊分车道闸门。
     private func queuePendingSend(_ text: String, imageData: Data?, fileData: Data?, fileName: String?,
+                                  attachments: [PendingChatAttachment] = [],
                                   model: ProviderModel, profile: Profile, preset: Preset,
                                   providerManager: ProviderManager, context: ModelContext,
                                   conversation: Conversation) {
         pendingSends.append(PendingSend(
             text: text, imageData: imageData, fileData: fileData, fileName: fileName,
+            attachments: attachments,
             model: model, profile: profile, preset: preset,
             providerManager: providerManager, context: context,
             conversationId: conversation.id
@@ -872,6 +913,7 @@ extension ConversationViewModel {
             let accepted = self.sendMessage(
                 pending.text, imageData: pending.imageData,
                 fileData: pending.fileData, fileName: pending.fileName,
+                attachments: pending.attachments,
                 model: pending.model, profile: pending.profile, preset: pending.preset,
                 providerManager: pending.providerManager, context: pending.context
             )

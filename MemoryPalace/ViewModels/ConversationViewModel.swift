@@ -116,6 +116,7 @@ final class ConversationViewModel {
         let imageData: Data?
         let fileData: Data?
         let fileName: String?
+        var attachments: [PendingChatAttachment] = []   // 多附件（09-12）
         let model: ProviderModel
         let profile: Profile
         let preset: Preset
