@@ -10,6 +10,7 @@ const HUB_TOKEN = process.env.MP_CC_HUB_TOKEN || '';
 /// 同一种门铃的最小间隔，防止连响（毫秒）
 const COOLDOWN: Record<string, number> = {
   fableline: 0,        // Fable 找他：每条都响
+  call: 0,             // 通话结果（接了/拒了/没接/挂了）：每条都响，他在等
   wish: 5 * 60_000,
   intimacy: 0,
   board: 0,            // 兔兔贴纸条：每条都响

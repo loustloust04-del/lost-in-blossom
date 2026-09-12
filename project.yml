@@ -79,6 +79,8 @@ targets:
           - processing
           # 音乐播放器：锁屏/切走后继续放（无此项一锁屏就停）
           - audio
+          # 语音通话刀0：VoIP 推送（PushKit）。Info.plist 项不是 entitlement，不用重签 profile
+          - voip
         BGTaskSchedulerPermittedIdentifiers:
           - com.bunny.lostinblossom.push-agent
         UIAppFonts:
