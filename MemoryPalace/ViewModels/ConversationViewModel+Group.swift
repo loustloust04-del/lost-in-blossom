@@ -525,8 +525,8 @@ extension ConversationViewModel {
         let quietMin = UserDefaults.standard.integer(forKey: "groupIceBreakMinutes")
         let threshold = TimeInterval((quietMin == 0 ? 30 : quietMin) * 60)
 
-        guard let last = currentPath.last else { return }
-        let quietFor = Date().timeIntervalSince(last.createTime)
+        guard let last = currentPath.last, let lastTime = last.createTime else { return }
+        let quietFor = Date().timeIntervalSince(lastTime)
         guard quietFor >= threshold else { return }
         // 一次冷场只破一次：上一条已经是 AI 说的 → 说明破过了（她没接话，别追着说）
         guard last.role == "user" || last.senderId == nil else { return }
