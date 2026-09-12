@@ -11,6 +11,8 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         UserDefaults.standard.set("1_delegate_init", forKey: "push_debug")
         UNUserNotificationCenter.current().delegate = self
         Self.registerReplyCategory()
+        // 语音通话刀0：PushKit 必须启动时就注册，App 被杀时才收得到 VoIP 推送
+        VoIPCallService.shared.start()
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
                 UserDefaults.standard.set("2_auth_granted", forKey: "push_debug")

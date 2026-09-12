@@ -8,6 +8,7 @@ import { NOWPLAYING_TOOLS, callNowPlayingTool } from '../nowplaying';
 import { PLAYLIST_TOOLS, callPlaylistTool } from '../playlist';
 import { INTIMACY_TOOLS, callIntimacyTool, WISH_TOOLS, callWishTool } from '../intimacy';
 import { FABLELINE_TOOLS, callFablelineTool } from '../fableline';
+import { CALL_TOOLS, callCallTool } from '../call';
 import { PREREAD_TOOLS, callPrereadTool } from '../preread';
 import { GEO_TOOLS, callGeoTool } from '../geotools';
 import { HOWISSHE_TOOLS, callHowIsSheTool } from '../howisshe';
@@ -36,6 +37,7 @@ export const BUILTIN_TOOLS = [
   ...INTIMACY_TOOLS,
   ...WISH_TOOLS,
   ...FABLELINE_TOOLS,
+  ...CALL_TOOLS,
   ...PREREAD_TOOLS,
   ...GEO_TOOLS,
   {
@@ -197,6 +199,8 @@ export async function callBuiltinTool(name: string, input: any): Promise<string 
   if (wishResult !== null) return wishResult;
   const fableResult = await callFablelineTool(name, input);
   if (fableResult !== null) return fableResult;
+  const callResult = await callCallTool(name, input);
+  if (callResult !== null) return callResult;
   const prereadResult = await callPrereadTool(name, input);
   if (prereadResult !== null) return prereadResult;
   const geoResult = await callGeoTool(name, input);

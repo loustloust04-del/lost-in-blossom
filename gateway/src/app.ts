@@ -33,6 +33,7 @@ import { screencastRoutes } from './screencast';
 import { livelineRoutes } from './liveline';
 import { intimacyRoutes } from './intimacy';
 import { fablelineRoutes } from './fableline';
+import { callRoutes } from './call';
 import { prereadRoutes } from './preread';
 import { geoRoutes } from './geotools';
 import { healthRoutes } from './health';
@@ -910,6 +911,7 @@ screencastRoutes(app);
 livelineRoutes(app);
 intimacyRoutes(app);
 fablelineRoutes(app);
+callRoutes(app);
 
 /// 碎碎念（他的内心独白）。2026-06-13 做了后端与定时器，注释写「前端展示后续做」，
 /// 但既没有读取路由、Supabase 里也从没建过 murmurs 表——
