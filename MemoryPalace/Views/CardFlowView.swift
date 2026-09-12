@@ -132,6 +132,8 @@ struct CardFlowView: View {
     @State private var pendingImageData: Data?
     @State private var pendingFileData: Data?
     @State private var pendingFileName: String?
+    /// 多附件（09-12）：一次多张图 / 多文件。旧的三个单件绑定留给粘贴/拖入等旧路径
+    @State private var pendingAttachments: [PendingChatAttachment] = []
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
@@ -536,6 +538,7 @@ struct CardFlowView: View {
                                     pendingImageData: $pendingImageData,
                                     pendingFileData: $pendingFileData,
                                     pendingFileName: $pendingFileName,
+                                    pendingAttachments: $pendingAttachments,
                                     onStickerTap: {
                                         // + 号 → Add to Chat 功能面板（iOS）
                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -709,7 +712,8 @@ struct CardFlowView: View {
 
                     pendingImageData: $pendingImageData,
                     pendingFileData: $pendingFileData,
-                    pendingFileName: $pendingFileName
+                    pendingFileName: $pendingFileName,
+                    pendingAttachments: $pendingAttachments
                 )
             }
             .alert("文件添加失败", isPresented: Binding(
@@ -874,6 +878,7 @@ struct ChatInputBar: View {
     var pendingImageData: Binding<Data?> = .constant(nil)
     var pendingFileData: Binding<Data?> = .constant(nil)
     var pendingFileName: Binding<String?> = .constant(nil)
+    var pendingAttachments: Binding<[PendingChatAttachment]> = .constant([])
     var onStickerTap: (() -> Void)? = nil
 
     @AppStorage("blurRadius") private var blurRadius = 1.3
@@ -919,6 +924,7 @@ struct ChatInputBar: View {
             pendingImageData: pendingImageData,
             pendingFileData: pendingFileData,
             pendingFileName: pendingFileName,
+            pendingAttachments: pendingAttachments,
             onSend: { text in send(text) },
             onCancelStream: { viewModel.cancelAssistantTurn(context: modelContext) },
             onStickerTap: onStickerTap,
@@ -1009,7 +1015,8 @@ struct ChatInputBar: View {
         let imageData = pendingImageData.wrappedValue
         let fileData = pendingFileData.wrappedValue
         let fileName = pendingFileName.wrappedValue
-        guard !trimmed.isEmpty || imageData != nil || fileData != nil else { return false }
+        let attachments = pendingAttachments.wrappedValue
+        guard !trimmed.isEmpty || imageData != nil || fileData != nil || !attachments.isEmpty else { return false }
 
         // Task 3: 选了 CC 模型但 CC 未连接 → 弹提示，不发送（保留 text）
         if providerManager.provider(for: currentModel)?.type == .ccBridge,
@@ -1031,10 +1038,12 @@ struct ChatInputBar: View {
         ) else { return false }
 
         // globalWorldBookEntries 已由 ContentView 同步
-        viewModel.sendMessage(trimmed, imageData: imageData, fileData: fileData, fileName: fileName, model: currentModel, profile: prof, preset: preset, providerManager: providerManager, context: modelContext)
+        let accepted = viewModel.sendMessage(trimmed, imageData: imageData, fileData: fileData, fileName: fileName, attachments: attachments, model: currentModel, profile: prof, preset: preset, providerManager: providerManager, context: modelContext)
+        guard accepted else { return false }   // 被拦（如 API 车道抽不出文本的附件）→ 保留 text 与附件
         pendingImageData.wrappedValue = nil
         pendingFileData.wrappedValue = nil
         pendingFileName.wrappedValue = nil
+        pendingAttachments.wrappedValue = []
         return true
     }
 }
@@ -1065,6 +1074,7 @@ extension ChatInputBar: Equatable {
             && (lhs.onStickerTap == nil) == (rhs.onStickerTap == nil)
             && (lhs.pendingImageData.wrappedValue != nil) == (rhs.pendingImageData.wrappedValue != nil)
             && (lhs.pendingFileData.wrappedValue != nil) == (rhs.pendingFileData.wrappedValue != nil)
+            && lhs.pendingAttachments.wrappedValue.map(\.id) == rhs.pendingAttachments.wrappedValue.map(\.id)
     }
 }
 
@@ -1106,6 +1116,7 @@ private struct InputFieldContainer: View {
     @Binding var pendingImageData: Data?
     @Binding var pendingFileData: Data?
     @Binding var pendingFileName: String?
+    @Binding var pendingAttachments: [PendingChatAttachment]
     let onSend: (String) -> Bool
     let onCancelStream: () -> Void
     let onStickerTap: (() -> Void)?
@@ -1147,10 +1158,10 @@ private struct InputFieldContainer: View {
     }
 
     private var canSend: Bool {
-        isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
+        isStreaming || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil || !pendingAttachments.isEmpty
     }
     private var hasText: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImageData != nil || pendingFileData != nil || !pendingAttachments.isEmpty
     }
 
 
@@ -1198,6 +1209,53 @@ private struct InputFieldContainer: View {
         }()
         #endif
         return AnyView(VStack(spacing: 0) {
+            // ── 多附件条（09-12）：缩略图 / 文件块横排，各自可删 ──────────────
+            if !pendingAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(pendingAttachments) { att in
+                            ZStack(alignment: .topTrailing) {
+                                if att.isImage, let d = att.imageData, let ui = UIImage(data: d) {
+                                    Image(uiImage: ui)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 56, height: 56)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                } else {
+                                    VStack(spacing: 2) {
+                                        Image(systemName: "doc.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(Theme.branchIndicator)
+                                        Text(att.typeDescription)
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundColor(Theme.textMuted)
+                                        Text(att.name)
+                                            .font(.system(size: 9))
+                                            .foregroundColor(Theme.textMuted)
+                                            .lineLimit(1)
+                                    }
+                                    .frame(width: 72, height: 56)
+                                    .padding(.horizontal, 4)
+                                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.sidebarBg))
+                                }
+                                Button {
+                                    pendingAttachments.removeAll { $0.id == att.id }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(Theme.textMuted)
+                                        .background(Circle().fill(Theme.mainBg))
+                                }
+                                .buttonStyle(.plain)
+                                .offset(x: 6, y: -6)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                Divider().padding(.horizontal, 12)
+            }
             // ── 图片预览行（pendingImageData 非 nil 时显示）──────────────
             if let imgData = pendingImageData, let uiImg = UIImage(data: imgData) {
                 HStack(spacing: 8) {

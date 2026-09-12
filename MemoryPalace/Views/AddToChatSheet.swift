@@ -14,6 +14,8 @@ struct AddToChatSheet: View {
     /// 选中文件后写入，由 CardFlowView 持有并传给 ChatInputBar
     @Binding var pendingFileData: Data?
     @Binding var pendingFileName: String?
+    /// 多附件（09-12）：多选照片 / 多选文件全进这里；旧的单件绑定不再由本 sheet 写
+    @Binding var pendingAttachments: [PendingChatAttachment]
 
     @Environment(\.dismiss) private var dismiss
     @Environment(ProviderManager.self) private var providerManager: ProviderManager?
@@ -58,7 +60,7 @@ struct AddToChatSheet: View {
                 // ── 行 0：添加文件 / 照片 ──────────────────────────────
                 PhotosPicker(
                     selection: $photoPickerItems,
-                    maxSelectionCount: 1,
+                    maxSelectionCount: 9,   // 微信习惯；每张 ≤ PendingChatAttachment.maxImageBytes
                     matching: .images
                 ) {
                     addToChatRow(
@@ -69,38 +71,44 @@ struct AddToChatSheet: View {
                     )
                 }
                 .onChange(of: photoPickerItems) { (_: [PhotosPickerItem], newItems: [PhotosPickerItem]) in
-                    guard let item = newItems.first else { return }
+                    guard !newItems.isEmpty else { return }
                     Task {
-                        // 三级 fallback：Data.self → 自定义 TransferableImage → 降级 JPEG
-                        var loaded = false
-                        // 1) 原路径：loadTransferable(type: Data.self)
-                        do {
-                            if let data = try await item.loadTransferable(type: Data.self),
-                               let uiImage = UIImage(data: data),
-                               let compressed = compressImage(uiImage) {
-                                await MainActor.run { pendingImageData = compressed }
-                                loaded = true
-                            }
-                        } catch {
-                            BreadcrumbLog.shared.add("📷", "loadTransferable(Data) failed: \(error.localizedDescription)")
-                        }
-                        // 2) Fallback：直接 loadTransferable 为自定义 TransferableImage
-                        if !loaded {
+                        var picked: [PendingChatAttachment] = []
+                        for (i, item) in newItems.enumerated() {
+                            // 三级 fallback：Data.self → 自定义 TransferableImage → 降级 JPEG
+                            var compressedData: Data? = nil
                             do {
-                                if let img = try await item.loadTransferable(type: TransferableImage.self),
-                                   let compressed = compressImage(img.uiImage) {
-                                    await MainActor.run { pendingImageData = compressed }
-                                    loaded = true
-                                    BreadcrumbLog.shared.add("📷", "fallback TransferableImage succeeded")
+                                if let data = try await item.loadTransferable(type: Data.self),
+                                   let uiImage = UIImage(data: data) {
+                                    compressedData = compressImage(uiImage)
                                 }
                             } catch {
-                                BreadcrumbLog.shared.add("📷", "loadTransferable(TransferableImage) failed: \(error.localizedDescription)")
+                                BreadcrumbLog.shared.add("📷", "loadTransferable(Data) failed: \(error.localizedDescription)")
+                            }
+                            if compressedData == nil {
+                                do {
+                                    if let img = try await item.loadTransferable(type: TransferableImage.self) {
+                                        compressedData = compressImage(img.uiImage)
+                                        if compressedData != nil { BreadcrumbLog.shared.add("📷", "fallback TransferableImage succeeded") }
+                                    }
+                                } catch {
+                                    BreadcrumbLog.shared.add("📷", "loadTransferable(TransferableImage) failed: \(error.localizedDescription)")
+                                }
+                            }
+                            guard let compressed = compressedData else {
+                                BreadcrumbLog.shared.add("📷", "all image load paths failed for item \(i)")
+                                continue
+                            }
+                            let name = "照片\(i + 1).jpg"
+                            if let att = try? PendingChatAttachment.image(name: name, typeDescription: "JPEG", mimeType: "image/jpeg", data: compressed) {
+                                picked.append(att)
+                            } else {
+                                BreadcrumbLog.shared.add("📷", "\(name) 超过单张上限，跳过")
                             }
                         }
-                        if !loaded {
-                            BreadcrumbLog.shared.add("📷", "all image load paths failed for item: \(String(describing: item))")
-                        }
+                        let result = picked
                         await MainActor.run {
+                            pendingAttachments.append(contentsOf: result)
                             photoPickerItems = []
                             dismiss()
                         }
@@ -213,21 +221,20 @@ struct AddToChatSheet: View {
             .fileImporter(
                 isPresented: $showFilePicker,
                 // .text 是 .plainText 的父类型：txt/md/log 等文本变体都能选
-                allowedContentTypes: [.pdf, .json, .text, .html, .commaSeparatedText, .png, .jpeg, .gif, .webP, .heic, .xml],
-                allowsMultipleSelection: false
+                allowedContentTypes: [.item],   // 09-12 放开到任意文件：CC 什么都能读；API 车道抽不出文本的在发送时拒
+                // 旧白名单（留档）：[.pdf, .json, .text, .html, .commaSeparatedText, .png, .jpeg, .gif, .webP, .heic, .xml],
+                allowsMultipleSelection: true   // 09-12 多选
             ) { result in
                 switch result {
                 case .success(let urls):
-                    guard let url = urls.first else { return }
-                    // scoped 访问失败不硬拦：App 沙盒内/inbox 的 URL 本来就返回 false，
-                    // 之前 guard 直接 return 导致选中后静默无反应
-                    let accessed = url.startAccessingSecurityScopedResource()
-                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                    if let data = try? Data(contentsOf: url), !data.isEmpty, data.count <= 10_485_760 {
-                        pendingFileData = data
-                        pendingFileName = url.lastPathComponent
-                    } else {
-                        BreadcrumbLog.shared.add("📎", "文件读取失败: \(url.lastPathComponent)")
+                    // 每个文件走 AttachmentTextExtractor（图→image；pdf/代码/文本→抽文本；其余→原始字节给 CC）；
+                    // 单个失败只跳过那个并记面包屑，不整批丢
+                    for url in urls {
+                        do {
+                            pendingAttachments.append(try AttachmentTextExtractor.extract(from: url))
+                        } catch {
+                            BreadcrumbLog.shared.add("📎", "\(url.lastPathComponent)：\(error.localizedDescription)")
+                        }
                     }
                 case .failure:
                     break
