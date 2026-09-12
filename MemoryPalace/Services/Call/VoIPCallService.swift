@@ -186,66 +186,62 @@ extension VoIPCallService: PKPushRegistryDelegate {
 }
 
 // MARK: - LiveCommunicationKit
+// ConversationManagerDelegate 本身是 @MainActor 协议（CI 09-12 教的：写成 nonisolated 会「candidate has non-matching type」），
+// 类已经是 @MainActor，方法直接写就行，不用 nonisolated 也不用跳线程。
 
 extension VoIPCallService: ConversationManagerDelegate {
-    nonisolated func conversationManagerDidBegin(_ manager: ConversationManager) {}
-    nonisolated func conversationManagerDidReset(_ manager: ConversationManager) {
-        Task { @MainActor in self.clearActive() }
-    }
-    nonisolated func conversationManager(_ manager: ConversationManager, conversationChanged conversation: Conversation) {}
+    func conversationManagerDidBegin(_ manager: ConversationManager) {}
+    func conversationManagerDidReset(_ manager: ConversationManager) { clearActive() }
+    func conversationManager(_ manager: ConversationManager, conversationChanged conversation: Conversation) {}
 
-    nonisolated func conversationManager(_ manager: ConversationManager, perform action: ConversationAction) {
-        Task { @MainActor in
-            guard let sessionId = self.activeSessionId, action.conversationUUID == self.activeUUID else {
-                action.fail(); return
+    func conversationManager(_ manager: ConversationManager, perform action: ConversationAction) {
+        guard let sessionId = activeSessionId, action.conversationUUID == activeUUID else {
+            action.fail(); return
+        }
+        switch action {
+        case let join as JoinConversationAction:
+            // 她接了
+            configureAudioSession()
+            joined = true
+            connectedAt = Date()
+            if let conv = manager.conversations.first(where: { $0.uuid == activeUUID }) {
+                manager.reportConversationEvent(.conversationConnected(.now), for: conv)
             }
-            switch action {
-            case let join as JoinConversationAction:
-                // 她接了
-                self.configureAudioSession()
-                self.joined = true
-                self.connectedAt = Date()
-                if let conv = manager.conversations.first(where: { $0.uuid == self.activeUUID }) {
-                    manager.reportConversationEvent(.conversationConnected(.now), for: conv)
-                }
-                join.fulfill(dateConnected: .now)
-                CallLogStore.update(id: sessionId) { $0.outcome = .answered }
-                await self.post("/api/call/answer", ["call_session_id": sessionId])
+            join.fulfill(dateConnected: .now)
+            CallLogStore.update(id: sessionId) { $0.outcome = .answered }
+            Task { await self.post("/api/call/answer", ["call_session_id": sessionId]) }
 
-            case let end as EndConversationAction:
-                // 没接就是拒接；接了再挂是挂断
-                let wasJoined = self.joined
-                let dur = self.connectedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
-                end.fulfill(dateEnded: .now)
-                if wasJoined {
-                    CallLogStore.update(id: sessionId) { $0.outcome = .answered; $0.durationSec = dur }
-                    await self.post("/api/call/hangup", ["call_session_id": sessionId])
-                } else {
-                    CallLogStore.update(id: sessionId) { $0.outcome = .declined }
-                    await self.post("/api/call/decline", ["call_session_id": sessionId])
-                }
-                self.clearActive()
-
-            default:
-                action.fulfill()
+        case let end as EndConversationAction:
+            // 没接就是拒接；接了再挂是挂断
+            let wasJoined = joined
+            let dur = connectedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
+            end.fulfill(dateEnded: .now)
+            if wasJoined {
+                CallLogStore.update(id: sessionId) { $0.outcome = .answered; $0.durationSec = dur }
+                Task { await self.post("/api/call/hangup", ["call_session_id": sessionId]) }
+            } else {
+                CallLogStore.update(id: sessionId) { $0.outcome = .declined }
+                Task { await self.post("/api/call/decline", ["call_session_id": sessionId]) }
             }
+            clearActive()
+
+        default:
+            action.fulfill()
         }
     }
 
-    nonisolated func conversationManager(_ manager: ConversationManager, timedOutPerforming action: ConversationAction) {
+    func conversationManager(_ manager: ConversationManager, timedOutPerforming action: ConversationAction) {
         action.fail()
     }
 
-    nonisolated func conversationManager(_ manager: ConversationManager, didActivate audioSession: AVAudioSession) {
+    func conversationManager(_ manager: ConversationManager, didActivate audioSession: AVAudioSession) {
         // 音频会话由系统激活后才能出声——他的第一句在这儿
-        Task { @MainActor in
-            guard self.joined else { return }
-            CallGreeting.shared.play()
-        }
+        guard joined else { return }
+        CallGreeting.shared.play()
     }
 
-    nonisolated func conversationManager(_ manager: ConversationManager, didDeactivate audioSession: AVAudioSession) {
-        Task { @MainActor in CallGreeting.shared.stop() }
+    func conversationManager(_ manager: ConversationManager, didDeactivate audioSession: AVAudioSession) {
+        CallGreeting.shared.stop()
     }
 }
 #endif
