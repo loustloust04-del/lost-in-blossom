@@ -274,7 +274,25 @@ final class OpenAICompatibleProvider: BaseChatProvider {
             apiMessages.append(["role": "system", "content": sys])
         }
         for msg in messages {
-            apiMessages.append(["role": msg.role, "content": msg.content])
+            // 多模态 JSON（旧图转述后台调用会带图块）→ 与流式路径同一 vision 转换
+            if msg.role == "user", msg.content.hasPrefix("[{"),
+               let data = msg.content.data(using: .utf8),
+               let blocks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]],
+               Self.supportsVision(model: model) {
+                var vision: [[String: Any]] = []
+                for block in blocks {
+                    let type = block["type"] as? String ?? ""
+                    if type == "image", let source = block["source"] as? [String: Any],
+                       let b64 = source["data"] as? String, let mt = source["media_type"] as? String {
+                        vision.append(["type": "image_url", "image_url": ["url": "data:\(mt);base64,\(b64)"]])
+                    } else if type == "text" {
+                        vision.append(["type": "text", "text": block["text"] as? String ?? ""])
+                    }
+                }
+                apiMessages.append(["role": msg.role, "content": vision])
+            } else {
+                apiMessages.append(["role": msg.role, "content": msg.content])
+            }
         }
 
         let body: [String: Any] = [

@@ -285,6 +285,9 @@ extension ConversationViewModel {
 
     /// Build API message history from currentPath, excluding a specific node, limited to recent messages
     private func buildAPIMessages(excluding excludeId: String? = nil, maxMessages: Int = 40, anchored: Bool = false) -> [(role: String, content: String)] {
+        // 旧图转述（粟粟 M7）：最近 3 条 user 消息里的图照发原图，更早的有描述就换成文字
+        let userIds = currentPath.filter { $0.role == "user" && $0.id != excludeId }.map(\.id)
+        let recentUserIds = Set(userIds.suffix(3))
         let relevant = currentPath.compactMap { node -> (role: String, content: String)? in
             guard node.role == "user" || node.role == "assistant" else { return nil }
             if node.id == excludeId { return nil }
@@ -294,6 +297,10 @@ extension ConversationViewModel {
             if node.role == "assistant" {
                 let result = ContentCleaner.extractThinking(from: node.content)
                 content = result.content
+            } else if node.contentType == "multimodal_text", !recentUserIds.contains(node.id),
+                      let summary = ImageSummaryStore.summary(for: node.id) {
+                let t = ImageSummaryStore.textPart(of: node.content)
+                content = (t.isEmpty ? "" : t + "\n") + "[图片：\(summary)]"
             } else {
                 content = node.content
             }
@@ -617,6 +624,10 @@ extension ConversationViewModel {
             userNode.setSegments(segs)
         }
         context.insert(userNode)
+        // 旧图转述（粟粟 M7）：API 车道发了图 → 后台让主模型写一句描述存起来，三条之后替原图省 token
+        if !isCCLane, userContentType == "multimodal_text" {
+            ImageSummaryStore.summarizeInBackground(nodeId: userNodeId, content: userContent, model: model, providerManager: providerManager)
+        }
 
         // Update parent's childrenIds
         if let parentId, let parent = nodeMap[parentId] {
