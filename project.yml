@@ -52,6 +52,12 @@ targets:
     dependencies:
       - target: MemoryPalaceBroadcast
         embed: true
+      - target: MemoryPalaceDAM
+        embed: true
+      - target: MemoryPalaceShieldConfig
+        embed: true
+      - target: MemoryPalaceShieldAct
+        embed: true
         codeSign: true
       - package: MarkdownUI
       - package: VariableBlur
@@ -160,6 +166,105 @@ targets:
           DEVELOPMENT_TEAM: GQN42B462A
           CODE_SIGN_IDENTITY: "Apple Development"
           PROVISIONING_PROFILE_SPECIFIER: "MP iOS Dev - Bunny Broadcast"
+
+  # Screen Time 三件套（09-09）。entitlements **只声明 family-controls、不要 App Group**——
+  # 粟粟签的 profile 就是这个组合，实测能签过（见 DEBT-MAP「绕过 App Group」一节）。
+  MemoryPalaceDAM:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "18.0"
+    sources:
+      - path: MemoryPalaceDAM
+    dependencies:
+      - sdk: DeviceActivity.framework
+    entitlements:
+      path: MemoryPalaceDAM/MemoryPalaceDAM.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+    info:
+      path: MemoryPalaceDAM/Info.plist
+      properties:
+        CFBundleDisplayName: 用量监听
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.DeviceActivityMonitor
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        CODE_SIGN_ENTITLEMENTS: MemoryPalaceDAM/MemoryPalaceDAM.entitlements
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          DEVELOPMENT_TEAM: GQN42B462A
+          CODE_SIGN_IDENTITY: "Apple Development"
+          PROVISIONING_PROFILE_SPECIFIER: "MP iOS Dev - Bunny DeviceActivityMonitor"
+
+  # Screen Time 三件套（09-09）。entitlements **只声明 family-controls、不要 App Group**——
+  # 粟粟签的 profile 就是这个组合，实测能签过（见 DEBT-MAP「绕过 App Group」一节）。
+  MemoryPalaceShieldConfig:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "18.0"
+    sources:
+      - path: MemoryPalaceShieldConfig
+    dependencies:
+      - sdk: ManagedSettingsUI.framework
+    entitlements:
+      path: MemoryPalaceShieldConfig/MemoryPalaceShieldConfig.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+    info:
+      path: MemoryPalaceShieldConfig/Info.plist
+      properties:
+        CFBundleDisplayName: 拦截界面
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.ShieldConfiguration
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        CODE_SIGN_ENTITLEMENTS: MemoryPalaceShieldConfig/MemoryPalaceShieldConfig.entitlements
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          DEVELOPMENT_TEAM: GQN42B462A
+          CODE_SIGN_IDENTITY: "Apple Development"
+          PROVISIONING_PROFILE_SPECIFIER: "MP iOS Dev - Bunny ShieldConfiguration"
+
+  # Screen Time 三件套（09-09）。entitlements **只声明 family-controls、不要 App Group**——
+  # 粟粟签的 profile 就是这个组合，实测能签过（见 DEBT-MAP「绕过 App Group」一节）。
+  MemoryPalaceShieldAct:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "18.0"
+    sources:
+      - path: MemoryPalaceShieldAct
+    dependencies:
+      - sdk: ManagedSettings.framework
+    entitlements:
+      path: MemoryPalaceShieldAct/MemoryPalaceShieldAct.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+    info:
+      path: MemoryPalaceShieldAct/Info.plist
+      properties:
+        CFBundleDisplayName: 拦截操作
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.susu.MemoryPalace.ios.ShieldAction
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        CODE_SIGN_ENTITLEMENTS: MemoryPalaceShieldAct/MemoryPalaceShieldAct.entitlements
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          DEVELOPMENT_TEAM: GQN42B462A
+          CODE_SIGN_IDENTITY: "Apple Development"
+          PROVISIONING_PROFILE_SPECIFIER: "MP iOS Dev - Bunny ShieldAction"
 
   StickerProbeUITests:
     type: bundle.ui-testing
