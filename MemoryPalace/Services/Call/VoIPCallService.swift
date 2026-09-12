@@ -113,7 +113,7 @@ final class VoIPCallService: NSObject {
         guard let manager else { return }
         if let uuid = activeUUID, activeSessionId == sessionId, !joined,
            let conv = manager.conversations.first(where: { $0.uuid == uuid }) {
-            manager.reportConversationEvent(.conversationEnded(.remoteEnded), for: conv)
+            manager.reportConversationEvent(.conversationEnded(.now, .remoteEnded), for: conv)
             CallLogStore.update(id: sessionId) { $0.outcome = .cancelled }
             print("[Call] 他撤回了 \(sessionId.prefix(8))")
             clearActive()
@@ -125,7 +125,7 @@ final class VoIPCallService: NSObject {
         let update = Conversation.Update(members: [remote])
         try? await manager.reportNewIncomingConversation(uuid: uuid, update: update)
         if let conv = manager.conversations.first(where: { $0.uuid == uuid }) {
-            manager.reportConversationEvent(.conversationEnded(.remoteEnded), for: conv)
+            manager.reportConversationEvent(.conversationEnded(.now, .remoteEnded), for: conv)
         }
     }
 
@@ -200,23 +200,23 @@ extension VoIPCallService: ConversationManagerDelegate {
                 action.fail(); return
             }
             switch action {
-            case is JoinConversationAction:
+            case let join as JoinConversationAction:
                 // 她接了
                 self.configureAudioSession()
                 self.joined = true
                 self.connectedAt = Date()
                 if let conv = manager.conversations.first(where: { $0.uuid == self.activeUUID }) {
-                    manager.reportConversationEvent(.conversationConnected, for: conv)
+                    manager.reportConversationEvent(.conversationConnected(.now), for: conv)
                 }
-                action.fulfill()
+                join.fulfill(dateConnected: .now)
                 CallLogStore.update(id: sessionId) { $0.outcome = .answered }
                 await self.post("/api/call/answer", ["call_session_id": sessionId])
 
-            case is EndConversationAction:
+            case let end as EndConversationAction:
                 // 没接就是拒接；接了再挂是挂断
                 let wasJoined = self.joined
                 let dur = self.connectedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
-                action.fulfill()
+                end.fulfill(dateEnded: .now)
                 if wasJoined {
                     CallLogStore.update(id: sessionId) { $0.outcome = .answered; $0.durationSec = dur }
                     await self.post("/api/call/hangup", ["call_session_id": sessionId])
