@@ -5,6 +5,7 @@ import AVFoundation
 import UIKit
 import PushKit
 import CallKit
+import Intents
 
 /// 语音通话 · 刀0「电话先响一次」——App 侧的壳。
 ///
@@ -30,6 +31,7 @@ final class VoIPCallService: NSObject {
 
     private var registry: PKPushRegistry?
     private var provider: CXProvider?
+    private let callController = CXCallController()
 
     /// 当前来电：uuid ↔ gateway 的 call_session_id（同一个字符串）
     private var activeUUID: UUID?
@@ -243,6 +245,60 @@ final class VoIPCallService: NSObject {
         guard joined else { return }
         CallGreeting.shared.play()
     }
+
+    // MARK: - 回拨（电话 App「最近通话」/ 通讯录 → INStartCallIntent）
+
+    /// 系统投递的 NSUserActivity：从里面取出要打给谁，然后发起一通「打给他」的电话
+    func handleCallIntent(_ activity: NSUserActivity) {
+        var handle: String? = nil
+        if let intent = activity.interaction?.intent as? INStartCallIntent {
+            handle = intent.contacts?.first?.personHandle?.value
+        } else if let intent = activity.interaction?.intent as? INStartAudioCallIntent {
+            handle = intent.contacts?.first?.personHandle?.value
+        }
+        print("[Call] 回拨意图 handle=\(handle ?? "-")")
+        startOutgoingCall(handle: handle ?? Self.defaultHandle)
+    }
+
+    /// 她打给他。刀0：系统层面走完「拨号 → 接通」，接通后播他的问候；真正的对话是刀1。
+    func startOutgoingCall(handle: String) {
+        guard activeSessionId == nil else { print("[Call] 已有通话，忽略回拨"); return }
+        let uuid = UUID()
+        let cxHandle = handle.contains("@")
+            ? CXHandle(type: .emailAddress, value: handle)
+            : CXHandle(type: .generic, value: handle)
+        let action = CXStartCallAction(call: uuid, handle: cxHandle)
+        action.isVideo = false
+        action.contactIdentifier = nil
+        callController.request(CXTransaction(action: action)) { error in
+            if let error { print("[Call] 回拨请求失败: \(error.localizedDescription)") }
+        }
+    }
+
+    fileprivate func handleStart(_ action: CXStartCallAction) {
+        guard let provider else { action.fail(); return }
+        let uuid = action.callUUID
+        let sessionId = uuid.uuidString.lowercased()
+        activeUUID = uuid
+        activeSessionId = sessionId
+        connectedAt = nil
+        joined = false
+        configureAudioSession()
+        provider.reportOutgoingCall(with: uuid, startedConnectingAt: nil)
+        action.fulfill()
+        CallLogStore.upsert(CallLogEntry(id: sessionId, caller: callerName, startedAt: Date(), outcome: .answered, durationSec: 0, outgoing: true))
+        Task {
+            // 告诉网关她打过来了（网关记账 + 门铃叫他）；他「接起来」用 1.5 秒
+            await self.post("/api/call/outgoing", ["call_session_id": sessionId])
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard self.activeUUID == uuid else { return }
+            self.joined = true
+            self.connectedAt = Date()
+            provider.reportOutgoingCall(with: uuid, connectedAt: nil)
+            // 音频会话通常在 fulfill 后就已激活，didActivate 早于这里——补一次播放
+            CallGreeting.shared.play()
+        }
+    }
 }
 
 // MARK: - PushKit
@@ -290,6 +346,10 @@ extension VoIPCallService: PKPushRegistryDelegate {
 extension VoIPCallService: CXProviderDelegate {
     nonisolated func providerDidReset(_ provider: CXProvider) {
         MainActor.assumeIsolated { self.clearActive() }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
+        MainActor.assumeIsolated { self.handleStart(action) }
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {

@@ -75,6 +75,10 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
+        # 语音通话：电话 App「最近通话」里点他 → 系统把 INStartCallIntent 交给我们 → 回拨
+        NSUserActivityTypes:
+          - INStartCallIntent
+          - INStartAudioCallIntent
         UIBackgroundModes:
           - processing
           # 音乐播放器：锁屏/切走后继续放（无此项一锁屏就停）

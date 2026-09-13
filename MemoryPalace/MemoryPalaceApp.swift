@@ -509,6 +509,7 @@ struct MemoryPalaceApp: App {
                         break
                     }
                 }
+                .handlesCallBackIntent()
                 .onOpenURL { url in
                     let accessed = url.startAccessingSecurityScopedResource()
                     defer { if accessed { url.stopAccessingSecurityScopedResource() } }

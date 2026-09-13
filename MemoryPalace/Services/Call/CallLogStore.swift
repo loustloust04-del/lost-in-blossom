@@ -9,6 +9,7 @@ struct CallLogEntry: Codable, Identifiable {
     let startedAt: Date
     var outcome: Outcome
     var durationSec: Int
+    var outgoing: Bool?       // true = 她打给他（最近通话回拨）
 }
 
 enum CallLogStore {

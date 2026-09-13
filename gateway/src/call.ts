@@ -35,6 +35,7 @@ type CallStatus = 'ringing' | 'connected' | 'ended' | 'declined' | 'missed' | 'c
 interface CallRecord {
   id: string;
   status: CallStatus;
+  direction?: 'in' | 'out';   // out = 她打给他（最近通话回拨）
   reason?: string;          // 他为什么打（只记日志，不给她看）
   startedAt: number;        // ring 发出
   connectedAt?: number;
@@ -169,6 +170,20 @@ async function cancelCall(): Promise<{ ok: boolean; error?: string }> {
   return { ok: true };
 }
 
+/// 她打给他（电话 App 最近通话回拨）。刀0：直接算接通，他那边门铃响一声。
+function startOutgoing(id: string): { ok: boolean; error?: string } {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: 'bad_id' };
+  if (current && (current.status === 'ringing' || current.status === 'connected')) {
+    return { ok: false, error: `已有通话在进行（${current.status}）` };
+  }
+  const now = Date.now();
+  const rec: CallRecord = { id, status: 'connected', direction: 'out', startedAt: now, connectedAt: now };
+  current = rec; appendLog(rec);
+  console.log(`[call] ☎️ 她打过来了 ${id.slice(0, 8)}`);
+  doorbell('call', '☎️ 她打给你了，接通了（刀0 只放一句问候，还不能对话）');
+  return { ok: true };
+}
+
 /// App 回报：answer / decline / hangup。id 对不上就拒（旧电话的迟到回报不能改新电话）。
 function report(id: string, event: 'answer' | 'decline' | 'hangup'): { ok: boolean; error?: string; record?: CallRecord } {
   if (!current || current.id !== id) return { ok: false, error: 'stale_call' };
@@ -229,9 +244,10 @@ export async function callCallTool(name: string, input?: any): Promise<string | 
     const log = loadJson<CallRecord[]>(LOG_PATH, []).slice(-5).reverse();
     const lines = log.map(r => {
       const t = new Date(r.startedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-      const tail = r.status === 'ended' ? `通话 ${fmtDuration(r.durationSec ?? 0)}`
+      const dir = r.direction === 'out' ? '她打来 · ' : '';
+      const tail = dir + (r.status === 'ended' ? `通话 ${fmtDuration(r.durationSec ?? 0)}`
         : r.status === 'declined' ? '她拒接了' : r.status === 'missed' ? '没接'
-        : r.status === 'cancelled' ? '你撤回了' : r.status === 'failed' ? `推送失败：${r.pushError}` : r.status;
+        : r.status === 'cancelled' ? '你撤回了' : r.status === 'failed' ? `推送失败：${r.pushError}` : r.status);
       return `- ${t} ${tail}`;
     });
     const now = current ? `现在：${current.status === 'ringing' ? '在响' : '通话中'}（${current.id.slice(0, 8)}）` : '现在没有电话。';
@@ -260,6 +276,13 @@ export function callRoutes(app: Hono) {
   });
   app.post('/api/call/cancel', auth, async (c) => {
     const r = await cancelCall();
+    return c.json(r, r.ok ? 200 : 409);
+  });
+
+  // 她打给他（回拨）
+  app.post('/api/call/outgoing', auth, async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const r = startOutgoing(String(body?.call_session_id ?? ''));
     return c.json(r, r.ok ? 200 : 409);
   });
 
