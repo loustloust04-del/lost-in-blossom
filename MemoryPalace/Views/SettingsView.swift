@@ -74,6 +74,9 @@ struct SettingsView: View {
                     settingsButton(icon: "cloud", title: "网关控制台", color: Theme.branchIndicator, tab: .gatewayConsole)
                     settingsButton(icon: "brain.head.profile", title: "记忆", color: Theme.textSecondary, tab: .memory)
                     settingsButton(icon: "chart.bar", title: "Token 统计", color: Theme.textSecondary, tab: .tokenStats)
+                    // 0910 兔兔报「设置里找不到群聊」：页面和路由都加了，**忘了把入口
+                    // 摆进这张手工排版的列表**——房间盖好了没装门。
+                    settingsButton(icon: "person.2", title: "群聊", color: Theme.textSecondary, tab: .groupChat)
                 } header: {
                     settingsSectionHeader("对话与模型")
                 }
