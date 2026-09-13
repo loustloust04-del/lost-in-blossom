@@ -29,8 +29,7 @@ struct GroupChatSettingsTab: View {
                         .font(.system(size: 14))
                         .overlay(alignment: .topLeading) {
                             if userPersona.isEmpty {
-                                Text("群里的成员会看到这段，用来知道你是谁、该怎么对你说话。
-例：兔兔，这个群的主人。爱吃甜的、作息颠倒，喜欢被人接话。")
+                                Text("群里的成员会看到这段，用来知道你是谁、该怎么对你说话。例：兔兔，这个群的主人。爱吃甜的、作息颠倒，喜欢被人接话。")
                                     .font(.system(size: 13))
                                     .foregroundStyle(.tertiary)
                                     .padding(.top, 8)
