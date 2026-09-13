@@ -26,6 +26,8 @@ const TEAM_ID = process.env.MP_APNS_TEAM_ID || 'GQN42B462A';
 const BUNDLE_ID = process.env.MP_APNS_TOPIC || 'com.susu.MemoryPalace.ios';
 const HOST = process.env.MP_APNS_HOST || 'https://api.sandbox.push.apple.com';
 const CALLER_NAME = process.env.MP_CALL_CALLER_NAME || 'Caelum';
+/// 来电 handle：她通讯录里存同邮箱的「Caelum」联系人，锁屏就显示他的头像（CallKit 按 handle 匹配联系人）
+const CALLER_HANDLE = process.env.MP_CALL_CALLER_HANDLE || 'caelum@amberrib.com';
 const RING_TIMEOUT_MS = 60_000;
 
 // ---------- 状态 ----------
@@ -42,6 +44,7 @@ interface CallRecord {
 }
 
 let current: CallRecord | null = null;
+let last: CallRecord | null = null;      // 最近一通的终态，给 App 轮询分辨「撤回」还是「未接」
 let ringTimer: ReturnType<typeof setTimeout> | null = null;
 
 function ensureDir() { if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true }); }
@@ -136,7 +139,7 @@ async function startCall(reason?: string): Promise<{ ok: boolean; id?: string; e
   const rec: CallRecord = { id: crypto.randomUUID(), status: 'ringing', reason, startedAt: Date.now() };
   current = rec;
   const r = await sendVoipPush(token, {
-    type: 'ring', call_session_id: rec.id, caller: CALLER_NAME,
+    type: 'ring', call_session_id: rec.id, caller: CALLER_NAME, handle: CALLER_HANDLE,
   });
   if (!r.ok) {
     rec.status = 'failed'; rec.pushError = r.error; rec.endedAt = Date.now();
@@ -149,20 +152,20 @@ async function startCall(reason?: string): Promise<{ ok: boolean; id?: string; e
   clearRingTimer();
   ringTimer = setTimeout(() => {
     if (current?.id === rec.id && rec.status === 'ringing') {
-      rec.status = 'missed'; rec.endedAt = Date.now(); appendLog(rec); current = null;
+      rec.status = 'missed'; rec.endedAt = Date.now(); appendLog(rec); current = null; last = rec;
       doorbell('call', '☎️ 她没接电话（响了一分钟）');
     }
   }, RING_TIMEOUT_MS);
   return { ok: true, id: rec.id };
 }
 
+/// 撤回：只改状态，不发推送——DTS 明说 VoIP 推送只能用来报来电。
+/// App 响铃期间每 2 秒查 /api/call/current，看到 last.status=cancelled 自己收横幅。
 async function cancelCall(): Promise<{ ok: boolean; error?: string }> {
   if (!current || current.status !== 'ringing') return { ok: false, error: '没有正在响的电话' };
   const rec = current;
   clearRingTimer();
-  rec.status = 'cancelled'; rec.endedAt = Date.now(); appendLog(rec); current = null;
-  const token = loadToken();
-  if (token) await sendVoipPush(token, { type: 'cancel', call_session_id: rec.id, caller: CALLER_NAME });
+  rec.status = 'cancelled'; rec.endedAt = Date.now(); appendLog(rec); current = null; last = rec;
   return { ok: true };
 }
 
@@ -179,14 +182,14 @@ function report(id: string, event: 'answer' | 'decline' | 'hangup'): { ok: boole
     return { ok: true, record: rec };
   }
   if (event === 'decline') {
-    rec.status = 'declined'; rec.endedAt = now; appendLog(rec); current = null;
+    rec.status = 'declined'; rec.endedAt = now; appendLog(rec); current = null; last = rec;
     doorbell('call', '☎️ 她拒接了');
     return { ok: true, record: rec };
   }
   // hangup
   rec.status = 'ended'; rec.endedAt = now;
   rec.durationSec = rec.connectedAt ? Math.max(0, Math.round((now - rec.connectedAt) / 1000)) : 0;
-  appendLog(rec); current = null;
+  appendLog(rec); current = null; last = rec;
   doorbell('call', `☏ 通话结束，${fmtDuration(rec.durationSec)}`);
   return { ok: true, record: rec };
 }
@@ -203,7 +206,7 @@ export const CALL_TOOLS = [
   },
   {
     name: 'call_cancel',
-    description: '撤回正在响的来电（她还没接的时候反悔）。横幅会消失。',
+    description: '撤回正在响的来电（她还没接的时候反悔）。横幅两秒内消失。',
     input_schema: { type: 'object' as const, properties: {} },
   },
   {
@@ -270,6 +273,6 @@ export function callRoutes(app: Hono) {
   }
 
   // 当前状态（App 启动时对账用）
-  app.get('/api/call/current', auth, (c) => c.json({ current, callerName: CALLER_NAME }));
+  app.get('/api/call/current', auth, (c) => c.json({ current, last, callerName: CALLER_NAME }));
   app.get('/api/call/log', auth, (c) => c.json({ log: loadJson<CallRecord[]>(LOG_PATH, []).slice(-50) }));
 }

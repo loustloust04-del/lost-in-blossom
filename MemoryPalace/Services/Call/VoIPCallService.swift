@@ -19,7 +19,10 @@ import CallKit
 ///   CallKit 的 reportNewIncomingCall 是同步的，同一套代码就能过。
 ///   国区那条禁令是 App Store 审核政策（要求上架 App 对中国用户运行时关掉 CallKit），不是系统层面的；
 ///   我们是粟粟签名直装，不走商店，CallKit 在她手机上能用。
-/// includesCallsInRecents = false：兔兔定的，不进系统通话记录，App 自己留。
+/// 兔兔 09-13：「想做成那种系统通话」——所以进系统最近通话（includesCallsInRecents = true），
+/// 来电方用邮箱 handle（caelum@amberrib.com）：她通讯录里存一个同邮箱的「Caelum」联系人，锁屏来电就会显示他的头像和名字，
+/// 和真电话一模一样。文字记录仍然只放 App 自己的通话记录区。
+/// 撤回不走 VoIP 推送（DTS：VoIP 推送只能报来电）——响铃期间 App 每 2 秒问一次网关，状态变了自己收横幅。
 /// 计划书：docs/VOICE-CALL-PLAN.md §5 刀0。
 @MainActor
 final class VoIPCallService: NSObject {
@@ -34,6 +37,8 @@ final class VoIPCallService: NSObject {
     private var callerName = "Caelum"
     private var connectedAt: Date?
     private var joined = false
+    private var ringWatch: Timer?
+    static let defaultHandle = "caelum@amberrib.com"
 
     // MARK: - 启动
 
@@ -44,8 +49,8 @@ final class VoIPCallService: NSObject {
         config.supportsVideo = false
         config.maximumCallGroups = 1
         config.maximumCallsPerCallGroup = 1
-        config.includesCallsInRecents = false   // 兔兔：不进系统通话记录，App 自己留
-        config.supportedHandleTypes = [.generic]
+        config.includesCallsInRecents = true    // 兔兔 09-13：要像系统通话，进「最近通话」
+        config.supportedHandleTypes = [.emailAddress, .generic]
         let p = CXProvider(configuration: config)
         p.setDelegate(self, queue: nil)          // nil = 主队列，和 PushKit 同一条线
         provider = p
@@ -90,7 +95,7 @@ final class VoIPCallService: NSObject {
     // MARK: - 来电（必须同步完成上报，不能 Task）
 
     /// 收到 ring 推送：立刻报给系统。completion 在系统回话后再调。
-    private func reportIncoming(sessionId: String, caller: String, completion: @escaping () -> Void) {
+    private func reportIncoming(sessionId: String, caller: String, handle: String, completion: @escaping () -> Void) {
         guard let provider else { completion(); return }
         let uuid = UUID(uuidString: sessionId) ?? UUID()
         activeUUID = uuid
@@ -100,7 +105,10 @@ final class VoIPCallService: NSObject {
         joined = false
 
         let update = CXCallUpdate()
-        update.remoteHandle = CXHandle(type: .generic, value: caller)
+        // 邮箱 handle：通讯录里有同邮箱的联系人时，系统自动显示其头像和名字
+        update.remoteHandle = handle.contains("@")
+            ? CXHandle(type: .emailAddress, value: handle)
+            : CXHandle(type: .generic, value: caller)
         update.localizedCallerName = caller
         update.hasVideo = false
         update.supportsHolding = false
@@ -117,9 +125,48 @@ final class VoIPCallService: NSObject {
                 }
             } else {
                 print("[Call] ☎️ 来电已上报系统 \(sessionId.prefix(8))")
+                Task { @MainActor in self.startRingWatch(sessionId: sessionId, uuid: uuid) }
             }
             completion()
         }
+    }
+
+    /// 响铃期间每 2 秒问一次网关：他撤回了 / 响满一分钟算未接 → 自己收横幅。
+    /// 不用 VoIP 推送传撤回（DTS：每一次 VoIP 推送都必须对应一次来电上报）。
+    private func startRingWatch(sessionId: String, uuid: UUID) {
+        ringWatch?.invalidate()
+        let started = Date()
+        ringWatch = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] t in
+            Task { @MainActor in
+                guard let self, self.activeSessionId == sessionId, !self.joined else { t.invalidate(); return }
+                if Date().timeIntervalSince(started) > 75 { t.invalidate(); return }
+                guard let status = await self.fetchStatus(sessionId: sessionId) else { return }
+                switch status {
+                case "ringing": return
+                case "cancelled":
+                    self.provider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
+                    CallLogStore.update(id: sessionId) { $0.outcome = .cancelled }
+                    print("[Call] 他撤回了 \(sessionId.prefix(8))")
+                default:   // missed / 其他终态
+                    self.provider?.reportCall(with: uuid, endedAt: nil, reason: .unanswered)
+                    CallLogStore.update(id: sessionId) { $0.outcome = .missed }
+                }
+                t.invalidate()
+                self.clearActive()
+            }
+        }
+    }
+
+    /// 网关 /api/call/current：current 为空时看 last（同一 id 的终态）
+    private func fetchStatus(sessionId: String) async -> String? {
+        guard let url = URL(string: gatewayBase + "/api/call/current") else { return nil }
+        var req = URLRequest(url: url, timeoutInterval: 5)
+        req.setValue("Bearer \(gatewayToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        if let cur = json["current"] as? [String: Any], cur["id"] as? String == sessionId { return cur["status"] as? String }
+        if let last = json["last"] as? [String: Any], last["id"] as? String == sessionId { return last["status"] as? String }
+        return nil
     }
 
     /// 他撤回了：横幅消失。规矩是收到 VoIP 推送必须报一次来电——没有在响的就报了再立刻挂。
@@ -145,6 +192,7 @@ final class VoIPCallService: NSObject {
     }
 
     private func clearActive() {
+        ringWatch?.invalidate(); ringWatch = nil
         activeUUID = nil
         activeSessionId = nil
         connectedAt = nil
@@ -225,11 +273,13 @@ extension VoIPCallService: PKPushRegistryDelegate {
         let kind = dict["type"] as? String ?? "ring"
         let sessionId = dict["call_session_id"] as? String ?? UUID().uuidString
         let caller = dict["caller"] as? String ?? "Caelum"
+        let handle = dict["handle"] as? String ?? Self.defaultHandle
         MainActor.assumeIsolated {
             if kind == "cancel" {
+                // 旧网关兼容：撤回现在走轮询，不该再收到这种推送；收到了也按规矩先报再挂
                 self.handleCancel(sessionId: sessionId, caller: caller, completion: completion)
             } else {
-                self.reportIncoming(sessionId: sessionId, caller: caller, completion: completion)
+                self.reportIncoming(sessionId: sessionId, caller: caller, handle: handle, completion: completion)
             }
         }
     }

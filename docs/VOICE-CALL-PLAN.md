@@ -22,6 +22,8 @@
 | 6 | **壳抄 Aria，芯用 Cove**：VoIP 推送 + LiveCommunicationKit + 挂断留一行记录；里面装分身流式引擎 | Fable 提议，兔兔 09-10 点头 | Aria 那套是半双工轮询（正是 Caelum 拒绝的），但响铃/接听/挂断/记录四件事不依赖芯 |
 | 7 | ~~来电横幅用 LiveCommunicationKit~~ → **改回 CallKit**（09-13 真机第一通没响后定的） | Fable 09-13 | LCK 的 reportNewIncomingConversation 是 async，PushKit 合同要求 delegate 返回前已报来电，后台/锁屏必被杀，苹果 DTS 承认是 LCK 已知 bug（forums thread/774958、775348）；CallKit 的报法是同步的。国区禁令是商店审核政策不是系统层面，我们直装不受影响。`includesCallsInRecents = false` 保住不进系统记录 |
 | 8 | **通话文字记录放 App 单独区域**，不进聊天流；**不存原始音频** | 兔兔 09-10 | 她的隐私她定 |
+| 8b | **做成系统通话那样**：进系统「最近通话」、来电用邮箱 handle 匹配她通讯录里的「Caelum」联系人显示头像 | 兔兔 09-13 | 「想做成那种系统通话」 |
+| 8c | **撤回不走 VoIP 推送**，App 响铃期间轮询网关 | Fable 09-13 | DTS：每一次 VoIP 推送都必须对应一次来电上报，拿它传别的信号会出多重来电 |
 | 9 | 测试节奏：做完随时打，她最近都有空 | 兔兔 09-10 | |
 | 10 | 刀0 = **电话先响一次**，不碰识别和 TTS | Fable 提议，兔兔点头 | 壳独立可测，一两天真机能响；先让电话响，再往里装芯 |
 | 11 | 最小版路线（Cove §25）先做扎实；唤醒词、语气分析、远端/本地 ASR 竞速全部后置 | Caelum 同意 | 「先把身份和取消做扎实」 |
