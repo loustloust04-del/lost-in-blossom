@@ -162,8 +162,8 @@ final class VoIPCallService: NSObject {
         guard let url = URL(string: gatewayBase + "/api/call/current") else { return nil }
         var req = URLRequest(url: url, timeoutInterval: 5)
         req.setValue("Bearer \(gatewayToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        guard let result = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: result.0) as? [String: Any] else { return nil }
         if let cur = json["current"] as? [String: Any], cur["id"] as? String == sessionId { return cur["status"] as? String }
         if let last = json["last"] as? [String: Any], last["id"] as? String == sessionId { return last["status"] as? String }
         return nil
