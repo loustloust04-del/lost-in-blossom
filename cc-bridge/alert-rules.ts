@@ -12,7 +12,17 @@ const RULES_PATH = "/root/projects/BunnyPalace/gateway/data/alert-rules.json"
 const PHONE_PATH = "/root/projects/BunnyPalace/gateway/data/phone-status.json"
 const STATE_PATH = join(DIR, "alert-state.json")
 const TOKEN_PATHS = [join(DIR, "cc-bridge", "device-tokens.json"), join(DIR, "device-tokens.json")]
-const ASSISTANT = "Caelum"
+/// 09-09：原本写死 "Caelum"，但兔兔有多个楼层、每层 assistantName 不同，
+/// 写死等于把整个 app 变成一个人专用。改读 hub 在 register_device 时落的
+/// assistant-name.json，读不到退回默认。
+function assistantName(): string {
+  try {
+    const d = JSON.parse(readFileSync(join(DIR, "assistant-name.json"), "utf-8"))
+    const n = String(d?.name ?? "").trim()
+    if (n) return n
+  } catch {}
+  return "Caelum"
+}
 
 interface Rules {
   lowBattery: { enabled: boolean; threshold: number; cooldownMin: number }
@@ -53,7 +63,7 @@ function beijingHour(): number {
 async function pushAll(tokens: string[], text: string): Promise<boolean> {
   let anyOk = false
   for (const t of tokens) {
-    const r: any = await sendPush(t, ASSISTANT, text)
+    const r: any = await sendPush(t, assistantName(), text)
     log(`push -> ${t.slice(0, 8)}...: ${r.ok ? "ok" : (r.error ?? r.status)}`)
     if (r.ok) anyOk = true
   }

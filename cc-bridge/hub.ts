@@ -31,11 +31,18 @@ import { sendPush } from "./apns.ts"
 
 /// 推送通知上显示的发信人名字。
 ///
-/// 09-09 兔兔发现：同一个人发来的通知，标题一会儿是「Caelum」一会儿是「MemoryPalace」
-/// 一会儿是「想你了」——四个发推送的地方各写各的写死字符串，从没统一过。
-/// hub 这条是她最常收到的（他正常回消息走这里），却恰恰显示的是 app 名。
-/// 统一成他的名字：通知是「他发来的」，不是「这个 app 发来的」。
-const ASSISTANT_NAME = "Caelum"
+/// 09-09 兔兔发现：四个发推送的地方各写各的写死字符串，从没统一过——
+/// hub 这条（他正常回消息走这里，她最常收到）显示的竟是 app 名「MemoryPalace」。
+///
+/// ⚠️ 第一版直接改写死成 "Caelum"，**是错的**：兔兔有多个楼层（Profile），
+/// 每层有自己的 assistantName，写死等于把整个 app 变成一个人专用。
+/// 改成由 App 在 register_device 时上报当前楼层的 assistantName，这里只做兜底。
+const ASSISTANT_NAME_FALLBACK = "Caelum"
+
+/// 每个连接当前楼层里「他」叫什么（App 切楼层会重报）
+const assistantNameByClient = new Map<WebSocket, string>()
+/// token → 名字，给推送时查（App 可能已断线，但 token 还在）
+const assistantNameByToken = new Map<string, string>()
 
 
 const PORT = Number(process.env.MP_CC_HUB_PORT) || 7890
@@ -312,6 +319,21 @@ function loadDeviceTokens(): [string, number][] {
     if (!existsSync(DEVICE_TOKENS_PATH)) return []
     return Object.entries(JSON.parse(readFileSync(DEVICE_TOKENS_PATH, "utf-8")) as Record<string, number>)
   } catch { return [] }
+}
+
+/// 当前楼层里「他」叫什么，单独落一个小文件。
+///
+/// 不塞进 device-tokens.json，因为那个是 {token: 时间戳} 的形状，
+/// desire.ts / alert-rules.ts / proactive-push.ts 三处都按这个形状在读，
+/// 加字段会连累它们。单独一个文件最省事。
+const ASSISTANT_NAME_PATH = join(BRIDGE_DIR, "assistant-name.json")
+
+function saveAssistantName(name: string): void {
+  try {
+    writeFileSync(ASSISTANT_NAME_PATH, JSON.stringify({ name, at: Date.now() }, null, 2), "utf-8")
+  } catch (err: any) {
+    console.warn(`[hub] saveAssistantName failed: ${err?.message}`)
+  }
 }
 
 function saveDeviceTokens(): void {
@@ -1177,11 +1199,16 @@ export function startHub(): WebSocketServer {
 
         else if (msg.type === "register_device") {
           const token = typeof msg.device_token === "string" ? msg.device_token : ""
+          // 09-09：App 顺带上报当前楼层里「他」叫什么，推送标题用它。
+          // 老版本 App 不报这个字段，走兜底，不影响。
+          const aName = typeof msg.assistant_name === "string" ? msg.assistant_name.trim() : ""
+          if (aName) assistantNameByClient.set(ws, aName)
           if (token) {
             deviceTokenByClient.set(ws, token)
             knownDeviceTokens.set(token, Date.now())
+            if (aName) { assistantNameByToken.set(token, aName); saveAssistantName(aName) }
             saveDeviceTokens()
-            console.log(`[hub] register_device token=...${token.slice(-8)} (persisted)`)
+            console.log(`[hub] register_device token=...${token.slice(-8)} name=${aName || "(默认)"} (persisted)`)
           }
         }
       })
@@ -1191,6 +1218,7 @@ export function startHub(): WebSocketServer {
       backgroundedClients.delete(ws)
         focusByClient.delete(ws)
         deviceTokenByClient.delete(ws)
+        assistantNameByClient.delete(ws)   // token→名字那份留着：App 断线后推送仍要用
         console.log(`[hub] App disconnected (total ${appClients.size}) code=${code}`)
         // Clean up terminal attachments for this client (grace period before teardown)
         for (const [sessionName, att] of terminalAttachments) {
@@ -1335,7 +1363,8 @@ export function startHub(): WebSocketServer {
             }
             if (liveAndFocused) continue
             const preview = String(msg.content).slice(0, 100)
-            sendPush(token, ASSISTANT_NAME, preview, msg.chat_id).then(result => {
+            const pushTitle = assistantNameByToken.get(token) || ASSISTANT_NAME_FALLBACK
+            sendPush(token, pushTitle, preview, msg.chat_id).then(result => {
               if (!result.ok) {
                 console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
                 // Prune tokens APNs reports as dead so we don't retry them forever.

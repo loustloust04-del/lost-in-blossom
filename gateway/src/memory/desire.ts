@@ -168,6 +168,17 @@ const DEVICE_TOKENS_PATH =
   [join(BRIDGE_DIR, 'device-tokens.json'), join(BRIDGE_DIR, 'cc-bridge', 'device-tokens.json')]
     .find(p => existsSync(p)) || join(BRIDGE_DIR, 'device-tokens.json');
 
+/// 当前楼层里「他」叫什么。hub 在 register_device 时落盘。
+/// 兔兔有多个楼层、每层 assistantName 不同，不能写死。读不到退回默认。
+function assistantName(): string {
+  try {
+    const d = JSON.parse(readFileSync(join(BRIDGE_DIR, 'assistant-name.json'), 'utf-8'));
+    const n = String(d?.name ?? '').trim();
+    if (n) return n;
+  } catch {}
+  return 'Caelum';
+}
+
 /** 读取已注册的设备 token */
 function loadDeviceTokens(): string[] {
   try {
@@ -190,8 +201,8 @@ async function pushDesire(content: string): Promise<void> {
   for (const token of tokens) {
     try {
       // 09-09：原本标题写死「想你了」、正文才是他真说的话，看着像 app 替他喊口号。
-      // 统一成他的名字——通知是「他发来的」，不是「这个功能发来的」。
-      const res = await sendPush(token, 'Caelum', content, 'desire');
+      // 改成他在当前楼层里的名字——通知是「他发来的」，不是「这个功能发来的」。
+      const res = await sendPush(token, assistantName(), content, 'desire');
       if (res.ok) {
         console.log(`[desire] 📲 pushed to ${token.slice(0, 8)}… (apns-id: ${res.apnsId})`);
       } else {

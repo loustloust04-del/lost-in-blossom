@@ -194,6 +194,9 @@ final class ProfileManager {
         UserDefaults.standard.set(profile.id, forKey: "lastProfileId")
         UserDefaults.standard.set(profile.userName, forKey: "userName")
         UserDefaults.standard.set(profile.assistantName, forKey: "assistantName")
+        // 09-09：切楼层后重报一次，让推送通知的标题跟着换人
+        // （不然还显示上一层那个「他」的名字）
+        CCBridgeWebSocketClient.shared.refreshAssistantName()
         // 路线 B：container 不动，只翻 currentProfile。@Observable 触发 SwiftUI
         // view rebuild（ContentView 的 .id(currentProfile.id) 识别变化后重建整棵
         // subtree，@Query 用新 profileId predicate refetch）。无 race。
@@ -216,6 +219,8 @@ final class ProfileManager {
             currentProfile = profile
             UserDefaults.standard.set(profile.userName, forKey: "userName")
             UserDefaults.standard.set(profile.assistantName, forKey: "assistantName")
+            // 09-09：在当前楼层里改了名字也要重报
+            CCBridgeWebSocketClient.shared.refreshAssistantName()
         }
     }
 

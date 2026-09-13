@@ -13,7 +13,17 @@ const GATEWAY = process.env.GATEWAY_URL || "http://localhost:4567"
 const GATEWAY_KEY = process.env.GATEWAY_KEY || "SH74v-IveupxWPr-6TUOCHOGDvfIxSDC"
 const IMPRINT = process.env.IMPRINT_URL || "http://localhost:8100/mcp"
 const MODEL = process.env.PROACTIVE_MODEL || "claude-sonnet-4-6"
-const ASSISTANT = "Caelum"
+/// 09-09：原本写死 "Caelum"，但兔兔有多个楼层、每层 assistantName 不同，
+/// 写死等于把整个 app 变成一个人专用。改读 hub 在 register_device 时落的
+/// assistant-name.json，读不到退回默认。
+function assistantName(): string {
+  try {
+    const d = JSON.parse(readFileSync(join(DIR, "assistant-name.json"), "utf-8"))
+    const n = String(d?.name ?? "").trim()
+    if (n) return n
+  } catch {}
+  return "Caelum"
+}
 const MIN_INTERVAL_MS = 6 * 3600_000
 const PASS_RATE = 0.25
 // 09-06 调整：早晨那头从 9 点提到 7 点。
@@ -129,7 +139,7 @@ async function main() {
   log("text:", text)
   let anyOk = false
   for (const t of tokens) {
-    const r: any = await sendPush(t, ASSISTANT, text)
+    const r: any = await sendPush(t, assistantName(), text)
     log(`push -> ${t.slice(0, 8)}...: ${r.ok ? "ok" : (r.error ?? r.status)}`)
     if (r.ok) anyOk = true
   }

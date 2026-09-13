@@ -213,16 +213,36 @@ final class CCBridgeWebSocketClient: NSObject {
         send(["type": "app_state", "state": state]) { _ in }
     }
 
+    /// 当前楼层里「他」叫什么，给推送标题用。
+    ///
+    /// 09-09：原本 hub 推送标题写死「MemoryPalace」，兔兔发现后第一版改成写死
+    /// 「Caelum」——也是错的，她有多个楼层、每层 assistantName 不同，
+    /// 写死等于把整个 app 变成一个人专用。ProfileManager.switchTo 本来就会把
+    /// assistantName 写进 UserDefaults，这里直接读它上报即可。
+    private var currentAssistantName: String {
+        let n = UserDefaults.standard.string(forKey: "assistantName") ?? ""
+        return n.isEmpty ? "Caelum" : n
+    }
+
     func sendPushToken(_ token: String) {
         pushToken = token
-        send(["type": "register_device", "device_token": token, "env": "sandbox", "preview": pushPreview]) { _ in }
+        send(["type": "register_device", "device_token": token, "env": "sandbox",
+              "preview": pushPreview, "assistant_name": currentAssistantName]) { _ in }
     }
 
     func updatePushPreview(_ mode: String) {
         UserDefaults.standard.set(mode, forKey: Self.pushPreviewKey)
         if let t = pushToken {
-            send(["type": "register_device", "device_token": t, "env": "sandbox", "preview": mode]) { _ in }
+            send(["type": "register_device", "device_token": t, "env": "sandbox",
+                  "preview": mode, "assistant_name": currentAssistantName]) { _ in }
         }
+    }
+
+    /// 切楼层后重报一次，让推送标题跟着换人。
+    func refreshAssistantName() {
+        guard let t = pushToken else { return }
+        send(["type": "register_device", "device_token": t, "env": "sandbox",
+              "preview": pushPreview, "assistant_name": currentAssistantName]) { _ in }
     }
 
     func sendCCConfig() {
