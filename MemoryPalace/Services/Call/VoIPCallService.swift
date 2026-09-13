@@ -97,7 +97,7 @@ final class VoIPCallService: NSObject {
         joined = false
 
         let remote = Handle(type: .generic, value: caller.lowercased(), displayName: caller)
-        let update = Conversation.Update(members: [remote])
+        let update = LiveCommunicationKit.Conversation.Update(members: [remote])
         do {
             try await manager.reportNewIncomingConversation(uuid: uuid, update: update)
             CallLogStore.upsert(CallLogEntry(id: sessionId, caller: caller, startedAt: Date(), outcome: .missed, durationSec: 0))
@@ -122,7 +122,7 @@ final class VoIPCallService: NSObject {
         // 没有对应的来电在响：先报再挂（满足系统规矩，用户几乎看不到）
         let uuid = UUID(uuidString: sessionId) ?? UUID()
         let remote = Handle(type: .generic, value: caller.lowercased(), displayName: caller)
-        let update = Conversation.Update(members: [remote])
+        let update = LiveCommunicationKit.Conversation.Update(members: [remote])
         try? await manager.reportNewIncomingConversation(uuid: uuid, update: update)
         if let conv = manager.conversations.first(where: { $0.uuid == uuid }) {
             manager.reportConversationEvent(.conversationEnded(.now, .remoteEnded), for: conv)
@@ -186,13 +186,14 @@ extension VoIPCallService: PKPushRegistryDelegate {
 }
 
 // MARK: - LiveCommunicationKit
-// ConversationManagerDelegate 本身是 @MainActor 协议（CI 09-12 教的：写成 nonisolated 会「candidate has non-matching type」），
-// 类已经是 @MainActor，方法直接写就行，不用 nonisolated 也不用跳线程。
+// ConversationManagerDelegate 是 @MainActor 协议，类已是 @MainActor，方法直接写，不加 nonisolated。
+// 坑（CI 09-13）：App 自己有个 Models/Conversation，和 LCK 的 Conversation 撞名——
+// 这里凡是 LCK 的 Conversation 都要写全 LiveCommunicationKit.Conversation，否则协议对不上、Update 找不到。
 
 extension VoIPCallService: ConversationManagerDelegate {
     func conversationManagerDidBegin(_ manager: ConversationManager) {}
     func conversationManagerDidReset(_ manager: ConversationManager) { clearActive() }
-    func conversationManager(_ manager: ConversationManager, conversationChanged conversation: Conversation) {}
+    func conversationManager(_ manager: ConversationManager, conversationChanged conversation: LiveCommunicationKit.Conversation) {}
 
     func conversationManager(_ manager: ConversationManager, perform action: ConversationAction) {
         guard let sessionId = activeSessionId, action.conversationUUID == activeUUID else {
