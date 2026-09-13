@@ -75,6 +75,44 @@ struct IOSDebugPage: View {
             }
             .listRowBackground(Theme.mainBg)
 
+            // 面包屑日志（09-13 兔兔：「面包屑在哪里呢」——原来只有写没有看的地方）
+            Section {
+                let log = BreadcrumbLog.shared
+                if log.entries.isEmpty {
+                    Text("还没有记录").font(.caption).foregroundColor(Theme.textMuted)
+                } else {
+                    ForEach(log.entries.suffix(40).reversed()) { e in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text(e.icon)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(e.text)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Theme.textPrimary)
+                                Text(e.time.formatted(date: .omitted, time: .standard))
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Theme.textMuted)
+                            }
+                        }
+                    }
+                }
+                Button(action: {
+                    UIPasteboard.general.string = log.formattedDump()
+                    stressNotice = "面包屑已复制（\(log.entries.count) 条），贴给 Fable"
+                }) {
+                    Text("复制全部面包屑")
+                        .font(.system(size: Theme.F.body))
+                        .foregroundColor(Theme.textPrimary)
+                }
+                .buttonStyle(.plain)
+            } header: {
+                Text("面包屑日志（最近 40 条，新的在上）")
+            } footer: {
+                Text("📉 掉帧探针 · 📷📎 附件 · 🖼️ 旧图转述 · 🔔 门铃。说「卡」的时候把这里复制给 Fable。")
+                    .font(.caption2)
+                    .foregroundColor(Theme.textMuted)
+            }
+            .listRowBackground(Theme.mainBg)
+
             // 压力对话：给白屏/卡顿一个随时能复现的靶子（配面包屑 📉 掉帧探针）
             Section {
                 ForEach([300, 800, 1500], id: \.self) { n in
