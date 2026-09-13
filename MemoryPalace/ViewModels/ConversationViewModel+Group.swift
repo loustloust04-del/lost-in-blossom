@@ -309,7 +309,11 @@ extension ConversationViewModel {
         if isCC { headers["X-MP-MessageId"] = node.id }
         // 让气泡在流式期间显示实时文本：判定是 streamingNodeId == node.id，
         // 群聊之前没设它 → 整段流式都是空气泡，直到 onComplete 才一次性冒出来。
-        streamingNodeId = node.id
+        // 0913「串台」另一半：streamingNodeId/streamingText 是全局的，她切到别的对话后
+        // 仍在写 → 群聊的流式泡出现在主人的聊天页。只在还看着这个群时才挂。
+        if selectedConversation?.id == conversation.id {
+            streamingNodeId = node.id
+        }
 
         // 流式调用
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -329,7 +333,10 @@ extension ConversationViewModel {
                 onToken: { [weak self] token in
                     guard let self else { return }
                     accumulated += token
-                    streamingText = accumulated
+                    // 切走了就别再往全局流式态写（那会显示在她当前看的那个对话里）
+                    if self.selectedConversation?.id == conversation.id {
+                        self.streamingText = accumulated
+                    }
                     // 不做 per-token SwiftData 写（V5 流式优化）
                 },
                 onComplete: { [weak self] fullText, usage in
@@ -439,7 +446,16 @@ extension ConversationViewModel {
         context: ModelContext
     ) -> MessageNode {
         let nodeId = UUID().uuidString
-        let parentId = currentPath.last?.id
+        // 兔兔 0913 报「夺舍」：角色正在说话时切到别的对话，群聊消息会落进新对话、
+        // 群聊内容被覆盖。真凶就在这行——父节点取 currentPath.last，而 currentPath
+        // 在她切对话的那一刻已经换成**另一个对话**的路径了，于是新消息认了别人的爹、
+        // 又改写了那个对话的 currentNodeId，两边同时错乱。
+        // 修：父节点以**这一轮所属的对话**为准（它自己的 currentNodeId），
+        // 与当前在看哪个对话彻底脱钩；UI 状态只在「还在看这个群」时才同步。
+        let isStillViewing = (selectedConversation?.id == conversation.id)
+        let parentId: String? = isStillViewing
+            ? currentPath.last?.id
+            : (conversation.currentNodeId.isEmpty ? nil : conversation.currentNodeId)
 
         let node = MessageNode(
             id: nodeId,
@@ -456,13 +472,25 @@ extension ConversationViewModel {
         node.senderName = senderName
         context.insert(node)
 
-        if let parentId, let parent = nodeMap[parentId] {
-            parent.childrenIds.append(nodeId)
-            effectiveChildrenMap[parentId, default: []].append(nodeId)
+        if let parentId {
+            if isStillViewing, let parent = nodeMap[parentId] {
+                parent.childrenIds.append(nodeId)
+                effectiveChildrenMap[parentId, default: []].append(nodeId)
+            } else {
+                // 不在看这个群：nodeMap 装的是别人的树，绝不能碰——直接查库挂爹
+                let pid = conversation.profileId
+                let desc = FetchDescriptor<MessageNode>(
+                    predicate: #Predicate<MessageNode> { $0.id == parentId && $0.profileId == pid })
+                if let parent = try? context.fetch(desc).first, !parent.childrenIds.contains(nodeId) {
+                    parent.childrenIds.append(nodeId)
+                }
+            }
         }
-        nodeMap[nodeId] = node
-        effectiveChildrenMap[nodeId] = []
-        currentPath.append(node)
+        if isStillViewing {
+            nodeMap[nodeId] = node
+            effectiveChildrenMap[nodeId] = []
+            currentPath.append(node)
+        }
 
         conversation.currentNodeId = nodeId
         conversation.updateTime = Date()
