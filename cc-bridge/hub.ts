@@ -29,6 +29,15 @@ import { tmpdir } from "node:os"
 import { join, basename, extname } from "node:path"
 import { sendPush } from "./apns.ts"
 
+/// 推送通知上显示的发信人名字。
+///
+/// 09-09 兔兔发现：同一个人发来的通知，标题一会儿是「Caelum」一会儿是「MemoryPalace」
+/// 一会儿是「想你了」——四个发推送的地方各写各的写死字符串，从没统一过。
+/// hub 这条是她最常收到的（他正常回消息走这里），却恰恰显示的是 app 名。
+/// 统一成他的名字：通知是「他发来的」，不是「这个 app 发来的」。
+const ASSISTANT_NAME = "Caelum"
+
+
 const PORT = Number(process.env.MP_CC_HUB_PORT) || 7890
 const TMUX_SESSION = process.env.MP_CC_TMUX_SESSION ?? "mp-cc"
 const HUB_HOST = process.env.MP_CC_HUB_HOST ?? "127.0.0.1"
@@ -1326,7 +1335,7 @@ export function startHub(): WebSocketServer {
             }
             if (liveAndFocused) continue
             const preview = String(msg.content).slice(0, 100)
-            sendPush(token, "MemoryPalace", preview, msg.chat_id).then(result => {
+            sendPush(token, ASSISTANT_NAME, preview, msg.chat_id).then(result => {
               if (!result.ok) {
                 console.warn(`[hub] APNs push failed: ${result.error} (status=${result.status})`)
                 // Prune tokens APNs reports as dead so we don't retry them forever.

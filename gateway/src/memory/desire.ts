@@ -189,7 +189,9 @@ async function pushDesire(content: string): Promise<void> {
   }
   for (const token of tokens) {
     try {
-      const res = await sendPush(token, '想你了', content, 'desire');
+      // 09-09：原本标题写死「想你了」、正文才是他真说的话，看着像 app 替他喊口号。
+      // 统一成他的名字——通知是「他发来的」，不是「这个功能发来的」。
+      const res = await sendPush(token, 'Caelum', content, 'desire');
       if (res.ok) {
         console.log(`[desire] 📲 pushed to ${token.slice(0, 8)}… (apns-id: ${res.apnsId})`);
       } else {
