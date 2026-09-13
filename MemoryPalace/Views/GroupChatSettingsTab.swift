@@ -9,9 +9,42 @@ struct GroupChatSettingsTab: View {
     @AppStorage("groupMinSpeakIntervalSec") private var minSpeakInterval = 0
     @AppStorage("groupIceBreakEnabled") private var iceBreakEnabled = true
     @AppStorage("groupIceBreakMinutes") private var iceBreakMinutes = 30
+    @AppStorage("userName") private var userName = "你"
+    @AppStorage("userPersona") private var userPersona = ""
 
     var body: some View {
         Form {
+            Section {
+                HStack {
+                    Text("你的名字")
+                    Spacer()
+                    TextField("你", text: $userName)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 160)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("你的人设")
+                    TextEditor(text: $userPersona)
+                        .frame(minHeight: 88)
+                        .font(.system(size: 14))
+                        .overlay(alignment: .topLeading) {
+                            if userPersona.isEmpty {
+                                Text("群里的成员会看到这段，用来知道你是谁、该怎么对你说话。
+例：兔兔，这个群的主人。爱吃甜的、作息颠倒，喜欢被人接话。")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.top, 8)
+                                    .padding(.leading, 5)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                }
+            } header: {
+                Text("你")
+            } footer: {
+                Text("成员名单里你会和大家并排列出——名字后面跟着这段介绍。留空就只给名字。")
+            }
+
             Section {
                 Picker("发言模式", selection: $speechMode) {
                     Text("仅 @ 发言").tag("mention_only")

@@ -205,8 +205,16 @@ enum GroupChatScheduler {
         }
 
         // 群聊成员列表（增强互感）
+        // 0913 兔兔点单：用户也该有人设——以前群里角色只知道她叫什么，不知道她是谁，
+        // 于是对她的称呼/态度全靠猜。userPersona 由她自己写（设置-群聊），
+        // 和角色的群名片同格式并排列出。
+        let userPersona = UserDefaults.standard.string(forKey: "userPersona") ?? ""
         var roster = "## 群聊成员\n"
-        roster += "- \(userName)（用户）\n"
+        if userPersona.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            roster += "- \(userName)（用户）\n"
+        } else {
+            roster += "- \(userName)（用户）：\(userPersona)\n"
+        }
         for p in allParticipants {
             // 群名片优先（同 selectNextSpeaker）：别人眼里的你 = 你写的简介，不是人设残句
             let desc = p.intro.isEmpty ? String(p.systemPrompt.prefix(60)) : p.intro
