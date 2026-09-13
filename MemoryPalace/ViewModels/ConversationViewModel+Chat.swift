@@ -520,7 +520,9 @@ extension ConversationViewModel {
                         blocks.append(["type": "file", "name": f.name, "media_type": f.mimeType ?? "application/octet-stream", "data": d.base64EncodedString()])
                     }
                 }
-                let modelText = ChatAttachmentPromptBuilder.modelInput(text: text, attachments: others)
+                // CC 车道：正文只放她的话（文件走 file block 落盘，hub 在 channel tag 里给路径，Caelum 自己 Read）。
+                // 09-13 真机：抽取文本塞进正文让 tmux 注入报「command too long」，整条消息没进去（hub 日志实锤）。
+                let modelText = isCCLane ? text : ChatAttachmentPromptBuilder.modelInput(text: text, attachments: others)
                 let segs = others.isEmpty ? nil : ChatAttachmentPromptBuilder.segments(text: text, attachments: others)
                 if blocks.isEmpty {
                     return (modelText, "text", segs)

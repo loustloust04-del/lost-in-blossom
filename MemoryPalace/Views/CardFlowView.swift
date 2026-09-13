@@ -134,6 +134,9 @@ struct CardFlowView: View {
     @State private var pendingFileName: String?
     /// 多附件（09-12）：一次多张图 / 多文件。旧的三个单件绑定留给粘贴/拖入等旧路径
     @State private var pendingAttachments: [PendingChatAttachment] = []
+    /// 附件条当前属于哪条对话（09-13：切大对话时 isCurrentConvLoading 分支把 onChange 挤出树，
+    /// 换对话事件漏掉，附件跟着聊天框走到别的对话——兔兔真机 #12。onAppear 再核对一次）
+    @State private var attachmentsConvId: String? = nil
     // iOS 下 PinBar 已挪到 ContentView.iOSChatTopBar，state 同步搬走。
     // macOS 下 PinBar 仍作为 VStack 子项留在 CardFlowView，保留这两个 state。
     @State private var isAtBottom: Bool = true
@@ -233,6 +236,13 @@ struct CardFlowView: View {
     /// 现在：写一次 offset；懒加载在落点 mount 出真实高度后 contentSize 会变，
     /// 再复核三次（只写 offset，零 mount 风暴）。找不到 UIScrollView（理论上不会）才退回
     /// 单步禁动画 scrollTo 哨兵。
+    /// 附件条随对话走：存到旧对话名下，取回新对话名下
+    private func swapAttachments(from oldId: String?, to newId: String?) {
+        if let oldId, oldId != newId { viewModel.draftAttachments[oldId] = pendingAttachments }
+        pendingAttachments = newId.flatMap { viewModel.draftAttachments[$0] } ?? []
+        attachmentsConvId = newId
+    }
+
     /// force=false（默认）：只在用户已经在底部时才滚，避免流式时弹跳
     /// force=true：强制滚底（切换对话、消息完成、发送、用户点回底按钮）
     private func scrollToLastMessage(proxy: ScrollViewProxy, force: Bool = false) {
@@ -607,11 +617,13 @@ struct CardFlowView: View {
                 pendingFileName = nil
                 pendingImageData = nil
                 // 多附件随对话暂存/取回（09-12）：切走时存起来，切回来时还在
-                if let oldId { viewModel.draftAttachments[oldId] = pendingAttachments }
-                pendingAttachments = convId.flatMap { viewModel.draftAttachments[$0] } ?? []
+                swapAttachments(from: oldId, to: convId)
             }
             .onAppear {
                 loadStickersForConversation(viewModel.selectedConversation?.id)
+                // 大对话切换走 loading 分支时上面的 onChange 不在树上，这里补核对
+                let cid = viewModel.selectedConversation?.id
+                if attachmentsConvId != cid { swapAttachments(from: attachmentsConvId, to: cid) }
                 // 注入贴纸 mutation callback：加/删贴纸时推对话走 3s debounce 重排
                 stickerVM.onConversationMutated = { [viewModel] convId in
                     if let conv = viewModel.selectedConversation, conv.id == convId {
@@ -1732,10 +1744,11 @@ private struct MultimodalUserBubble: View {
     let lineSpacingScale: Double
 
     @State private var previewItems: [BubbleAttachmentItem]? = nil
+    @State private var previewStart: Int = 0
 
     private struct ContentBlock {
-        var imageData: Data?
-        var documentTitle: String?
+        var images: [Data] = []            // 09-13：多图全画（之前只留最后一张）
+        var fileNames: [String] = []       // CC 车道 file block / document 的名字
         var text: String = ""
     }
 
@@ -1751,9 +1764,11 @@ private struct MultimodalUserBubble: View {
             if type == "image", let source = item["source"] as? [String: Any],
                let b64 = source["data"] as? String,
                let imgData = Data(base64Encoded: b64) {
-                block.imageData = imgData
+                block.images.append(imgData)
             } else if type == "document" {
-                block.documentTitle = item["title"] as? String ?? "document.pdf"
+                block.fileNames.append(item["title"] as? String ?? "document.pdf")
+            } else if type == "file" {
+                block.fileNames.append(item["name"] as? String ?? "file")
             } else if type == "text" {
                 block.text = item["text"] as? String ?? ""
             }
@@ -1764,25 +1779,33 @@ private struct MultimodalUserBubble: View {
     var body: some View {
         let block = parsed
         VStack(alignment: .leading, spacing: 6) {
-            if let imgData = block.imageData, let uiImg = UIImage(data: imgData) {
-                Image(uiImage: uiImg)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 200)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    // 点开走她的 AttachmentPreviewSheet：全屏 + 保存到相册 + QuickLook
-                    //（原来的裸 fullScreenCover 只有一张图和关闭键，兔兔 08-31：存不了相册）
-                    .onTapGesture { previewItems = [.image(name: "photo.jpg", data: imgData)] }
-                    .fullScreenCover(isPresented: Binding(
-                        get: { previewItems != nil },
-                        set: { if !$0 { previewItems = nil } }
-                    )) {
-                        if let items = previewItems {
-                            AttachmentPreviewSheet(items: items, initialIndex: 0)
+            if !block.images.isEmpty {
+                // 一张：原样 200pt 宽；多张：九宫格 3 列，点哪张从哪张开始预览（09-13 兔兔真机 #8）
+                let uiImages = block.images.compactMap { UIImage(data: $0) }
+                let allItems: [BubbleAttachmentItem] = block.images.enumerated().map { .image(name: "photo\($0.offset + 1).jpg", data: $0.element) }
+                if uiImages.count == 1 {
+                    Image(uiImage: uiImages[0])
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        // 点开走她的 AttachmentPreviewSheet：全屏 + 保存到相册 + QuickLook
+                        .onTapGesture { previewStart = 0; previewItems = allItems }
+                } else {
+                    let cols = [GridItem(.fixed(64), spacing: 4), GridItem(.fixed(64), spacing: 4), GridItem(.fixed(64), spacing: 4)]
+                    LazyVGrid(columns: cols, alignment: .leading, spacing: 4) {
+                        ForEach(Array(uiImages.enumerated()), id: \.offset) { idx, ui in
+                            Image(uiImage: ui)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 64, height: 64)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .onTapGesture { previewStart = idx; previewItems = allItems }
                         }
                     }
+                }
             }
-            if let title = block.documentTitle {
+            ForEach(Array(block.fileNames.enumerated()), id: \.offset) { _, title in
                 HStack(spacing: 6) {
                     Image(systemName: "doc.fill")
                         .font(.system(size: 16))
@@ -1803,6 +1826,14 @@ private struct MultimodalUserBubble: View {
                     .foregroundColor(Theme.textPrimary)
                     .textSelection(.enabled)
                     .lineSpacing(4 * (fontScale > 0 ? fontScale : 1.0) * lineSpacingScale)
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { previewItems != nil },
+            set: { if !$0 { previewItems = nil; previewStart = 0 } }
+        )) {
+            if let items = previewItems {
+                AttachmentPreviewSheet(items: items, initialIndex: previewStart)
             }
         }
     }
