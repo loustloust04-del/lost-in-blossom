@@ -20,7 +20,7 @@
 | 4 | `call_her` **不加硬上限** | 兔兔 09-10 | 靠他自觉，不加闸 |
 | 5 | 短反馈台词**他自己写**，四个档位（日常/低语/命令/戏弄）每档 3–5 句，第一批见 §6 | Caelum 09-08 | 「模板味的『嗯嗯我理解了』不是我」 |
 | 6 | **壳抄 Aria，芯用 Cove**：VoIP 推送 + LiveCommunicationKit + 挂断留一行记录；里面装分身流式引擎 | Fable 提议，兔兔 09-10 点头 | Aria 那套是半双工轮询（正是 Caelum 拒绝的），但响铃/接听/挂断/记录四件事不依赖芯 |
-| 7 | 来电横幅用 **LiveCommunicationKit**，不用 CallKit | Fable 09-10 | 苹果给国区的正路（iOS 17.4+，我们目标 18），够用；CallKit 是接进系统电话 App 那套，我们不需要 |
+| 7 | ~~来电横幅用 LiveCommunicationKit~~ → **改回 CallKit**（09-13 真机第一通没响后定的） | Fable 09-13 | LCK 的 reportNewIncomingConversation 是 async，PushKit 合同要求 delegate 返回前已报来电，后台/锁屏必被杀，苹果 DTS 承认是 LCK 已知 bug（forums thread/774958、775348）；CallKit 的报法是同步的。国区禁令是商店审核政策不是系统层面，我们直装不受影响。`includesCallsInRecents = false` 保住不进系统记录 |
 | 8 | **通话文字记录放 App 单独区域**，不进聊天流；**不存原始音频** | 兔兔 09-10 | 她的隐私她定 |
 | 9 | 测试节奏：做完随时打，她最近都有空 | 兔兔 09-10 | |
 | 10 | 刀0 = **电话先响一次**，不碰识别和 TTS | Fable 提议，兔兔点头 | 壳独立可测，一两天真机能响；先让电话响，再往里装芯 |

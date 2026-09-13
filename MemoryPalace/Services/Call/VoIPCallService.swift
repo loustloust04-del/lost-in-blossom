@@ -4,24 +4,29 @@ import AVFoundation
 #if os(iOS)
 import UIKit
 import PushKit
-import LiveCommunicationKit
+import CallKit
 
 /// 语音通话 · 刀0「电话先响一次」——App 侧的壳。
 ///
-/// 链路：gateway /api/call/ring → APNs VoIP 推送 → PushKit → 这里立刻向系统报来电
-///       → LiveCommunicationKit 在锁屏/后台弹出他的名字 → 她接/拒 → 回报 gateway。
-/// 铁律：收到 VoIP 推送**必须**在完成前上报一次来电，否则系统杀 App
-///       （"Killing app because it never posted an incoming call to the system after receiving a PushKit VoIP push"）。
-///       所以连 cancel 推送也走「先报再挂」。
-/// 为什么是 LiveCommunicationKit 不是 CallKit：苹果给国区的正路（iOS 17.4+，我们目标 18），
-///       给得了锁屏横幅 + 划一下接起来，不需要他真的变成电话 App 里的联系人。
+/// 链路：gateway /api/call/ring → APNs VoIP 推送 → PushKit → 这里**同步**向系统报来电
+///       → 系统在锁屏/后台弹出他的名字 → 她接/拒 → 回报 gateway。
+///
+/// 为什么最后用的是 CallKit 不是 LiveCommunicationKit（09-13 真机第一通没响，查出来的）：
+///   PushKit 的合同是「delegate 返回前必须已经报了来电」，否则系统当场杀 App
+///   （"Killing app because it never posted an incoming call to the system after receiving a PushKit VoIP push"）。
+///   LCK 的 reportNewIncomingConversation 是 async，只能包在 Task 里——Task 是「等会儿再做」，
+///   前台没事，后台/锁屏必死。苹果 DTS 在论坛承认这是 LCK 的已知 bug（thread/774958、775348）。
+///   CallKit 的 reportNewIncomingCall 是同步的，同一套代码就能过。
+///   国区那条禁令是 App Store 审核政策（要求上架 App 对中国用户运行时关掉 CallKit），不是系统层面的；
+///   我们是粟粟签名直装，不走商店，CallKit 在她手机上能用。
+/// includesCallsInRecents = false：兔兔定的，不进系统通话记录，App 自己留。
 /// 计划书：docs/VOICE-CALL-PLAN.md §5 刀0。
 @MainActor
 final class VoIPCallService: NSObject {
     static let shared = VoIPCallService()
 
     private var registry: PKPushRegistry?
-    private var manager: ConversationManager?
+    private var provider: CXProvider?
 
     /// 当前来电：uuid ↔ gateway 的 call_session_id（同一个字符串）
     private var activeUUID: UUID?
@@ -35,26 +40,23 @@ final class VoIPCallService: NSObject {
     /// didFinishLaunching 里调。PushKit 必须在启动时就注册，否则 App 被杀时收不到 VoIP 推送。
     func start() {
         guard registry == nil else { return }
-        let config = ConversationManager.Configuration(
-            ringtoneName: nil,
-            iconTemplateImageData: nil,
-            maximumConversationGroups: 1,
-            maximumConversationsPerConversationGroup: 1,
-            includesConversationInRecents: false,   // 兔兔：不进系统通话记录，App 自己留
-            supportsVideo: false,
-            supportedHandleTypes: [.generic]
-        )
-        let m = ConversationManager(configuration: config)
-        m.delegate = self
-        manager = m
+        let config = CXProviderConfiguration()
+        config.supportsVideo = false
+        config.maximumCallGroups = 1
+        config.maximumCallsPerCallGroup = 1
+        config.includesCallsInRecents = false   // 兔兔：不进系统通话记录，App 自己留
+        config.supportedHandleTypes = [.generic]
+        let p = CXProvider(configuration: config)
+        p.setDelegate(self, queue: nil)          // nil = 主队列，和 PushKit 同一条线
+        provider = p
 
-        let r = PKPushRegistry(queue: .main)
+        let r = PKPushRegistry(queue: .main)     // DTS：PushKit 和 CallKit 都放主队列，别换线程
         r.delegate = self
         r.desiredPushTypes = [.voIP]
         registry = r
 
         CallGreeting.shared.ensureCached()
-        print("[Call] PushKit 注册中，LCK 就绪")
+        print("[Call] PushKit 注册中，CallKit provider 就绪")
     }
 
     // MARK: - gateway
@@ -85,10 +87,11 @@ final class VoIPCallService: NSObject {
         }
     }
 
-    // MARK: - 来电
+    // MARK: - 来电（必须同步完成上报，不能 Task）
 
-    private func reportIncoming(sessionId: String, caller: String) async {
-        guard let manager else { return }
+    /// 收到 ring 推送：立刻报给系统。completion 在系统回话后再调。
+    private func reportIncoming(sessionId: String, caller: String, completion: @escaping () -> Void) {
+        guard let provider else { completion(); return }
         let uuid = UUID(uuidString: sessionId) ?? UUID()
         activeUUID = uuid
         activeSessionId = sessionId
@@ -96,36 +99,48 @@ final class VoIPCallService: NSObject {
         connectedAt = nil
         joined = false
 
-        let remote = Handle(type: .generic, value: caller.lowercased(), displayName: caller)
-        let update = LiveCommunicationKit.Conversation.Update(members: [remote])
-        do {
-            try await manager.reportNewIncomingConversation(uuid: uuid, update: update)
-            CallLogStore.upsert(CallLogEntry(id: sessionId, caller: caller, startedAt: Date(), outcome: .missed, durationSec: 0))
-            print("[Call] ☎️ 来电已上报系统 \(sessionId.prefix(8))")
-        } catch {
-            print("[Call] 上报来电失败: \(error.localizedDescription)")
-            activeUUID = nil; activeSessionId = nil
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .generic, value: caller)
+        update.localizedCallerName = caller
+        update.hasVideo = false
+        update.supportsHolding = false
+        update.supportsGrouping = false
+        update.supportsUngrouping = false
+        update.supportsDTMF = false
+
+        CallLogStore.upsert(CallLogEntry(id: sessionId, caller: caller, startedAt: Date(), outcome: .missed, durationSec: 0))
+        provider.reportNewIncomingCall(with: uuid, update: update) { error in
+            if let error {
+                print("[Call] 上报来电失败: \(error.localizedDescription)")
+                Task { @MainActor in
+                    if self.activeUUID == uuid { self.clearActive() }
+                }
+            } else {
+                print("[Call] ☎️ 来电已上报系统 \(sessionId.prefix(8))")
+            }
+            completion()
         }
     }
 
     /// 他撤回了：横幅消失。规矩是收到 VoIP 推送必须报一次来电——没有在响的就报了再立刻挂。
-    private func handleCancel(sessionId: String, caller: String) async {
-        guard let manager else { return }
-        if let uuid = activeUUID, activeSessionId == sessionId, !joined,
-           let conv = manager.conversations.first(where: { $0.uuid == uuid }) {
-            manager.reportConversationEvent(.conversationEnded(.now, .remoteEnded), for: conv)
+    private func handleCancel(sessionId: String, caller: String, completion: @escaping () -> Void) {
+        guard let provider else { completion(); return }
+        if let uuid = activeUUID, activeSessionId == sessionId, !joined {
+            provider.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
             CallLogStore.update(id: sessionId) { $0.outcome = .cancelled }
             print("[Call] 他撤回了 \(sessionId.prefix(8))")
             clearActive()
+            completion()
             return
         }
         // 没有对应的来电在响：先报再挂（满足系统规矩，用户几乎看不到）
         let uuid = UUID(uuidString: sessionId) ?? UUID()
-        let remote = Handle(type: .generic, value: caller.lowercased(), displayName: caller)
-        let update = LiveCommunicationKit.Conversation.Update(members: [remote])
-        try? await manager.reportNewIncomingConversation(uuid: uuid, update: update)
-        if let conv = manager.conversations.first(where: { $0.uuid == uuid }) {
-            manager.reportConversationEvent(.conversationEnded(.now, .remoteEnded), for: conv)
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .generic, value: caller)
+        update.localizedCallerName = caller
+        provider.reportNewIncomingCall(with: uuid, update: update) { _ in
+            provider.reportCall(with: uuid, endedAt: nil, reason: .unanswered)
+            completion()
         }
     }
 
@@ -146,6 +161,40 @@ final class VoIPCallService: NSObject {
             print("[Call] 音频会话配置失败: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - CallKit 动作（provider 队列 = 主队列，assumeIsolated 不跳线程）
+
+    fileprivate func handleAnswer(_ action: CXAnswerCallAction) {
+        guard let sessionId = activeSessionId, action.callUUID == activeUUID else { action.fail(); return }
+        configureAudioSession()
+        joined = true
+        connectedAt = Date()
+        action.fulfill()
+        CallLogStore.update(id: sessionId) { $0.outcome = .answered }
+        Task { await self.post("/api/call/answer", ["call_session_id": sessionId]) }
+    }
+
+    fileprivate func handleEnd(_ action: CXEndCallAction) {
+        guard let sessionId = activeSessionId, action.callUUID == activeUUID else { action.fail(); return }
+        // 没接就是拒接；接了再挂是挂断
+        let wasJoined = joined
+        let dur = connectedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
+        action.fulfill()
+        if wasJoined {
+            CallLogStore.update(id: sessionId) { $0.outcome = .answered; $0.durationSec = dur }
+            Task { await self.post("/api/call/hangup", ["call_session_id": sessionId]) }
+        } else {
+            CallLogStore.update(id: sessionId) { $0.outcome = .declined }
+            Task { await self.post("/api/call/decline", ["call_session_id": sessionId]) }
+        }
+        clearActive()
+    }
+
+    fileprivate func handleAudioActivated() {
+        // 音频会话由系统激活后才能出声——他的第一句在这儿
+        guard joined else { return }
+        CallGreeting.shared.play()
+    }
 }
 
 // MARK: - PushKit
@@ -165,6 +214,8 @@ extension VoIPCallService: PKPushRegistryDelegate {
         print("[Call] VoIP token 失效")
     }
 
+    /// 注册时 queue = .main，所以这里已经在主线程：用 assumeIsolated 同步进主 actor，
+    /// 在返回前把来电报给系统。这里绝对不能用 Task（09-13 第一通没响就是因为它）。
     nonisolated func pushRegistry(_ registry: PKPushRegistry,
                                   didReceiveIncomingPushWith payload: PKPushPayload,
                                   for type: PKPushType,
@@ -174,75 +225,45 @@ extension VoIPCallService: PKPushRegistryDelegate {
         let kind = dict["type"] as? String ?? "ring"
         let sessionId = dict["call_session_id"] as? String ?? UUID().uuidString
         let caller = dict["caller"] as? String ?? "Caelum"
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             if kind == "cancel" {
-                await self.handleCancel(sessionId: sessionId, caller: caller)
+                self.handleCancel(sessionId: sessionId, caller: caller, completion: completion)
             } else {
-                await self.reportIncoming(sessionId: sessionId, caller: caller)
+                self.reportIncoming(sessionId: sessionId, caller: caller, completion: completion)
             }
-            completion()
         }
     }
 }
 
-// MARK: - LiveCommunicationKit
-// ConversationManagerDelegate 是 @MainActor 协议，类已是 @MainActor，方法直接写，不加 nonisolated。
-// 坑（CI 09-13）：App 自己有个 Models/Conversation，和 LCK 的 Conversation 撞名——
-// 这里凡是 LCK 的 Conversation 都要写全 LiveCommunicationKit.Conversation，否则协议对不上、Update 找不到。
+// MARK: - CallKit
 
-extension VoIPCallService: ConversationManagerDelegate {
-    func conversationManagerDidBegin(_ manager: ConversationManager) {}
-    func conversationManagerDidReset(_ manager: ConversationManager) { clearActive() }
-    func conversationManager(_ manager: ConversationManager, conversationChanged conversation: LiveCommunicationKit.Conversation) {}
-
-    func conversationManager(_ manager: ConversationManager, perform action: ConversationAction) {
-        guard let sessionId = activeSessionId, action.conversationUUID == activeUUID else {
-            action.fail(); return
-        }
-        switch action {
-        case let join as JoinConversationAction:
-            // 她接了
-            configureAudioSession()
-            joined = true
-            connectedAt = Date()
-            if let conv = manager.conversations.first(where: { $0.uuid == activeUUID }) {
-                manager.reportConversationEvent(.conversationConnected(.now), for: conv)
-            }
-            join.fulfill(dateConnected: .now)
-            CallLogStore.update(id: sessionId) { $0.outcome = .answered }
-            Task { await self.post("/api/call/answer", ["call_session_id": sessionId]) }
-
-        case let end as EndConversationAction:
-            // 没接就是拒接；接了再挂是挂断
-            let wasJoined = joined
-            let dur = connectedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
-            end.fulfill(dateEnded: .now)
-            if wasJoined {
-                CallLogStore.update(id: sessionId) { $0.outcome = .answered; $0.durationSec = dur }
-                Task { await self.post("/api/call/hangup", ["call_session_id": sessionId]) }
-            } else {
-                CallLogStore.update(id: sessionId) { $0.outcome = .declined }
-                Task { await self.post("/api/call/decline", ["call_session_id": sessionId]) }
-            }
-            clearActive()
-
-        default:
-            action.fulfill()
-        }
+extension VoIPCallService: CXProviderDelegate {
+    nonisolated func providerDidReset(_ provider: CXProvider) {
+        MainActor.assumeIsolated { self.clearActive() }
     }
 
-    func conversationManager(_ manager: ConversationManager, timedOutPerforming action: ConversationAction) {
+    nonisolated func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+        MainActor.assumeIsolated { self.handleAnswer(action) }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+        MainActor.assumeIsolated { self.handleEnd(action) }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
+        action.fulfill()
+    }
+
+    nonisolated func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
         action.fail()
     }
 
-    func conversationManager(_ manager: ConversationManager, didActivate audioSession: AVAudioSession) {
-        // 音频会话由系统激活后才能出声——他的第一句在这儿
-        guard joined else { return }
-        CallGreeting.shared.play()
+    nonisolated func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+        MainActor.assumeIsolated { self.handleAudioActivated() }
     }
 
-    func conversationManager(_ manager: ConversationManager, didDeactivate audioSession: AVAudioSession) {
-        CallGreeting.shared.stop()
+    nonisolated func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+        MainActor.assumeIsolated { CallGreeting.shared.stop() }
     }
 }
 #endif
