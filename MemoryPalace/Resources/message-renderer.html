@@ -173,9 +173,11 @@ var richColorMap = {
 };
 function preprocessRichText(text) {
     // {color:xxx}文字{/color} → <span>（颜色名映射为柔和色调）
-    text = text.replace(/\{color:(\w+)\}([\s\S]*?)\{\/color\}/g,
+    // 颜色值：名字走柔和色表；#hex 直接用（Caelum 09-14 QA：原生路径吃 hex，这里之前 \w+ 不认 #）。
+    // 只放行 #RGB / #RRGGBB 和 [A-Za-z]+，别的原样保留，免得注进 style
+    text = text.replace(/\{color:(#(?:[0-9A-Fa-f]{3}){1,2}|[A-Za-z]+)\}([\s\S]*?)\{\/color\}/g,
         function(match, color, inner) {
-            var mapped = richColorMap[color.toLowerCase()] || color;
+            var mapped = color.charAt(0) === '#' ? color : (richColorMap[color.toLowerCase()] || color);
             return '<span class="rich-color" style="color:' + mapped + '">' + inner + '</span>';
         });
     // ||spoiler|| → 点击展开的黑块
