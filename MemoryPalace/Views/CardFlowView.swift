@@ -312,6 +312,11 @@ struct CardFlowView: View {
     /// 单步禁动画 scrollTo 哨兵。
     /// 列表往输入条底下多伸多少：输入条本身的高度（含 home 条那截由安全区自己管），封顶 96
     private var barOverlap: CGFloat { min(max(bottomBarHeight, 0), 96) }
+    /// 视觉顶留白：状态栏 + nav 按钮区（GeometryReader 忽略了顶部安全区，读不到时按 59 兜底）
+    private var topReserve: CGFloat {
+        let top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.top ?? 59
+        return 50 + max(top, 44)
+    }
 
     /// 附件条随对话走：存到旧对话名下，取回新对话名下
     private func swapAttachments(from oldId: String?, to newId: String?) {
@@ -376,8 +381,9 @@ struct CardFlowView: View {
                         // 详见 docs/plan-sticker-pan-relationship-fix-2026-04-25.md 方案 2 v2。
                         ZStack(alignment: .topLeading) {
                           VStack(spacing: 0) {
-                            // [短对话顶对齐] 物理顶垫块：不满一屏时把消息推到物理底=视觉顶
-                            let usable = geo.size.height - (barOverlap + 4) - (50 + geo.safeAreaInsets.top)
+                            // [短对话顶对齐] 物理顶垫块：不满一屏时把消息推到物理底=视觉顶。
+                            // 视觉顶的 nav 留白已经算进 messagesHeight（见下方 padding(.bottom)），这里只扣输入条那截
+                            let usable = geo.size.height - (barOverlap + 4)
                             Color.clear.frame(height: max(0, usable - messagesHeight))
                             LazyVStack(spacing: bubbleSpacing) {
                                 // [反转列表] 物理顺序 = 视觉倒序：这里第一项是视觉底。
@@ -436,7 +442,10 @@ struct CardFlowView: View {
                             .animation(isAtBottom ? .easeOut(duration: 0.2) : nil, value: viewModel.currentPath.count)
                             .padding(.horizontal, 16)
                             .padding(.top, 4)      // 物理顶=视觉底：贴着输入条（B round 3）
-                            .padding(.bottom, 16)  // 物理底=视觉顶
+                            // 物理底=视觉顶：nav 区留白放进内容里（round 8）。之前放在 contentMargins(.bottom)，
+                            // 那只是 UIScrollView 的 inset——内容不满一屏时根本推不动，第一条顶到 nav 按钮底下
+                            // （兔兔 09-15 截图）。放进 padding 后短对话/长对话都是同一段留白。
+                            .padding(.bottom, 16 + topReserve)
                             .frame(maxWidth: .infinity)
                             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { messagesHeight = $0 }
                           }   // VStack（垫块 + 列表）
@@ -457,8 +466,7 @@ struct CardFlowView: View {
                     // [反转列表] 整个 ScrollView 翻转；offset 0 = 最新。defaultScrollAnchor 不再需要。
                     .flippedUpsideDown()
                     .clipped()
-                    // 视觉顶 nav 区留白（物理底）；视觉底离输入条一点距离（物理顶）
-                    .contentMargins(.bottom, 50 + geo.safeAreaInsets.top, for: .scrollContent)
+                    // 视觉顶 nav 区留白改进内容 padding（见 LazyVStack），这里不再给 bottom margin
                     // 物理顶=视觉底：让出往输入条底下伸的那截 + 一点呼吸
                     .contentMargins(.top, barOverlap + 4, for: .scrollContent)
                     // 反转后 safe area 的 bottom inset 会落到物理底=视觉顶（错边）。让 ScrollView
