@@ -216,7 +216,10 @@ struct CardFlowView: View {
     @State private var keyboardUp: Bool = false
     /// [短对话顶对齐] 消息列表实测高度；不满一屏时物理顶（视觉底）塞一块 viewport − 内容 的垫块，
     /// 让第一条回到最顶上往下长（.frame(minHeight:alignment:.bottom) 那招在翻转 ScrollView 里不生效，09-15 实测）
-    @State private var messagesHeight: CGFloat = 0
+    /// round 9：存「垫块高」而不是「列表高」——长对话里列表高每 mount 一条就变一次，存它会让
+    /// 整个聊天页每次上滑都重算一遍（兔兔 09-15：「百多条从下往上滑很卡、页面变重」——这一半是它）。
+    /// 存垫块：满一屏后恒为 0，不再触发重算。
+    @State private var shortConvPad: CGFloat = 0
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -382,9 +385,8 @@ struct CardFlowView: View {
                         ZStack(alignment: .topLeading) {
                           VStack(spacing: 0) {
                             // [短对话顶对齐] 物理顶垫块：不满一屏时把消息推到物理底=视觉顶。
-                            // 视觉顶的 nav 留白已经算进 messagesHeight（见下方 padding(.bottom)），这里只扣输入条那截
-                            let usable = geo.size.height - (barOverlap + 4)
-                            Color.clear.frame(height: max(0, usable - messagesHeight))
+                            // 视觉顶的 nav 留白已经算进列表高（见下方 padding(.bottom)），这里只扣输入条那截
+                            Color.clear.frame(height: shortConvPad)
                             LazyVStack(spacing: bubbleSpacing) {
                                 // [反转列表] 物理顺序 = 视觉倒序：这里第一项是视觉底。
                                 // 哨兵留在物理顶，proxy 回落路径用 scrollTo(anchor: .top)
@@ -447,7 +449,10 @@ struct CardFlowView: View {
                             // （兔兔 09-15 截图）。放进 padding 后短对话/长对话都是同一段留白。
                             .padding(.bottom, 16 + topReserve)
                             .frame(maxWidth: .infinity)
-                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { messagesHeight = $0 }
+                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { h in
+                                let pad = max(0, geo.size.height - (barOverlap + 4) - h)
+                                if abs(pad - shortConvPad) > 0.5 { shortConvPad = pad }   // 长对话恒 0，不重算
+                            }
                           }   // VStack（垫块 + 列表）
 
                             StickerCanvasLayer(
@@ -501,6 +506,11 @@ struct CardFlowView: View {
                         geometry.contentOffset.y + geometry.contentInsets.top < 200
                     } action: { _, atBottom in
                         isAtBottom = atBottom
+                        // round 9：回到底就把渲染窗口收回初始大小——上滑时挂上的几百条气泡全部卸掉，
+                        // 页面重新变轻（左右滑分页也跟着轻）。她在底，收的是物理远端，视口不动。
+                        if atBottom, viewModel.renderStart < max(0, viewModel.currentPath.count - 2 * ConversationViewModel.initialRenderWindow) {
+                            withAnimation(.none) { viewModel.resetRenderWindow() }
+                        }
                     }
                     .onScrollGeometryChange(for: CGFloat.self) { geometry in
                         // [armed-pin] 底 inset（输入框缩回）或内容高度一变 → 武装期内同步钉底

@@ -33,7 +33,9 @@ final class ConversationViewModel {
     /// 渲染窗口：只画尾部这么多条，往上滑再扩。
     /// 此前 ForEach 直接吃整条 currentPath——聊到上千条时每条都要参与布局与几何测量，
     /// 于是白屏、左右滑卡死、连打字都卡（兔兔实测）。LazyVStack 只省绘制不省布局。
-    static let renderWindowStep = 60
+    /// round 9（B）：一次补 60 条 = 60 个 Markdown 气泡在同一帧里生成，就是上滑时那一下「加载感」。
+    /// 改 24：一屏多一点，滑到顶再补，每次都轻。
+    static let renderWindowStep = 24
     /// 打开对话时先画多少条。兔兔 09-12：「点开长对话明显卡顿、白、划不动」——打开那一下
     /// 要同步生成整个窗口的气泡（Markdown 排版，有的带 WebView），60 条是主线程上几百毫秒
     /// 到一两秒。24 条稳稳超过一屏，打开成本先砍一大半；上滑到顶再按 step 补。
