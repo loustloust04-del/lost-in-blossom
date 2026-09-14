@@ -20,26 +20,27 @@ struct RichBubbleText: View {
 
     @State private var spoilersRevealed = false
 
-    /// 触发条件与今天的 WebView 完全一致：有 {color:} 才走（只有 ||…|| 的消息照旧走 MarkdownUI，
-    /// 免得 `a || b` 这种普通文本被误伤）
+    /// 走原生富文本的触发：{color:} / ||剧透||（成对且不跨行）/ ~~删除线~~（Caelum 09-14 二轮 QA：
+    /// 纯 ||…|| 和 ~~…~~ 的消息之前走 MarkdownUI，前者不认、后者不显）。`a || b` 单个 || 不触发。
     static func needsRich(_ s: String) -> Bool {
-        s.contains("{color:")
+        if s.contains("{color:") { return true }
+        if s.range(of: #"\|\|[^|\n]+\|\|"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"~~[^~\n]+~~"#, options: .regularExpression) != nil { return true }
+        return false
     }
-    /// 原生只接「聊天体」：颜色 + 粗体 + 删除线 + 剧透 + 行内代码。以下回落 WebView（Caelum 09-14 QA：
-    /// 斜体 / 粗斜体 / 标题 / 分割线 / 引用块 / 各种嵌套组合在原生 inline 模式下要么不显示要么没样式——
-    /// 尤其斜体：SwiftUI 不给中文合成斜体，WebView 的 CSS 会）。WebView 量高的坑 7b65466c 已填，回落安全。
-    static func canRenderNatively(_ s: String) -> Bool {
-        if s.contains("```") { return false }                                   // 围栏代码块
-        if s.range(of: #"(?m)^\s{0,3}#{1,6}\s"#, options: .regularExpression) != nil { return false }   // 标题
-        if s.range(of: #"(?m)^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$"#, options: .regularExpression) != nil { return false }   // 分割线
-        if s.range(of: #"(?m)^\s{0,3}>\s"#, options: .regularExpression) != nil { return false }        // 引用块
-        // 斜体：单星/单下划线包裹（排除 ** 粗体和 *** 粗斜体本身；*** 也回落）
-        if s.contains("***") { return false }
-        if s.range(of: #"(?<![*\w])\*(?!\*)[^*\n]+?\*(?!\*)"#, options: .regularExpression) != nil { return false }
-        if s.range(of: #"(?<![_\w])_(?!_)[^_\n]+?_(?![_\w])"#, options: .regularExpression) != nil { return false }
-        return true
+    /// 必须走 WebView 的语法（原生画不了 / 画不好）。rich=true 时标题/引用块/代码块也回落（原生 inline
+    /// 模式画不了块级）；纯文本消息的标题/引用块/代码块照旧走 MarkdownUI（抹平文档感是有意的）。
+    /// 中文斜体：SwiftUI 不合成斜体，只有 WebView 的 CSS 会——含中文的 *…* / ***…*** 一律回落。
+    static func needsWebView(_ s: String, rich: Bool) -> Bool {
+        if rich && s.contains("```") { return true }
+        if rich && s.range(of: #"(?m)^\s{0,3}#{1,6}\s"#, options: .regularExpression) != nil { return true }
+        if rich && s.range(of: #"(?m)^\s{0,3}>\s"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"(?m)^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$"#, options: .regularExpression) != nil { return true }   // 分割线
+        if s.range(of: #"\*{3}[^*\n]*[\u4e00-\u9fff][^*\n]*\*{3}"#, options: .regularExpression) != nil { return true }   // 中文粗斜体
+        if s.range(of: #"(?<![*\w])\*(?!\*)[^*\n]*[\u4e00-\u9fff][^*\n]*\*(?!\*)"#, options: .regularExpression) != nil { return true }   // 中文斜体
+        if s.range(of: #"(?<![_\w])_(?!_)[^_\n]*[\u4e00-\u9fff][^_\n]*_(?![_\w])"#, options: .regularExpression) != nil { return true }
+        return false
     }
-
     var body: some View {
         Text(Self.build(text, base: baseColor, spoilerBg: spoilerBg, revealed: spoilersRevealed))
             .font(font)

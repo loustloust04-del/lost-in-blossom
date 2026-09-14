@@ -209,6 +209,11 @@ struct CardFlowView: View {
     @StateObject private var bubbleMenuModel = BubbleMenuOverlayModel()
     /// 键盘弹出瞬间视口缩小会把 isAtBottom 打成 false——willShow 时抓快照，didShow 后按它回底。
     @State private var wasAtBottomBeforeKeyboard: Bool = true
+    /// [B·round4 遮挡关系] 底部安全区内容（输入条 / 贴纸面板占位 / 编辑工具栏占位）的实际高度。
+    /// 列表 frame 现在伸到屏幕底，用它当物理顶 contentMargin：最新消息停在输入条上方，更早的
+    /// 内容滚过输入条底下的毛玻璃渐变——兔兔 09-15：「要粟粟那种没有白横条、精致的遮挡关系」
+    @State private var bottomBarHeight: CGFloat = 0
+    @State private var keyboardUp: Bool = false
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -302,6 +307,11 @@ struct CardFlowView: View {
     /// 现在：写一次 offset；懒加载在落点 mount 出真实高度后 contentSize 会变，
     /// 再复核三次（只写 offset，零 mount 风暴）。找不到 UIScrollView（理论上不会）才退回
     /// 单步禁动画 scrollTo 哨兵。
+    /// home 条高度（键盘收起时输入条坐在它上面）
+    private var homeIndicatorInset: CGFloat {
+        UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0
+    }
+
     /// 附件条随对话走：存到旧对话名下，取回新对话名下
     private func swapAttachments(from oldId: String?, to newId: String?) {
         if let oldId, oldId != newId { viewModel.draftAttachments[oldId] = pendingAttachments }
@@ -418,7 +428,7 @@ struct CardFlowView: View {
                                 }
                             }
                             // 新消息入场动画：路径长度变化时触发 ForEach item transition
-                            .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
+                            .animation(isAtBottom ? .easeOut(duration: 0.2) : nil, value: viewModel.currentPath.count)
                             .padding(.horizontal, 16)
                             .padding(.top, 4)      // 物理顶=视觉底：贴着输入条（B round 3）
                             .padding(.bottom, 16)  // 物理底=视觉顶
@@ -442,7 +452,8 @@ struct CardFlowView: View {
                     .clipped()
                     // 视觉顶 nav 区留白（物理底）；视觉底离输入条一点距离（物理顶）
                     .contentMargins(.bottom, 50 + geo.safeAreaInsets.top, for: .scrollContent)
-                    .contentMargins(.top, 2, for: .scrollContent)
+                    // 物理顶=视觉底：让出输入条 + home 条（键盘弹起时输入条直接坐在键盘上，不再加 home）
+                    .contentMargins(.top, bottomBarHeight + (keyboardUp ? 0 : homeIndicatorInset) + 4, for: .scrollContent)
                     // 反转后 safe area 的 bottom inset 会落到物理底=视觉顶（错边）。让 ScrollView
                     // 的 frame 本身停在输入条/键盘之上（见下方 GeometryReader 容器），底部零 inset；
                     // 键盘弹起容器变矮，offset 0 的最新消息跟着上去。顶部照旧伸到状态栏下。
@@ -505,9 +516,13 @@ struct CardFlowView: View {
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
                         // [keyboard-ride] 在底才跟：内容和键盘同曲线一起升；上滑读历史的不动
                         wasAtBottomBeforeKeyboard = isAtBottom
+                        keyboardUp = true
                         FrameHitchProbe.mark("键盘弹起")
                         // [反转列表] 键盘避让由容器变矮完成（offset 0 跟着上去），不再推 offset
                         _ = note
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                        keyboardUp = false
                     }
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                         // 动画结束后校一次（ride 落准了就是 no-op，差 0.5pt 内不写）
@@ -605,8 +620,8 @@ struct CardFlowView: View {
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
                     .scrollDismissesKeyboard(.immediately)
-                    }   // GeometryReader（安全区容器）
-                    .ignoresSafeArea(.container, edges: .top)
+                    }   // GeometryReader（安全区容器：现在上下都伸满，底部遮挡关系靠 contentMargins）
+                    .ignoresSafeArea(.container, edges: [.top, .bottom])
                     .overlay(alignment: .bottomTrailing) {
                         // 回底按钮浮在列表上，不占 safe area（见上）
                         if !isAtBottom && !viewModel.currentPath.isEmpty {
@@ -621,6 +636,7 @@ struct CardFlowView: View {
                     }
                     .environment(\.bubbleMenuOverlayModel, bubbleMenuModel)   // [B·砖3] 树内 marker 拿 model
                     .safeAreaInset(edge: .bottom, spacing: 0) {
+                        Group {
                         if showStickerPanel {
                             // 透明占位：把滚动内容推上去，真正的面板在外层 overlay
                             Color.clear.frame(height: 320)
@@ -650,6 +666,8 @@ struct CardFlowView: View {
                             .animation(.easeOut(duration: 0.25), value: isAtBottom)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
+                        }   // Group
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomBarHeight = $0 }
                     }
                     .animation(.easeInOut(duration: 0.25), value: showStickerPanel)
                     .animation(.easeInOut(duration: 0.25), value: stickerVM.isEditingStickers)
@@ -2514,8 +2532,10 @@ struct BubbleView: View {
                     if displayText.isEmpty && isStreaming {
                         TypingDotsView()
                     } else if !displayText.isEmpty {
+                        // 三条路：WebView（原生画不了的：中文斜体/分割线/富文本里的标题引用代码块）
+                        //        → 原生富文本（颜色/剧透/删除线的聊天体）→ MarkdownUI（普通文本）
                         let needsRich = RichBubbleText.needsRich(displayText)
-                        let needsWebView = needsRich && !RichBubbleText.canRenderNatively(displayText)
+                        let needsWebView = RichBubbleText.needsWebView(displayText, rich: needsRich)
                         if needsRich && !needsWebView {
                             // [B 计划·砖 1] 彩色字 / 剧透块原生渲染——不再各背一个 WebView
                             RichBubbleText(
