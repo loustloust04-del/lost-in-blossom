@@ -65,6 +65,10 @@ struct BubbleMenuLiftWrapper<Content: View>: View {
 
     var body: some View {
         #if os(iOS)
+        if actions.isEmpty {
+            // 09-13：菜单样式切成「系统」时 actions 传空——不装长按识别器，让系统 contextMenu 接管
+            content()
+        } else {
         content()
             .opacity(lifted ? 0 : 1)
             .background(BubbleMenuMarker(
@@ -75,6 +79,7 @@ struct BubbleMenuLiftWrapper<Content: View>: View {
                 previewBuilder: previewContent,
                 onMenuVisibleChanged: { lifted = $0 }
             ))
+        }
         #else
         content()
         #endif

@@ -40,15 +40,41 @@ final class ChatScrollHost {
         didSet {
             // 反转后「点状态栏回顶」会滚到视觉底（offset 0），关掉
             scrollView?.scrollsToTop = false
+            // [反转列表] 兔兔 09-13 B 包：「上滚时底部一条白横条消不掉」——系统还是往 UIScrollView 塞了
+            // 一截自动 inset，落在物理顶=视觉底。反转后所有留白都由 contentMargins 显式给
+            // （视觉顶 50+状态栏，视觉底 6），系统那套一律不要
+            scrollView?.contentInsetAdjustmentBehavior = .never
+            if let sv = scrollView {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    let i = sv.adjustedContentInset
+                    BreadcrumbLog.shared.add("📐", "列表 inset top=\(Int(i.top)) bottom=\(Int(i.bottom)) offset=\(Int(sv.contentOffset.y)) h=\(Int(sv.bounds.height))")
+                }
+            }
             // [armed-pin] 武装期内 contentSize 一变（新气泡量出真高）就同步钉底——KVO 在 setter 里
             // 同步回调，赶在这一帧提交之前，不等定时器
-            sizeObs = scrollView?.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
-                self?.pinIfArmed()
+            // [hold-reading] 她在上面读历史时，物理顶（视觉底）来了新内容/他在吐字 → 内容整体被推 Δ，
+            // 视口会跟着滑到新内容上（兔兔 09-13 B 包 #6「会拽回底部」）。补偿：contentSize 长 Δ 就把
+            // offset 也加 Δ，她眼前的字纹丝不动。只在 hold 期内、且她不在底时补（粟粟 StreamFollowController
+            // 的简版：不逐 cell 报高，按总高差补）
+            sizeObs = scrollView?.observe(\.contentSize, options: [.old, .new]) { [weak self] sv, change in
+                guard let self else { return }
+                if CACurrentMediaTime() < self.holdUntil,
+                   let o = change.oldValue?.height, let n = change.newValue?.height, n - o > 0.5,
+                   sv.contentOffset.y + sv.adjustedContentInset.top >= 200 {
+                    sv.contentOffset.y += (n - o)
+                    return
+                }
+                self.pinIfArmed()
             }
         }
     }
     private var sizeObs: NSKeyValueObservation?
     private var armedUntil: CFTimeInterval = 0
+    private var holdUntil: CFTimeInterval = 0
+    /// [hold-reading] 上滑读历史时来了新内容 / 他在吐字：接下来一小段时间内的内容增长都补偿掉
+    func holdReading(for seconds: CFTimeInterval = 0.8) {
+        holdUntil = CACurrentMediaTime() + seconds
+    }
 
     /// [armed-pin] 发送那一刻武装 0.6s：期间滚动几何一变就钉底。
     /// 兔兔 09-12 真机（A 刀后）：「发长消息的一瞬间闪一下白」——长消息时输入框长到五六行，
@@ -500,6 +526,10 @@ struct CardFlowView: View {
                         // user）无条件回底；别人的消息进来（CC 主动说话）只在她本来就在底时回底。
                         guard n > old else { return }
                         let justSent = viewModel.currentPath.suffix(n - old).contains { $0.role == "user" }
+                        if !justSent && !isAtBottom {
+                            scrollHost.holdReading()   // [hold-reading] 她在读历史，新消息别把她拽下去
+                            return
+                        }
                         guard justSent || isAtBottom else { return }
                         scrollHost.arm()   // [armed-pin] 当下 + 下一圈 + 几何一变都钉，不留白帧
                         FrameHitchProbe.mark(justSent ? "发送" : "收到消息")
@@ -515,6 +545,8 @@ struct CardFlowView: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 scrollToLastMessage(proxy: proxy, force: true)
                             }
+                        } else if old != nil, new == nil {
+                            scrollHost.holdReading()   // [hold-reading] CC 回复落进空泡，她在上面读，别拽
                         }
                     }
                     .onChange(of: viewModel.scrollToNodeId) { _, nodeId in
@@ -537,9 +569,10 @@ struct CardFlowView: View {
                         }
                     }
                     .onChange(of: viewModel.streamingText) { oldText, newText in
-                        // 流式结束 → 强制回底（行为与改造前一致：补齐 MarkdownUI
-                        // async 渲染撑高后的最后一段）
-                        if newText.isEmpty && !oldText.isEmpty {
+                        // [hold-reading] 她在读历史时他在吐字：每次文字变化都续一段补偿期
+                        if !isAtBottom { scrollHost.holdReading(); if !newText.isEmpty { return } }
+                        // 流式结束 → 回底（只在她本来就在底时；反转后在底吐字本就钉底，这是校准）
+                        if newText.isEmpty && !oldText.isEmpty, isAtBottom {
                             scrollToLastMessage(proxy: proxy, force: true)
                         }
                         // [scroll-anchor] 流式期间不再逐 token scrollTo——
@@ -2061,6 +2094,99 @@ struct BubbleView: View {
     @State private var detectedArtifact: ArtifactContent? = nil
     @State private var messageWebViewHeight: CGFloat = 44
 
+    /// 长按菜单样式：overlay（浮层，默认）/ system（原生）。设置→外观 可切；macOS 恒为原生
+    @AppStorage("bubbleMenuStyle") private var bubbleMenuStyle: String = "overlay"
+    private var useSystemBubbleMenu: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return bubbleMenuStyle == "system"
+        #endif
+    }
+
+    /// 原生 contextMenu 的条目（与浮层 nodeMenuSpecs 同一份条件逻辑）
+    @ViewBuilder private var systemMenuItems: some View {
+                if isUser, onEdit != nil {
+                    Button(action: {
+                        editText = node.content
+                        isEditing = true
+                    }) {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    Divider()
+                }
+                if !isUser, let onRegenerate, !isStreaming {
+                    Button(action: onRegenerate) {
+                        Label("重新生成", systemImage: "arrow.counterclockwise")
+                    }
+                    Divider()
+                }
+                if !isUser, !isStreaming {
+                    Button {
+                        SpeechService.shared.speak(nodeId: node.id, text: SpeechService.speakableText(from: node))
+                    } label: {
+                        Label("朗读", systemImage: "speaker.wave.2")
+                    }
+                    Button {
+                        SpeechService.shared.stop()
+                    } label: {
+                        Label("停止朗读", systemImage: "speaker.slash")
+                    }
+                    Divider()
+                }
+                if !groupMembers.isEmpty, let onGroupReply, !isStreaming {
+                    Menu {
+                        ForEach(groupMembers, id: \.id) { member in
+                            Button(member.name) { onGroupReply(member.id) }
+                        }
+                    } label: {
+                        Label("让 TA 接话", systemImage: "bubble.left.and.bubble.right")
+                    }
+                    Divider()
+                }
+                Button(action: {
+                    let willFav = !node.isFavorite
+                    onToggleFavorite()
+                    HapticService.shared.longPress()
+                    onNotice?(willFav ? "已收藏" : "已取消收藏")
+                }) {
+                    Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
+                }
+                Button(action: { showFolderPicker = true }) {
+                    Label("收藏到文件夹...", systemImage: "folder.badge.plus")
+                }
+                Button(action: {
+                    let willPin = !node.isPinned
+                    onTogglePin()
+                    HapticService.shared.longPress()
+                    onNotice?(willPin ? "已钉住" : "已取消钉住")
+                }) {
+                    Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
+                }
+                Divider()
+                Button(action: {
+                    UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
+                    // 2026-08-31：项目里早有 HapticService（含 copyText/deleteAction），
+                    // 但气泡按钮一个都没接过——现成的轮子没用上。（自粟粟 07-11「气泡小按钮三连打磨」）
+                    HapticService.shared.copyText()
+                    onNotice?("已复制")
+                }) {
+                    Label("复制文本", systemImage: "doc.on.doc")
+                }
+                Button(action: { isSelectingText = true }) {
+                    Label("选取文本", systemImage: "text.cursor")
+                }
+                Divider()
+                Button(role: .destructive, action: {
+                    // 兔兔 09-02 拍板：撤掉二次确认——app 里根本没有回收站入口，
+                    // 弹窗说「可恢复」是空头支票；长按菜单本身已经是一道确认了。
+                    HapticService.shared.deleteAction()
+                    onSoftDelete()
+                }) {
+                    Label("删除", systemImage: "trash")
+                }
+    }
+
     // MARK: - [B·砖3] 长按菜单条目（Telegram 式浮层）——与 macOS .contextMenu 同一份条件逻辑
     private func nodeMenuSpecs() -> [MenuActionSpec] {
         var specs: [MenuActionSpec] = []
@@ -2242,7 +2368,7 @@ struct BubbleView: View {
 
             // Bubble（[B·砖3] iOS 包 BubbleMenuLiftWrapper：长按走自定义浮层，不用系统 contextMenu——
             // 反转列表下系统 lift 快照会颠倒（七月三雷之二）；浮层零件 592074d4 早已进仓，这里接线）
-            BubbleMenuLiftWrapper(isUser: isUser, cornerRadius: chatBubbleMode ? bubbleModeCornerRadius : bubbleCornerRadius, actions: nodeMenuSpecs()) {
+            BubbleMenuLiftWrapper(isUser: isUser, cornerRadius: chatBubbleMode ? bubbleModeCornerRadius : bubbleCornerRadius, actions: useSystemBubbleMenu ? [] : nodeMenuSpecs()) {
             VStack(alignment: .leading, spacing: 6) {
                 // 流式优化：streaming 时直接读 streamingContentText（绕过 SwiftData），完成后读 node.content
                 let sourceText = isStreaming && !streamingContentText.isEmpty ? streamingContentText : node.content
@@ -2518,89 +2644,18 @@ struct BubbleView: View {
             .if(isUser) { view in
                 view.frame(maxWidth: 500, alignment: .trailing)
             }
-            #if os(macOS)
-            .contextMenu {
-                if isUser, onEdit != nil {
-                    Button(action: {
-                        editText = node.content
-                        isEditing = true
-                    }) {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    Divider()
-                }
-                if !isUser, let onRegenerate, !isStreaming {
-                    Button(action: onRegenerate) {
-                        Label("重新生成", systemImage: "arrow.counterclockwise")
-                    }
-                    Divider()
-                }
-                if !isUser, !isStreaming {
-                    Button {
-                        SpeechService.shared.speak(nodeId: node.id, text: SpeechService.speakableText(from: node))
-                    } label: {
-                        Label("朗读", systemImage: "speaker.wave.2")
-                    }
-                    Button {
-                        SpeechService.shared.stop()
-                    } label: {
-                        Label("停止朗读", systemImage: "speaker.slash")
-                    }
-                    Divider()
-                }
-                if !groupMembers.isEmpty, let onGroupReply, !isStreaming {
-                    Menu {
-                        ForEach(groupMembers, id: \.id) { member in
-                            Button(member.name) { onGroupReply(member.id) }
-                        }
-                    } label: {
-                        Label("让 TA 接话", systemImage: "bubble.left.and.bubble.right")
-                    }
-                    Divider()
-                }
-                Button(action: {
-                    let willFav = !node.isFavorite
-                    onToggleFavorite()
-                    HapticService.shared.longPress()
-                    onNotice?(willFav ? "已收藏" : "已取消收藏")
-                }) {
-                    Label(node.isFavorite ? "取消收藏" : "收藏", systemImage: node.isFavorite ? "star.slash" : "star")
-                }
-                Button(action: { showFolderPicker = true }) {
-                    Label("收藏到文件夹...", systemImage: "folder.badge.plus")
-                }
-                Button(action: {
-                    let willPin = !node.isPinned
-                    onTogglePin()
-                    HapticService.shared.longPress()
-                    onNotice?(willPin ? "已钉住" : "已取消钉住")
-                }) {
-                    Label(node.isPinned ? "取消钉住" : "钉住", systemImage: node.isPinned ? "pin.slash" : "pin")
-                }
-                Divider()
-                Button(action: {
-                    UIPasteboard.general.string = ContentCleaner.clean(node.content, cacheKey: node.id)
-                    // 2026-08-31：项目里早有 HapticService（含 copyText/deleteAction），
-                    // 但气泡按钮一个都没接过——现成的轮子没用上。（自粟粟 07-11「气泡小按钮三连打磨」）
-                    HapticService.shared.copyText()
-                    onNotice?("已复制")
-                }) {
-                    Label("复制文本", systemImage: "doc.on.doc")
-                }
-                Button(action: { isSelectingText = true }) {
-                    Label("选取文本", systemImage: "text.cursor")
-                }
-                Divider()
-                Button(role: .destructive, action: {
-                    // 兔兔 09-02 拍板：撤掉二次确认——app 里根本没有回收站入口，
-                    // 弹窗说「可恢复」是空头支票；长按菜单本身已经是一道确认了。
-                    HapticService.shared.deleteAction()
-                    onSoftDelete()
-                }) {
-                    Label("删除", systemImage: "trash")
-                }
+            // 长按菜单样式（兔兔 09-13 B 包 #7：「能不能新旧可选」）：浮层 = Telegram 式（默认）；
+            // 系统 = 原生 contextMenu，反转列表下自带 preview 画正的（不用系统快照，快照会颠倒）
+            .if(useSystemBubbleMenu) { view in
+                view.contextMenu(menuItems: { systemMenuItems }, preview: {
+                    Text(ContentCleaner.clean(node.content, cacheKey: node.id).prefix(600))
+                        .font(FontManager.font(size: 13.5))
+                        .foregroundColor(Theme.textPrimary)
+                        .padding(12)
+                        .frame(maxWidth: 320, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Theme.sidebarBg))
+                })
             }
-            #endif
 
             // Hover action buttons — macOS only（iOS 用 context menu 代替）
 
