@@ -1,6 +1,6 @@
 # plan：反转列表——聊天页白屏的根治（照粟粟的路走）
 
-> 状态：**A 刀已上 main（e868baa2，09-11）白屏死了；兔兔 09-12 拍板 B 计划开工，分支 `b/inverted`，独立通道 `/dl/b/install`，见 §八**。批注直接写在本文加 `⬅ 兔兔：`，没意见回「go」。
+> 状态：**✅ 完成。B 计划 09-15 兔兔验收「大成功」，16 个 commit 已合入 main（HEAD 3ac5dc81）。正式包从此是反转列表。** 过程见 §八、§九。批注直接写在本文加 `⬅ 兔兔：`，没意见回「go」。
 > 2026-09-03 Fable。前情：发送白屏第五刀 `280c30a0` 后兔兔说「还是好严重」→ 去读了粟粟那边怎么做的。
 > 粟粟原件：`/root/projects/SusuPalace` origin/master，commit 链 `5ccfb2b1`→`9b7af5ff`→`764c79e3`→`e8cc596b`→`3aa82aac`，
 > 收官文档 `docs/review-reversed-list.md` / `docs/plan-stream-follow-controller.md` / `docs/handoffs/handoff-keyboard-follow-2026-08-26.md`。
@@ -134,3 +134,21 @@ nginx 位置块加在 sites-enabled/mcp（备份 /root/mcp.nginx.bak-*）。同�
 
 **已知未做**：流式跟随补偿（上滑读历史时他吐字会漂，粟粟 StreamFollowController）；渲染窗口可放宽（反转后 LazyVStack
 只 mount 视口附近）；顶部 blur 采样（粟粟 diag-blur）；半秒颠倒闪烁（isLoading 切换重建）。
+
+## 九、B 合入记录（2026-09-15，兔兔宣布「大成功」）
+B 分支从 09-12 到 09-15 共 11 轮真机 QA，每轮她报、我下刀、独立通道出包，正式包全程未动：
+| 轮 | 兔兔报的 | 真凶 / 修法 |
+|---|---|---|
+| 1 | 11 条验收 9 过；白横条、拽回底、系统菜单颠倒 | 见下 |
+| 2-3 | 白横条 | 回底按钮放在 safeAreaInset 里，离底时 inset +54pt；反转后 frame 是硬边 → 移到 overlay |
+| 3-5 | 读历史被拽回底 | 补偿之外真凶：回复完成时 vm 的 scrollToNodeId 无条件 scrollTo；目标是最后一条且不在底 → 忽略 |
+| 4 | 要粟粟那种「内容滚过输入条毛玻璃」 | 负 padding 让列表往输入条底下伸输入条那么高；忽略底部安全区是错的（键盘避让走 container） |
+| 5 | 分割线没有、大字太大 | --- 紧贴文字被当 setext 标题 → 补空行；h1 2.4→1.9em |
+| 6-8 | 短对话第一条贴底（粟粟同款） | frame(minHeight:) 在翻转里不生效；改物理顶自适应垫块；nav 留白进内容 padding（inset 短对话推不动） |
+| 9-10 | 百多条上滑整个卡死、页面变重 | 我 round7 存列表高回流（改存垫块）；扩窗 60→24；回到底收窗卸气泡；Markdown 解析缓存 + 后台预热 |
+| 11 | 浮层里选不了字 | MarkdownUI 不支持 textSelection；浮层预览换 UITextView |
+| — | 系统式长按「消息跟着转一圈」 | 七月同款，lift 取源视图渲染，反转下无解 → 选项移除，iOS 恒浮层 |
+| — | Caelum 两轮富文本 QA | 原生只接聊天体（颜色/剧透/删除线），中文斜体/分割线/富文本里的标题引用代码块回落 WebView；WebView 认 #hex |
+
+**剩余（UI 打磨，非阻塞）**：键盘打字时每秒 1-4 次 30-60ms 小掉帧；搜索慢；引用回复（粟粟三刀）；
+Markdown 排版真正提前算好（现在只预热了解析）。探针与压力对话生成器留在 App 里，说「卡」看面包屑。
