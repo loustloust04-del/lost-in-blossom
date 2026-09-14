@@ -444,6 +444,12 @@ struct CardFlowView: View {
                         .onDrop(of: [UTType.plainText], isTargeted: nil) { providers, location in
                             handleStickerDrop(providers: providers, location: location)
                         }
+                        // [反转列表·短对话顶对齐] 兔兔 09-15：「原来第一条消息在最顶上往下长，现在贴着输入框往上顶，
+                        // 不顺手」。反转后内容天然锚在物理顶（视觉底）。不满一屏时把内容框撑到视口那么高、
+                        // 内容贴物理底（=视觉顶），就回到原来「从上往下长」的样子；满一屏后 minHeight 不起作用。
+                        // 视口高要扣掉两头 contentMargins（它们在框外）。
+                        .frame(minHeight: max(0, geo.size.height - (barOverlap + 4) - (50 + geo.safeAreaInsets.top)),
+                               alignment: .bottom)
                     }
                     // [反转列表] 整个 ScrollView 翻转；offset 0 = 最新。defaultScrollAnchor 不再需要。
                     .flippedUpsideDown()
