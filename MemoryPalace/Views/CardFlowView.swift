@@ -313,6 +313,20 @@ struct CardFlowView: View {
     /// 现在：写一次 offset；懒加载在落点 mount 出真实高度后 contentSize 会变，
     /// 再复核三次（只写 offset，零 mount 风暴）。找不到 UIScrollView（理论上不会）才退回
     /// 单步禁动画 scrollTo 哨兵。
+    /// [round 10] 预热渲染窗口之外、紧挨着的下一批（renderStart 往前 step 条）的 Markdown 解析
+    private func prewarmMarkdown(before start: Int) {
+        let path = viewModel.currentPath
+        let lo = max(0, start - ConversationViewModel.renderWindowStep)
+        guard lo < start, start <= path.count else { return }
+        let items: [(nodeId: String, text: String)] = path[lo..<start].compactMap { n in
+            guard n.role == "assistant" || n.role == "user", !n.content.isEmpty, n.contentType != "multimodal_text" else { return nil }
+            let cleaned = ContentCleaner.clean(n.content, cacheKey: "\(n.id)_\(n.content.count)")
+            let body = n.role == "assistant" ? (ContentCleaner.extractThinking(from: cleaned).content) : cleaned
+            return (n.id, n.role == "user" ? body : BubbleMarkdownSimplifier.simplify(body))
+        }
+        MarkdownParseCache.prewarm(items)
+    }
+
     /// 列表往输入条底下多伸多少：输入条本身的高度（含 home 条那截由安全区自己管），封顶 96
     private var barOverlap: CGFloat { min(max(bottomBarHeight, 0), 96) }
     /// 视觉顶留白：状态栏 + nav 按钮区（GeometryReader 忽略了顶部安全区，读不到时按 59 兜底）
@@ -435,8 +449,9 @@ struct CardFlowView: View {
                                     .buttonStyle(.plain)
                                     .flippedUpsideDown()
                                     .onAppear {
-                                        // 滑到顶就自动扩，不用真去点
+                                        // 滑到顶就自动扩，不用真去点；并把再下一批提前解析好（round 10）
                                         viewModel.expandRenderWindow()
+                                        prewarmMarkdown(before: viewModel.renderStart)
                                     }
                                 }
                             }
@@ -569,6 +584,7 @@ struct CardFlowView: View {
                         // 普通切对话不会自动滚，ScrollView 保留上一对话的 offset，所以要在这里兜底）
                         if !loading, !viewModel.currentPath.isEmpty {
                             FrameHitchProbe.mark("打开对话(\(viewModel.currentPath.count)条)")
+                            prewarmMarkdown(before: viewModel.renderStart)   // round 10：下一批先解析好
                             // B20 修复：先把 currentPathCount 同步给 stickerVM，再 migrate 飞远的贴纸
                             stickerVM.currentPathCount = viewModel.currentPath.count
                             stickerVM.migrateStickerPositions(context: modelContext)
@@ -2597,7 +2613,8 @@ struct BubbleView: View {
                         } else {
                             // 普通消息：MarkdownUI 渲染（纯 SwiftUI，零白屏）
                             // 抹平文档感（## 标题/嵌套列表/---）；只影响渲染，复制仍是 node.content 原文
-                            Markdown(isUser ? displayText : BubbleMarkdownSimplifier.simplify(displayText))
+                            // round 10：解析走缓存（窗口扩张时后台已预热；未命中就地解析一次）
+                            Markdown(MarkdownParseCache.content(nodeId: node.id, text: isUser ? displayText : BubbleMarkdownSimplifier.simplify(displayText)))
                                 .markdownTheme(
                                     .memoryPalace(
                                         fontName: selectedFont,
