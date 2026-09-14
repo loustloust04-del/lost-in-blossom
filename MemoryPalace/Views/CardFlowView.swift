@@ -214,6 +214,9 @@ struct CardFlowView: View {
     /// 内容滚过输入条底下的毛玻璃渐变——兔兔 09-15：「要粟粟那种没有白横条、精致的遮挡关系」
     @State private var bottomBarHeight: CGFloat = 0
     @State private var keyboardUp: Bool = false
+    /// [短对话顶对齐] 消息列表实测高度；不满一屏时物理顶（视觉底）塞一块 viewport − 内容 的垫块，
+    /// 让第一条回到最顶上往下长（.frame(minHeight:alignment:.bottom) 那招在翻转 ScrollView 里不生效，09-15 实测）
+    @State private var messagesHeight: CGFloat = 0
     @State private var textSelectItem: TextSelectItem?
 
     @ViewBuilder
@@ -372,6 +375,10 @@ struct CardFlowView: View {
                         // 保证 overlay 永远覆盖所有 sticker 实际位置。
                         // 详见 docs/plan-sticker-pan-relationship-fix-2026-04-25.md 方案 2 v2。
                         ZStack(alignment: .topLeading) {
+                          VStack(spacing: 0) {
+                            // [短对话顶对齐] 物理顶垫块：不满一屏时把消息推到物理底=视觉顶
+                            let usable = geo.size.height - (barOverlap + 4) - (50 + geo.safeAreaInsets.top)
+                            Color.clear.frame(height: max(0, usable - messagesHeight))
                             LazyVStack(spacing: bubbleSpacing) {
                                 // [反转列表] 物理顺序 = 视觉倒序：这里第一项是视觉底。
                                 // 哨兵留在物理顶，proxy 回落路径用 scrollTo(anchor: .top)
@@ -431,6 +438,8 @@ struct CardFlowView: View {
                             .padding(.top, 4)      // 物理顶=视觉底：贴着输入条（B round 3）
                             .padding(.bottom, 16)  // 物理底=视觉顶
                             .frame(maxWidth: .infinity)
+                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { messagesHeight = $0 }
+                          }   // VStack（垫块 + 列表）
 
                             StickerCanvasLayer(
                                 stickerVM: stickerVM,
@@ -444,12 +453,6 @@ struct CardFlowView: View {
                         .onDrop(of: [UTType.plainText], isTargeted: nil) { providers, location in
                             handleStickerDrop(providers: providers, location: location)
                         }
-                        // [反转列表·短对话顶对齐] 兔兔 09-15：「原来第一条消息在最顶上往下长，现在贴着输入框往上顶，
-                        // 不顺手」。反转后内容天然锚在物理顶（视觉底）。不满一屏时把内容框撑到视口那么高、
-                        // 内容贴物理底（=视觉顶），就回到原来「从上往下长」的样子；满一屏后 minHeight 不起作用。
-                        // 视口高要扣掉两头 contentMargins（它们在框外）。
-                        .frame(minHeight: max(0, geo.size.height - (barOverlap + 4) - (50 + geo.safeAreaInsets.top)),
-                               alignment: .bottom)
                     }
                     // [反转列表] 整个 ScrollView 翻转；offset 0 = 最新。defaultScrollAnchor 不再需要。
                     .flippedUpsideDown()
