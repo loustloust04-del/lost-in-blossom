@@ -307,10 +307,8 @@ struct CardFlowView: View {
     /// 现在：写一次 offset；懒加载在落点 mount 出真实高度后 contentSize 会变，
     /// 再复核三次（只写 offset，零 mount 风暴）。找不到 UIScrollView（理论上不会）才退回
     /// 单步禁动画 scrollTo 哨兵。
-    /// home 条高度（键盘收起时输入条坐在它上面）
-    private var homeIndicatorInset: CGFloat {
-        UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0
-    }
+    /// 列表往输入条底下多伸多少：输入条本身的高度（含 home 条那截由安全区自己管），封顶 96
+    private var barOverlap: CGFloat { min(max(bottomBarHeight, 0), 96) }
 
     /// 附件条随对话走：存到旧对话名下，取回新对话名下
     private func swapAttachments(from oldId: String?, to newId: String?) {
@@ -452,8 +450,8 @@ struct CardFlowView: View {
                     .clipped()
                     // 视觉顶 nav 区留白（物理底）；视觉底离输入条一点距离（物理顶）
                     .contentMargins(.bottom, 50 + geo.safeAreaInsets.top, for: .scrollContent)
-                    // 物理顶=视觉底：让出输入条 + home 条（键盘弹起时输入条直接坐在键盘上，不再加 home）
-                    .contentMargins(.top, bottomBarHeight + (keyboardUp ? 0 : homeIndicatorInset) + 4, for: .scrollContent)
+                    // 物理顶=视觉底：让出往输入条底下伸的那截 + 一点呼吸
+                    .contentMargins(.top, barOverlap + 4, for: .scrollContent)
                     // 反转后 safe area 的 bottom inset 会落到物理底=视觉顶（错边）。让 ScrollView
                     // 的 frame 本身停在输入条/键盘之上（见下方 GeometryReader 容器），底部零 inset；
                     // 键盘弹起容器变矮，offset 0 的最新消息跟着上去。顶部照旧伸到状态栏下。
@@ -621,8 +619,16 @@ struct CardFlowView: View {
                     // 编辑贴纸时锁住纵向滚动，否则纵向 pinch 被 ScrollView 吃掉
                     .scrollDisabled(stickerVM.isEditingStickers)
                     .scrollDismissesKeyboard(.immediately)
-                    }   // GeometryReader（安全区容器：现在上下都伸满，底部遮挡关系靠 contentMargins）
-                    .ignoresSafeArea(.container, edges: [.top, .bottom])
+                    }   // GeometryReader（安全区容器）
+                    // round 6：不能忽略底部安全区——这台 App 的键盘避让是 PagingViewController 往 chat HC 的
+                    // additionalSafeAreaInsets 注入的（走的是 container 不是 .keyboard），round 4 一忽略，
+                    // 键盘一起被忽略 → 「键盘和输入框水平往上提，把最后一条盖住」。而且 UIHostingController
+                    // 里 ignoresSafeArea 会让内部 UIView 溢出 hc.view.bounds（粟粟 gotcha 04-20）——她那边
+                    // 短对话里那根多出来的黑条多半也是这个溢出。
+                    // 遮挡关系改用负 padding：frame 照旧停在安全区（键盘一来就变矮），只往输入条底下多伸
+                    // barOverlap 那么多，内容滚过输入条的毛玻璃；最新一条靠 contentMargins 停在输入条上方。
+                    .ignoresSafeArea(.container, edges: .top)
+                    .padding(.bottom, -barOverlap)
                     .overlay(alignment: .bottomTrailing) {
                         // 回底按钮浮在列表上，不占 safe area（见上）
                         if !isAtBottom && !viewModel.currentPath.isEmpty {
