@@ -593,6 +593,7 @@ struct CardFlowView: View {
                             // 搜索跳转的目标不是最后一条，不受影响
                             if nodeId == viewModel.currentPath.last?.id, !isAtBottom {
                                 viewModel.scrollToNodeId = nil
+                                scrollHost.holdReading()
                                 return
                             }
                             // 先无动画跳（让 LazyVStack 加载目标），再动画微调
