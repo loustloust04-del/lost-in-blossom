@@ -18,7 +18,7 @@ final class BreadcrumbLog {
 
     private(set) var entries: [Entry] = []
 
-    private static let capacity = 80
+    private static let capacity = 400   // 09-15：探针一秒一条会把 📐🧭📎 挤掉，放大
     private static let storeKey = "breadcrumbLog"
 
     private init() {

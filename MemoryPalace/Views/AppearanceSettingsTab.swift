@@ -7,7 +7,6 @@ struct IOSAppearancePage: View {
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @AppStorage("slimInputBar") private var slimInputBar = true
     @AppStorage("chatBubbleMode") private var chatBubbleMode = false
-    @AppStorage("bubbleMenuStyle") private var bubbleMenuStyle: String = "overlay"
     @AppStorage("selectedFont") private var selectedFont = ""
     @AppStorage("fontScale") private var fontScale = 1.2
     @AppStorage("expandAllMessages") private var expandAllMessages = false
@@ -169,19 +168,6 @@ struct IOSAppearancePage: View {
                         Text("气泡模式")
                             .font(.system(size: Theme.F.body))
                         Text("iMessage 式带尾巴气泡，长回复按空行拆成连续小气泡")
-                            .font(.caption)
-                            .foregroundColor(Theme.textMuted)
-                    }
-                }
-
-                Picker(selection: $bubbleMenuStyle) {
-                    Text("浮层（Telegram 式）").tag("overlay")
-                    Text("系统原生").tag("system")
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("长按菜单")
-                            .font(.system(size: Theme.F.body))
-                        Text("浮层是粟粟那套样式；系统原生是改版前的菜单")
                             .font(.caption)
                             .foregroundColor(Theme.textMuted)
                     }

@@ -59,8 +59,8 @@ final class ChatScrollHost {
             sizeObs = scrollView?.observe(\.contentSize, options: [.old, .new]) { [weak self] sv, change in
                 guard let self else { return }
                 if CACurrentMediaTime() < self.holdUntil,
-                   let o = change.oldValue?.height, let n = change.newValue?.height, n - o > 0.5,
-                   sv.contentOffset.y + sv.adjustedContentInset.top >= 200 {
+                   let o = change.oldValue?.height, let n = change.newValue?.height, abs(n - o) > 0.5 {
+                    // 逐帧补：总高变 Δ，offset 跟着变 Δ（含入场动画期间的逐帧增长）
                     sv.contentOffset.y += (n - o)
                     return
                 }
@@ -71,9 +71,30 @@ final class ChatScrollHost {
     private var sizeObs: NSKeyValueObservation?
     private var armedUntil: CFTimeInterval = 0
     private var holdUntil: CFTimeInterval = 0
-    /// [hold-reading] 上滑读历史时来了新内容 / 他在吐字：接下来一小段时间内的内容增长都补偿掉
+    private var holdBaseOffset: CGFloat = 0
+    private var holdBaseHeight: CGFloat = 0
+    /// [hold-reading] 上滑读历史时来了新内容 / 他在吐字：接下来一小段时间内的内容增长都补偿掉。
+    /// round 3：记基线（offset / contentSize），KVO 逐帧补之外再在 0 / 0.1 / 0.35s 事后校准一次——
+    /// 目标位置 = 基线 offset + (当前总高 − 基线总高)。不管 SwiftUI 中间怎么动，最后一定停在她原来看的那行。
     func holdReading(for seconds: CFTimeInterval = 0.8) {
+        guard let sv = scrollView else { return }
+        let fresh = CACurrentMediaTime() >= holdUntil
         holdUntil = CACurrentMediaTime() + seconds
+        if fresh {
+            holdBaseOffset = sv.contentOffset.y
+            holdBaseHeight = sv.contentSize.height
+        }
+        for d in [0.0, 0.1, 0.35] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak self] in self?.settleHold() }
+        }
+    }
+    private func settleHold() {
+        guard let sv = scrollView, !sv.isTracking, !sv.isDragging else { return }
+        let target = holdBaseOffset + (sv.contentSize.height - holdBaseHeight)
+        if abs(sv.contentOffset.y - target) > 1 {
+            BreadcrumbLog.shared.add("🧭", "读历史校准 offset \(Int(sv.contentOffset.y))→\(Int(target))（总高 \(Int(holdBaseHeight))→\(Int(sv.contentSize.height))）")
+            sv.setContentOffset(CGPoint(x: sv.contentOffset.x, y: target), animated: false)
+        }
     }
 
     /// [armed-pin] 发送那一刻武装 0.6s：期间滚动几何一变就钉底。
@@ -399,7 +420,8 @@ struct CardFlowView: View {
                             // 新消息入场动画：路径长度变化时触发 ForEach item transition
                             .animation(.easeOut(duration: 0.2), value: viewModel.currentPath.count)
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 16)
+                            .padding(.top, 4)      // 物理顶=视觉底：贴着输入条（B round 3）
+                            .padding(.bottom, 16)  // 物理底=视觉顶
                             .frame(maxWidth: .infinity)
 
                             StickerCanvasLayer(
@@ -420,7 +442,7 @@ struct CardFlowView: View {
                     .clipped()
                     // 视觉顶 nav 区留白（物理底）；视觉底离输入条一点距离（物理顶）
                     .contentMargins(.bottom, 50 + geo.safeAreaInsets.top, for: .scrollContent)
-                    .contentMargins(.top, 6, for: .scrollContent)
+                    .contentMargins(.top, 2, for: .scrollContent)
                     // 反转后 safe area 的 bottom inset 会落到物理底=视觉顶（错边）。让 ScrollView
                     // 的 frame 本身停在输入条/键盘之上（见下方 GeometryReader 容器），底部零 inset；
                     // 键盘弹起容器变矮，offset 0 的最新消息跟着上去。顶部照旧伸到状态栏下。
@@ -585,6 +607,18 @@ struct CardFlowView: View {
                     .scrollDismissesKeyboard(.immediately)
                     }   // GeometryReader（安全区容器）
                     .ignoresSafeArea(.container, edges: .top)
+                    .overlay(alignment: .bottomTrailing) {
+                        // 回底按钮浮在列表上，不占 safe area（见上）
+                        if !isAtBottom && !viewModel.currentPath.isEmpty {
+                            ScrollToBottomButton(
+                                isVisible: true,
+                                action: { scrollToLastMessage(proxy: proxy, force: true) }
+                            )
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 8)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                    }
                     .environment(\.bubbleMenuOverlayModel, bubbleMenuModel)   // [B·砖3] 树内 marker 拿 model
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if showStickerPanel {
@@ -595,20 +629,9 @@ struct CardFlowView: View {
                             Color.clear.frame(height: 60)
                         } else if let pm = providerManager {
                             VStack(spacing: 0) {
-                                // 回底按钮：离底时淡入，占位最小（只在可见时 54pt）
-                                if !isAtBottom && !viewModel.currentPath.isEmpty {
-                                    HStack {
-                                        Spacer()
-                                        ScrollToBottomButton(
-                                            isVisible: true,
-                                            action: { scrollToLastMessage(proxy: proxy, force: true) }
-                                        )
-                                        .padding(.trailing, 16)
-                                    }
-                                    .padding(.bottom, 4)
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                                }
-
+                                // 回底按钮已挪到 ScrollView 的 overlay（B round 3）：它在 safeAreaInset 里会把
+                                // 列表 frame 抬高 54pt——反转列表下 frame 是硬边，那 54pt 就是兔兔看到的
+                                // 「上滚时底部消不掉的白横条」（正序时内容可以滚进 inset 区，看不出来）
                                 ChatInputBar(
                                     viewModel: viewModel, modelContext: modelContext,
                                     profileManager: profileManager, providerManager: pm, presetManager: presetManager,
@@ -2100,7 +2123,9 @@ struct BubbleView: View {
         #if os(macOS)
         return true
         #else
-        return bubbleMenuStyle == "system"
+        // 09-15 兔兔 B 包：系统式长按「消息跟着旋转一圈」= 七月同款——lift 动画取的是源视图渲染，
+        // 反转列表下源视图本身是翻的，自定义 preview 救不了。iOS 恒走浮层；缺的功能往浮层里补。
+        return false
         #endif
     }
 

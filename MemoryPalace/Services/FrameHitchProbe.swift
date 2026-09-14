@@ -35,12 +35,20 @@ final class FrameHitchProbe {
         guard lastTs > 0 else { bucketStart = now; return }
         let dt = now - lastTs
         let expected = l.targetTimestamp - l.timestamp   // 这一帧应有的间隔
+        if dt > 2 {
+            // 两秒以上不是掉帧，是后台/锁屏/切走了；单独记一条，不算进掉帧
+            BreadcrumbLog.shared.add("⏸️", "离开了 \(Int(dt))s（后台/锁屏/切 App）")
+            hitches = 0; worstMs = 0; bucketStart = now
+            return
+        }
         if expected > 0, dt > expected * 2 {
             hitches += 1
             worstMs = max(worstMs, dt * 1000)
         }
         if now - bucketStart >= 1 {
-            if hitches > 0 {
+            // 只记值得看的那一秒：≥3 次或最长 ≥ 60ms（09-15 兔兔第一份数据：每秒 1 次 30-50ms 的
+            // 小掉帧刷屏，把 📐📎🧭 都挤出面包屑）
+            if hitches >= 3 || worstMs >= 60 {
                 let since = Int((now - lastMarkAt) * 1000)
                 BreadcrumbLog.shared.add("📉", "掉帧 \(hitches) 次，最长 \(Int(worstMs))ms，「\(lastMark)」后 \(since)ms")
             }
