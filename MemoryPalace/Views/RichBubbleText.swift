@@ -25,9 +25,19 @@ struct RichBubbleText: View {
     static func needsRich(_ s: String) -> Bool {
         s.contains("{color:")
     }
-    /// 有围栏代码块的先别走原生（inline Markdown 画不了折叠代码块）
+    /// 原生只接「聊天体」：颜色 + 粗体 + 删除线 + 剧透 + 行内代码。以下回落 WebView（Caelum 09-14 QA：
+    /// 斜体 / 粗斜体 / 标题 / 分割线 / 引用块 / 各种嵌套组合在原生 inline 模式下要么不显示要么没样式——
+    /// 尤其斜体：SwiftUI 不给中文合成斜体，WebView 的 CSS 会）。WebView 量高的坑 7b65466c 已填，回落安全。
     static func canRenderNatively(_ s: String) -> Bool {
-        !s.contains("```")
+        if s.contains("```") { return false }                                   // 围栏代码块
+        if s.range(of: #"(?m)^\s{0,3}#{1,6}\s"#, options: .regularExpression) != nil { return false }   // 标题
+        if s.range(of: #"(?m)^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$"#, options: .regularExpression) != nil { return false }   // 分割线
+        if s.range(of: #"(?m)^\s{0,3}>\s"#, options: .regularExpression) != nil { return false }        // 引用块
+        // 斜体：单星/单下划线包裹（排除 ** 粗体和 *** 粗斜体本身；*** 也回落）
+        if s.contains("***") { return false }
+        if s.range(of: #"(?<![*\w])\*(?!\*)[^*\n]+?\*(?!\*)"#, options: .regularExpression) != nil { return false }
+        if s.range(of: #"(?<![_\w])_(?!_)[^_\n]+?_(?![_\w])"#, options: .regularExpression) != nil { return false }
+        return true
     }
 
     var body: some View {
@@ -114,9 +124,20 @@ struct RichBubbleText: View {
             case .plain(let t):
                 result += inlineMarkdown(t)
             case .colored(let t, let color):
-                var a = inlineMarkdown(t)
-                a.foregroundColor = color ?? base
-                result += a
+                // 彩色段里可以套剧透：{color:x}…||遮住||…{/color}（Caelum QA：组合渲染）
+                for inner in segments(t) {
+                    switch inner {
+                    case .spoiler(let st):
+                        var a = inlineMarkdown(st)
+                        a.backgroundColor = revealed ? spoilerBg.opacity(0.18) : spoilerBg
+                        a.foregroundColor = revealed ? (color ?? base) : .clear
+                        result += a
+                    case .plain(let pt), .colored(let pt, _):
+                        var a = inlineMarkdown(pt)
+                        a.foregroundColor = color ?? base
+                        result += a
+                    }
+                }
             case .spoiler(let t):
                 var a = inlineMarkdown(t)
                 a.backgroundColor = revealed ? spoilerBg.opacity(0.18) : spoilerBg
