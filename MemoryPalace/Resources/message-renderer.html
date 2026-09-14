@@ -33,6 +33,12 @@ p:last-child { margin-bottom: 0; }
 a { color: var(--link-color); text-decoration: none; }
 strong { font-weight: 600; }
 em { font-style: italic; }
+/* 标题：兔兔要「雷霆大字」（Caelum 09-14 QA：h1 只有小标题大小）。h1 顶到 2.4em，逐级递减 */
+h1 { font-size: 2.4em; font-weight: 800; line-height: 1.15; margin: 0.3em 0 0.4em; }
+h2 { font-size: 1.8em; font-weight: 700; line-height: 1.2; margin: 0.4em 0 0.35em; }
+h3 { font-size: 1.4em; font-weight: 700; margin: 0.4em 0 0.3em; }
+h4, h5, h6 { font-size: 1.15em; font-weight: 600; margin: 0.4em 0 0.25em; }
+hr { border: 0; border-top: 1px solid var(--spoiler-bg); margin: 0.8em 0; }
 
 /* 行内代码 */
 code {
