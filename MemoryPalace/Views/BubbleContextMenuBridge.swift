@@ -62,6 +62,18 @@ struct BubbleMenuLiftWrapper<Content: View>: View {
         self.content = content
         self.previewContent = previewContent ?? { AnyView(content()) }
     }
+    /// 重载：previewContent 在前、content 尾随闭包（09-15 浮层可选字预览接线用）
+    init(
+        isUser: Bool,
+        cornerRadius: Double,
+        tailBackdrop: Bool = false,
+        actions: [MenuActionSpec],
+        previewContent: @escaping () -> AnyView,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(isUser: isUser, cornerRadius: cornerRadius, tailBackdrop: tailBackdrop, actions: actions,
+                  content: content, previewContent: previewContent)
+    }
 
     var body: some View {
         #if os(iOS)

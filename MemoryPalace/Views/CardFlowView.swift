@@ -2461,7 +2461,14 @@ struct BubbleView: View {
 
             // Bubble（[B·砖3] iOS 包 BubbleMenuLiftWrapper：长按走自定义浮层，不用系统 contextMenu——
             // 反转列表下系统 lift 快照会颠倒（七月三雷之二）；浮层零件 592074d4 早已进仓，这里接线）
-            BubbleMenuLiftWrapper(isUser: isUser, cornerRadius: chatBubbleMode ? bubbleModeCornerRadius : bubbleCornerRadius, actions: useSystemBubbleMenu ? [] : nodeMenuSpecs()) {
+            BubbleMenuLiftWrapper(isUser: isUser, cornerRadius: chatBubbleMode ? bubbleModeCornerRadius : bubbleCornerRadius, actions: useSystemBubbleMenu ? [] : nodeMenuSpecs(),
+                                  // round 11：浮层预览换 UITextView 可选字副本（MarkdownUI 不支持 textSelection）
+                                  previewContent: {
+                                      let raw = ContentCleaner.clean(node.content, cacheKey: node.id)
+                                      let body = isUser ? raw : ContentCleaner.extractThinking(from: raw).content
+                                      return AnyView(SelectableTextPreview(text: body, fontSize: 15 * (fontScale > 0 ? fontScale : 1.0),
+                                                                           textColor: UIColor(Theme.textPrimary)))
+                                  }) {
             VStack(alignment: .leading, spacing: 6) {
                 // 流式优化：streaming 时直接读 streamingContentText（绕过 SwiftData），完成后读 node.content
                 let sourceText = isStreaming && !streamingContentText.isEmpty ? streamingContentText : node.content
