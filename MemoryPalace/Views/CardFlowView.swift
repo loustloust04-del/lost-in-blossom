@@ -495,6 +495,13 @@ struct CardFlowView: View {
                     }
                     .onChange(of: viewModel.scrollToNodeId) { _, nodeId in
                         if let nodeId {
+                            // 回复完成时 vm 会把 scrollToNodeId 设成新回复——她在上面读历史就别拽
+                            // （兔兔 09-15：「回复的话还是会被拉到最底下」——真凶在这，不是补偿）。
+                            // 搜索跳转的目标不是最后一条，不受影响
+                            if nodeId == viewModel.currentPath.last?.id, !isAtBottom {
+                                viewModel.scrollToNodeId = nil
+                                return
+                            }
                             // 先无动画跳（让 LazyVStack 加载目标），再动画微调
                             proxy.scrollTo(nodeId, anchor: .center)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

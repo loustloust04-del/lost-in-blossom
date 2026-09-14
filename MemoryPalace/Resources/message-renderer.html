@@ -34,9 +34,9 @@ a { color: var(--link-color); text-decoration: none; }
 strong { font-weight: 600; }
 em { font-style: italic; }
 /* 标题：兔兔要「雷霆大字」（Caelum 09-14 QA：h1 只有小标题大小）。h1 顶到 2.4em，逐级递减 */
-h1 { font-size: 2.4em; font-weight: 800; line-height: 1.15; margin: 0.3em 0 0.4em; }
-h2 { font-size: 1.8em; font-weight: 700; line-height: 1.2; margin: 0.4em 0 0.35em; }
-h3 { font-size: 1.4em; font-weight: 700; margin: 0.4em 0 0.3em; }
+h1 { font-size: 1.9em; font-weight: 800; line-height: 1.15; margin: 0.3em 0 0.35em; }
+h2 { font-size: 1.5em; font-weight: 700; line-height: 1.2; margin: 0.4em 0 0.3em; }
+h3 { font-size: 1.25em; font-weight: 700; margin: 0.4em 0 0.3em; }
 h4, h5, h6 { font-size: 1.15em; font-weight: 600; margin: 0.4em 0 0.25em; }
 hr { border: 0; border-top: 1px solid var(--spoiler-bg); margin: 0.8em 0; }
 
@@ -180,6 +180,9 @@ function preprocessRichText(text) {
             var mapped = color.charAt(0) === '#' ? color : (richColorMap[color.toLowerCase()] || color);
             return '<span class="rich-color" style="color:' + mapped + '">' + inner + '</span>';
         });
+    // --- 紧贴在文字下一行时 Markdown 会当成 setext 二级标题（上一行变大字、没有横线）；
+    // 聊天里写 --- 就是想要分割线：前面补一个空行（兔兔 09-15：「分割线还是没有」）
+    text = text.replace(/([^\n])\n(\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*)(?=\n|$)/g, '$1\n\n$2');
     // ||spoiler|| → 点击展开的黑块
     text = text.replace(/\|\|(.+?)\|\|/g,
         '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
