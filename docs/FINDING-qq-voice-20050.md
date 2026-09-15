@@ -1,104 +1,123 @@
-# `20050` 死循环的一个假设：登录第五参数可能是票据位
+# 解决了：`20050` 不是错误码，是 AVSDK 的日志通道
 
-2026-09-14 · 给 `ClaudiaGardner/maibot-qq-voice-call` issue #1 的补充
+2026-09-16 · 兔兔 & Fable · 给 `ClaudiaGardner/maibot-qq-voice-call` issue #1
 
-## TL;DR
+**我们在自己的环境里把通话跑通了。** 从来电到进房间 1.1 秒，
+`networkOutputCount > 0`，媒体会话建立。
 
-`scheduleAVHostLogin` 登录 AVSDK 时第五个参数传的是空串：
+```
+phase: connected
+inviteCallbackSeen: true
+autoAcceptPostedAt: 23:40:05.442   （来电后 0.6s 自动接听）
+enterRoomOutputAt:  23:40:05.974   （1.1s 进房间）
+networkOutputCount: 2
+```
+
+---
+
+## 根因
+
+`index.mjs` 原本这样处理：
 
 ```js
-// bridge/napcat-plugin/index.mjs:533
-await invokeAVHost(1, [selfUid, selfUin, selfUin, accountPath, ""]);
-//                                                              ↑ 这里
+if ((command === 20050 || command === 120043) && state.avHost.loginPosted && pluginContext) {
+  state.avHost.loginPosted = false;
+  scheduleAVHostLogin(pluginContext, 100);   // 当成掉线，100ms 后重登
+}
 ```
 
-**假设：该位是签名/票据位，空串导致登录不完整，AVSDK 回 `20050`。**
-而 `handleAVSDKOutput` 把 `20050` 当作「掉线需重登」，100ms 后重登 →
-形成 issue #1 描述的 521 次死循环，`networkOutputCount` 恒为 0。
+**但 `20050` 不是错误码，是 AVSDK 的日志输出通道。**
 
-## 支持这个假设的证据
-
-**一、AVSDK 内部有完整的签名机制**
-
-从 `libAVSDKPlugin.so`（33,643,064 字节，与 issue #1 报告的同一份）里扒出：
+我们在 `handleAVSDKOutput` 里打了诊断日志，把 payload 原样打出来：
 
 ```
-GetSignReq / GetSignRsp / AVGetSignResponse
+#2  cmd=20050 value=["avsdk output(wrapper): Create QRTCServiceInterfaceWrapper."]
+#7  cmd=20050 value=["avsdk output(bugly): [BuglyManager.cpp][InitBuglyManager][212]..."]
+#11 cmd=20050 value=["avsdk output(wrapper): os_name=Linux os_version="]
+#13 cmd=20050 value=["avsdk output(wrapper): [transport_mgr.cpp:TransportMgr@:28..."]
 ```
 
-`wrapper.node` 里另有 `forceTRTCSign`、`userTRTC`。
-即 AVSDK 的 TRTC 链路是要签名的。
+**每一条都是 `avsdk output(...)` 开头的普通日志。**
+于是每来一条日志就重登一次 → issue #1 描述的
+「约 32 条消息后固定 20050、重登 521 次、`networkOutputCount` 恒 0」正是这么来的。
+AVSDK 从未有机会完成初始化。
 
-**二、NapCat 侧有现成的取票接口，但桥从未调用**
+`120043` 同理，是提示类消息：
 
 ```
-NodeIKernelTicketService::forceFetchClientKey(destUin)
-NodeIKernelTicketService::addKernelTicketListener
-napcat.mjs: getTicketService() / getClientKey() / forceFetchClientKey()
+#5 cmd=120043 value=["渲染资源初始化失败，显示驱动不兼容，视频画面无法显示"]
 ```
 
-而且 NapCat 直接暴露了公开 API `get_clientkey`，实测可用：
+无头环境必然出现（前一条是 `PP_Resource3D Create fail, try to create PP_Resource2D`），
+**只影响视频画面，不影响语音**，同样不该触发重登。
 
-```bash
-curl -s -X POST http://127.0.0.1:3000/get_clientkey \
-  -H 'Authorization: Bearer <token>' -d '{}'
-# → {"status":"ok","data":{"clientkey":"<96 字符>"}}
-```
-
-**三、桥代码里从未出现 ticket/clientkey/sign 的取用**
-
-`grep -niE 'clientkey|ticket|getsign'` 在 `napcat-plugin/index.mjs` 与
-`av-host/host.cjs` 中只命中一处——第 10 行的**日志脱敏正则**：
+## 修法
 
 ```js
-/(auth|ticket|token|sign|open_?key|d2|a2|cookie|session|credential|password|secret)/i
+// 两者都不再触发重登，只记录
+if (command === 20050 || command === 120043) {
+  const line = Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
+  state.avHost.lastAvsdkLog = line.slice(0, 200);
+  if (command === 120043) state.avHost.lastAvsdkWarning = line.slice(0, 200);
+}
 ```
 
-即作者知道这类凭据存在（防止打进日志），但登录调用里没有取用任何一个。
+**效果对比（同一环境）：**
 
-**四、与 issue #1 的现象吻合**
+| | 修前 | 修后 |
+|---|---|---|
+| `loginPosted` | false（不断被重置） | **true** |
+| `outputCount` | 2665 且持续暴涨 | 44 → 297（正常速率） |
+| 重登 | 无限循环 | 不再重登 |
+| 通话 | 永远接不通 | **1.1s 进房间** |
 
-- 每次登录约 32 条消息后固定 `20050` → 像是「握手走完但鉴权不过」
-- `networkOutputCount` 恒为 0（从未产生 `20001`）→ 媒体会话从未建立
-- 报告者修正 `accountPath` 后重登次数从无上限收敛到 521 → 证明**参数确实影响登录结果**，
-  只是修的不是关键那一个
-- 他已排除：动态库、`/dev/shm`、特权模式、host 网络、音频设备、版本漂移
+---
 
-**五、顺带一个版本口径问题（可能对上游也有价值）**
+## 另外两个坑（issue 里没提过）
 
-同一个容器里两份版本号不一致：
+**一、NapCat 有官方插件白名单，第三方插件默认被拒**
 
-| 来源 | 值 |
-|---|---|
-| `/opt/QQ/resources/app/package.json` | **3.2.30-50969**（实际装的） |
-| `/app/napcat/qqnt.json` | 3.2.20-40990（NapCat 以为的） |
+```
+[PluginLoader] Rejected napcat-plugin-maibot-qq-voice-call: not in official plugin whitelist
+[PluginManager] Loaded 0 plugins
+```
 
-issue #1 报的 `9.9.22-40990 / 3.2.20-40990` 正是后者。
-即报告者（和我们）填的都是「NapCat 以为的版本」，不是实际 QQ 版本。
-如果登录负载里带版本号，这个口径差值得核一下。
-
-## 建议的验证方法（最小改动）
-
-在 `scheduleAVHostLogin` 里把第五参数换成 clientkey：
+白名单硬编码在 `napcat.mjs`：
 
 ```js
-const ticketService = ctx.core?.context?.session?.getTicketService?.();
-// 或直接走 NapCat 的 get_clientkey
-const clientKey = await ticketService?.forceFetchClientKey?.(Number(selfUin));
-await invokeAVHost(1, [selfUid, selfUin, selfUin, accountPath, clientKey?.clientKey ?? ""]);
+new Set(["napcat-plugin-builtin","napcat-plugin-cleaner","napcat-plugin-ssqq","napcat-plugin-qce"])
 ```
 
-**判据**：来电时看 AV Host 的 `lastForwardedCommand` 在 `55` 之后是否出现
-`20006`（invite 回调）或 `20001`（网络数据）。只要不再固定停在 `20050`，
-方向就是对的。
+即使 `config/plugins.json` 里已启用也没用，必须把插件名加进这个 Set。
+**安装文档应当说明这一步**，否则插件静默不加载，表现为「桥端点 6110 起不来」。
 
-## 未验证的部分（诚实说明）
+**二、Docker 环境缺的动态库（逐个补到齐）**
 
-我们没有真机跑通这条链路——只做了静态分析与接口可用性验证：
-- ✅ 确认 AVSDK 内有 GetSign 机制
-- ✅ 确认 NapCat 侧 `get_clientkey` 实际可取到 96 字符密钥
-- ✅ 确认桥代码从未取用任何票据
-- ❌ **未验证** clientkey 就是第五参数期望的格式（也可能要 A2/D2、或 GetSignRsp 的产物）
+```
+libpulse-mainloop-glib0  libopengl0  libglvnd0  libglx0  libgl1  libegl1  libgles2
+```
 
-即便第五参数不是 clientkey，「该位需要某种凭据」这个方向仍值得一试——
-因为它是登录调用里唯一一个空着的参数。
+缺任何一个都会 `Failed to load Pepper module`，且报错只提第一个缺的，
+要反复重启才能补完。建议写进 README 的依赖清单。
+
+**三、`forceFetchClientKey` 需要 1 个参数**
+
+若有人想取 clientkey：必须传参（NapCat 自己传空串），
+不传会 `assertion (argc == 1) failed`。
+
+---
+
+## 一个被证伪的假设（留个记录，省别人的力气）
+
+我们起初怀疑登录第五参数（`invokeAVHost(1, [...,""])` 那个空串）是票据位，
+理由是 `libAVSDKPlugin.so` 内有 `GetSignReq/GetSignRsp`、`wrapper.node` 内有 `forceTRTCSign`。
+
+**实测填入 clientkey 后 `20050` 照旧** —— 该假设不成立。
+第五参数留空是对的，问题从来不在登录参数上。
+
+---
+
+## 环境
+
+Docker（`mlikiowa/napcat-docker`）· Ubuntu 22.04 · QQ 3.2.30-50969 ·
+`libAVSDKPlugin.so` 33,643,064 字节（与 issue #1 报告者同一份）· bridge 0.3.4
