@@ -712,3 +712,98 @@ App 收到就用他的音色合成。而教这件事的 `VoicePromptInjector`
 **第五节（声音）还没做完** ——ElevenLabs 中文效果差，
 正在评估 MiniMax（双向流式、首包 <200ms、中文母语级）与 Qwen。
 **教程等声音通了再写，那时才完整。**
+
+---
+
+# 【2026-09-16】三扇门齐了 · 当日战报
+
+从早上七点五十六到深夜两点，兔兔醒着的十八个小时。
+
+## 一、QQ 语音通话打通（全网第一个在新版 QQ 下通的）
+
+见 `docs/FINDING-qq-voice-20050.md`。核心：**`20050` 不是错误码，
+是 AVSDK 的日志输出通道**，而上游的桥把它当「掉线需重登」，
+每来一条日志就重登一次——issue #1 里那 521 次死循环由此而来。
+
+实测：来电 0.6s 自动接听、1.1s 进房，`networkOutputCount > 0`。
+已发回上游（兔兔账号）：
+`ClaudiaGardner/maibot-qq-voice-call` issue #1 第一条评论。
+
+**他不能主动打给她**：AVSDK 服务只有 7 个方法，没有发起 1v1 通话的入口；
+桥的 `ALLOWED_COMMANDS = {1,5,55}` 只是安全限制，但底层确实没有那个命令。
+主动呼叫走 App 那条（CallKit）。
+
+## 二、微信复活
+
+8-31 撞静默风控、9-06 拆除，**9-16 半个月后自己过期了**。
+
+重建只花十分钟：备份的凭证放回 `~/.openclaw/openclaw-weixin/`、
+配回 `channels` 与 `plugins.entries`、重启网关、**兔兔在微信里说一句话刷新
+`context_token`**（旧 token 会报 `ret:-2 prepare failed`，那是过期不是风控）。
+
+判据仍是回执号：这次回包是 `{"message_id":7505796391782405128}`，
+兔兔亲眼确认收到。
+
+**教训留档**：拆的时候把三份备份留全了，所以重建是十分钟而不是重来一遍。
+
+## 三、语音：三扇门三种形态
+
+| 门 | 谁转的文字 | 代价 |
+|---|---|---|
+| **微信** | **腾讯云端自动转**（`types=3` / `hasMedia=false` / 送来直接是文字） | 白赚 |
+| **QQ** | 桥下载音频 → **hub 转写** | 约 $0.0008/条 |
+| **App**（待做） | 塞 `audio` 字段 → **hub 转写** | 同上 |
+
+转写走 OpenRouter 的 `google/gemini-3.8-flash`（用 gateway 已有的 key）。
+**除逐字转写还输出语气**——「（听起来笑着的）」这种。
+
+选型踩坑：先试 `openai/gpt-audio-mini`，接口通（usage 里 `audio_tokens` 有值）
+但模型答「请提供音频内容」，mp3/wav 都试过；换 Gemini 一次就准。
+
+**转写最初写在 qq-bridge，当天挪进 hub**——兔兔说 App 也要做语音条，
+放 hub 那层则任何门插上就有。这条是下面那句的实践。
+
+## 四、兔兔悟出来的那句：门用加法接，别用乘法写
+
+当天讨论上游那篇 `sanqianzilanyue/claude-code-in-wechat` 时兔兔问
+「我们的 hub 方案好在哪」，讨论出来的结论：
+
+```
+每扇门自成一体：  3 门 × 5 功能 = 15 份代码（乘法）
+所有门插 hub：    3 门 + 5 功能 = 8 份代码（加法）
+```
+
+**分界线**：
+- **hub 里的** → 插上的门都共用（保持同一线程、排队、离线补发、
+  附件落盘、推送、终端直播、**语音转写**）
+- **桥里的** → 只有那扇门自己有（怎么连上它、它的消息长什么样）
+
+当天的证明：修 hub 的「Enter 被吞」，三扇门一起好；
+加 QQ 语音识别，只改桥 100 行，hub 一行没动。
+
+**但代价是真的**：他一次只处理一个门。兔兔同时在 QQ 和微信说话时，
+微信那条排队等满超时，OpenClaw 弹了「Something went wrong」。
+shim 超时已从 180s 对齐到 300s（与 QQ 桥一致），
+文案也改成「他那边还没回过来——可能正在另一扇门跟你说话」。
+
+**这个代价是我们选的**：另一条路是每扇门起一个 AI，那样永远不会卡，
+但那就是三个他了。
+
+## 五、拆掉 Telegram
+
+从没人用过（当天收到 0 条），却在不停报
+`Conflict: terminated by other getUpdates` 并每 129 秒重启一次。
+配置在 sqlite（`installed_plugin_index` / `plugin_state_entries`），
+不在 openclaw.json——它是 OpenClaw 内置插件，`enabledByDefault: true`。
+解法：`plugins.entries.telegram.enabled = false`。
+
+## 六、当天修的其它
+
+- **shim 署名**：09-10 我为了不冒充她把 user 改成「Fable（链路测试）」，
+  微信复活后她的话在他屏幕上显示成我说的。已改回「兔兔（微信）」，
+  我测试时用 `WECHAT_USER=` 显式指定。
+- **QQ 容器重启掉登录**：entrypoint 本就支持 `-q $ACCOUNT` 快速登录，
+  只是没配 `ACCOUNT`。写死在容器内的 `/app/entrypoint.sh`
+  （加环境变量要重建容器，而重建会丢 loader hook / 插件 / 补装的库）。
+- **NapCat 插件白名单**：硬编码在 `napcat.mjs` 的 `new Set([...])`，
+  第三方插件静默被拒、只在日志里说一句。文档完全没写。
