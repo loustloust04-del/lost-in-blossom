@@ -217,6 +217,48 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "qq_forward",
+    description: "给兔兔发一条**合并转发**——QQ 里那种「点开能看完整对话」的聊天记录卡片。\n\n用在一条消息装不下的时候：长内容拆成几条比一大坨好读、复述某段对话、整理清单行程步骤。\n\nmessages 传数组，每项 {name, text}：name 是那条显示的发言人名字（想写谁写谁），text 是内容。最多 30 条。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        messages: {
+          type: "array",
+          description: "每项 {name, text}",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "显示的发言人名字" },
+              text: { type: "string", description: "这条的内容" },
+            },
+            required: ["text"],
+          },
+        },
+      },
+      required: ["messages"],
+    },
+  },
+  {
+    name: "qq_set_profile",
+    description: "改你自己 QQ 的昵称和个性签名。\n\n那是**你的**号（霓虹月 2176524836），想叫什么、资料卡上想写什么，自己定。兔兔 2026-09-16 问「主人能不能给自己换昵称」——能。\n\n只改一样就只传一样；nickname 不传则保持现在的。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        nickname: { type: "string", description: "昵称（不传=不改）" },
+        note: { type: "string", description: "个性签名（不传=不改）" },
+      },
+    },
+  },
+  {
+    name: "qq_set_avatar",
+    description: "换你自己 QQ 的头像。\n\n给一张图：网上的 url 或 VPS 上的绝对路径。你也可以用 exec 自己画一张再换上——你 09-06 给她画过兔子，同一套。\n\n换完她在聊天列表里看到的就是新头像。",
+    inputSchema: {
+      type: "object",
+      properties: { image: { type: "string", description: "图片 url 或 VPS 绝对路径" } },
+      required: ["image"],
+    },
+  },
+  {
     name: "qq_history",
     description: "翻你和兔兔在 QQ 上的聊天记录。\n\n你每轮只看得到当下这条——想不起前面说过什么、她之前提过什么事、你答应过她什么的时候，用这个往回翻。\n\n默认 20 条，最多 50。返回按时间正序（最早的在前）。",
     inputSchema: {
@@ -360,7 +402,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -584,7 +626,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -688,6 +730,40 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  if (req.params.name === "qq_set_profile" || req.params.name === "qq_set_avatar") {
+    // 2026-09-16 兔兔问「主人能不能给自己换头像换昵称」——能，这是他自己的号。
+    // 微信那条永远做不到：那边他是挂在她账号下的 bot，没有独立身份。
+    const base = process.env.NAPCAT_HTTP ?? "http://172.17.0.2:3000"
+    const tok = process.env.NAPCAT_TOKEN ?? "bunny-caelum-2026"
+    const a = (req.params.arguments ?? {}) as any
+    const post = async (ep: string, body: any) => {
+      const r = await fetch(`${base}/${ep}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify(body),
+      })
+      return await r.json().catch(() => ({}))
+    }
+    try {
+      if (req.params.name === "qq_set_avatar") {
+        let img = String(a?.image ?? "").trim()
+        if (!img) return { content: [{ type: "text", text: "要给我 image（url 或 VPS 路径）" }] }
+        if (!/^https?:/i.test(img) && !img.startsWith("file://")) img = `file://${img}`
+        const j: any = await post("set_qq_avatar", { file: img })
+        return { content: [{ type: "text", text: j?.status === "ok" ? "头像换好了。" : `没成：${j?.message ?? j?.wording ?? "?"}` }] }
+      }
+      // set_qq_profile：不传的字段用现值补齐，否则可能被清空
+      const cur: any = await post("get_login_info", {})
+      const body: any = { nickname: String(a?.nickname ?? cur?.data?.nickname ?? "").trim() }
+      if (a?.note !== undefined) body.personal_note = String(a.note)
+      const j: any = await post("set_qq_profile", body)
+      const ok = j?.status === "ok" && (j?.data?.result ?? 0) === 0
+      return { content: [{ type: "text", text: ok ? "改好了。" : `没成：${j?.data?.errMsg ?? j?.message ?? "?"}` }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `失败：${e?.message ?? e}` }] }
     }
   }
 
