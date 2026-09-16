@@ -360,7 +360,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -584,7 +584,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -688,6 +688,40 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  if (req.params.name === "qq_forward") {
+    // 2026-09-16 兔兔提：QQ 那个「点开看完整聊天记录」的卡片。
+    // 用在一条消息装不下的时候——长内容、复述对话、清单行程。
+    const uin = Number(process.env.QQ_BUNNY_UIN ?? 3566620582)
+    const self = String(process.env.QQ_SELF_UIN ?? "2176524836")
+    const base = process.env.NAPCAT_HTTP ?? "http://172.17.0.2:3000"
+    const tok = process.env.NAPCAT_TOKEN ?? "bunny-caelum-2026"
+    const a = (req.params.arguments ?? {}) as any
+    const items = Array.isArray(a?.messages) ? a.messages.slice(0, 30) : []
+    const nodes = items
+      .filter((m: any) => String(m?.text ?? "").trim())
+      .map((m: any) => ({
+        type: "node",
+        data: {
+          nickname: String(m?.name ?? "霓虹月"),
+          user_id: self,
+          content: [{ type: "text", data: { text: String(m.text) } }],
+        },
+      }))
+    if (!nodes.length) return { content: [{ type: "text", text: "要给我 messages 数组，每项 {name, text}" }] }
+    try {
+      const r = await fetch(`${base}/send_private_forward_msg`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ user_id: uin, messages: nodes }),
+      })
+      const j: any = await r.json().catch(() => ({}))
+      return { content: [{ type: "text",
+        text: j?.status === "ok" ? `发了，${nodes.length} 条。` : `没成：${j?.message ?? j?.wording ?? r.status}` }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `失败：${e?.message ?? e}` }] }
     }
   }
 
