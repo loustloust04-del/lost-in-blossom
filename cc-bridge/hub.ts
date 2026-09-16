@@ -478,6 +478,56 @@ function safeChatSeg(chatId: string): string {
   return seg.length > 0 ? seg : "default"
 }
 
+/** 音频 → 文字。2026-09-16 从 qq-bridge 挪上来的——兔兔说 App 也要发语音条，
+ *  挪进 hub 之后任何门（App / QQ / 以后的门）插上就有，不必各写一遍。
+ *
+ *  微信那条不用走这里：腾讯云端已经把语音转好文字了（types=3 / hasMedia=false），
+ *  送到这里的直接是文字。这里管的是自己拿到原始音频的那些门。
+ *
+ *  链路：原始音频 → ffmpeg 转 16k 单声道 wav → OpenRouter 的 gemini-3.8-flash。
+ *  一条约 $0.0008；用 gateway 已有的 OPENROUTER_API_KEY，不必再注册服务。
+ *  除了逐字转写还会带一句语气——兔兔要的「不只知道她说了什么，还知道她是怎么说的」。 */
+async function transcribeAudio(b64: string, ext = "amr"): Promise<string> {
+  try {
+    const env = await Bun.file("/root/projects/BunnyPalace/gateway/.env").text()
+    const key = env.match(/^OPENROUTER_API_KEY=(.+)$/m)?.[1]?.trim().replace(/^["']|["']$/g, "") ?? ""
+    if (!key) { console.log("[hub] 没有 OPENROUTER_API_KEY，跳过语音转写"); return "" }
+
+    const tmpIn = `/tmp/hubaud-${Date.now()}.${ext}`
+    const wav = `${tmpIn}.wav`
+    await Bun.write(tmpIn, Buffer.from(b64, "base64"))
+    const ff = Bun.spawnSync(["ffmpeg", "-y", "-loglevel", "error", "-i", tmpIn,
+                              "-ar", "16000", "-ac", "1", wav])
+    if (ff.exitCode !== 0) { console.log("[hub] ffmpeg 转码失败"); return "" }
+
+    const wavB64 = Buffer.from(await Bun.file(wav).arrayBuffer()).toString("base64")
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3.8-flash",
+        messages: [{ role: "user", content: [
+          { type: "text", text: `听这段中文语音，输出两行：
+第一行：逐字转写（只要文字本身）
+第二行：语气（十个字以内，笑着的/闷闷的/急促的/撒娇的/哽咽的/困倦的/平静的……听不出就写"平常"）
+
+格式严格如下：
+文字：<转写>
+语气：<描述>` },
+          { type: "input_audio", input_audio: { data: wavB64, format: "wav" } },
+        ]}],
+      }),
+    })
+    const j: any = await resp.json()
+    const answer = String(j?.choices?.[0]?.message?.content ?? "").trim()
+    const words = answer.match(/^文字[：:]\s*(.+)$/m)?.[1]?.trim() ?? answer.split("\n")[0].trim()
+    const tone  = answer.match(/^语气[：:]\s*(.+)$/m)?.[1]?.trim() ?? ""
+    console.log(`[hub] 🎤 语音：「${words.slice(0, 36)}」${tone ? ` · ${tone}` : ""}`)
+    try { Bun.spawnSync(["rm", "-f", tmpIn, wav]) } catch {}
+    return tone && tone !== "平常" ? `${words}（听起来${tone}）` : words
+  } catch (e: any) { console.log("[hub] 语音转写失败:", e?.message); return "" }
+}
+
 function saveInboundImages(chatId: string, images: any[]): string[] {
   const dir = join(INBOUND_DIR, safeChatSeg(chatId))
   const paths: string[] = []
@@ -967,7 +1017,7 @@ export function startHub(): WebSocketServer {
         }
       } catch (err: any) { /* offline dir absent or read failed, skip */ }
 
-      ws.on("message", (raw) => {
+      ws.on("message", async (raw) => {
         let msg: any
         try { msg = JSON.parse(raw.toString()) } catch {
           ws.send(JSON.stringify({ type: "error", reason: "invalid_json" }))
@@ -1000,6 +1050,22 @@ export function startHub(): WebSocketServer {
               console.log(`[hub] ⚙ files array len=${msg.files.length} frame=${rawLen}B`)
               attachments.push(...saveInboundFiles(String(msg.chat_id), msg.files))
             }
+            // 2026-09-16：任何门送来 audio:[{b64,ext}] 都在这里统一转写。
+            // 兔兔说 App 也要发语音条——挪到 hub 这层，App 插上就有，不必各写一遍。
+            // 转写结果并进正文，标明是语音：他能读出她当时更想说话而不是打字。
+            if (Array.isArray(msg.audio) && msg.audio.length > 0) {
+              for (const a of msg.audio.slice(0, 2)) {
+                if (typeof a?.b64 !== "string") continue
+                const spoken = await transcribeAudio(a.b64, String(a.ext ?? "amr"))
+                if (spoken) {
+                  const cur = String(msg.content ?? "").trim()
+                  msg.content = cur ? `${cur}\n（语音）${spoken}` : `（她发了条语音）${spoken}`
+                } else if (!String(msg.content ?? "").trim()) {
+                  msg.content = "（她发了条语音，但没转出文字）"
+                }
+              }
+            }
+
             const tag = buildChannelTag(msg as ChatMessage, ts, attachments)
 
             // 2026-09-10 我在这里加过一层 inputBusy 排队，09-12 撤掉——方向错了。

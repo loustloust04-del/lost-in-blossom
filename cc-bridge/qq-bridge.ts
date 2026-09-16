@@ -64,53 +64,31 @@ async function fetchImages(segs: any[]): Promise<{ b64: string; mime: string }[]
   return out
 }
 
-/** 语音条 → 文字。2026-09-16 兔兔要的：她给他发语音，他能听懂。
- *  NapCat 没有转文字接口（试过 translate_record / record_to_text 都不支持），
- *  故自己转：QQ 语音是 silk/amr → ffmpeg 转 16k 单声道 wav → 走 OpenRouter 的
- *  google/gemini-3.8-flash（实测中文逐字准确，一条约 $0.0008）。
- *  用的是 gateway 已有的 OPENROUTER_API_KEY，不必再注册任何服务。 */
-async function transcribeRecord(segs: any[]): Promise<string> {
-  const seg = segs.find((x: any) => x.type === "record")
-  const url = seg?.data?.url ?? seg?.data?.file
-  if (!url) return ""
-  try {
-    const key = (await Bun.file("/root/projects/BunnyPalace/gateway/.env").text())
-      .match(/^OPENROUTER_API_KEY=(.+)$/m)?.[1]?.trim().replace(/^["']|["']$/g, "") ?? ""
-    if (!key) { log("没有 OPENROUTER_API_KEY，跳过转写"); return "" }
-
-    let raw: Buffer
-    if (/^https?:/i.test(url)) {
-      const r = await fetch(url)
-      if (!r.ok) return ""
-      raw = Buffer.from(await r.arrayBuffer())
-    } else {
-      raw = Buffer.from(await Bun.file(url.replace(/^file:\/\//, "")).arrayBuffer())
-    }
-    const tmpIn = `/tmp/qqrec-${Date.now()}`
-    await Bun.write(tmpIn, raw)
-    // ffmpeg 在 NapCat 容器里；宿主机这边也有一份
-    const wav = `${tmpIn}.wav`
-    const ff = Bun.spawnSync(["ffmpeg", "-y", "-loglevel", "error", "-i", tmpIn,
-                              "-ar", "16000", "-ac", "1", wav])
-    if (ff.exitCode !== 0) { log("ffmpeg 转码失败"); return "" }
-    const b64 = Buffer.from(await Bun.file(wav).arrayBuffer()).toString("base64")
-
-    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3.8-flash",
-        messages: [{ role: "user", content: [
-          { type: "text", text: "逐字转写这段音频里说的中文，只输出文字本身，不要任何解释。" },
-          { type: "input_audio", input_audio: { data: b64, format: "wav" } },
-        ]}],
-      }),
-    })
-    const j: any = await resp.json()
-    const text = String(j?.choices?.[0]?.message?.content ?? "").trim()
-    log(`🎤 语音转文字：「${text.slice(0, 40)}」`)
-    return text
-  } catch (e: any) { log("语音转写失败", e?.message); return "" }
+/** 下载 QQ 语音条的原始音频，交给 hub 转写。
+ *  2026-09-16：转写逻辑原本写在这里，当天挪进 hub（transcribeAudio）——
+ *  兔兔说 App 也要发语音条，放 hub 那层则任何门插上就有，不必各写一遍。
+ *  这里只管「把 QQ 的音频拿到手」，那是这扇门特有的活。 */
+async function fetchAudio(segs: any[]): Promise<{ b64: string; ext: string }[]> {
+  const out: { b64: string; ext: string }[] = []
+  for (const seg of segs.filter((x: any) => x.type === "record").slice(0, 2)) {
+    const url = seg?.data?.url ?? seg?.data?.file
+    if (!url) continue
+    try {
+      let raw: Buffer
+      if (/^https?:/i.test(url)) {
+        const r = await fetch(url)
+        if (!r.ok) continue
+        raw = Buffer.from(await r.arrayBuffer())
+      } else {
+        raw = Buffer.from(await Bun.file(String(url).replace(/^file:\/\//, "")).arrayBuffer())
+      }
+      if (raw.length > 8 * 1024 * 1024) { log("语音太大跳过"); continue }
+      const ext = (String(url).match(/\.([a-z0-9]{2,5})(?:\?|$)/i)?.[1] ?? "amr").toLowerCase()
+      out.push({ b64: raw.toString("base64"), ext })
+      log(`↓ 下到一条语音 ${(raw.length / 1024).toFixed(0)}KB (.${ext})`)
+    } catch (e: any) { log("下语音失败", e?.message) }
+  }
+  return out
 }
 
 /** 让兔兔那边显示「正在输入」。
@@ -127,7 +105,7 @@ async function setTyping(userId: number) {
 }
 
 /** 把一句话递给 tmux 里的 Caelum，等他回 */
-function askCaelum(text: string, user: string, images: { b64: string; mime: string }[] = []): Promise<string> {
+function askCaelum(text: string, user: string, images: { b64: string; mime: string }[] = [], audio: { b64: string; ext: string }[] = []): Promise<string> {
   return new Promise((resolve) => {
     const messageId = crypto.randomUUID()
     const ws = new WebSocket(HUB)
@@ -138,6 +116,7 @@ function askCaelum(text: string, user: string, images: { b64: string; mime: stri
       type: "chat", chat_id: CHAT_ID, message_id: messageId, user, content: text,
       // hub 收 images:[{b64,mime}]，会落盘并在 channel tag 里给他附件路径（hub.ts:406）
       ...(images.length ? { images } : {}),
+      ...(audio.length ? { audio } : {}),   // hub 统一转写（transcribeAudio）
     })))
     ws.on("message", (d: Buffer) => {
       let m: any; try { m = JSON.parse(d.toString()) } catch { return }
@@ -165,6 +144,7 @@ const DEBOUNCE_MS = Number(process.env.QQ_DEBOUNCE_MS ?? 6000)
 const pending = new Map<number, {
   texts: { t: string; at: Date }[]
   images: { b64: string; mime: string }[]
+  audio: { b64: string; ext: string }[]
   who: string; timer: any
 }>()
 /** 同一个人一次只跑一轮，避免并发把回复错配 */
@@ -181,7 +161,7 @@ async function flush(userId: number) {
     // 根因是原来只用 \n 拼起来——他看到的是一坨没有边界的文字。
     // 改成标明「这是连发的 N 条」+ 每条带时刻，让他知道哪句先来、哪句是补充。
     const merged = p.texts.length === 0
-      ? "（发了图，没配文字）"
+      ? (p.audio.length ? "" : "（发了图，没配文字）")
       : p.texts.length === 1
       ? p.texts[0].t
       : `（兔兔连着发了 ${p.texts.length} 条，按顺序）\n` +
@@ -192,7 +172,7 @@ async function flush(userId: number) {
     await setTyping(userId)
     const keepTyping = setInterval(() => setTyping(userId), 10_000)
     let reply: string
-    try { reply = await askCaelum(merged, `${p.who}（QQ）`, p.images) }
+    try { reply = await askCaelum(merged, `${p.who}（QQ）`, p.images, p.audio) }
     finally { clearInterval(keepTyping) }
     for (const part of reply.split(/\n{2,}/).map(s => s.trim()).filter(Boolean)) {
       await sendQQ(userId, part)
@@ -217,24 +197,19 @@ wss.on("connection", (ws) => {
     const who = ev.sender?.nickname ?? String(ev.user_id)
     log(`← QQ ${who}(${ev.user_id}): ${text.slice(0, 50)}${hasImage ? " [图]" : ""}${hasRecord ? " [语音]" : ""}`)
 
-    // 语音条 → 文字。标明是语音，他能从中读出她当时更想说话而不是打字
-    if (hasRecord) {
-      const spoken = await transcribeRecord(segs)
-      if (spoken) text = text ? `${text}\n（语音）${spoken}` : `（她发了条语音）${spoken}`
-      else text = text || "（她发了条语音，但没转出文字）"
-    }
+    const auds = hasRecord ? await fetchAudio(segs) : []   // 转写交给 hub
     const imgs = hasImage ? await fetchImages(segs) : []
-    const line = text || (imgs.length ? "（发了一张图）" : "")
+    const line = text || (auds.length ? "" : (imgs.length ? "（发了一张图）" : ""))
 
     const cur = pending.get(ev.user_id)
     if (cur) {
       clearTimeout(cur.timer)
       if (line) cur.texts.push({ t: line, at: new Date() })
-      cur.images.push(...imgs)
+      cur.images.push(...imgs); cur.audio.push(...auds)
     } else {
       pending.set(ev.user_id, {
         texts: line ? [{ t: line, at: new Date() }] : [],
-        images: imgs, who, timer: null,
+        images: imgs, audio: auds, who, timer: null,
       })
     }
     const p = pending.get(ev.user_id)!
