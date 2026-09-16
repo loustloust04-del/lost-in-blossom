@@ -44,7 +44,11 @@ const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-bunny"
 // 这个 shim 只被我当测试工具用。现在微信活了，默认值必须改回代表她。
 // 我自己测试时用 WECHAT_USER=... 显式指定。
 const USER = process.env.WECHAT_USER ?? "兔兔（微信）"
-const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 180_000)
+// 2026-09-16 兔兔撞到「Something went wrong」：她同时在 QQ 和微信跟他说话，
+// 而他一次只处理一个——微信那条排队等了 3 分钟就超时，OpenClaw 弹了错误。
+// 这是「三扇门共用一个他」的代价：他忙的时候别的门得等。
+// QQ 那边给的是 5 分钟，这里对齐；他思考 + 调工具 + 回话，3 分钟确实紧。
+const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 300_000)
 
 /** 从 OpenClaw 的 prompt 里抠出「真正的新消息」。
  *  2026-08-31 兔兔报「微信还是收不到」的根因：OpenClaw 会把整段对话历史
@@ -113,7 +117,7 @@ const finish = (content: string, isError = false) => {
   process.exit(isError ? 1 : 0)
 }
 
-const timer = setTimeout(() => finish("（等主人回复超时了）", true), TIMEOUT_MS)
+const timer = setTimeout(() => finish("（他那边还没回过来——可能正在另一扇门跟你说话。等一下再发一次。）", true), TIMEOUT_MS)
 
 ws.on("open", () => {
   // 去掉 OpenClaw 加的时间戳前缀「[Sun 2026-08-30 01:59 UTC] 」——
