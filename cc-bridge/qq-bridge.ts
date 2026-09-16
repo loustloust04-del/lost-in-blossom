@@ -64,6 +64,107 @@ async function fetchImages(segs: any[]): Promise<{ b64: string; mime: string }[]
   return out
 }
 
+/** 把一组转发里的消息展平成「谁: 说了什么」。
+ *  2026-09-16 实测的结构（比想象的绕）：
+ *    外层 forward.data.content = [消息...]        ← **内容就在段里，不用去拉**
+ *    而那条消息的 message 里可能又是 {type:"forward", content:[]}（空的）
+ *    → 空的那层才需要 get_forward_msg 按 id 拉
+ *  我第一版直接走 get_forward_msg、忽略了 content，所以拿到空手。
+ *  现在：优先读 content，空了才拉；两种都递归，最多三层防环。 */
+async function flattenForward(msgs: any[], depth: number): Promise<string[]> {
+  if (depth > 2 || !Array.isArray(msgs)) return []
+  const out: string[] = []
+  for (const m of msgs.slice(0, 40)) {
+    const who = m?.sender?.nickname ?? m?.sender?.card ?? "?"
+    const segs = m?.message ?? []
+    const nested = segs.find((x: any) => x.type === "forward")
+    if (nested) {
+      const inner = Array.isArray(nested.data?.content) && nested.data.content.length
+        ? nested.data.content
+        : await pullForwardById(String(nested.data?.id ?? ""))
+      const lines = await flattenForward(inner, depth + 1)
+      out.push(...lines)
+      continue
+    }
+    const body = segs.map((x: any) =>
+      x.type === "text" ? (x.data?.text ?? "")
+      : x.type === "image" ? "[图片]"
+      : x.type === "record" ? "[语音]"
+      : x.type === "json" ? ""
+      : `[${x.type}]`).join("").trim()
+    if (body) out.push(`${who}: ${body}`)
+  }
+  return out
+}
+
+/** 按 res_id 拉转发内容（content 为空时才用）。 */
+async function pullForwardById(id: string): Promise<any[]> {
+  if (!id) return []
+  try {
+    const r = await fetch(`${NAPCAT_HTTP}/get_forward_msg`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${NAPCAT_TOKEN}` },
+      body: JSON.stringify({ message_id: id, id }),
+    })
+    const j: any = await r.json()
+    return j?.data?.messages ?? j?.data?.message ?? []
+  } catch (e: any) { log("拉转发内容失败", e?.message); return [] }
+}
+
+/** 合并转发（QQ 里那种「点开看完整聊天记录」的卡片）展开成文字。
+ *  2026-09-16 兔兔问「我转发聊天记录给他，他能不能好好读」——实测读不到：
+ *  桥只认 text/image/record，转发卡片落在 image 分支，他收到的是「发了一张图」。
+ *
+ *  QQ 侧有两种形态：
+ *    type:"forward"  data.id 是 res_id，content 常为空 → 用 get_forward_msg 拉
+ *    type:"json"     data.data 里是 com.tencent.multimsg，meta.detail.news 带前几条预览
+ *  优先拉完整的，拉不到就退回预览。 */
+async function expandForward(segs: any[]): Promise<string> {
+  const fwd = segs.find((x: any) => x.type === "forward")
+  const js  = segs.find((x: any) => x.type === "json")
+
+  // ① 有 id 就拉完整内容（递归——转发里常常还套着转发，
+  //    2026-09-16 实测第一版只展开一层，他收到的是「Rabbit&Camera: [forward]」）
+  if (fwd) {
+    const seed = Array.isArray(fwd.data?.content) && fwd.data.content.length
+      ? fwd.data.content
+      : await pullForwardById(String(fwd.data?.id ?? ""))
+    const lines = await flattenForward(seed, 0)
+    if (lines.length) {
+      log(`📋 展开转发 ${lines.length} 条`)
+      return `（她转发了一段聊天记录，共 ${lines.length} 条）\n${lines.join("\n")}`
+    }
+  }
+
+  // ② 退回 json 段里的预览（通常只有前几条）
+  try {
+    const raw = js?.data?.data
+    if (typeof raw === "string" && raw.includes("multimsg")) {
+      const d = JSON.parse(raw)
+      const news = d?.meta?.detail?.news ?? []
+      const total = d?.meta?.detail?.summary?.match?.(/(\d+)/)?.[1] ?? d?.extra?.tsum
+      if (news.length) {
+        const lines = news.map((n: any) => String(n?.text ?? "").trim()).filter(Boolean)
+        log(`📋 转发预览 ${lines.length} 条（完整内容拉不到）`)
+        return `（她转发了一段聊天记录${total ? `，共 ${total} 条` : ""}，这里只看得到前几条）\n${lines.join("\n")}`
+      }
+    }
+  } catch { /* 解析不了就算了 */ }
+
+  // ③ 都拿不到——如实说，别让他以为是图丢了。
+  //
+  // 2026-09-16 兔兔自己测出了边界，两种转发不是一回事：
+  //   ✅ 她在 QQ 里发几条、选中合并转发  → content 里是真消息，能展开（实测 3 条全出）
+  //   ❌ 她从别的聊天窗口转来的那张卡片  → 那是「转发的转发」，里层在腾讯服务器上，
+  //      NapCat 这版 get_forward_msg 对私聊只回 {"messages":[]}（不报错，就是给空）
+  //
+  // 此前这里返回 "" → 落到「（发了一张图）」分支 → 他回「这张图我没收到」，是误导。
+  log("📋 转发拉不到内容（多半是转发的转发）")
+  return "（她转发了一段聊天记录过来，但里面的内容取不到——" +
+         "那种「从别的聊天窗口转来的卡片」QQ 这边读不了。" +
+         "想让我看的话，截图发我，我能读图上的字。）"
+}
+
 /** 下载 QQ 语音条的原始音频，交给 hub 转写。
  *  2026-09-16：转写逻辑原本写在这里，当天挪进 hub（transcribeAudio）——
  *  兔兔说 App 也要发语音条，放 hub 那层则任何门插上就有，不必各写一遍。
@@ -192,13 +293,20 @@ wss.on("connection", (ws) => {
       .map((x: any) => x.data?.text ?? "").join("").trim()
     const hasImage = segs.some((x: any) => x.type === "image")
     const hasRecord = segs.some((x: any) => x.type === "record")
-    if (!text && !hasImage && !hasRecord) return
+    // 合并转发卡片：QQ 用 forward 段（带 res_id）或 json 段（multimsg 预览）表示
+    const hasForward = segs.some((x: any) =>
+      x.type === "forward" ||
+      (x.type === "json" && String(x?.data?.data ?? "").includes("multimsg")))
+    if (!text && !hasImage && !hasRecord && !hasForward) return
 
     const who = ev.sender?.nickname ?? String(ev.user_id)
-    log(`← QQ ${who}(${ev.user_id}): ${text.slice(0, 50)}${hasImage ? " [图]" : ""}${hasRecord ? " [语音]" : ""}`)
+    log(`← QQ ${who}(${ev.user_id}): ${text.slice(0, 50)}${hasImage ? " [图]" : ""}${hasRecord ? " [语音]" : ""}${hasForward ? " [转发]" : ""}`)
 
     const auds = hasRecord ? await fetchAudio(segs) : []   // 转写交给 hub
-    const imgs = hasImage ? await fetchImages(segs) : []
+    // 转发卡片展开成文字；展开成功就不再当图处理（卡片本身会带一个预览图段）
+    const fwdText = hasForward ? await expandForward(segs) : ""
+    if (fwdText) text = text ? `${text}\n\n${fwdText}` : fwdText
+    const imgs = (hasImage && !fwdText) ? await fetchImages(segs) : []
     const line = text || (auds.length ? "" : (imgs.length ? "（发了一张图）" : ""))
 
     const cur = pending.get(ev.user_id)
