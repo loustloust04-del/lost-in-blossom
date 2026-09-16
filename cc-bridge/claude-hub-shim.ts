@@ -39,7 +39,11 @@ const CHAT_ID = process.env.WECHAT_CHAT_ID ?? "wechat-bunny"
 // 2026-09-10：微信那条 09-06 已拆，但这个脚本留着当测试工具——
 // 于是我每次测链路，他那边都看到「兔兔（微信）」在说话，以为是她。
 // 兔兔今天发现了。改成标明是我，别冒充她。
-const USER = process.env.WECHAT_USER ?? "Fable（链路测试）"
+// 2026-09-16 微信复活后发现：这个默认值会让他把兔兔的微信消息当成我说的。
+// 09-10 我为了不冒充她改成了「Fable（链路测试）」——但那时微信是断的，
+// 这个 shim 只被我当测试工具用。现在微信活了，默认值必须改回代表她。
+// 我自己测试时用 WECHAT_USER=... 显式指定。
+const USER = process.env.WECHAT_USER ?? "兔兔（微信）"
 const TIMEOUT_MS = Number(process.env.SHIM_TIMEOUT_MS ?? 180_000)
 
 /** 从 OpenClaw 的 prompt 里抠出「真正的新消息」。
