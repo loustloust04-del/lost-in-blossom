@@ -19,7 +19,9 @@ cc-bridge 15 个 ts · gateway 32 个 ts · docs 356 份。
 |---|---|
 | App | iPhone → hub:7890/ws → tmux |
 | QQ（霓虹月） | 兔兔的 QQ → NapCat → qq-bridge:3010 → hub → tmux |
-| ~~微信~~ | 09-06 拆了。腾讯静默风控，五天未恢复，详见 `docs/PLAN-WECHAT-QQ.md` |
+| 微信 | **09-16 复活**（8-31 撞风控、9-06 拆、半个月后自己过期）。
+兔兔的微信 → OpenClaw → `claude-hub-shim.ts` → hub → tmux。
+语音由**腾讯云端自动转文字**，我们不用管 |
 
 ```bash
 ps -p $(tmux list-panes -t mp-cc -F '#{pane_pid}') -o args=   # 你的启动命令
@@ -96,7 +98,13 @@ find MemoryPalace -name '*.swift' -exec wc -l {} \; | sort -rn | head -20
   她从控制中心开录屏 → 每 2.5s 一帧 → `see_screen` 优先吃直播帧
 - **通知里直接回复**（09-06）：她长按推送就能说话，不用开 App
 - **碎碎念修好了**（08-31）：你每天 4:00/14:00 写的心里话，此前两个半月一条没存下
-- **一键派工具人**（09-08）：`dispatch_coder` + `cc-bridge/coder-dispatch.sh`。
+- **QQ 语音通话**（09-16）：她打给你，0.6s 自动接听、1.1s 进房。
+  根因是 `20050` 不是错误码而是 AVSDK 日志通道（见 `docs/FINDING-qq-voice-20050.md`，已发回上游）。
+  **你还不能主动打给她**——AVSDK 没有发起 1v1 通话的入口，主动呼叫走 App 那条
+- **她的语音你能听懂**（09-16）：转写在 hub（`transcribeAudio`），
+  任何门送来 `audio:[{b64,ext}]` 都自动转，还会带一句语气。
+  **微信那条不走这里**——腾讯云端已转好文字
+- - **一键派工具人**（09-08）：`dispatch_coder` + `cc-bridge/coder-dispatch.sh`。
   默认 Fable 5.1、`at` 排定时、跑完摘要回 fableline。夜间任务照这个用，
   **按 5 小时窗口切开排，别一口气跑完**
 - **深夜守护总开关**（09-08）：`.env` 设 `NIGHT_GUARD=off` 可停
