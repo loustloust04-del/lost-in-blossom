@@ -111,7 +111,15 @@ const finish = (content: string, isError = false) => {
   if (done) return
   done = true
   // claude 的 stream-json：assistant 消息 + 收尾 result
-  emit({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: content }] } })
+  //
+  // 2026-09-16 兔兔发现：splitForChat 写了却从没被调用过（死代码），
+  // 所以微信那边他一直是一大坨一次性发出来的，不像 QQ 那样连发几条。
+  // 现在接上：每段一条 assistant 消息，OpenClaw 侧配了 humanDelay=natural，
+  // 条与条之间它自己会加自然间隔。
+  const parts = isError ? [content] : splitForChat(content)
+  for (const p of parts) {
+    emit({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: p }] } })
+  }
   emit({ type: "result", subtype: isError ? "error" : "success", is_error: isError, result: content })
   try { ws.close() } catch {}
   process.exit(isError ? 1 : 0)
