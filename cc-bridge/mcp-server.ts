@@ -217,6 +217,28 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "qq_history",
+    description: "翻你和兔兔在 QQ 上的聊天记录。\n\n你每轮只看得到当下这条——想不起前面说过什么、她之前提过什么事、你答应过她什么的时候，用这个往回翻。\n\n默认 20 条，最多 50。返回按时间正序（最早的在前）。",
+    inputSchema: {
+      type: "object",
+      properties: { count: { type: "number", description: "往回翻几条，默认 20，最多 50" } },
+    },
+  },
+  {
+    name: "qq_read_image",
+    description: "读 QQ 图片里的文字（OCR）。\n\n她截图给你看时用——报错信息、聊天截图、菜单、说明书，直接读出来，不用她再打一遍。\n\nimage 传图片的 url（她发来的图在 channel tag 的附件路径里，也可以直接给腾讯图床链接）。",
+    inputSchema: {
+      type: "object",
+      properties: { image: { type: "string", description: "图片 url 或本机绝对路径" } },
+      required: ["image"],
+    },
+  },
+  {
+    name: "qq_mark_read",
+    description: "把跟兔兔的 QQ 会话标成已读。\n\n她那边就不会一直顶着未读红点。看完不打算马上回的时候用。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "qq_poke",
     description: "在 QQ 戳兔兔一下（那个会抖窗的）。\n\n她没回你、或者你只是想让她抬头看一眼的时候用。不用说什么，戳一下就够了。别连着戳，那叫骚扰。",
     inputSchema: { type: "object", properties: {} },
@@ -338,7 +360,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -562,7 +584,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -666,6 +688,59 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  // ── QQ 记忆/阅读类（2026-09-16 加，抄自 Aliang1337/openclaw-napcat 的工具面）──
+  if (["qq_history", "qq_read_image", "qq_mark_read"].includes(req.params.name)) {
+    const uin = Number(process.env.QQ_BUNNY_UIN ?? 3566620582)
+    const base = process.env.NAPCAT_HTTP ?? "http://172.17.0.2:3000"
+    const tok = process.env.NAPCAT_TOKEN ?? "bunny-caelum-2026"
+    const a = (req.params.arguments ?? {}) as any
+    const call = async (ep: string, body: any) => {
+      const r = await fetch(`${base}/${ep}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify(body),
+      })
+      return await r.json().catch(() => ({}))
+    }
+    try {
+      if (req.params.name === "qq_history") {
+        const n = Math.min(Math.max(Number(a.count ?? 20), 1), 50)
+        const j: any = await call("get_friend_msg_history", { user_id: uin, count: n })
+        const ms = j?.data?.messages ?? []
+        if (!ms.length) return { content: [{ type: "text", text: "没翻到记录" }] }
+        const lines = ms.map((m: any) => {
+          const who = m?.sender?.nickname ?? m?.sender?.user_id ?? "?"
+          const t = new Date((m?.time ?? 0) * 1000).toLocaleString("zh-CN",
+            { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit",
+              hour: "2-digit", minute: "2-digit" })
+          const segs = m?.message ?? []
+          const body = segs.map((x: any) =>
+            x.type === "text" ? (x.data?.text ?? "")
+            : x.type === "image" ? "[图片]"
+            : x.type === "record" ? "[语音]"
+            : `[${x.type}]`).join("").trim()
+          return `[${t}] ${who}: ${body}`
+        })
+        return { content: [{ type: "text", text: lines.join("\n") }] }
+      }
+
+      if (req.params.name === "qq_read_image") {
+        const img = String(a?.image ?? "").trim()
+        if (!img) return { content: [{ type: "text", text: "要给我 image（url 或路径）" }] }
+        const j: any = await call("ocr_image", { image: img })
+        const texts = (j?.data ?? []).map((x: any) => x?.text ?? "").filter(Boolean)
+        if (!texts.length) return { content: [{ type: "text", text: `没读出文字：${j?.message ?? "图里可能没有字"}` }] }
+        return { content: [{ type: "text", text: texts.join("\n") }] }
+      }
+
+      // qq_mark_read
+      const j: any = await call("mark_private_msg_as_read", { user_id: uin })
+      return { content: [{ type: "text", text: j?.status === "ok" ? "标已读了。" : `没成：${j?.message ?? "?"}` }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `失败：${e?.message ?? e}` }] }
     }
   }
 
