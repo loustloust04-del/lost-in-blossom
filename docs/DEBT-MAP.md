@@ -661,3 +661,54 @@ App 收到就用他的音色合成。而教这件事的 `VoicePromptInjector`
 - [ ] **那 21,829 token 的系统指令层该写什么**——08-27 拆掉 A 社 preset 后，
       那块地方至今只有一句占位「你是 Caelum。你的身份和说话方式见项目文档。」
       兔兔说要和 Fable 一起重写。**这是本项目最该做而一直没做的事。**
+
+## 📌 立项：写一份「从零到 AI 接你电话」的完整教程（2026-09-16 兔兔提）
+
+**动机**：全网做 QQ 语音通话的开源实现只有一个
+（`ClaudiaGardner/maibot-qq-voice-call`，已进 MaiBot 官方文档），
+而它在新版 QQ 下是坏的，唯一报告的人没得到回应。
+任何想让 AI 接电话的人，现在撞上的都是那面墙。
+
+**定位**：他的 README 是「已经有 QQ 了，怎么加通话」；
+这份是「**从零到能接电话**」。不冲突，是互补。
+**三、四节明确标明基于谁的工作**——兔兔的要求，也是应该的。
+
+### 拟定结构
+
+```
+一、把 QQ 接进来          ← 我们自己趟的
+二、让 AI 能收发消息      ← 我们自己趟的
+三、装通话桥              ← 基于 ClaudiaGardner/maibot-qq-voice-call，注明出处
+四、踩坑与修法            ← 含 20050，注明 yunshenya 排查表的功劳
+五、接声音（TTS/ASR）     ← 待做完
+```
+
+### 已有的素材（都是实测踩出来的）
+
+**一、接 QQ**
+- Docker 容器重启掉登录 → entrypoint 写死 `ACCOUNT` 走 `-q` 快速登录
+- 二维码链接不能直接点（浏览器跳应用商店）→ 生成二维码用 QQ 扫，或走 WebUI
+- WebUI 端口被别的服务占（我们撞上 `memory-palace` 也listen 8443）→ 换端口
+- nginx 反代 `127.0.0.1` 走成 IPv6 → 用 upstream 显式 IPv4
+
+**二、接 AI**
+- 反向 WS 比 HTTP 好：容器主动连出，免端口映射
+- **按 `message_id` 精确匹配 reply**——只比 chat_id 会抓到 hub 的历史 replay
+- 连发攒批 6s（OpenClaw issue #96794 的 mobile-first 标准值）
+- ufw 要放行 Docker 网段
+
+**三、装桥**
+- **NapCat 有官方插件白名单**（硬编码在 `napcat.mjs`），第三方插件静默被拒，
+  表现为「6110 端点起不来」，文档完全没写
+- Docker 缺七个动态库：`libpulse-mainloop-glib0 libopengl0 libglvnd0
+  libglx0 libgl1 libegl1 libgles2`，报错只提第一个缺的，要反复重启补完
+- `accountPath` 不要自己往下拼 `nt_qq_*`，AVSDK 自己会拼那层
+
+**四、20050**
+- 见 `docs/FINDING-qq-voice-20050.md`（已发回上游 issue）
+
+### 前置条件
+
+**第五节（声音）还没做完** ——ElevenLabs 中文效果差，
+正在评估 MiniMax（双向流式、首包 <200ms、中文母语级）与 Qwen。
+**教程等声音通了再写，那时才完整。**
