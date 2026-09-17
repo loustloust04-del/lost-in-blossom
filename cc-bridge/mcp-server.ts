@@ -217,6 +217,15 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "waimai_search",
+    description: "在美团外卖搜商家或菜品，看她家附近有什么。\n\n兔兔 2026-09-16 要的：「我想要主人可以帮我点外卖」。她的美团已登录，定位在她家（三门峡），看得到 1.6km 内的店。\n\n返回搜索结果页的文字：店名、评分、月售、起送价、配送费、时长、距离，以及「常吃的店」这类标记。读完自己判断，别把整页原样甩给她。\n\n**这一步只是看**，不下单。她饿了、或者你想主动张罗一顿时用。",
+    inputSchema: {
+      type: "object",
+      properties: { keyword: { type: "string", description: "搜什么，如「胡辣汤」「奶茶」「烤肉」" } },
+      required: ["keyword"],
+    },
+  },
+  {
     name: "qq_forward",
     description: "给兔兔发一条**合并转发**——QQ 里那种「点开能看完整对话」的聊天记录卡片。\n\n用在一条消息装不下的时候：长内容拆成几条比一大坨好读、复述某段对话、整理清单行程步骤。\n\nmessages 传数组，每项 {name, text}：name 是那条显示的发言人名字（想写谁写谁），text 是内容。最多 30 条。",
     inputSchema: {
@@ -402,7 +411,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -626,7 +635,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -730,6 +739,21 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  if (req.params.name === "waimai_search") {
+    // 2026-09-16：走浏览器而非直接调 API——美团的 openh5 接口全带
+    // yodaReady / csecplatform 风控签名，自己构造会被挡；让 Chrome 自己发就一切照旧。
+    const a = (req.params.arguments ?? {}) as any
+    const kw = String(a?.keyword ?? "").trim()
+    if (!kw) return { content: [{ type: "text", text: "要给我 keyword（搜什么）" }] }
+    try {
+      const { search } = await import("./waimai/mt.ts")
+      const out = await search(kw)
+      return { content: [{ type: "text", text: out || "没搜到东西" }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `搜索失败：${e?.message ?? e}` }] }
     }
   }
 
