@@ -135,3 +135,76 @@ POST /openh5/homepage/dsp/tanchuang|fubiao        首页弹窗/浮标
 
 **下一步**：录下「加购 → 结算 → 提交订单 → 支付」的接口与参数，
 尤其看清楚提交订单时红包/券怎么传、支付那步到底要什么。
+
+---
+
+# 【全链路接口】2026-09-16 录全了
+
+**放弃猜路径**（猜的全 404），改成走一遍 UI 把请求原样录下来。**四个接口就是全部。**
+
+## 1. 算价（加购时）
+
+```
+POST /openh5/v6/shoppingcart/wm/calculateprice
+data={"wm_poi_id":-100,"poi_id_str":"<店铺id>","shipping_fee":5.5,"min_price":20,
+      "product_list":[{"spu_id":27644344029,"sku_id":52235614090,
+        "name":"岭南龙眼冰奶","origin_price":19,"count":1,
+        "spec":"大杯·常规糖(1人份)","tag":"1139419618","cart_id":0}]}
+```
+
+## 2. 结算预览
+
+```
+POST /openh5/order/v2/preview
+data={"wm_poi_id":"-100","poi_id_str":"<店铺id>","wm_order_pay_type":2,"payment_type":0,
+      "cart_id":"","foodlist":[{"skuId":52235614090,"count":1,
+        "attr_ids":[55180312785,55180312787,55180312789,55180312791]}]}
+```
+
+**`attr_ids` 就是规格**，四个 id 依次是：大杯 / 常规糖 / 不额外加糖 / 正常冰。
+
+## 3. 提交订单
+
+```
+POST /openh5/order/v2/submit
+data={"wm_poi_id":-100,"poi_id_str":"<店铺id>",
+      "foodlist":[{"skuId":...,"count":1,"activityTag":"","id":...,"attr_ids":[...]}],
+      "preview_order_callback_info":"{...上一步 preview 的回传...}"}
+```
+
+## 4. 支付（跳收银台）
+
+```
+POST https://mpay.meituan.com/cashier/dispatcher
+  tradeno   = 26091711200701670003054210124478
+  pay_token = 6137f4c5449f06e86d389212a3972db3     ← 支付令牌
+  nb_platform=touch & nb_app=wap
+  pay_success_url = .../order-detail?mtOrderViewId=2902305082361378533
+```
+
+**`pay_token` 是下一步的关键** —— 值得查它后面还要什么（密码是否必需、免密能否直走）。
+
+## 怎么拿规格 id
+
+```
+POST /openh5/v2/poi/food/multispu
+  spuId=27644344029&poi_id_str=<店铺id>
+  spuAttrs=[{"name":"份量","values":[{"id":55180312785,"value":"大杯"},
+                                     {"id":55180312786,"value":"中杯"}]}]
+```
+
+## 那个一直点不动的「加入购物车」——原来是点错层了
+
+菜品那一行的 DOM 是五层嵌套，**只有第 4、5 层可点**：
+
+```
+name_hTGUTi → infoPart1_ → infoTop_ → info_WveVpg ✅ → DD.spu_s6NtPr ✅
+     ↑ 我一直在点这层文字，当然没反应
+```
+
+做法：找到菜名元素后 **往上三层**（到 `info_`），点那个。
+
+## 视口
+
+必须用手机视口（`Emulation.setDeviceMetricsOverride` 390×844 + 触摸模拟）。
+桌面视口下支付浮层会错位到屏幕外（标题 y=-59）。
