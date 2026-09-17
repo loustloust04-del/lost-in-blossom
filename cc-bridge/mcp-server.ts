@@ -217,6 +217,14 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "waimai_coupons",
+    description: "看兔兔美团账号里有哪些红包/优惠券。\n\n她券很多（2026-09-16 实测 127 张），经常放到过期——**点单前先看一眼，别让她白付钱**。她为此心疼过一张七块的。\n\n可以传 amount（这一单大概多少钱），只列门槛够得着的；不传则全列。\n\n注意：限定品类的券（宠物/药/酒饮/闪购便利店/生鲜/电影等）在普通外卖单上用不了，别推荐。",
+    inputSchema: {
+      type: "object",
+      properties: { amount: { type: "number", description: "订单金额，用来筛门槛；不传则全列" } },
+    },
+  },
+  {
     name: "waimai_order",
     description: "给兔兔点外卖——从进店到付款一条龙。\n\n2026-09-16 打通，全程无人工。她的美团已登录，地址是她家（银堤漫步 六号楼一单元八楼801东户），月付付款。\n\n**没有密码就停在『订单已提交』**，她自己去 App 按一下付款；给了密码才直接付完。\n\n用之前先 `waimai_search` 看看有什么，别闷头点。点完告诉她点了什么、多少钱。\n\n她起送价通常 ¥20，一杯中杯可能不够——选大杯或者加一份。",
     inputSchema: {
@@ -425,7 +433,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "waimai_coupons", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -649,7 +657,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "waimai_coupons", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -753,6 +761,32 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  if (req.params.name === "waimai_coupons") {
+    const a = (req.params.arguments ?? {}) as any
+    const amount = Number(a?.amount ?? 0)
+    try {
+      const { withPage } = await import("./waimai/mt.ts")
+      const { couponListExpr, pickBest } = await import("./waimai/coupon.ts")
+      const out = await withPage(async (p: any) => {
+        const cs = await p.evalJson(couponListExpr())
+        if (!Array.isArray(cs) || !cs.length) return "没查到券"
+        const EXCLUDE = /宠物|药|酒饮|闪购便利店|生鲜|买菜|电影|酒店|门票/
+        const usable = cs.filter((c: any) => c.status === 1 && c.amount > 0 && !EXCLUDE.test(c.title))
+          .filter((c: any) => !amount || c.threshold <= amount)
+          .sort((x: any, y: any) => y.amount - x.amount)
+        if (!usable.length) return amount ? `¥${amount} 这一单没有够得着门槛的券` : "没有可用券"
+        const best = pickBest(cs, amount || 9999)
+        const lines = usable.slice(0, 8).map((c: any) =>
+          `  ¥${c.amount}  ${c.limit || "无门槛"}  ${c.title}`)
+        return `共 ${cs.length} 张，能用的 ${usable.length} 张：\n${lines.join("\n")}` +
+               (best ? `\n\n最划算：¥${best.amount}（${best.limit || "无门槛"}）` : "")
+      })
+      return { content: [{ type: "text", text: out }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `查券失败：${e?.message ?? e}` }] }
     }
   }
 

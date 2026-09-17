@@ -46,8 +46,11 @@ export async function withPage<T>(fn: (api: PageAPI) => Promise<T>): Promise<T> 
         expression: `document.body.innerText.slice(0, ${limit})`, returnByValue: true });
       return String(o?.result?.value ?? "");
     },
+    /** 求值并把结果当 JSON 解析。表达式可以是 async IIFE——
+     *  awaitPromise 开着，否则拿到的是个 Promise 对象（2026-09-16 踩过）。 */
     async evalJson(expr: string) {
-      const o = await send("Runtime.evaluate", { expression: expr, returnByValue: true });
+      const o = await send("Runtime.evaluate", {
+        expression: expr, returnByValue: true, awaitPromise: true });
       try { return JSON.parse(String(o?.result?.value ?? "null")) } catch { return null }
     },
     /** 真实鼠标点击——React 组件对 el.click() 常常不响应，必须发真事件 */

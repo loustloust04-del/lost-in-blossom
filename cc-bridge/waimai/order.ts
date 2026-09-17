@@ -13,6 +13,7 @@
  *   - 密码键盘是普通 DOM，但**不在密码框容器里**，要全页面扫单个 0-9 的元素
  */
 import { withPage, sleep, type PageAPI } from "./mt.ts"
+import { couponListExpr, pickBest } from "./coupon.ts"
 
 const HOME = "https://h5.waimai.meituan.com/waimai/mindex/home"
 
@@ -116,6 +117,19 @@ export async function orderOne(opts: {
 
     if (!await tapText(p, "去结算", { maxLen: 14, pick: "bottom" })) return "没到起送价或找不到结算"
     await sleep(13000)
+
+    // 自动选最优券。2026-09-16 兔兔：「你知道你刚才少用了一张七块钱的券吗」。
+    // 券卡片是 WEBC-VIEW 点不动，但结算页会自己带上「最优券」——
+    // 这里只做一件事：把可用券里最划算的那张报出来，让她/他知道有没有漏。
+    // （真正的选券在 API 层，见 coupon.ts；UI 这条路留给「顺手确认」）
+    try {
+      const cs = await p.evalJson(couponListExpr())
+      if (Array.isArray(cs)) {
+        const amt = Number((await p.text(2000)).match(/合计¥([\d.]+)/)?.[1] ?? 0)
+        const best = pickBest(cs, amt || 9999)
+        if (best) log.push(`最优券 ¥${best.amount}（${best.limit}）`)
+      }
+    } catch { /* 券查不到不影响下单 */ }
 
     if (!await tapText(p, "提交订单", { maxLen: 20, pick: "bottom" })) return "提交失败"
     await sleep(15000)
