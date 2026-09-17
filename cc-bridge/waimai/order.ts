@@ -88,9 +88,13 @@ export async function orderOne(opts: {
     log.push("进店")
 
     // 菜品：找到菜名后**往上三层**到可点的那层（这是踩了很久的坑）
+    // 菜名元素：class 名是随机哈希（name_hTGUTi 这种），但前缀 name_ 稳定；
+    // 找不到时退回「菜单区里最短的那些文本节点」
     const dishSel = opts.dish
-      ? `[...document.querySelectorAll('[class*=name_]')].find(e => e.offsetParent && new RegExp(${JSON.stringify(opts.dish)}).test(e.innerText||''))`
-      : `[...document.querySelectorAll('[class*=name_]')].filter(e => e.offsetParent && (e.innerText||'').trim().length > 2 && (e.innerText||'').trim().length < 16)[0]`
+      ? `([...document.querySelectorAll('[class*=name_],[class*=Name]')].find(e => e.offsetParent && new RegExp(${JSON.stringify(opts.dish)}).test(e.innerText||''))
+         || [...document.querySelectorAll('*')].find(e => e.offsetParent && e.children.length === 0 && new RegExp(${JSON.stringify(opts.dish)}).test((e.innerText||'').trim()) && (e.innerText||'').trim().length < 18))`
+      : `([...document.querySelectorAll('[class*=name_],[class*=Name]')].filter(e => e.offsetParent && (e.innerText||'').trim().length > 2 && (e.innerText||'').trim().length < 16)[0]
+         || [...document.querySelectorAll('dd,li')].map(e => [...e.querySelectorAll('*')].find(x => x.children.length===0 && (x.innerText||'').trim().length>2 && (x.innerText||'').trim().length<16)).filter(Boolean)[0])`
     const dish = await p.evalJson(`(() => {
       const t = ${dishSel};
       if (!t) return null;
