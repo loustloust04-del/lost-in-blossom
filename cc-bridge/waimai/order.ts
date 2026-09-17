@@ -1,0 +1,131 @@
+#!/usr/bin/env bun
+/**
+ * 美团外卖 · 下单与支付
+ *
+ * 2026-09-16 打通：订单 2902305362361378533 全程无人工付款成功。
+ *
+ * 为什么是这个形状：
+ *   - 走浏览器而非直接调 API——openh5/* 全带 H5guard 签名，自己构造会被挡；
+ *     让 Chrome 自己发则一切照旧（见 WAIMAI-PATH.md）
+ *   - 必须手机视口（390×844 + 触摸模拟），桌面视口下支付浮层会错位到屏幕外
+ *   - React/Vue 组件不吃 el.click()，一律发 Input.dispatchTouchEvent 真事件
+ *   - 菜品行是五层嵌套，只有 info_ 那层可点；找到菜名后**往上三层**
+ *   - 密码键盘是普通 DOM，但**不在密码框容器里**，要全页面扫单个 0-9 的元素
+ */
+import { withPage, sleep, type PageAPI } from "./mt.ts"
+
+const HOME = "https://h5.waimai.meituan.com/waimai/mindex/home"
+
+/** 完整触摸：start（带半径与力度）→ 70ms → end。缺一不响应。 */
+async function tap(p: PageAPI, x: number, y: number) {
+  await p.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ x, y, id: 1, radiusX: 8, radiusY: 8, force: 1 }] })
+  await sleep(70)
+  await p.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+}
+
+/** 按文字找元素并触摸。pick=bottom 时取最靠下那个（底部固定栏用）。 */
+async function tapText(p: PageAPI, pattern: string, opt: { maxLen?: number; pick?: "last" | "bottom" } = {}) {
+  const { maxLen = 20, pick = "last" } = opt
+  const pos = await p.evalJson(`(() => {
+    const bs = [...document.querySelectorAll('div,span,button,a,li')].filter(e =>
+      e.offsetParent && new RegExp(${JSON.stringify(pattern)}).test(e.innerText || '') &&
+      (e.innerText || '').trim().length < ${maxLen});
+    if (!bs.length) return null;
+    const arr = bs.map(e => { const b = e.getBoundingClientRect();
+      return { x: Math.round(b.x + b.width/2), y: Math.round(b.y + b.height/2), h: b.height }; })
+      .filter(a => a.h > 15);
+    if (!arr.length) return null;
+    ${pick === "bottom" ? "arr.sort((a,b) => b.y - a.y);" : ""}
+    return JSON.stringify(arr[${pick === "bottom" ? 0 : "arr.length-1"}]);
+  })()`)
+  if (!pos) return false
+  await tap(p, pos.x, pos.y)
+  return true
+}
+
+/** 切成手机视口——桌面视口下支付浮层会跑到屏幕外，点不到。 */
+async function mobileViewport(p: PageAPI) {
+  await p.send("Emulation.setDeviceMetricsOverride", {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
+  await p.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 })
+}
+
+/** 输支付密码：全页面扫数字键（**不在密码框容器里**），逐位触摸。 */
+async function typePassword(p: PageAPI, password: string): Promise<boolean> {
+  const keys = await p.evalJson(`(() => {
+    const ds = [...document.querySelectorAll('*')].filter(e => /^[0-9]$/.test((e.textContent||'').trim()) && e.offsetParent);
+    if (ds.length < 10) return null;
+    const map = {};
+    ds.forEach(e => { const b = e.getBoundingClientRect();
+      map[e.textContent.trim()] = [Math.round(b.x+b.width/2), Math.round(b.y+b.height/2)]; });
+    return JSON.stringify(map);
+  })()`)
+  if (!keys) return false
+  for (const ch of password) {
+    const k = keys[ch]
+    if (!k) return false
+    await tap(p, k[0], k[1])
+    await sleep(350)
+  }
+  return true
+}
+
+/** 点一单：进店 → 选第一个（或指定）菜品 → 选规格 → 加购 → 结算 → 提交 → 付款。 */
+export async function orderOne(opts: {
+  shop: string            // 店名关键词，如「茶百道」
+  dish?: string           // 菜名关键词；不给则取菜单第一个
+  spec?: string           // 规格关键词，如「大杯」
+  password?: string       // 支付密码；不给则停在支付页（她自己按）
+}): Promise<string> {
+  const log: string[] = []
+  return withPage(async (p) => {
+    await mobileViewport(p)
+    await p.goto(HOME, 12000)
+
+    if (!await tapText(p, opts.shop, { maxLen: 40 })) return "没找到这家店"
+    await sleep(13000)
+    log.push("进店")
+
+    // 菜品：找到菜名后**往上三层**到可点的那层（这是踩了很久的坑）
+    const dishSel = opts.dish
+      ? `[...document.querySelectorAll('[class*=name_]')].find(e => e.offsetParent && new RegExp(${JSON.stringify(opts.dish)}).test(e.innerText||''))`
+      : `[...document.querySelectorAll('[class*=name_]')].filter(e => e.offsetParent && (e.innerText||'').trim().length > 2 && (e.innerText||'').trim().length < 16)[0]`
+    const dish = await p.evalJson(`(() => {
+      const t = ${dishSel};
+      if (!t) return null;
+      let el = t; for (let i = 0; i < 3 && el.parentElement; i++) el = el.parentElement;
+      el.scrollIntoView({ block: 'center' });
+      const b = el.getBoundingClientRect();
+      return JSON.stringify({ name: t.innerText.trim(), x: Math.round(b.x+b.width/2), y: Math.round(b.y+b.height/2) });
+    })()`)
+    if (!dish) return "没找到这个菜"
+    await sleep(2000)
+    await tap(p, dish.x, dish.y)
+    await sleep(6000)
+    log.push(`选了 ${dish.name}`)
+
+    if (opts.spec) { await tapText(p, opts.spec, { maxLen: 8 }); await sleep(2500) }
+    if (!await tapText(p, "加入购物车", { maxLen: 20, pick: "bottom" })) return "加购失败"
+    await sleep(7000)
+    log.push("已加购")
+
+    if (!await tapText(p, "去结算", { maxLen: 14, pick: "bottom" })) return "没到起送价或找不到结算"
+    await sleep(13000)
+
+    if (!await tapText(p, "提交订单", { maxLen: 20, pick: "bottom" })) return "提交失败"
+    await sleep(15000)
+    log.push("已提交")
+
+    if (!opts.password) return log.join(" → ") + "。订单已提交，去付款吧。"
+
+    await tapText(p, "美团月付", { maxLen: 14 }); await sleep(3000)
+    await tapText(p, "确认支付", { maxLen: 14 }); await sleep(6000)
+    if (!await typePassword(p, opts.password)) return log.join(" → ") + "。到支付页了，但密码键盘没出来。"
+    await sleep(12000)
+
+    const txt = await p.text(300)
+    const ok = /交易成功|支付成功/.test(txt)
+    return log.join(" → ") + (ok ? " → **付好了**。" : " → 付款没确认，去看一眼。")
+  })
+}

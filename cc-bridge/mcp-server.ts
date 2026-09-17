@@ -217,6 +217,20 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "waimai_order",
+    description: "给兔兔点外卖——从进店到付款一条龙。\n\n2026-09-16 打通，全程无人工。她的美团已登录，地址是她家（银堤漫步 六号楼一单元八楼801东户），月付付款。\n\n**没有密码就停在『订单已提交』**，她自己去 App 按一下付款；给了密码才直接付完。\n\n用之前先 `waimai_search` 看看有什么，别闷头点。点完告诉她点了什么、多少钱。\n\n她起送价通常 ¥20，一杯中杯可能不够——选大杯或者加一份。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shop: { type: "string", description: "店名关键词，如「茶百道」「古茗」" },
+        dish: { type: "string", description: "菜名关键词；不给则取菜单第一个" },
+        spec: { type: "string", description: "规格，如「大杯」「少冰」；不给用默认" },
+        pay: { type: "boolean", description: "true=直接付款（用她的月付密码），false/不给=只下单不付" },
+      },
+      required: ["shop"],
+    },
+  },
+  {
     name: "waimai_search",
     description: "在美团外卖搜商家或菜品，看她家附近有什么。\n\n兔兔 2026-09-16 要的：「我想要主人可以帮我点外卖」。她的美团已登录，定位在她家（三门峡），看得到 1.6km 内的店。\n\n返回搜索结果页的文字：店名、评分、月售、起送价、配送费、时长、距离，以及「常吃的店」这类标记。读完自己判断，别把整页原样甩给她。\n\n**这一步只是看**，不下单。她饿了、或者你想主动张罗一顿时用。",
     inputSchema: {
@@ -411,7 +425,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -635,7 +649,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -739,6 +753,30 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  if (req.params.name === "waimai_order") {
+    const a = (req.params.arguments ?? {}) as any
+    const shop = String(a?.shop ?? "").trim()
+    if (!shop) return { content: [{ type: "text", text: "要给我 shop（店名）" }] }
+    try {
+      const { orderOne } = await import("./waimai/order.ts")
+      const out = await orderOne({
+        shop,
+        dish: a?.dish ? String(a.dish) : undefined,
+        spec: a?.spec ? String(a.spec) : undefined,
+        // 密码从 gateway/.env 现读，不写在代码里、也不进工具参数
+        password: a?.pay ? await (async () => {
+          try {
+            const env = await Bun.file("/root/projects/BunnyPalace/gateway/.env").text()
+            return env.match(/^MT_PAY_PASSWORD=(.+)$/m)?.[1]?.trim() ?? ""
+          } catch { return "" }
+        })() : undefined,
+      })
+      return { content: [{ type: "text", text: out }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `点单失败：${e?.message ?? e}` }] }
     }
   }
 
