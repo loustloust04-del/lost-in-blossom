@@ -69,3 +69,69 @@ canvas: 0     shadow DOM: 0     标签里**有 INPUT**
 他现在能搜店，返回店名/评分/月售/起送/配送/时长/距离。
 
 下单那几步还没包装成工具，等密码那关解决了再一起做。
+
+---
+
+# 【重大转向】2026-09-16：别操作 UI，直接调 API
+
+兔兔给了两个参考：`Faye-labs/AutoGLM-Waimai-Tool`（ADB 控真手机）
+和 `yanghx/food`（Foodpanda 的 Claude Code skill）。
+
+后者点醒了关键：**它「纯 API 下单」，完全不碰浏览器**
+（`cart/calculate → purchase/intent → cart/checkout`，默认 pandapay 免密）。
+
+对比两家的认证：
+
+| | 认证 |
+|---|---|
+| Foodpanda | `Authorization: Bearer <token>`，**零签名零风控** |
+| 美团 | 每个请求都要 `yodaReady` / `csecplatform` + **H5guard 签名** |
+
+看起来美团更难——**但 `H5guard` 就挂在 `window` 上**，方法齐全：
+
+```
+["init","getfp","getId","initWithKey","sign","xhrResHandle","fetchResHandle","addCommonParams","getSGRandom"]
+```
+
+**所以在页面里用它自己的 fetch 调 API，签名和 cookie 全是现成的。**
+
+## 实证：通了
+
+```js
+// 在美团页面的 Runtime.evaluate 里执行
+await fetch('https://i.waimai.meituan.com/openh5/address/list?_=' + Date.now() +
+  '&yodaReady=h5&csecplatform=4&csecversion=4.3.0',
+  { method: 'POST', credentials: 'include',
+    headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: '' })
+```
+
+返回 **200**：`{"msg":"成功","code":0,"data":{"currentNum":24,"list":[...]}}`
+——兔兔的 24 个收货地址全出来了（含她出差住过的酒店）。
+
+**风控一点没拦。** 先前 GET 返回 405「Request method 'GET' not supported」，
+那不是拒绝，是方法不对——说明请求本来就到得了服务器。
+
+## 为什么这条路值得走
+
+之前跟 UI 搏斗的两处死结，在 API 层可能都只是参数：
+
+| | 操作 UI | 调 API |
+|---|---|---|
+| 选红包 | ❌ `WEBC-VIEW` 不吃任何事件 | 可能只是一个券 id 参数 |
+| 输密码 | ❌ 调系统键盘，无头 Chrome 没有 | 可能只是一个字段 |
+| 稳定性 | class 名随机哈希、坐标会变 | 接口稳定 |
+
+## 已抓到的接口
+
+```
+POST /openh5/address/list              收货地址（已验证可调，返回 24 条）
+POST /openh5/order/manager/v3/myuncompleteorder   未完成订单
+POST /openh5/v2/poi/food               店铺菜单
+POST /openh5/v2/poi/food/collect       菜单（另一入口）
+POST /openapi/v1/poi/food/scheme
+POST /tsp/open/openh5/set/info
+POST /openh5/homepage/dsp/tanchuang|fubiao        首页弹窗/浮标
+```
+
+**下一步**：录下「加购 → 结算 → 提交订单 → 支付」的接口与参数，
+尤其看清楚提交订单时红包/券怎么传、支付那步到底要什么。
