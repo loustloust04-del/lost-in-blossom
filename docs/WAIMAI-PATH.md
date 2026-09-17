@@ -288,3 +288,53 @@ for (const ch of PASSWORD) { await tap(...KEY[ch]); await sleep(350); }
    （密码区那次就是这么查出只认 touch 的）
 3. 若都不行，回到 API 层：`order/v2/preview` 的返回里应有可用券列表，
    `submit` 时多半只是多传一个券 id 字段——**那比点 UI 稳**
+
+---
+
+# 🎉【红包也解决了】2026-09-16：别点 UI，走 API
+
+兔兔：「你没用优惠券啊血亏了」。当天解决。
+
+**实证**：同一单，传券前 ¥41.50，传券后 **¥28.50**，`status_tip` 从
+「未选红包，最高13元可用」变成「**-¥13**」。
+
+## 两个关键发现
+
+**一、之前券「不可用」是因为 API 调用里没传地址**
+
+`coupon_info_list[0].status_tip` 明明白白写着「**填写地址后可选**」。
+补上 `addr_id` / `latitude` / `longitude` 之后，立刻变成「未选红包，最高13元可用」。
+
+**二、券列表在 `/openh5/coupon/list`**（猜了 8 个路径，只有这个 200）
+
+```
+POST /openh5/coupon/list   data={}
+→ {"coupon_total_num":127, "coupon_list":[{
+     id:-11, amount:13, price_limit:"满38可用",
+     coupon_view_id:"PPBPByAwKtswKwKPPvyBvsPvyv…",   ← 选券用这个
+     coupon_id:…, coupon_key:"…", title:"外卖神券", status:1 }]}
+```
+
+**兔兔有 127 张券**（¥26满88、¥21满60、¥19满68、¥17满58、¥15满48、¥13满38…）。
+
+## 怎么选券
+
+`order/v2/preview` 里多传这三个字段（保险起见三个都给）：
+
+```js
+selected_coupon_view_id: c.coupon_view_id,
+coupon_view_id:          c.coupon_view_id,
+selected_coupon_id:      c.coupon_id
+```
+
+**选最优的做法**：拉券列表 → 过滤 `status===1` 且门槛 ≤ 订单金额
+→ 按 `amount` 降序取第一张。注意排除限定品类的
+（标题含「宠物」「药」「酒」「闪购便利店」等的那些）。
+
+## 教训（与密码盘同一个）
+
+两次都卡在「以为 UI 是唯一入口」。密码盘那次是范围划窄，
+这次是**根本不该点 UI**——券卡片是 `WEBC-VIEW` 小程序容器，点不动；
+而 API 层只是一个字段。
+
+**遇到点不动的组件，先问：这一步在 API 层是什么？**
