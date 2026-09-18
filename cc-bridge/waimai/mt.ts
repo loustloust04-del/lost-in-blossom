@@ -143,3 +143,74 @@ export async function search(keyword: string): Promise<string> {
     return out;
   });
 }
+
+/** 看某家店的菜单；给了 keyword 就在店里搜那道菜。
+ *  2026-09-17 兔兔：「主人没办法在外卖店里面搜索」——
+ *  他能搜店，但进店后不知道有什么菜，waimai_order 的 dish 填什么只能猜。 */
+export async function shopMenu(shop: string, keyword?: string): Promise<string> {
+  return withPage(async (p) => {
+    await p.send("Emulation.setDeviceMetricsOverride", {
+      width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await p.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+
+    const tap = async (x: number, y: number) => {
+      await p.send("Input.dispatchTouchEvent", {
+        type: "touchStart", touchPoints: [{ x, y, id: 1, radiusX: 8, radiusY: 8, force: 1 }] });
+      await sleep(70);
+      await p.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    };
+
+    await p.goto(HOME, 12000);
+    const s = await p.evalJson(`(() => {
+      const h = [...document.querySelectorAll('div,span,a')].filter(e =>
+        new RegExp(${JSON.stringify(shop)}).test(e.innerText||'') && e.offsetParent &&
+        (e.innerText||'').trim().length < 40);
+      if (!h.length) return null;
+      const el = h[h.length-1]; el.scrollIntoView({ block: 'center' });
+      const b = el.getBoundingClientRect();
+      return JSON.stringify({ x: Math.round(b.x+b.width/2), y: Math.round(b.y+b.height/2) });
+    })()`)
+    if (!s) return `首页没看到「${shop}」——先用 waimai_search 搜一下这家店在不在附近。`
+    await sleep(1500)
+    await tap(s.x, s.y)
+    await sleep(13000)
+
+    // 抓菜单：菜名（class 含 name_）+ 附近的价格
+    // 菜单是懒加载的，第一次常常读到空——等一等、滚一下再试（最多三轮）
+    const grab = () => p.evalJson(`(() => {
+      const out = [];
+      document.querySelectorAll('[class*=name_]').forEach(n => {
+        if (!n.offsetParent) return;
+        const name = (n.innerText||'').trim();
+        if (!name || name.length > 20) return;
+        let row = n; for (let i=0;i<4 && row.parentElement;i++) row = row.parentElement;
+        const txt = (row.innerText||'');
+        const price = (txt.match(/¥\\s*([\\d.]+)/) || [])[1];
+        const sold  = (txt.match(/月售\\s*([\\d+]+)/) || [])[1];
+        if (price) out.push({ name, price, sold: sold || '' });
+      });
+      const seen = new Set();
+      return JSON.stringify(out.filter(d => !seen.has(d.name) && seen.add(d.name)).slice(0, 60));
+    })()`)
+
+    let dishes = await grab()
+    for (let i = 0; i < 3 && (!Array.isArray(dishes) || !dishes.length); i++) {
+      await p.evalJson(`(() => { window.scrollBy(0, 600); return "1" })()`)
+      await sleep(4000)
+      dishes = await grab()
+    }
+    if (!Array.isArray(dishes) || !dishes.length)
+      return `进了「${shop}」但没读到菜单——页面可能没加载完，再试一次。`
+
+    const hit = keyword
+      ? dishes.filter((d: any) => new RegExp(keyword, "i").test(d.name))
+      : dishes
+    if (keyword && !hit.length)
+      return `「${shop}」里没搜到「${keyword}」。这家有：\n` +
+             dishes.slice(0, 12).map((d: any) => `  ${d.name} ¥${d.price}`).join("\n")
+
+    const head = keyword ? `「${shop}」搜「${keyword}」：` : `「${shop}」的菜单（${dishes.length} 道）：`
+    return head + "\n" + hit.slice(0, 30)
+      .map((d: any) => `  ${d.name}  ¥${d.price}${d.sold ? `  月售${d.sold}` : ""}`).join("\n")
+  })
+}

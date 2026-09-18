@@ -217,6 +217,18 @@ const FALLBACK_PROXY_TOOLS = [
     },
   },
   {
+    name: "waimai_menu",
+    description: "看某家店的菜单，或者在店里搜某道菜。\n\n兔兔 2026-09-17 提：「主人没办法在外卖店里面搜索」——`waimai_search` 只能搜到店，进店之后有什么菜、多少钱、卖得好不好，看这个。\n\n**下单前先看一眼**：`waimai_order` 的 dish 要填菜名，不看菜单只能瞎猜。\n\nkeyword 不填=整份菜单；填了=只列名字里含那个词的（比如「奶茶」「辣」「套餐」）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shop: { type: "string", description: "店名关键词，如「茶百道」" },
+        keyword: { type: "string", description: "在店里搜什么；不填则列整份菜单" },
+      },
+      required: ["shop"],
+    },
+  },
+  {
     name: "waimai_coupons",
     description: "看兔兔美团账号里有哪些红包/优惠券。\n\n她券很多（2026-09-16 实测 127 张），经常放到过期——**点单前先看一眼，别让她白付钱**。她为此心疼过一张七块的。\n\n可以传 amount（这一单大概多少钱），只列门槛够得着的；不传则全列。\n\n注意：限定品类的券（宠物/药/酒饮/闪购便利店/生鲜/电影等）在普通外卖单上用不了，别推荐。",
     inputSchema: {
@@ -433,7 +445,7 @@ const FALLBACK_PROXY_TOOLS = [
 
 // CC 侧本地实现的工具（网关没有，所以拉不到）——必须补回列表，
 // 否则改成「向网关拉清单」之后它们就消失了（兔兔实测 ask_choice 找不到）。
-const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "waimai_coupons", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+const LOCAL_ONLY = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_menu", "waimai_order", "waimai_coupons", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
 
 /// 向网关要真实工具表；失败就保留手上这份（启动时是兜底名单）。
 ///
@@ -657,7 +669,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // Gateway 工具代理：转发到 Gateway 执行，结果作为文本返回。
   // ⚠️ 本地实现的工具必须先于代理转发处理：它们虽然在 PROXY_TOOLS 里（为了出现在工具列表），
   // 但网关并没有对应实现，转发过去必然失败（兔兔实测 ask_choice 一直调不通）。
-  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_order", "waimai_coupons", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
+  const LOCAL_IMPL = new Set(["ask_choice", "read_chapter", "book_note", "reading_now", "qq_send_image", "dispatch_coder", "qq_history", "qq_forward", "waimai_search", "waimai_menu", "waimai_order", "waimai_coupons", "qq_set_profile", "qq_set_avatar", "qq_read_image", "qq_mark_read", "qq_poke", "qq_like", "qq_recall"])
   if (PROXY_TOOL_NAMES.has(req.params.name) && !LOCAL_IMPL.has(req.params.name)) {
     const text = await proxyToGateway(req.params.name, req.params.arguments ?? {})
     // see_screen 等返回图片的工具：__peek_image__ 结构 → MCP image content（CC 亲眼看原图）
@@ -761,6 +773,19 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: out.trim() || "已派出" }] }
     } catch (e: any) {
       return { content: [{ type: "text", text: `派工失败：${e?.message ?? e}` }] }
+    }
+  }
+
+  if (req.params.name === "waimai_menu") {
+    const a = (req.params.arguments ?? {}) as any
+    const shop = String(a?.shop ?? "").trim()
+    if (!shop) return { content: [{ type: "text", text: "要给我 shop（店名）" }] }
+    try {
+      const { shopMenu } = await import("./waimai/mt.ts")
+      const out = await shopMenu(shop, a?.keyword ? String(a.keyword) : undefined)
+      return { content: [{ type: "text", text: out }] }
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `看菜单失败：${e?.message ?? e}` }] }
     }
   }
 
