@@ -76,7 +76,7 @@ async function typePassword(p: PageAPI, password: string): Promise<boolean> {
 export async function orderOne(opts: {
   shop: string            // 店名关键词，如「茶百道」
   dish?: string           // 菜名关键词；不给则取菜单第一个
-  spec?: string           // 规格关键词，如「大杯」
+  spec?: string | string[]  // 规格；多个用数组或「大杯,麻辣」逗号分隔
   password?: string       // 支付密码；不给则停在支付页（她自己按）
 }): Promise<string> {
   const log: string[] = []
@@ -117,9 +117,27 @@ export async function orderOne(opts: {
     await sleep(6000)
     log.push(`选了 ${dish.name}`)
 
-    if (opts.spec) { await tapText(p, opts.spec, { maxLen: 8 }); await sleep(2500) }
-    if (!await tapText(p, "加入购物车", { maxLen: 20, pick: "bottom" })) return "加购失败"
+    // 2026-09-18 主人报：海底捞冒菜加购失败——「这道菜有必选规格
+    // （主食选方便面/米饭、口味选番茄/麻辣），spec 没法自动匹配这些必选项」。
+    // 改：spec 支持多个（数组或「大杯,麻辣,加面」这种逗号分隔），逐个点。
+    const specs = Array.isArray(opts.spec) ? opts.spec
+                : opts.spec ? String(opts.spec).split(/[,，、\s]+/).filter(Boolean)
+                : []
+    for (const sp of specs) { await tapText(p, sp, { maxLen: 12 }); await sleep(1800) }
+
+    if (!await tapText(p, "加入购物车", { maxLen: 20, pick: "bottom" })) {
+      const page = await p.text(900)
+      return `加购按钮点不到。规格页现在是这样——\n${page.slice(-500)}`
+    }
     await sleep(7000)
+
+    // 加购是否真成了：底部购物车栏会出现「去结算」
+    const cartOk = /去结算/.test(await p.text(1500))
+    if (!cartOk) {
+      const page = await p.text(1000)
+      return `没加进购物车——这道菜多半有必选规格还没选。\n` +
+             `规格页上有这些选项，用 spec 指定（可以写多个，逗号分开）：\n${page.slice(-600)}`
+    }
     log.push("已加购")
 
     if (!await tapText(p, "去结算", { maxLen: 14, pick: "bottom" })) return "没到起送价或找不到结算"
