@@ -93,6 +93,43 @@ export interface PageAPI {
 
 export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/** 在当前 page 上搜索（供 shopMenu / orderOne 复用，不另开连接）。 */
+export async function searchOnPage(p: PageAPI, keyword: string): Promise<boolean> {
+  await p.goto(HOME, 10000);
+  const box = await p.evalJson(`(() => {
+    const els = [...document.querySelectorAll('*')].filter(e =>
+      (e.innerText||'').trim() === '搜索' && e.offsetParent);
+    if (!els.length) return null;
+    const b = els[els.length-1].getBoundingClientRect();
+    return JSON.stringify({ x: Math.round(b.x+b.width/2), y: Math.round(b.y+b.height/2) });
+  })()`);
+  if (!box) return false;
+  await p.clickAt(box.x, box.y);
+  await sleep(5000);
+  const inp = await p.evalJson(`(() => {
+    const i = [...document.querySelectorAll('input,textarea')].find(x => x.offsetParent);
+    if (!i) return null; i.focus();
+    const b = i.getBoundingClientRect();
+    return JSON.stringify({ x: Math.round(b.x+b.width/2), y: Math.round(b.y+b.height/2) });
+  })()`);
+  if (!inp) return false;
+  await p.clickAt(inp.x, inp.y);
+  await sleep(700);
+  await p.type(keyword);
+  await sleep(1600);
+  await p.send("Input.dispatchKeyEvent", {
+    type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+  await p.send("Input.dispatchKeyEvent", {
+    type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+  await sleep(9000);
+  let out = await p.text(800);
+  if (!/起送|配送|月售/.test(out)) {
+    await p.clickText(keyword, 30);
+    await sleep(9000);
+  }
+  return true;
+}
+
 /** 搜商家/菜品。返回页面上的结果文本，由他自己读。 */
 export async function search(keyword: string): Promise<string> {
   return withPage(async (p) => {
@@ -160,7 +197,12 @@ export async function shopMenu(shop: string, keyword?: string): Promise<string> 
       await p.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     };
 
-    await p.goto(HOME, 12000);
+    // 2026-09-17 主人报「不管用什么店名都说没找到这家店」（海底捞/蜜雪冰城/茶百道…）。
+    // 根因：原本只在首页找店名，而**首页只列附近的一部分店**——
+    // 海底捞、蜜雪冰城根本不在那个列表里。
+    // 改成：先搜索这家店，再从搜索结果进去。
+    await searchOnPage(p, shop)
+    await sleep(2000)
     const s = await p.evalJson(`(() => {
       const h = [...document.querySelectorAll('div,span,a')].filter(e =>
         new RegExp(${JSON.stringify(shop)}).test(e.innerText||'') && e.offsetParent &&
@@ -170,7 +212,7 @@ export async function shopMenu(shop: string, keyword?: string): Promise<string> 
       const b = el.getBoundingClientRect();
       return JSON.stringify({ x: Math.round(b.x+b.width/2), y: Math.round(b.y+b.height/2) });
     })()`)
-    if (!s) return `首页没看到「${shop}」——先用 waimai_search 搜一下这家店在不在附近。`
+    if (!s) return `搜「${shop}」没搜到这家店——换个更短的店名试试（比如「海底捞」而不是「海底捞下饭火锅菜」）。`
     await sleep(1500)
     await tap(s.x, s.y)
     await sleep(13000)

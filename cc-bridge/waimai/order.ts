@@ -82,9 +82,16 @@ export async function orderOne(opts: {
   const log: string[] = []
   return withPage(async (p) => {
     await mobileViewport(p)
-    await p.goto(HOME, 12000)
 
-    if (!await tapText(p, opts.shop, { maxLen: 40 })) return "没找到这家店"
+    // 2026-09-17 主人报「不管用什么店名都说没找到这家店」。
+    // 根因：原本直接在首页找店名，而首页只列附近的一部分店——
+    // 海底捞、蜜雪冰城根本不在那个列表里。改成先搜索再进店。
+    const { searchOnPage } = await import("./mt.ts")
+    await searchOnPage(p, opts.shop)
+    await sleep(2500)
+
+    if (!await tapText(p, opts.shop, { maxLen: 40 }))
+      return `搜「${opts.shop}」没搜到这家店——换个更短的店名试试。`
     await sleep(13000)
     log.push("进店")
 
