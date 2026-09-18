@@ -120,11 +120,26 @@ export async function search(keyword: string): Promise<string> {
     await p.clickAt(inp.x, inp.y);
     await sleep(700);
     await p.type(keyword);
-    await sleep(1500);
-    // 点联想词里含关键词的第一条（比敲回车稳）
-    const clicked = await p.clickText(keyword, 14);
-    if (!clicked) return "搜索没出结果";
-    await sleep(11000);
-    return await p.text(1400);
+    await sleep(1600);
+
+    // 2026-09-17 修：原本去点「联想词里文字等于关键词的那条」，
+    // 但联想词多半是「麦当劳(万达店)」这种，跟关键词不完全匹配——
+    // 主人实测搜了 5 轮（米线/麦当劳/烤肉饭/夜宵/炒饭）全部「搜索没出结果」。
+    // 改成敲回车，回车没反应再退回点联想词。
+    await p.send("Input.dispatchKeyEvent", {
+      type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await p.send("Input.dispatchKeyEvent", {
+      type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await sleep(9000);
+
+    let out = await p.text(1400);
+    // 回车没跳出结果（还停在联想词页）就点一条含关键词的
+    if (!/起送|配送|月售|分/.test(out)) {
+      await p.clickText(keyword, 30);
+      await sleep(9000);
+      out = await p.text(1400);
+    }
+    if (!/起送|配送|月售/.test(out)) return `搜「${keyword}」没出结果——换个词试试，或者先用店名搜。`;
+    return out;
   });
 }
