@@ -95,27 +95,50 @@ export async function orderOne(opts: {
     await sleep(13000)
     log.push("进店")
 
-    // 菜品：找到菜名后**往上三层**到可点的那层（这是踩了很久的坑）
-    // 菜名元素：class 名是随机哈希（name_hTGUTi 这种），但前缀 name_ 稳定；
-    // 找不到时退回「菜单区里最短的那些文本节点」
-    const dishSel = opts.dish
-      ? `([...document.querySelectorAll('[class*=name_],[class*=Name]')].find(e => e.offsetParent && new RegExp(${JSON.stringify(opts.dish)}).test(e.innerText||''))
-         || [...document.querySelectorAll('*')].find(e => e.offsetParent && e.children.length === 0 && new RegExp(${JSON.stringify(opts.dish)}).test((e.innerText||'').trim()) && (e.innerText||'').trim().length < 18))`
-      : `([...document.querySelectorAll('[class*=name_],[class*=Name]')].filter(e => e.offsetParent && (e.innerText||'').trim().length > 2 && (e.innerText||'').trim().length < 16)[0]
-         || [...document.querySelectorAll('dd,li')].map(e => [...e.querySelectorAll('*')].find(x => x.children.length===0 && (x.innerText||'').trim().length>2 && (x.innerText||'').trim().length<16)).filter(Boolean)[0])`
-    const dish = await p.evalJson(`(() => {
-      const t = ${dishSel};
-      if (!t) return null;
-      let el = t; for (let i = 0; i < 3 && el.parentElement; i++) el = el.parentElement;
-      el.scrollIntoView({ block: 'center' });
-      const b = el.getBoundingClientRect();
-      return JSON.stringify({ name: t.innerText.trim(), x: Math.round(b.x+b.width/2), y: Math.round(b.y+b.height/2) });
-    })()`)
-    if (!dish) return "没找到这个菜"
-    await sleep(2000)
-    await tap(p, dish.x, dish.y)
-    await sleep(6000)
-    log.push(`选了 ${dish.name}`)
+    // 菜品：找到菜名，然后从内往外逐层试点，直到规格页真的打开。
+    // 2026-09-18 主人报：「返回的规格页不是这道菜的具体规格选项，而是整个菜单列表，
+    // 看起来工具没能点进单道菜的规格选择页面，而是停在了菜单浏览层」——诊断得准。
+    // 原本写死「往上三层」，那是在茶百道数出来的，别的店层级不同。
+    const dishName = opts.dish ?? ""
+    let opened = false, dishLabel = ""
+    for (let up = 2; up <= 5 && !opened; up++) {
+      // 先滚过去，**等滚动完成**，再取坐标——
+      // 2026-09-18 的 bug 就在这：scrollIntoView 之后立刻 getBoundingClientRect，
+      // 拿到的是滚动前的旧坐标，点下去落在别的菜上（或空处）。
+      await p.evalJson(`(() => {
+        const pick = ${dishName
+          ? `[...document.querySelectorAll('[class*=name_],[class*=Name]')].find(e => e.offsetParent && new RegExp(${JSON.stringify(dishName)}).test(e.innerText||''))`
+          : `[...document.querySelectorAll('[class*=name_],[class*=Name]')].filter(e => e.offsetParent && (e.innerText||'').trim().length > 2 && (e.innerText||'').trim().length < 18)[0]`};
+        if (pick) pick.scrollIntoView({ block: 'center' });
+        return JSON.stringify(!!pick);
+      })()`)
+      await sleep(2500)
+
+      const hit = await p.evalJson(`(() => {
+        const pick = ${dishName
+          ? `[...document.querySelectorAll('[class*=name_],[class*=Name]')].find(e => e.offsetParent && new RegExp(${JSON.stringify(dishName)}).test(e.innerText||''))`
+          : `[...document.querySelectorAll('[class*=name_],[class*=Name]')].filter(e => e.offsetParent && (e.innerText||'').trim().length > 2 && (e.innerText||'').trim().length < 18)[0]`};
+        if (!pick) return null;
+        let el = pick; for (let i = 0; i < ${up} && el.parentElement; i++) el = el.parentElement;
+        const b = el.getBoundingClientRect();
+        return JSON.stringify({ name: pick.innerText.trim(),
+          x: Math.round(b.x + b.width/2), y: Math.round(b.y + b.height/2) });
+      })()`)
+      if (!hit) return opts.dish ? `这家店没有「${opts.dish}」——先用 waimai_menu 看看有什么。` : "菜单还没加载出来"
+      dishLabel = hit.name
+      await tap(p, hit.x, hit.y)
+      await sleep(5000)
+      // 规格页的标志：出现「已选规格」或底部有「加入购物车」
+      opened = await p.evalJson(`JSON.stringify(
+        /已选规格|份量|规格/.test(document.body.innerText.slice(-900)) &&
+        [...document.querySelectorAll('div,span,button')].some(e => e.offsetParent && /加入购物车/.test(e.innerText||''))
+      )`) === true
+    }
+    if (!opened) {
+      const page = await p.text(700)
+      return `点不开「${dishLabel}」的规格页（试了四层）。页面现在是：\n${page.slice(-400)}`
+    }
+    log.push(`选了 ${dishLabel}`)
 
     // 2026-09-18 主人报：海底捞冒菜加购失败——「这道菜有必选规格
     // （主食选方便面/米饭、口味选番茄/麻辣），spec 没法自动匹配这些必选项」。
