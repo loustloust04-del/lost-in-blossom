@@ -822,3 +822,34 @@ typingMode）配回去被拒：`messages: Invalid input`。dist/index.js 里
 **兔兔 09-16 拍板：不好做就算了。** 影响只是形式——他会分三次回而不是一次，
 不影响他理解内容。真要做的话，另一条路是在 shim 里自己攒，
 但 shim 是「一次调用一个进程」，跨进程攒要落盘或起常驻，代价不小。
+
+## 2026-09-17：摘掉 imprint-memory（荒废已久，数据库是空的）
+
+兔兔清点工具箱时说「这个已经完全荒废了，可以直接拆掉」。先验证再动手：
+
+- 最近 5 万行会话里，**真实 `tool_use` 调用只有 4 次**
+  （search_channel 3 + message_bus_read 1）；同期 cc-bridge 光 `reply` 就 2163 次
+- 先前统计出的「240 次」是**工具列表被读的次数**，不是调用——
+  十几个工具都恰好 240，那个均匀分布就是线索
+- **`/root/projects/claude-imprint/memory.db` 是 0 字节，一张表都没有**
+  ——不只是荒废，是从没存进去过任何东西
+  （9-09 文档里记的「1918 条对话只沉淀 16 条，两个月零新增」，实际是零）
+
+**做法**：只从 `cc-bridge/.mcp.json` 摘掉（那文件在 .gitignore 里，含 token）。
+8100 服务先留着不停，不占资源。
+备份：`/root/backups/mcp-json-before-imprint-*.bak`、`imprint-memory-empty-*.db`
+
+**效果**：他的工具从 127 个降到 102 个，少 25 个占位的。
+
+### 顺带：工具箱清点结果（09-17）
+
+| 来源 | 数量 |
+|---|---|
+| gateway 内置（`/api/mcp/tools`，source=builtin） | 81 |
+| cc-bridge 本地（LOCAL_ONLY） | 21 |
+| ~~imprint-memory~~ | ~~25~~ 已摘 |
+
+**真实用量前五**（按 `type:tool_use` 精确统计，不是列表次数）：
+`reply` 2163 · `how_is_she` 166 · `remember` 31 · `see_screen` 29 · `fable_send` 27
+
+**前五里有三个是「她怎么样」和「跟她说话」。**
